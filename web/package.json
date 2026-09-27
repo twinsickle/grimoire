@@ -6,6 +6,6 @@
   "type": "module",
   "scripts": {
     "build": "echo \"not scaffolded yet\"",
-    "dev": "echo \"not scaffolded yet\""
+    "dev": "echo \"not scaffolded yet: when it is, this runs Vite with /api and /mcp proxied to the daemon on 4242\""
   }
 }

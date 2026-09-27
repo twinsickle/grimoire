@@ -14,3 +14,23 @@ repository = "https://github.com/twinsickle/grimoire"
 grimoire-core = { path = "crates/core" }
 grimoire-extract = { path = "crates/extract" }
 grimoire-server = { path = "crates/server" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+notify = "8"
+notify-debouncer-full = "0.5"
+ignore = "0.4"
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+time = { version = "0.3", features = ["local-offset", "formatting", "parsing", "macros"] }
+toml = "0.9"
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+rmcp = { version = "3.4", features = ["server", "transport-streamable-http-server"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

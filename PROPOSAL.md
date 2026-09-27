@@ -159,6 +159,10 @@ the CLI.
   skill is a thin client of it, written first for Claude Code and again for
   any agent that has skills.
 
+Whether a store is ever versioned or shared between machines, so that a
+clone of a project comes with its manual, is an open question for every
+project and is not decided here.
+
 ## What a project gets
 
 Grimoire owns its store. A project it is pointed at contains nothing of the
@@ -270,6 +274,46 @@ API by then.
 The one part expected to need revision is the map view: a nested layout
 works for a few hundred nodes and will need rethinking if Grimoire is pointed
 at something much larger.
+
+## Development loop
+
+Grimoire is developed pointed at itself. Its own repository is the first
+target, its own manual the first store, and the daemon under development is
+the one its developers and their agents use. This is possible because the
+store lives outside the repository and the repository is only read, so
+pointing the tool at its own checkout creates no loop. It is worth doing
+because every rough edge is met by the people building the tool, on the tool,
+before any other project meets it.
+
+The loop has four layers.
+
+- **Content is live.** The daemon already watches the target repository and
+  re-parses a changed file into the graph. Editing Grimoire's own source
+  updates Grimoire's own manual within a second, with nothing restarted.
+- **The daemon restarts on change.** Rust is rebuilt, not reloaded. A file
+  watcher (`cargo watch` or `bacon`) rebuilds and restarts `grimoire serve` on
+  save. The graph is memory rebuilt from the store and a few-second parse, and
+  store writes are atomic, so a restart costs seconds and loses nothing.
+- **The UI hot-reloads.** Vite's dev server, with hot module replacement,
+  proxies `/api` and `/mcp` to the running daemon. The embedded UI is only
+  for release builds.
+- **Agents reach the dev daemon directly.** The repository carries a
+  `.grimoire.toml` naming Grimoire's own store and a `.mcp.json` pointing at
+  the dev daemon on a fixed local port, so an agent working in this
+  repository has the tools as tools and can debug the server it is building
+  by calling it. Until MCP exists, the same operations are reachable as JSON
+  at `/api/<tool>`, and the store's files can be read directly.
+
+What this requires of the tool, beyond what it already needs:
+
+- `serve` and `check` accept `--store <path>` so a dev store can sit anywhere
+  readable, not only in the platform data directory.
+- The repository watcher ignores whatever `.gitignore` ignores, `target/`
+  above all, since a rebuild churns thousands of files there.
+- A `dev` task in the repository runs the daemon watcher and the Vite dev
+  server together on the fixed port.
+- The self-store is seeded with `grimoire scaffold` the moment `scaffold`
+  exists, so the daemon is trialled against a real store from its first run.
 
 ## First milestone
 

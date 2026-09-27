@@ -1,0 +1,2 @@
+# Written once by `grimoire init`. Names the store that holds this project's manual.
+store = "grimoire"

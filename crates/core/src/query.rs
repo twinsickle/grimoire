@@ -1,0 +1,506 @@
+//! # Module contract
+//!
+//! ```json
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape docs/TOOLS.md gives for that tool."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first."}]}
+//! ```
+
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+
+use serde::Serialize;
+use serde_json::Value;
+
+use crate::graph::{Graph, Node, SourceLocation};
+use crate::lint::{lint, Rule};
+use crate::model::*;
+
+/// A node as every tool returns it: its fields, plus `ref`, `in` and `out`.
+#[derive(Debug, Clone, Serialize)]
+pub struct NodeView {
+    pub r#ref: Reference,
+    #[serde(flatten)]
+    pub node: Node,
+    pub r#in: Vec<EdgeView>,
+    pub out: Vec<EdgeView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EdgeView {
+    pub r#ref: Reference,
+    pub relation: Relation,
+}
+
+pub fn view(g: &Graph, r: &Reference) -> Option<NodeView> {
+    let node = g.get(r)?.clone();
+    Some(NodeView {
+        r#ref: r.clone(),
+        node,
+        r#in: g.inbound(r).map(|e| EdgeView { r#ref: e.from.clone(), relation: e.relation }).collect(),
+        out: g.out(r).map(|e| EdgeView { r#ref: e.to.clone(), relation: e.relation }).collect(),
+    })
+}
+
+/// The short form used in lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Summary {
+    pub r#ref: Reference,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<TicketKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<Status>,
+}
+
+pub fn summary(r: &Reference, n: &Node) -> Summary {
+    let (kind, priority, status) = match n {
+        Node::Ticket(t) => (Some(t.kind), Some(t.priority), Some(t.status)),
+        _ => (None, None, None),
+    };
+    Summary { r#ref: r.clone(), title: n.title(), kind, priority, status }
+}
+
+pub fn ticket_summary(t: &Ticket) -> Summary {
+    summary(&Reference::ticket(&t.slug), &Node::Ticket(t.clone()))
+}
+
+// ---------------------------------------------------------------------------
+// find
+// ---------------------------------------------------------------------------
+
+pub fn find(g: &Graph, query: &str, kinds: Option<&[Kind]>, limit: usize) -> Vec<Summary> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut scored: Vec<(u32, &Reference, &Node)> = Vec::new();
+    for (r, n) in &g.nodes {
+        if let Some(kinds) = kinds {
+            if !kinds.contains(&r.kind) {
+                continue;
+            }
+        }
+        let texts = n.searchable();
+        let mut best = 0u32;
+        for (i, t) in texts.iter().enumerate() {
+            let t = t.to_lowercase();
+            let s: u32 = if t == q {
+                100
+            } else if t.starts_with(&q) {
+                60
+            } else if t.contains(&q) {
+                30
+            } else {
+                0
+            };
+            // Earlier fields (slug, title) weigh more than bodies.
+            let s = s.saturating_sub(i as u32 * 5);
+            best = best.max(s);
+        }
+        if r.id.to_lowercase().contains(&q) {
+            best = best.max(25);
+        }
+        if best > 0 {
+            scored.push((best, r, n));
+        }
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
+    scored.into_iter().take(limit).map(|(_, r, n)| summary(r, n)).collect()
+}
+
+// ---------------------------------------------------------------------------
+// outline
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Tree {
+    pub r#ref: Reference,
+    pub title: String,
+    pub coverage: Value,
+    pub findings: usize,
+    pub children: Vec<Tree>,
+}
+
+pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>) -> Vec<Tree> {
+    let findings = lint(g, &Rule::ALL);
+    let mut per_node: HashMap<&Reference, usize> = HashMap::new();
+    for f in &findings {
+        *per_node.entry(&f.r#ref).or_default() += 1;
+    }
+    let roots: Vec<Reference> = match root {
+        Some(r) => vec![r.clone()],
+        None => g.roots.iter().map(|s| Reference::page(s)).collect(),
+    };
+    roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, &per_node, &mut HashSet::new())).collect()
+}
+
+fn tree(g: &Graph, r: &Reference, depth: usize, per_node: &HashMap<&Reference, usize>, path: &mut HashSet<Reference>) -> Tree {
+    let node = g.get(r);
+    let title = node.map(Node::title).unwrap_or_else(|| format!("(missing) {r}"));
+    let mut children = Vec::new();
+    if depth > 0 && path.insert(r.clone()) {
+        for c in children_of(g, r) {
+            children.push(tree(g, &c, depth - 1, per_node, path));
+        }
+        path.remove(r);
+    }
+    let coverage = match node {
+        Some(Node::Page(_)) => {
+            let (covered, total) = page_coverage(g, r, &mut HashSet::new());
+            if total == 0 {
+                Value::Null
+            } else {
+                Value::from(covered as f64 / total as f64)
+            }
+        }
+        Some(Node::Req(q)) => Value::from(q.covered_by.len()),
+        _ => Value::Null,
+    };
+    // Findings on or below the node, over the whole subtree regardless of the
+    // requested depth, so a shallow outline still shows where the problems are.
+    let findings = findings_below(g, r, per_node, &mut HashSet::new());
+    Tree { r#ref: r.clone(), title, coverage, findings, children }
+}
+
+fn children_of(g: &Graph, r: &Reference) -> Vec<Reference> {
+    match g.get(r) {
+        Some(Node::Page(p)) => p.links.clone(),
+        Some(Node::Req(q)) => q.covered_by.clone(),
+        Some(Node::Module(m)) => m.criteria.iter().map(|c| Reference::criterion(&c.module, &c.id)).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn findings_below(g: &Graph, r: &Reference, per_node: &HashMap<&Reference, usize>, seen: &mut HashSet<Reference>) -> usize {
+    if !seen.insert(r.clone()) {
+        return 0;
+    }
+    let own = per_node.get(r).copied().unwrap_or(0);
+    own + children_of(g, r).iter().map(|c| findings_below(g, c, per_node, seen)).sum::<usize>()
+}
+
+/// Criteria under a page (through its pages and modules) and how many some
+/// requirement names.
+fn page_coverage(g: &Graph, r: &Reference, seen: &mut HashSet<Reference>) -> (usize, usize) {
+    if !seen.insert(r.clone()) {
+        return (0, 0);
+    }
+    let mut covered = 0;
+    let mut total = 0;
+    match g.get(r) {
+        Some(Node::Page(p)) => {
+            for l in &p.links {
+                let (c, t) = page_coverage(g, l, seen);
+                covered += c;
+                total += t;
+            }
+        }
+        Some(Node::Module(m)) => {
+            for c in &m.criteria {
+                total += 1;
+                let cref = Reference::criterion(&c.module, &c.id);
+                if g.inbound_with(&cref, Relation::CoveredBy).next().is_some() {
+                    covered += 1;
+                }
+            }
+        }
+        _ => {}
+    }
+    (covered, total)
+}
+
+// ---------------------------------------------------------------------------
+// rests_on
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RestsOn {
+    pub r#ref: Reference,
+    pub title: String,
+    pub via: Vec<Reference>,
+    pub decisions: Vec<Decision>,
+}
+
+/// The downward relations each kind is followed through.
+fn downward(g: &Graph, r: &Reference) -> Vec<Reference> {
+    match g.get(r) {
+        Some(Node::Ticket(t)) => t.relies_on.iter().chain(t.touches.iter()).cloned().collect(),
+        Some(Node::Page(p)) => p.links.clone(),
+        Some(Node::Req(q)) => q.covered_by.clone(),
+        Some(Node::Criterion(c)) => vec![Reference::module(&c.module)],
+        Some(Node::Module(m)) => m.imports.iter().map(|i| Reference::module(i)).collect(),
+        _ => Vec::new(),
+    }
+}
+
+pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<RestsOn> {
+    let mut out: Vec<(usize, RestsOn)> = Vec::new();
+    let mut seen: HashSet<Reference> = HashSet::new();
+    seen.insert(start.clone());
+    let mut queue: VecDeque<(Reference, Vec<Reference>)> = VecDeque::new();
+    queue.push_back((start.clone(), vec![]));
+    while let Some((r, via)) = queue.pop_front() {
+        let dist = via.len();
+        if depth.is_some_and(|d| dist >= d) {
+            continue;
+        }
+        for next in downward(g, &r) {
+            if !seen.insert(next.clone()) {
+                continue;
+            }
+            let mut path = via.clone();
+            path.push(r.clone());
+            let decisions = match g.get(&next) {
+                Some(Node::Req(q)) => {
+                    let mut d = q.decisions.clone();
+                    d.sort_by(|a, b| b.date.cmp(&a.date));
+                    d
+                }
+                _ => Vec::new(),
+            };
+            let title = g.get(&next).map(Node::title).unwrap_or_else(|| format!("(missing) {next}"));
+            out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions }));
+            queue.push_back((next, path));
+        }
+    }
+    out.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| {
+                let da = a.1.decisions.first().map(|d| d.date.as_str()).unwrap_or("");
+                let db = b.1.decisions.first().map(|d| d.date.as_str()).unwrap_or("");
+                db.cmp(da)
+            })
+            .then_with(|| a.1.r#ref.cmp(&b.1.r#ref))
+    });
+    out.into_iter().map(|(_, r)| r).collect()
+}
+
+// ---------------------------------------------------------------------------
+// rests_on_me
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Affected {
+    pub r#ref: Reference,
+    pub title: String,
+    pub relation: Relation,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RestsOnMe {
+    pub nodes: Vec<Affected>,
+    pub tickets: Vec<Summary>,
+}
+
+/// Everything that would be affected if the node changed: the transitive
+/// upward closure through the derived edges, excluding tickets, which are
+/// listed separately.
+pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
+    let mut nodes: Vec<Affected> = Vec::new();
+    let mut seen: HashSet<Reference> = HashSet::new();
+    seen.insert(start.clone());
+    let mut queue: VecDeque<Reference> = VecDeque::new();
+    queue.push_back(start.clone());
+    while let Some(r) = queue.pop_front() {
+        for e in g.inbound(&r) {
+            if e.from.kind == Kind::Ticket {
+                continue;
+            }
+            if !seen.insert(e.from.clone()) {
+                continue;
+            }
+            let title = g.get(&e.from).map(Node::title).unwrap_or_default();
+            nodes.push(Affected { r#ref: e.from.clone(), title, relation: e.relation });
+            queue.push_back(e.from.clone());
+        }
+    }
+    let mut tickets: Vec<&Ticket> = g
+        .tickets()
+        .filter(|t| t.status != Status::Closed)
+        .filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x)))
+        .collect();
+    tickets.sort_by(|a, b| a.slug.cmp(&b.slug));
+    RestsOnMe { nodes, tickets: tickets.into_iter().map(ticket_summary).collect() }
+}
+
+// ---------------------------------------------------------------------------
+// coverage
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CriterionCoverage {
+    pub r#ref: Reference,
+    pub statement: String,
+    pub requirements: Vec<Summary>,
+}
+
+pub fn requirements_covering(g: &Graph, criterion: &Reference) -> Vec<Summary> {
+    let mut v: Vec<Summary> = g.inbound_with(criterion, Relation::CoveredBy).filter_map(|e| g.get(&e.from).map(|n| summary(&e.from, n))).collect();
+    v.sort_by(|a, b| a.r#ref.cmp(&b.r#ref));
+    v
+}
+
+pub fn module_coverage(g: &Graph, module: &Module) -> Vec<CriterionCoverage> {
+    module
+        .criteria
+        .iter()
+        .map(|c| {
+            let r = Reference::criterion(&c.module, &c.id);
+            CriterionCoverage { requirements: requirements_covering(g, &r), r#ref: r, statement: c.statement.clone() }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// board, related_tickets
+// ---------------------------------------------------------------------------
+
+pub struct BoardFilter<'a> {
+    pub status: Option<&'a [Status]>,
+    pub kinds: Option<&'a [TicketKind]>,
+    pub priority: Option<&'a [Priority]>,
+    pub touching: Option<&'a Reference>,
+}
+
+pub fn board(g: &Graph, f: &BoardFilter) -> Vec<Summary> {
+    let default_status = [Status::Open, Status::Active];
+    let default_kinds = [TicketKind::Change];
+    let status = f.status.unwrap_or(&default_status);
+    let kinds = f.kinds.unwrap_or(&default_kinds);
+    let mut tickets: Vec<&Ticket> = g
+        .tickets()
+        .filter(|t| status.contains(&t.status) && kinds.contains(&t.kind))
+        .filter(|t| f.priority.is_none_or(|p| p.contains(&t.priority)))
+        .filter(|t| f.touching.is_none_or(|x| t.touches.contains(x) || t.relies_on.contains(x)))
+        .collect();
+    tickets.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| b.status.cmp(&a.status)).then_with(|| a.title.cmp(&b.title)));
+    tickets.into_iter().map(ticket_summary).collect()
+}
+
+pub fn related_tickets(g: &Graph, ticket: &Ticket) -> Vec<Summary> {
+    let touches: HashSet<&Reference> = ticket.touches.iter().collect();
+    let mut v: Vec<&Ticket> = g
+        .tickets()
+        .filter(|t| t.slug != ticket.slug && t.status != Status::Closed && matches!(t.kind, TicketKind::Gap | TicketKind::Question))
+        .filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| touches.contains(x)))
+        .collect();
+    v.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| a.title.cmp(&b.title)));
+    v.into_iter().map(ticket_summary).collect()
+}
+
+pub fn module_source(g: &Graph, r: &Reference) -> Option<SourceLocation> {
+    g.source_of(r)
+}
+
+/// Count findings per rule, for `lint`'s `counts`.
+pub fn counts(findings: &[crate::lint::Finding]) -> BTreeMap<String, usize> {
+    let mut m = BTreeMap::new();
+    for r in Rule::ALL {
+        m.insert(serde_json::to_value(r).unwrap().as_str().unwrap().to_string(), 0usize);
+    }
+    for f in findings {
+        *m.get_mut(serde_json::to_value(f.rule).unwrap().as_str().unwrap()).unwrap() += 1;
+    }
+    m
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::fixtures::graph;
+
+    #[test]
+    fn find_ranks_exact_slug_first() {
+        let g = graph();
+        let hits = find(&g, "git-readiness", None, 10);
+        assert_eq!(hits[0].r#ref, Reference::page("git-readiness"));
+        let only_reqs = find(&g, "ready", Some(&[Kind::Req]), 10);
+        assert!(only_reqs.iter().all(|s| s.r#ref.kind == Kind::Req));
+        assert!(!only_reqs.is_empty());
+    }
+
+    #[test]
+    fn view_has_both_directions() {
+        let g = graph();
+        let v = view(&g, &Reference::module("src/a/ready")).unwrap();
+        assert!(v.r#in.iter().any(|e| e.relation == Relation::Touches));
+        assert!(v.out.iter().any(|e| e.relation == Relation::Imports));
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(json["ref"], "module:src/a/ready");
+        assert!(json["purpose"].is_string());
+    }
+
+    #[test]
+    fn outline_from_roots() {
+        let g = graph();
+        let t = outline(&g, 3, None);
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].r#ref, Reference::page("overview"));
+        let gr = &t[0].children[0];
+        assert_eq!(gr.r#ref, Reference::page("git-readiness"));
+        // one of two criteria under module ready is covered.
+        assert_eq!(gr.coverage, Value::from(0.5));
+        assert!(gr.findings >= 1);
+        let module = gr.children.iter().find(|c| c.r#ref.kind == Kind::Module).unwrap();
+        assert_eq!(module.children.len(), 2);
+        // A shallow outline still counts the findings deep below it.
+        let shallow = outline(&g, 0, None);
+        assert_eq!(shallow[0].findings, t[0].findings);
+        assert!(shallow[0].children.is_empty());
+    }
+
+    #[test]
+    fn rests_on_ticket_reaches_modules_and_decisions() {
+        let g = graph();
+        let r = rests_on(&g, &Reference::ticket("phase-62"), None);
+        let refs: Vec<String> = r.iter().map(|x| x.r#ref.to_string()).collect();
+        // Nearest first; within a distance the node with the newest decision first.
+        assert_eq!(refs[0], "req:ready-only-with-commit");
+        assert_eq!(refs[1], "page:git-readiness");
+        assert_eq!(refs[2], "module:src/a/ready");
+        assert!(refs.contains(&"module:src/a/layout".to_string()));
+        let req = r.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).unwrap();
+        assert_eq!(req.decisions.len(), 1);
+        assert_eq!(req.via, vec![Reference::ticket("phase-62")]);
+        let layout = r.iter().find(|x| x.r#ref == Reference::module("src/a/layout")).unwrap();
+        assert_eq!(layout.via.last().unwrap(), &Reference::module("src/a/ready"));
+        assert_eq!(rests_on(&g, &Reference::ticket("phase-62"), Some(1)).len(), 3);
+    }
+
+    #[test]
+    fn rests_on_me_climbs_to_pages_and_tickets() {
+        let g = graph();
+        let r = rests_on_me(&g, &Reference::module("src/a/layout"));
+        let refs: Vec<String> = r.nodes.iter().map(|x| x.r#ref.to_string()).collect();
+        assert!(refs.contains(&"module:src/a/ready".to_string()));
+        assert!(refs.contains(&"req:ready-only-with-commit".to_string()));
+        assert!(refs.contains(&"page:git-readiness".to_string()));
+        assert!(refs.contains(&"page:overview".to_string()));
+        let tickets: Vec<String> = r.tickets.iter().map(|t| t.r#ref.id.clone()).collect();
+        assert_eq!(tickets, vec!["gap-1", "phase-62"]);
+    }
+
+    #[test]
+    fn board_orders_and_filters() {
+        let g = graph();
+        let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None });
+        let slugs: Vec<&str> = b.iter().map(|s| s.r#ref.id.as_str()).collect();
+        assert_eq!(slugs, vec!["phase-62", "later-1"]);
+        let touching = Reference::module("src/a/ready");
+        let b = board(&g, &BoardFilter { status: None, kinds: Some(&[TicketKind::Gap]), priority: None, touching: Some(&touching) });
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].r#ref.id, "gap-1");
+    }
+
+    #[test]
+    fn related_finds_gaps_on_shared_nodes() {
+        let g = graph();
+        let t = match g.get(&Reference::ticket("phase-62")).unwrap() {
+            Node::Ticket(t) => t.clone(),
+            _ => unreachable!(),
+        };
+        let r = related_tickets(&g, &t);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].r#ref.id, "gap-1");
+    }
+}

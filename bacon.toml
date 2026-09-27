@@ -1,0 +1,36 @@
+# Development loop. `bacon serve` rebuilds and restarts the daemon on every
+# save, pointed at this repository's own store (see .grimoire.toml).
+# See PROPOSAL.md, "Development loop".
+
+default_job = "check"
+
+[jobs.check]
+command = ["cargo", "check", "--workspace", "--all-targets", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--workspace", "--all-targets", "--color", "always"]
+need_stdout = false
+
+[jobs.test]
+command = ["cargo", "test", "--workspace", "--color", "always"]
+need_stdout = true
+
+# The daemon. Long-running, so bacon kills and restarts it when the source
+# changes. The store is the one .grimoire.toml names.
+[jobs.serve]
+command = ["cargo", "run", "--quiet", "--", "serve", "--port", "4242"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+allow_warnings = true
+
+# The lints over this repository's own manual, as a hook or CI would run them.
+[jobs.lint]
+command = ["cargo", "run", "--quiet", "--", "check"]
+need_stdout = true
+allow_warnings = true
+
+[keybindings]
+s = "job:serve"
+l = "job:lint"

@@ -1,0 +1,260 @@
+//! # Module contract
+//!
+//! ```json
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node.","criteria":[{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a dangling edge succeeds; the lint result is the caller's to report."}]}
+//! ```
+
+use serde::Serialize;
+
+use crate::model::*;
+use crate::store::{validate_page, validate_requirement, validate_ticket, FieldError, Store};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
+#[serde(tag = "error", rename_all = "snake_case")]
+pub enum ToolError {
+    #[error("{message}")]
+    NotFound { message: String },
+    #[error("{message}")]
+    Invalid {
+        message: String,
+        details: Vec<FieldError>,
+    },
+    #[error("{message}")]
+    Conflict { message: String },
+    #[error("{message}")]
+    StoreUnavailable { message: String },
+}
+
+impl ToolError {
+    pub fn not_found(r: &Reference) -> Self {
+        ToolError::NotFound { message: format!("{r} does not exist") }
+    }
+    pub fn invalid(message: impl Into<String>, details: Vec<FieldError>) -> Self {
+        ToolError::Invalid { message: message.into(), details }
+    }
+    pub fn conflict(message: impl Into<String>) -> Self {
+        ToolError::Conflict { message: message.into() }
+    }
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        ToolError::StoreUnavailable { message: message.into() }
+    }
+    pub fn code(&self) -> &'static str {
+        match self {
+            ToolError::NotFound { .. } => "not_found",
+            ToolError::Invalid { .. } => "invalid",
+            ToolError::Conflict { .. } => "conflict",
+            ToolError::StoreUnavailable { .. } => "store_unavailable",
+        }
+    }
+}
+
+fn invalid_if(errors: Vec<FieldError>, what: &str) -> Result<(), ToolError> {
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(ToolError::invalid(format!("{what} violates the schema"), errors))
+    }
+}
+
+/// The stored kinds a write changed, so a caller can persist exactly those.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Changed {
+    Page(String),
+    Requirement(String),
+    Ticket(String),
+    Deleted(Reference),
+}
+
+pub fn put_page(store: &mut Store, page: Page) -> Result<(Page, Changed), ToolError> {
+    invalid_if(validate_page(&page), "page")?;
+    store.pages.insert(page.slug.clone(), page.clone());
+    Ok((page.clone(), Changed::Page(page.slug)))
+}
+
+/// `decisions` on the input is ignored; the existing ones are kept.
+pub fn put_requirement(store: &mut Store, mut req: Requirement) -> Result<(Requirement, Changed), ToolError> {
+    req.decisions = store.requirements.get(&req.slug).map(|r| r.decisions.clone()).unwrap_or_default();
+    invalid_if(validate_requirement(&req), "requirement")?;
+    store.requirements.insert(req.slug.clone(), req.clone());
+    Ok((req.clone(), Changed::Requirement(req.slug)))
+}
+
+pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: String) -> Result<(Requirement, Changed), ToolError> {
+    if r.kind != Kind::Req {
+        return Err(ToolError::invalid(format!("{r} is not a requirement"), vec![]));
+    }
+    let existing = store.requirements.get(&r.id).ok_or_else(|| ToolError::not_found(r))?;
+    let mut req = existing.clone();
+    req.decisions.push(Decision { date, text });
+    invalid_if(validate_requirement(&req), "requirement")?;
+    store.requirements.insert(req.slug.clone(), req.clone());
+    Ok((req.clone(), Changed::Requirement(req.slug)))
+}
+
+pub struct NewTicket {
+    pub slug: String,
+    pub title: String,
+    pub kind: TicketKind,
+    pub priority: Priority,
+    pub touches: Vec<Reference>,
+    pub relies_on: Vec<Reference>,
+    pub body: String,
+}
+
+pub fn file_ticket(store: &mut Store, t: NewTicket) -> Result<(Ticket, Changed), ToolError> {
+    if store.tickets.contains_key(&t.slug) {
+        return Err(ToolError::conflict(format!("ticket:{} already exists", t.slug)));
+    }
+    let ticket = Ticket {
+        slug: t.slug,
+        title: t.title,
+        kind: t.kind,
+        priority: t.priority,
+        status: Status::Open,
+        touches: t.touches,
+        relies_on: t.relies_on,
+        body: t.body,
+        decision: None,
+    };
+    invalid_if(validate_ticket(&ticket), "ticket")?;
+    store.tickets.insert(ticket.slug.clone(), ticket.clone());
+    Ok((ticket.clone(), Changed::Ticket(ticket.slug)))
+}
+
+#[derive(Default)]
+pub struct TicketPatch {
+    pub title: Option<String>,
+    pub priority: Option<Priority>,
+    pub touches: Option<Vec<Reference>>,
+    pub relies_on: Option<Vec<Reference>>,
+    pub body: Option<String>,
+}
+
+fn ticket_mut<'a>(store: &'a mut Store, r: &Reference) -> Result<&'a mut Ticket, ToolError> {
+    if r.kind != Kind::Ticket {
+        return Err(ToolError::invalid(format!("{r} is not a ticket"), vec![]));
+    }
+    store.tickets.get_mut(&r.id).ok_or_else(|| ToolError::not_found(r))
+}
+
+pub fn update_ticket(store: &mut Store, r: &Reference, patch: TicketPatch) -> Result<(Ticket, Changed), ToolError> {
+    let existing = ticket_mut(store, r)?;
+    if existing.status == Status::Closed {
+        return Err(ToolError::conflict(format!("{r} is closed")));
+    }
+    let mut t = existing.clone();
+    if let Some(v) = patch.title {
+        t.title = v;
+    }
+    if let Some(v) = patch.priority {
+        t.priority = v;
+    }
+    if let Some(v) = patch.touches {
+        t.touches = v;
+    }
+    if let Some(v) = patch.relies_on {
+        t.relies_on = v;
+    }
+    if let Some(v) = patch.body {
+        t.body = v;
+    }
+    invalid_if(validate_ticket(&t), "ticket")?;
+    *existing = t.clone();
+    Ok((t, Changed::Ticket(r.id.clone())))
+}
+
+pub fn start_ticket(store: &mut Store, r: &Reference) -> Result<(Ticket, Changed), ToolError> {
+    let t = ticket_mut(store, r)?;
+    if t.status != Status::Open {
+        return Err(ToolError::conflict(format!("{r} is {:?}, not open", t.status).to_lowercase()));
+    }
+    t.status = Status::Active;
+    Ok((t.clone(), Changed::Ticket(r.id.clone())))
+}
+
+pub fn close_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Result<(Ticket, Changed), ToolError> {
+    let existing = ticket_mut(store, r)?;
+    if existing.status == Status::Closed {
+        return Err(ToolError::conflict(format!("{r} is already closed")));
+    }
+    let mut t = existing.clone();
+    t.status = Status::Closed;
+    t.body = String::new();
+    t.decision = Some(decision);
+    invalid_if(validate_ticket(&t), "ticket")?;
+    *existing = t.clone();
+    Ok((t, Changed::Ticket(r.id.clone())))
+}
+
+pub fn delete_node(store: &mut Store, r: &Reference) -> Result<Changed, ToolError> {
+    let removed = match r.kind {
+        Kind::Page => store.pages.remove(&r.id).is_some(),
+        Kind::Req => store.requirements.remove(&r.id).is_some(),
+        Kind::Ticket => store.tickets.remove(&r.id).is_some(),
+        _ => return Err(ToolError::invalid(format!("{r} is derived from the repository and cannot be deleted"), vec![])),
+    };
+    if removed {
+        Ok(Changed::Deleted(r.clone()))
+    } else {
+        Err(ToolError::not_found(r))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::fixtures::store;
+
+    #[test]
+    fn put_requirement_keeps_decisions() {
+        let mut s = store();
+        let mut r = s.requirements["ready-only-with-commit"].clone();
+        r.decisions = vec![];
+        r.title = "Changed".into();
+        let (out, _) = put_requirement(&mut s, r).unwrap();
+        assert_eq!(out.decisions.len(), 1);
+        assert_eq!(out.title, "Changed");
+    }
+
+    #[test]
+    fn record_decision_appends_and_validates() {
+        let mut s = store();
+        let r = Reference::req("ready-only-with-commit");
+        let (out, _) = record_decision(&mut s, &r, "Because.".into(), "2026-09-27".into()).unwrap();
+        assert_eq!(out.decisions.len(), 2);
+        let e = record_decision(&mut s, &r, "x".into(), "not-a-date".into()).unwrap_err();
+        assert_eq!(e.code(), "invalid");
+        assert_eq!(s.requirements["ready-only-with-commit"].decisions.len(), 2);
+        assert_eq!(record_decision(&mut s, &Reference::req("nope"), "x".into(), "2026-01-01".into()).unwrap_err().code(), "not_found");
+    }
+
+    #[test]
+    fn ticket_lifecycle() {
+        let mut s = store();
+        let r = Reference::ticket("phase-62");
+        assert_eq!(start_ticket(&mut s, &r).unwrap().0.status, Status::Active);
+        assert_eq!(start_ticket(&mut s, &r).unwrap_err().code(), "conflict");
+        let (t, _) = update_ticket(&mut s, &r, TicketPatch { priority: Some(Priority::Later), ..Default::default() }).unwrap();
+        assert_eq!(t.priority, Priority::Later);
+        let (t, _) = close_ticket(&mut s, &r, Decision { date: "2026-09-27".into(), text: "Shipped.".into() }).unwrap();
+        assert_eq!(t.status, Status::Closed);
+        assert_eq!(t.body, "");
+        assert_eq!(update_ticket(&mut s, &r, TicketPatch::default()).unwrap_err().code(), "conflict");
+        assert_eq!(close_ticket(&mut s, &r, Decision { date: "2026-09-27".into(), text: "again".into() }).unwrap_err().code(), "conflict");
+    }
+
+    #[test]
+    fn file_ticket_conflicts_on_slug() {
+        let mut s = store();
+        let t = NewTicket { slug: "phase-62".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, touches: vec![], relies_on: vec![], body: "b".into() };
+        assert_eq!(file_ticket(&mut s, t).unwrap_err().code(), "conflict");
+    }
+
+    #[test]
+    fn delete_only_store_kinds() {
+        let mut s = store();
+        assert_eq!(delete_node(&mut s, &Reference::module("src/a/ready")).unwrap_err().code(), "invalid");
+        assert!(delete_node(&mut s, &Reference::page("orphan")).is_ok());
+        assert_eq!(delete_node(&mut s, &Reference::page("orphan")).unwrap_err().code(), "not_found");
+    }
+}

@@ -188,7 +188,9 @@ diff them.
 **Uncovered.** A node no edge reaches.
 
 - A criterion no requirement names.
-- A module no page links to.
+- A module no page links to, when the module is expected to carry a contract
+  or carries one. Test files, build scripts and examples are code, not manual,
+  and are not reported.
 - A page no page links to, other than pages marked as roots. A root is a page
   whose slug is listed in the store config's `roots`; there must be at least
   one.
@@ -229,13 +231,17 @@ store with a version it does not know. Files are written atomically (write
 to a temporary file, rename) and the daemon is the only writer.
 
 The default location for a store is the platform data directory,
-`<data>/grimoire/stores/<name>/`, where `<name>` is chosen at `init`. The
+`<data>/grimoire/stores/<name>/`, where `<name>` is chosen at `init`. Every
+command also accepts `--store <path>` to use a directory anywhere. The
 target repository gets a `.grimoire.toml` naming the store so that
 `grimoire check` and the hooks find it:
 
 ```toml
 store = "example"
 ```
+
+`store` is a name under the stores directory, or a path (absolute, or
+relative to the repository when it contains a separator).
 
 That file is the only thing Grimoire writes into a repository, and it is
 written once by `init`.

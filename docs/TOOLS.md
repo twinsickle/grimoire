@@ -7,7 +7,11 @@ so this document defines both. Companion to [STORE.md](./STORE.md).
 ## Conventions
 
 - Served by `grimoire serve` over MCP streamable HTTP at `/mcp`, and as
-  JSON over HTTP at `/api/<tool>` for the UI.
+  JSON over HTTP at `/api/<tool>` for the UI: `POST` with the input as the
+  body, or `GET` with the input as query parameters (each value parsed as
+  JSON when it is JSON, otherwise a string). `GET /api/tools` lists the
+  definitions. The same tools run without a daemon as `grimoire tool <name>
+  '<json>'`.
 - Every input and output is a JSON object. References use the `kind:id`
   form from the store schema. Dates are ISO `YYYY-MM-DD`.
 - Every tool that returns a node returns it in the same shape: the stored or
@@ -129,6 +133,13 @@ Input: `{ "ref": module, criterion, file or decl reference }`. Output:
 is the line of the `# Module contract` heading, so a criterion opens on its
 contract.
 
+### `status`
+
+Counts, for orientation and for the dev loop.
+
+Input: `{}`. Output: `{ "repository", "roots", "languages", "nodes": { kind:
+int }, "edges": int, "unresolved_imports": int, "malformed": int }`.
+
 ## Write tools
 
 ### `put_page`
@@ -186,7 +197,8 @@ Close a ticket with its decision. The body is discarded.
 
 Input: `{ "ref": ticket reference, "decision": { "text", "date"? } }`.
 Output: `{ "node": ticket, "findings": [finding] }`. `findings` is the
-result of `lint` restricted to the nodes the ticket touched, so the
+result of `lint` restricted to the nodes the ticket touched (a touched
+module counts its criteria, and a dangling edge into them), so the
 finish-ticket skill sees in the same call whether the manual was left
 consistent. `conflict` if not `open` or `active`. Closing is allowed with
 findings present; refusing to close is the skill's decision, not the
