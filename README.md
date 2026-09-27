@@ -60,7 +60,10 @@ cd web && npm install && npm run dev   # the UI with hot reload on 5173, proxied
 
 `.mcp.json` points agents working in this repository at the dev daemon, so
 the tools are available as tools once the daemon is up (a fresh session or an
-MCP reconnect is needed after adding it). Without MCP, the same operations
+MCP reconnect is needed after adding it). The Claude Code skill in
+`.claude/skills/grimoire/` wraps the tools into the start, spec, finish and
+file sequences (`/grimoire start <slug>` and so on); it is the source that
+`grimoire init` will install into other projects. Without MCP, the same operations
 are `POST http://127.0.0.1:4242/api/<tool>` with the tool's JSON input, or
 `GET /api/<tool>?ref=...` for reads; `GET /api/tools` lists them.
 

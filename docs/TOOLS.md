@@ -226,7 +226,9 @@ created. Only store kinds can be deleted; derived nodes return `invalid`.
 
 ## Skill sequences over these tools
 
-For reference, since the skills are thin clients. Start a ticket:
+The Claude Code skill is `.claude/skills/grimoire/SKILL.md` in this
+repository; it is the reference implementation of these sequences and what
+`init` installs. Summarised here since the skills are thin clients. Start a ticket:
 `start_ticket`, then read `rests_on` and `related` from its output. Finish
 a ticket: `lint`, confirm every reference in `touches` was updated in this
 piece of work (the skill's judgement, from the diff and the nodes),
