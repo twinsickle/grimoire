@@ -17,6 +17,7 @@ grimoire-extract.workspace = true
 grimoire-server.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
+thiserror.workspace = true
 clap.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -243,5 +243,7 @@ store = "example"
 `store` is a name under the stores directory, or a path (absolute, or
 relative to the repository when it contains a separator).
 
-That file is the only thing Grimoire writes into a repository, and it is
-written once by `init`.
+`init` writes that file and the integration beside it: the agent skill under
+`.claude/skills/grimoire/`, the `grimoire` entry in `.mcp.json` (merged into
+an existing file), and a `pre-commit` hook running `grimoire check` when the
+repository has none. Nothing else Grimoire does writes into a repository.

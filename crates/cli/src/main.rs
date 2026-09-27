@@ -1,8 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, scaffold or init.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, and exits non-zero when there are findings."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only .grimoire.toml."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, scaffold or init.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, and exits non-zero when there are findings."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill, the MCP entry and a pre-commit hook. Every other command reads it."}]}
 //! ```
+
+mod init;
 
 use std::path::{Path, PathBuf};
 
@@ -60,15 +62,19 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Point a repository at a store: write .grimoire.toml, creating the store if needed.
+    /// Point a repository at a store and install the integration: .grimoire.toml,
+    /// the agent skill, the MCP entry and a pre-commit hook running `check`.
     Init {
         #[arg(long)]
         repo: Option<PathBuf>,
-        /// Store path or name.
+        /// Store path or name. Created empty if it does not exist.
         #[arg(long)]
         store: String,
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         languages: Vec<String>,
+        /// The port the daemon will serve on; written into .mcp.json.
+        #[arg(long, default_value_t = 4242)]
+        port: u16,
     },
     /// Run one tool against the store without a daemon and print its output.
     Tool {
@@ -167,7 +173,7 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Command::Init { repo, store, languages } => {
+        Command::Init { repo, store, languages, port } => {
             let repo = repo.unwrap_or(cwd()?);
             let repo_str = canonical(&repo)?;
             let store_dir = store_io::resolve_store(&store)?;
@@ -187,7 +193,14 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             let f = store_io::write_project_file(&repo, &store)?;
-            println!("wrote {}", f.display());
+            println!("wrote   {}", f.display());
+            for w in init::install(&repo, port)? {
+                match w {
+                    init::Wrote::Written(p) => println!("wrote   {}", p.display()),
+                    init::Wrote::Skipped { path, note } => println!("skipped {}: {note}", path.display()),
+                }
+            }
+            println!("done. Start the daemon with `grimoire serve --port {port}`; agents get the tools from .mcp.json and the sequences from the skill.");
             Ok(())
         }
         Command::Tool { store, name, input } => {

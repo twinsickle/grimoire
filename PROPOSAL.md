@@ -175,8 +175,12 @@ store and refers to nothing in it. The project gets only the integration:
   finish a ticket, write a spec, run the check.
 - **A small config** saying how to reach the daemon.
 
-Installing these is what `grimoire init` does. The code is only ever read;
-Grimoire writes no index, cache or marker into the repository.
+Installing these is what `grimoire init` does: `.grimoire.toml`, the skill,
+the MCP entry merged into `.mcp.json`, and a `pre-commit` hook that runs
+`grimoire check` when the repository has no hook of its own. A git hook rather
+than an agent's own hook, because the check is the same for every agent and
+for a person, and because the lints are a check, not a prompt. The code is
+only ever read; Grimoire writes no index, cache or marker into the repository.
 
 ## Visual
 
