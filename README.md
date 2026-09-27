@@ -3,7 +3,9 @@
 A manual and ticketing tool for software projects: one graph joining what a
 project is meant to do now, what is intended to change, the module contracts
 in its code, and the code itself, served to people through a web UI and to
-agents through MCP. See [PROPOSAL.md](./PROPOSAL.md) for the design and
+agents through MCP. See [PROPOSAL.md](./PROPOSAL.md) for the design,
+[docs/STORE.md](./docs/STORE.md) for the store schema,
+[docs/TOOLS.md](./docs/TOOLS.md) for the MCP tools, and
 [examples/](./examples/) for the projects it is pointed at.
 
 ## Layout
