@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { ErrorBox, KindTag, PriorityTag, RefLink, StatusTag, TicketTable } from "../components";
+import { ErrorBox, KindTag, Markdown, PriorityTag, RefLink, StatusTag, TicketTable } from "../components";
 import {
   idOf,
   kindOf,
@@ -72,7 +72,7 @@ function titleOf(n: AnyNode): string {
 function Page({ n }: { n: PageNode }) {
   return (
     <>
-      <div className="body-md">{n.body}</div>
+      <Markdown text={n.body} />
       <h2>Links</h2>
       <ul className="plain">
         {n.links.map((l) => (
@@ -154,7 +154,7 @@ function Ticket({ n }: { n: TicketNode }) {
       <p>
         <PriorityTag p={n.priority} /> · <span className="dim">{n.kind}</span> · <StatusTag s={n.status} />
       </p>
-      {n.body && <div className="body-md">{n.body}</div>}
+      {n.body && <Markdown text={n.body} />}
       {n.decision && (
         <div className="decision">
           <span className="date">{n.decision.date}</span>

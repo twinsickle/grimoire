@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the map, the board and node pages, the header with status and finding count, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the map at /, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."}]}
+ * {"purpose":"The shell: routes to the summary, the map, the board and node pages, the header with status and finding count, and search over find.","criteria":[{"id":"four-views","statement":"The routes are the summary at /, the map at /map, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."}]}
  * ```
  */
 
@@ -12,6 +12,7 @@ import { api, useQuery } from "./api";
 import { KindTag, nodePath } from "./components";
 import { idOf, type Summary } from "./types";
 import { BoardView } from "./views/Board";
+import { HomeView } from "./views/Home";
 import { MapView } from "./views/Map";
 import { NodeView } from "./views/Node";
 
@@ -22,7 +23,8 @@ export function App() {
         <Top />
         <div className="main">
           <Routes>
-            <Route path="/" element={<MapView />} />
+            <Route path="/" element={<HomeView />} />
+            <Route path="/map" element={<MapView />} />
             <Route path="/board" element={<BoardView />} />
             <Route path="/n/:ref" element={<NodeView />} />
           </Routes>
@@ -44,8 +46,9 @@ function Top() {
       </Link>
       <nav>
         <NavLink to="/" end>
-          Map
+          Manual
         </NavLink>
+        <NavLink to="/map">Map</NavLink>
         <NavLink to="/board">Board</NavLink>
       </nav>
       <Search />
@@ -55,7 +58,7 @@ function Top() {
         {status.data && (
           <>
             {repo} · {status.data.nodes.page} pages · {status.data.nodes.req} reqs · {status.data.nodes.module} modules · {status.data.nodes.ticket} tickets ·{" "}
-            <Link to="/" className={findings ? "bad" : ""}>
+            <Link to="/map" className={findings ? "bad" : ""}>
               {findings} finding{findings === 1 ? "" : "s"}
             </Link>
           </>
