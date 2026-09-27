@@ -54,7 +54,9 @@ impl ServerHandler for McpServer {
     }
 
     async fn list_tools(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(tool_defs()))
+        // Protocol 2026-07-28 requires the cache fields on list results. The
+        // tool set is fixed for the life of the process, so cache it freely.
+        Ok(ListToolsResult::with_all_items(tool_defs()).with_ttl_ms(24 * 60 * 60 * 1000).with_cache_scope(CacheScope::Public))
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
