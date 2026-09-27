@@ -154,6 +154,18 @@ Input: the page object from the schema. Output: `{ "node": page,
 "warnings": [finding] }`. `conflict` is not raised on replace; the slug is
 the identity.
 
+### `patch_page`
+
+Change part of a page without resending it. The usual way to link a new
+requirement or page from its area.
+
+Input: `{ "ref": page reference, "title"?, "body"?, "add_links"?: [reference],
+"remove_links"?: [reference] }`. Only given fields change. Added links go at
+the end in the order given and a link already present is not duplicated;
+removing an absent link is not an error. Output: `{ "node": page,
+"warnings": [finding] }`. `not_found` if the page does not exist; `invalid`
+if the result would break a field rule, in which case nothing changes.
+
 ### `put_requirement`
 
 Create or replace a requirement. Decisions are not replaced by this tool:

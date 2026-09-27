@@ -44,9 +44,11 @@ created in `warnings`. Treat every warning as work to do now.
   assumes true and does not change). Body is Markdown, at most 4,000
   characters, and is discarded on close. Kinds: `change`, `gap`, `question`.
   Priorities: `next`, `high`, `later`.
-- `put_page` and `put_requirement` **replace** the record. `get` it first and
-  send the whole thing back with the change; `put_requirement` keeps the
-  existing decisions regardless of what is sent.
+- `put_page` and `put_requirement` **replace** the record. To change part of
+  a page, above all to link a new requirement or page from its area, use
+  `patch_page` with `add_links` or `remove_links`; it touches nothing else.
+  For a requirement, `get` it first and send the whole thing back;
+  `put_requirement` keeps the existing decisions regardless of what is sent.
 - Module contracts live in the code as a JSON block under a
   `# Module contract` heading in the file's leading doc comment. Changing a
   criterion's id or removing one is a manual change: the requirements that
@@ -95,8 +97,8 @@ the code.
 1. For each node in the ticket's `touches`: `get` it. For a page,
    `put_page` with the new intent and links. For a requirement,
    `put_requirement` with the new statement, scenarios and `covered_by`. For a
-   new requirement, also add it to the `links` of the page that covers its
-   area, or it is `uncovered`.
+   new requirement, also `patch_page` the page that covers its area with
+   `add_links`, or it is `uncovered`.
 2. For every choice made while writing, `record_decision` on the requirement
    it belongs to: what was chosen and why, one paragraph. Date defaults to
    today.

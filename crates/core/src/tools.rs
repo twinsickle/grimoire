@@ -75,7 +75,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 19] = [
+pub const TOOL_NAMES: [&str; 20] = [
     "find",
     "get",
     "outline",
@@ -87,6 +87,7 @@ pub const TOOL_NAMES: [&str; 19] = [
     "lint",
     "module_source",
     "put_page",
+    "patch_page",
     "put_requirement",
     "record_decision",
     "file_ticket",
@@ -98,7 +99,7 @@ pub const TOOL_NAMES: [&str; 19] = [
 ];
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
@@ -233,6 +234,21 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let (node, changed) = ops::put_page(state.store_mut(), page)?;
             let r = Reference::page(&node.slug);
             written(state, &r, changed)
+        }
+        "patch_page" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Reference,
+                title: Option<String>,
+                body: Option<String>,
+                add_links: Option<Vec<Reference>>,
+                remove_links: Option<Vec<Reference>>,
+            }
+            let i: In = parse(input)?;
+            let patch = ops::PagePatch { title: i.title, body: i.body, add_links: i.add_links.unwrap_or_default(), remove_links: i.remove_links.unwrap_or_default() };
+            let (_, changed) = ops::patch_page(state.store_mut(), &i.r#ref, patch)?;
+            written(state, &i.r#ref, changed)
         }
         "put_requirement" => {
             #[derive(Deserialize)]
@@ -390,6 +406,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "lint", description: "The dangling, uncovered and malformed checks over the whole graph. Same output as `grimoire check`.", input_schema: obj(&[], json!({ "kinds": {"type":"array","items":{"type":"string","enum":["dangling","uncovered","malformed"]}} })) },
         ToolDef { name: "module_source", description: "Where a module, criterion, file or declaration lives: file and line, plus the contract line for criteria.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "put_page", description: "Create or replace a page. Links may point to page, req and module references.", input_schema: obj(&["slug","title","body","links"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "body": {"type":"string","description":"Markdown"}, "links": refs })) },
+        ToolDef { name: "patch_page", description: "Change a page's title or body, or add and remove links, leaving everything else as it was. The usual way to link a new requirement or page from its area.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "body": {"type":"string","description":"Markdown"}, "add_links": refs, "remove_links": refs })) },
         ToolDef { name: "put_requirement", description: "Create or replace a requirement. Existing decisions are preserved; use record_decision to add one.", input_schema: obj(&["slug","title","statement","scenarios","covered_by"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "statement": {"type":"string","description":"One normative paragraph (SHALL / MUST)"}, "scenarios": {"type":"array","items": scenario}, "covered_by": {"type":"array","items": reference, "description":"criterion references"} })) },
         ToolDef { name: "record_decision", description: "Append a dated decision to a requirement: what was chosen and why.", input_schema: obj(&["ref","text"], json!({ "ref": reference, "text": {"type":"string"}, "date": date })) },
         ToolDef { name: "file_ticket", description: "Create an open ticket: a change, gap or question, with the nodes it touches and relies on.", input_schema: obj(&["slug","title","kind","priority","body"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "kind": {"type":"string","enum":["change","gap","question"]}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string","description":"Markdown, at most 4000 characters"} })) },

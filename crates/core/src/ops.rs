@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node.","criteria":[{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a dangling edge succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node.","criteria":[{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a dangling edge succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."}]}
 //! ```
 
 use serde::Serialize;
@@ -69,6 +69,40 @@ pub fn put_page(store: &mut Store, page: Page) -> Result<(Page, Changed), ToolEr
     invalid_if(validate_page(&page), "page")?;
     store.pages.insert(page.slug.clone(), page.clone());
     Ok((page.clone(), Changed::Page(page.slug)))
+}
+
+/// A partial change to a page. Only given fields change; links are added at
+/// the end in the order given, never duplicated, and removing an absent
+/// link is not an error.
+#[derive(Default)]
+pub struct PagePatch {
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub add_links: Vec<Reference>,
+    pub remove_links: Vec<Reference>,
+}
+
+pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<(Page, Changed), ToolError> {
+    if r.kind != Kind::Page {
+        return Err(ToolError::invalid(format!("{r} is not a page"), vec![]));
+    }
+    let existing = store.pages.get(&r.id).ok_or_else(|| ToolError::not_found(r))?;
+    let mut page = existing.clone();
+    if let Some(t) = patch.title {
+        page.title = t;
+    }
+    if let Some(b) = patch.body {
+        page.body = b;
+    }
+    page.links.retain(|l| !patch.remove_links.contains(l));
+    for l in patch.add_links {
+        if !page.links.contains(&l) {
+            page.links.push(l);
+        }
+    }
+    invalid_if(validate_page(&page), "page")?;
+    store.pages.insert(page.slug.clone(), page.clone());
+    Ok((page, Changed::Page(r.id.clone())))
 }
 
 /// `decisions` on the input is ignored; the existing ones are kept.
@@ -204,6 +238,26 @@ pub fn delete_node(store: &mut Store, r: &Reference) -> Result<Changed, ToolErro
 mod tests {
     use super::*;
     use crate::graph::fixtures::store;
+
+    #[test]
+    fn patch_page_is_partial() {
+        let mut s = store();
+        let r = Reference::page("git-readiness");
+        let before = s.pages["git-readiness"].clone();
+        let (p, _) = patch_page(&mut s, &r, PagePatch { add_links: vec![Reference::page("orphan"), Reference::req("stale")], remove_links: vec![Reference::req("nope"), Reference::module("src/a/ready")], ..Default::default() }).unwrap();
+        assert_eq!(p.title, before.title);
+        assert_eq!(p.body, before.body);
+        // stale was already present: not duplicated; ready removed; orphan appended.
+        assert_eq!(p.links.iter().map(|l| l.to_string()).collect::<Vec<_>>(), vec!["req:ready-only-with-commit", "req:stale", "page:orphan"]);
+        let (p, _) = patch_page(&mut s, &r, PagePatch { title: Some("Readiness".into()), ..Default::default() }).unwrap();
+        assert_eq!(p.title, "Readiness");
+        assert_eq!(p.links.len(), 3);
+        // Invalid result changes nothing.
+        let e = patch_page(&mut s, &r, PagePatch { add_links: vec![Reference::ticket("x")], ..Default::default() }).unwrap_err();
+        assert_eq!(e.code(), "invalid");
+        assert_eq!(s.pages["git-readiness"].links.len(), 3);
+        assert_eq!(patch_page(&mut s, &Reference::page("nope"), PagePatch::default()).unwrap_err().code(), "not_found");
+    }
 
     #[test]
     fn put_requirement_keeps_decisions() {
