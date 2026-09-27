@@ -71,9 +71,13 @@ edges.
    and questions touching what it touches). If the ticket is already active,
    use `get`, `rests_on` and `related_tickets` instead.
 2. Read `rests_on` as a list of assumptions. For each requirement with
-   decisions, ask whether the decision still holds given what this ticket
-   changes. Name the ones you would challenge, with why, before planning.
-   This is the moment the question is asked; nothing pushes it later.
+   decisions, and each closed ticket listed, ask whether the decision still
+   holds given what this ticket changes. Name the ones you would challenge,
+   with why, before planning. This is the moment the question is asked;
+   nothing pushes it later. The walk is bounded: a ticket relied on appears
+   with its decision and is not expanded, and a page appears with its
+   requirements and modules but not its child pages. Module imports are
+   followed all the way down, since that is the blast radius.
 3. Read `related`. A gap or question that touches the same nodes is context
    for this work and may be closed by it; say which.
 4. For each module in `touches`, `rests_on_me` shows the blast radius: the

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape docs/TOOLS.md gives for that tool."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape docs/TOOLS.md gives for that tool."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -221,14 +221,33 @@ pub struct RestsOn {
     pub decisions: Vec<Decision>,
 }
 
-/// The downward relations each kind is followed through.
-fn downward(g: &Graph, r: &Reference) -> Vec<Reference> {
+/// The downward relations each kind is followed through. `is_start` is the
+/// node the question was asked about; nodes reached along the way are
+/// bounded: a ticket contributes its decision and is not expanded, and a
+/// page contributes its requirements and modules but not its child pages.
+/// Module imports stay transitive, since that is what blast radius means.
+fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
     match g.get(r) {
-        Some(Node::Ticket(t)) => t.relies_on.iter().chain(t.touches.iter()).cloned().collect(),
-        Some(Node::Page(p)) => p.links.clone(),
+        Some(Node::Ticket(t)) if is_start => t.relies_on.iter().chain(t.touches.iter()).cloned().collect(),
+        Some(Node::Ticket(_)) => Vec::new(),
+        Some(Node::Page(p)) => p.links.iter().filter(|l| l.kind != Kind::Page).cloned().collect(),
         Some(Node::Req(q)) => q.covered_by.clone(),
         Some(Node::Criterion(c)) => vec![Reference::module(&c.module)],
         Some(Node::Module(m)) => m.imports.iter().map(|i| Reference::module(i)).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The decisions a reached node contributes: a requirement's, newest first,
+/// or a closed ticket's.
+fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
+    match g.get(r) {
+        Some(Node::Req(q)) => {
+            let mut d = q.decisions.clone();
+            d.sort_by(|a, b| b.date.cmp(&a.date));
+            d
+        }
+        Some(Node::Ticket(t)) => t.decision.iter().cloned().collect(),
         _ => Vec::new(),
     }
 }
@@ -244,20 +263,13 @@ pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<Rests
         if depth.is_some_and(|d| dist >= d) {
             continue;
         }
-        for next in downward(g, &r) {
+        for next in downward(g, &r, r == *start) {
             if !seen.insert(next.clone()) {
                 continue;
             }
             let mut path = via.clone();
             path.push(r.clone());
-            let decisions = match g.get(&next) {
-                Some(Node::Req(q)) => {
-                    let mut d = q.decisions.clone();
-                    d.sort_by(|a, b| b.date.cmp(&a.date));
-                    d
-                }
-                _ => Vec::new(),
-            };
+            let decisions = decisions_of(g, &next);
             let title = g.get(&next).map(Node::title).unwrap_or_else(|| format!("(missing) {next}"));
             out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions }));
             queue.push_back((next, path));
@@ -465,6 +477,32 @@ mod tests {
         let layout = r.iter().find(|x| x.r#ref == Reference::module("src/a/layout")).unwrap();
         assert_eq!(layout.via.last().unwrap(), &Reference::module("src/a/ready"));
         assert_eq!(rests_on(&g, &Reference::ticket("phase-62"), Some(1)).len(), 3);
+    }
+
+    #[test]
+    fn rests_on_is_bounded_at_tickets_and_pages() {
+        let mut store = crate::graph::fixtures::store();
+        // A ticket relying on the closed ticket `old` (which touches a missing page)
+        // and on the root page, which links to the whole manual.
+        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Open, &[], &["ticket:old", "page:overview"]);
+        store.tickets.insert(t.slug.clone(), t);
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+        let r = rests_on(&g, &Reference::ticket("new"), None);
+        let refs: Vec<String> = r.iter().map(|x| x.r#ref.to_string()).collect();
+        // The closed ticket is present with its decision and was not expanded.
+        let old = r.iter().find(|x| x.r#ref == Reference::ticket("old")).unwrap();
+        assert_eq!(old.decisions.len(), 1);
+        assert!(!refs.contains(&"page:renamed-away".to_string()));
+        // The root page is present; its child page and everything below are not.
+        assert!(refs.contains(&"page:overview".to_string()));
+        assert!(!refs.contains(&"page:git-readiness".to_string()));
+        assert!(!refs.contains(&"module:src/a/ready".to_string()));
+        assert_eq!(r.len(), 2, "{refs:?}");
+        // Asked about a page directly, its requirements and modules are followed, not its pages.
+        let r = rests_on(&g, &Reference::page("git-readiness"), None);
+        let refs: Vec<String> = r.iter().map(|x| x.r#ref.to_string()).collect();
+        assert!(refs.contains(&"req:ready-only-with-commit".to_string()));
+        assert!(refs.contains(&"module:src/a/layout".to_string()), "imports stay transitive");
     }
 
     #[test]

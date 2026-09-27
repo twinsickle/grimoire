@@ -71,10 +71,14 @@ each. The planning and review question.
 Input: `{ "ref": reference, "depth"?: int (default unlimited) }`.
 Output: `{ "nodes": [ { "ref", "title", "via": [reference path from the
 input], "decisions": [decision] } ] }`. For a ticket, starts from
-`relies_on` and `touches`. For a page, follows `links`. For a requirement,
-follows `covered_by` to criteria and then to modules and their imports.
-Requirements contribute their decisions; other nodes contribute none.
-Ordered nearest first, then by decision date descending.
+`relies_on` and `touches`. For a page, follows `links` to requirements and
+modules but not to child pages. For a requirement, follows `covered_by` to
+criteria and then to modules and their imports, transitively. A ticket
+reached on the way is listed with its decision (when closed) and not
+expanded: relying on a ticket is relying on what was decided there.
+Requirements contribute their decisions, closed tickets their one decision;
+other nodes contribute none. Ordered nearest first, then by decision date
+descending. `depth` bounds the walk further; nothing widens it.
 
 ### `rests_on_me`
 
