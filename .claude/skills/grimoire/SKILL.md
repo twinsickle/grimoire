@@ -77,6 +77,16 @@ When the task is unclear or new to the session: `status`, then `outline`
 (depth 2), then `board`. The root page links the story in reading order:
 `goal`, `architecture`, `constraints`, `glossary`, then the areas under
 architecture. Read those pages before reading code.
+
+**Before opening a source file, `get` its module.** The module node gives
+its purpose, its criteria, its files and what it imports; `get` on a file
+gives every declaration with its line; `find` with `kinds: ["decl"]` finds
+a function or type by name across the repository; `module_source` gives a
+criterion's line. Use these to decide which file and which declaration to
+read, and read the file only then. Grep answers "where is this string";
+the graph answers "which module owns this behaviour and what does it
+promise", which is the question a change actually asks. The graph does not
+answer "who calls this"; that is grep or the language server, by design.
 `find` locates a node by any text. `get` shows a node with its `in` and `out`
 edges.
 
@@ -101,6 +111,8 @@ edges.
    for this work and may be closed by it; say which.
 4. For each module in `touches`, `rests_on_me` shows the blast radius: the
    requirements and pages above it and the other open tickets reaching it.
+   Then `get` the module for its files and declarations before opening any
+   of them.
 5. Plan the work. Include the manual updates in the plan: which pages and
    requirements change, which decisions get recorded, which contracts change.
 
