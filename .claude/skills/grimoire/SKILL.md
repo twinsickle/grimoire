@@ -63,7 +63,9 @@ created in `warnings`. Treat every warning as work to do now.
   running `bacon serve`), a source edit rebuilds and restarts the daemon and
   the tools are unavailable for the rebuild. Do the manual writes before the
   code edits, and retry a refused call after a moment rather than falling
-  back to editing the store.
+  back to editing the store. If you add a tool or change the server's
+  instructions, your own MCP client keeps the old list until it reconnects;
+  call the new tool over HTTP until then, and say so.
 - **When a `check` fails for a reason that makes no sense**, compare
   `status`'s `version` and `supported_languages` with the store's
   `languages`. An installed binary older than the store's needs is the

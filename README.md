@@ -69,6 +69,12 @@ cd web && npm install && npm run dev   # the UI with hot reload on 5173, proxied
 `bacon serve` also serves a built UI from `web/dist` on 4242 when one exists
 (`npm run build`). During UI work use the Vite server on 5173 instead.
 
+An MCP client reads a server's tool list and instructions once, on connect,
+and nothing on the server can push an update. A change to tool *behaviour*
+reaches a connected agent on its next call, since the transport is stateless.
+A change to the tool *set* or to the instructions string needs `/mcp` and a
+reconnect in every client, including the agent that made the change.
+
 `.mcp.json` points agents working in this repository at the dev daemon, so
 the tools are available as tools once the daemon is up (a fresh session or an
 MCP reconnect is needed after adding it). The Claude Code skill in
