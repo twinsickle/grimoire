@@ -1,0 +1,17 @@
+[package]
+name = "grimoire-cli"
+description = "The grimoire binary: serve, check, scaffold, init."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "grimoire"
+path = "src/main.rs"
+
+[dependencies]
+grimoire-core.workspace = true
+grimoire-extract.workspace = true
+grimoire-server.workspace = true

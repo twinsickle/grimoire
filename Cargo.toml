@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/extract", "crates/server", "crates/cli"]
+default-members = ["crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/twinsickle/grimoire"
+
+[workspace.dependencies]
+grimoire-core = { path = "crates/core" }
+grimoire-extract = { path = "crates/extract" }
+grimoire-server = { path = "crates/server" }

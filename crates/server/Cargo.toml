@@ -1,0 +1,16 @@
+[package]
+name = "grimoire-server"
+description = "The grimoire serve daemon: watching, JSON API, MCP over streamable HTTP, SSE updates, embedded web UI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "grimoire_server"
+path = "src/lib.rs"
+
+[dependencies]
+grimoire-core.workspace = true
+grimoire-extract.workspace = true
