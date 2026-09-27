@@ -1,0 +1,11 @@
+{
+  "name": "@grimoire/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "React/Vite UI: the map, the board, node pages. Dark only. Built last, per PROPOSAL.md.",
+  "type": "module",
+  "scripts": {
+    "build": "echo \"not scaffolded yet\"",
+    "dev": "echo \"not scaffolded yet\""
+  }
+}
