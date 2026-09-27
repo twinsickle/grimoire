@@ -80,6 +80,15 @@ The levels are a convention for how pages are written, not a rule the tool
 enforces. A page that lists modules is what the manual calls an area; the tool
 sees only a page with links.
 
+The top of the manual tells the story, also by convention: the root page
+links, in reading order, to **goal** (what this is and who it is for, and what
+it is not), **architecture** (how it is built, linking to the area pages),
+**constraints** (what must always or never hold, linking the cross-cutting
+requirements) and **glossary**. The scaffold seeds these with prompting text
+so a new project's manual reads top-down from the first run. A role field on
+pages was considered and rejected: the UI renders a page's links in order,
+and a missing story page is visible on the map, which is enough of a lint.
+
 A requirement carries the decisions behind it: a dated line saying what was
 chosen and why, kept on the requirement rather than in a log elsewhere. This
 is what gets challenged, and it is the only dated thing in the model. The

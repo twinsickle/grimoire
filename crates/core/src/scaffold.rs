@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and nothing else; it carries no intent the contracts did not."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,6 +11,17 @@ use crate::model::*;
 use crate::store::{is_slug, Store, SLUG_MAX};
 
 pub const ROOT_SLUG: &str = "overview";
+pub const ARCHITECTURE_SLUG: &str = "architecture";
+
+/// The story pages every manual starts with, in reading order, with the
+/// prompt each carries until someone writes it. The convention is the
+/// proposal's: what this is, what it does, and how.
+pub const STORY: [(&str, &str, &str); 4] = [
+    ("goal", "Goal", "What this project is for and who it is for, in a few paragraphs. What it is not: the neighbouring things it deliberately does not do. This is the first page a person or agent reads."),
+    (ARCHITECTURE_SLUG, "Architecture", "How the project is built: its parts and how they fit, as prose. The pages below are its areas, one per module group, seeded from the module contracts."),
+    ("constraints", "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
+    ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
+];
 
 /// Turn any path-ish text into a slug, or `node` if nothing survives.
 pub fn slugify(s: &str) -> String {
@@ -95,6 +106,9 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
     });
 
     let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string()]));
+    for (slug, _, _) in STORY {
+        page_slugs.0.insert(slug.to_string());
+    }
     let mut req_slugs = Slugs(BTreeSet::new());
 
     // Every group path that must exist, including ancestors.
@@ -116,25 +130,42 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
         group_slug.insert(g.clone(), slug);
     }
 
+    // Group pages are keyed by group path; the story pages by a key that no
+    // group path can be, so they share one map.
     let mut pages: BTreeMap<String, Page> = BTreeMap::new();
     for g in &groups {
         let slug = group_slug[g].clone();
         let (title, body) = if g.is_empty() {
-            ("Overview".to_string(), format!("Skeleton built from the module contracts of `{repository}`. Refine it: this page and the ones below hold no intent yet."))
+            ("Overview".to_string(), format!("Skeleton built from the module contracts of `{repository}`. Refine it: the story pages below say what belongs in each, and the area pages under architecture hold no intent yet."))
         } else {
             (title_of(g), format!("Modules under `{g}/`."))
         };
         pages.insert(g.clone(), Page { slug, title, body, links: Vec::new() });
     }
+    let root_key = String::new();
+    pages.entry(root_key.clone()).or_insert_with(|| Page {
+        slug: ROOT_SLUG.to_string(),
+        title: "Overview".to_string(),
+        body: format!("Skeleton for `{repository}`. No module contracts were found; the story pages below say what belongs in each."),
+        links: Vec::new(),
+    });
+    for (slug, title, prompt) in STORY {
+        let key = format!("story:{slug}");
+        pages.insert(key, Page { slug: slug.to_string(), title: title.to_string(), body: prompt.to_string(), links: Vec::new() });
+        pages.get_mut(&root_key).expect("root exists").links.push(Reference::page(slug));
+    }
 
-    // Child groups link from their parent, in path order.
+    // Child groups link from their parent, in path order; top-level groups
+    // hang under architecture rather than the root.
+    let architecture_key = format!("story:{ARCHITECTURE_SLUG}");
     for g in &groups {
         if g.is_empty() {
             continue;
         }
         let parent = parent_group(g);
+        let parent_key = if parent.is_empty() { architecture_key.clone() } else { parent };
         let slug = group_slug[g].clone();
-        pages.get_mut(&parent).expect("parent group exists").links.push(Reference::page(&slug));
+        pages.get_mut(&parent_key).expect("parent group exists").links.push(Reference::page(&slug));
     }
 
     // Modules and their requirements.
@@ -189,6 +220,13 @@ mod tests {
         let s = scaffold(&x, "C:/repo", &["rust".into()]);
         assert!(s.pages.contains_key("overview"));
         assert_eq!(s.requirements.len(), 3);
+        // The story outline: root links the four story pages in order, and
+        // the top-level group hangs under architecture.
+        let root_links: Vec<String> = s.pages["overview"].links.iter().map(|r| r.to_string()).collect();
+        assert_eq!(root_links, vec!["page:goal", "page:architecture", "page:constraints", "page:glossary"]);
+        assert!(s.pages["architecture"].links.iter().any(|r| r.kind == Kind::Page && r.id == "src-a"), "{:?}", s.pages["architecture"].links);
+        assert!(s.pages["overview"].links.iter().all(|r| r.id != "src-a"));
+        assert!(s.pages["goal"].body.contains("What this project is for"));
         let g = Graph::build(&s, &x, &[]);
         let f = lint(&g, &[Rule::Dangling]);
         assert!(f.is_empty(), "{f:?}");
