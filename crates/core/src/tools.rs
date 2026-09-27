@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add the dangling warnings the write created, start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count and malformed file count."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add the dangling warnings the write created, start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count and malformed file count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
 //! ```
 
 use serde::Deserialize;
@@ -15,24 +15,49 @@ use crate::ops::{self, Changed, ToolError};
 use crate::query::{self, BoardFilter};
 use crate::store::{Malformed, Store};
 
+/// What the running build is: facts the loader knows and core cannot find
+/// out for itself without I/O. `status` reports them next to the store's
+/// `languages` so a store naming a language this build lacks is visible.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Build {
+    /// The crate version; every crate in the workspace shares one.
+    pub version: String,
+    /// The languages this build has an extraction adapter for.
+    pub supported_languages: Vec<String>,
+}
+
+impl Default for Build {
+    fn default() -> Self {
+        Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: vec![] }
+    }
+}
+
 /// Everything the tools operate on, with the graph cached between calls.
 #[derive(Debug, Default)]
 pub struct State {
     store: Store,
     extraction: Extraction,
     malformed: Vec<Malformed>,
+    build: Build,
     graph: Option<Graph>,
 }
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, graph: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None }
     }
     pub fn store(&self) -> &Store {
         &self.store
     }
     pub fn extraction(&self) -> &Extraction {
         &self.extraction
+    }
+    pub fn build(&self) -> &Build {
+        &self.build
+    }
+    /// Tell the state what build is running. The graph does not depend on it.
+    pub fn set_build(&mut self, build: Build) {
+        self.build = build;
     }
     pub fn set_store(&mut self, store: Store, malformed: Vec<Malformed>) {
         self.store = store;
@@ -212,6 +237,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
         }
         "status" => {
             let config = state.store.config.clone();
+            let build = state.build.clone();
             let g = state.graph();
             let mut kinds = serde_json::Map::new();
             for k in Kind::ALL {
@@ -221,6 +247,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 "repository": config.repository,
                 "roots": config.roots,
                 "languages": config.languages,
+                "version": build.version,
+                "supported_languages": build.supported_languages,
                 "nodes": kinds,
                 "edges": g.edges.len(),
                 "unresolved_imports": g.unresolved_imports,
@@ -414,7 +442,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "start_ticket", description: "Move a ticket from open to active and return what it rests on and the related gaps and questions.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the lint findings on the nodes it touched.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, and how many imports did not resolve.", input_schema: obj(&[], json!({})) },
+        ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
 }
 
@@ -444,6 +472,24 @@ mod tests {
                 assert_ne!(e.to_string(), format!("unknown tool `{n}`"));
             }
         }
+    }
+
+    #[test]
+    fn status_reports_the_build_it_was_told() {
+        let mut s = state();
+        // Untold, the version is this crate's and no language is claimed.
+        let out = call(&mut s, "status", json!({}), "2026-09-27").unwrap();
+        assert_eq!(out.output["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(out.output["supported_languages"], json!([]));
+        assert!(out.output["languages"].is_array());
+
+        s.set_build(Build { version: "9.9.9".into(), supported_languages: vec!["rust".into()] });
+        let out = call(&mut s, "status", json!({}), "2026-09-27").unwrap();
+        assert_eq!(out.output["version"], "9.9.9");
+        assert_eq!(out.output["supported_languages"], json!(["rust"]));
+        // The rest of the answer is untouched by the build.
+        assert!(out.output["nodes"].is_object());
+        assert!(out.output["edges"].is_number());
     }
 
     #[test]

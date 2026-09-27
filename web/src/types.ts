@@ -166,6 +166,10 @@ export interface StatusResult {
   repository: string;
   roots: string[];
   languages: string[];
+  /** The running build's crate version. */
+  version: string;
+  /** The languages the running build can extract; compare with `languages`. */
+  supported_languages: string[];
   nodes: Record<Kind, number>;
   edges: number;
   unresolved_imports: number;

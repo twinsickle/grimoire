@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use grimoire_core::tools;
-use grimoire_core::{Extraction, FileExtraction, State, ToolError};
-use grimoire_extract::Extractor;
+use grimoire_core::{Build, Extraction, FileExtraction, State, ToolError};
+use grimoire_extract::{Extractor, SUPPORTED_LANGUAGES};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -65,7 +65,16 @@ pub fn load(store_dir: &Path) -> Result<Loaded, OpenError> {
     let (extracted, extract_errors) = extractor.extract_all()?;
     let files: BTreeMap<String, FileExtraction> = extracted.into_iter().map(|f| (f.path.clone(), f)).collect();
     let extraction = Extraction::from_files(files.values());
-    Ok(Loaded { state: State::new(store, extraction, malformed), files, extractor, repo, extract_errors })
+    let mut state = State::new(store, extraction, malformed);
+    state.set_build(build());
+    Ok(Loaded { state, files, extractor, repo, extract_errors })
+}
+
+/// What this binary is, for `status`: the workspace version and the
+/// languages the extractor has adapters for. Told to core here because the
+/// core crate does no I/O and this is the one path every command loads through.
+pub fn build() -> Build {
+    Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: SUPPORTED_LANGUAGES.iter().map(|l| l.to_string()).collect() }
 }
 
 impl Daemon {

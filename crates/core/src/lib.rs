@@ -25,4 +25,4 @@ pub use graph::Graph;
 pub use model::*;
 pub use ops::ToolError;
 pub use store::{Malformed, Store};
-pub use tools::State;
+pub use tools::{Build, State};

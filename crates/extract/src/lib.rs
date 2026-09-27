@@ -69,10 +69,25 @@ pub enum ExtractError {
     Walk(PathBuf, ignore::Error),
 }
 
+/// The languages this build has an adapter for, in the order
+/// [`Extractor::for_languages`] recognises them. What `status` reports as
+/// `supported_languages`.
+pub const SUPPORTED_LANGUAGES: &[&str] = &["rust", "typescript"];
+
 /// A repository root with its adapters.
 pub struct Extractor {
     root: PathBuf,
     adapters: Vec<Box<dyn Adapter>>,
+}
+
+/// The adapter for one language name, or `None` when this build has none.
+/// The names here and [`SUPPORTED_LANGUAGES`] are the same list.
+fn adapter_named(language: &str, root: &Path) -> Option<Box<dyn Adapter>> {
+    match language {
+        "rust" => Some(Box::new(rust::RustAdapter::new(root))),
+        "typescript" => Some(Box::new(typescript::TypeScriptAdapter::new(root))),
+        _ => None,
+    }
 }
 
 /// Repository-relative, `/`-separated.
@@ -94,18 +109,17 @@ impl Extractor {
     }
 
     /// Adapters for the named languages. Unknown names are ignored so a store
-    /// naming a language this build lacks still opens.
+    /// naming a language this build lacks still opens; `status` shows the
+    /// mismatch through [`SUPPORTED_LANGUAGES`].
     pub fn for_languages(root: impl Into<PathBuf>, languages: &[String]) -> Self {
         let root: PathBuf = root.into();
-        let mut adapters: Vec<Box<dyn Adapter>> = Vec::new();
-        for l in languages {
-            match l.as_str() {
-                "rust" => adapters.push(Box::new(rust::RustAdapter::new(&root))),
-                "typescript" => adapters.push(Box::new(typescript::TypeScriptAdapter::new(&root))),
-                _ => {}
-            }
-        }
+        let adapters: Vec<Box<dyn Adapter>> = languages.iter().filter_map(|l| adapter_named(l, &root)).collect();
         Extractor::new(root, adapters)
+    }
+
+    /// The adapters this extractor was built with, by language name.
+    pub fn languages(&self) -> Vec<&'static str> {
+        self.adapters.iter().map(|a| a.language()).collect()
     }
 
     pub fn root(&self) -> &Path {
@@ -162,5 +176,22 @@ impl Extractor {
             }
         }
         Ok((files, errors))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supported_languages_is_exactly_what_for_languages_accepts() {
+        let root = Path::new(".");
+        for l in SUPPORTED_LANGUAGES {
+            let a = adapter_named(l, root).unwrap_or_else(|| panic!("{l} is listed as supported but has no adapter"));
+            assert_eq!(a.language(), *l);
+        }
+        assert!(adapter_named("cobol", root).is_none());
+        let x = Extractor::for_languages(root, &["rust".to_string(), "cobol".to_string(), "typescript".to_string()]);
+        assert_eq!(x.languages(), vec!["rust", "typescript"]);
     }
 }
