@@ -50,16 +50,32 @@ export const api = {
   closeTicket: (ref: Ref, text: string) => call<{ node: AnyNode; findings: Finding[] }>("close_ticket", { ref, decision: { text } }),
 };
 
+// One event stream for the whole page. Browsers allow about six connections
+// per origin over HTTP/1.1, so one EventSource per query would starve the
+// very fetches the events are meant to trigger.
+const listeners = new Set<() => void>();
+let stream: EventSource | null = null;
+
+function ensureStream() {
+  if (stream) return;
+  stream = new EventSource("/api/events");
+  const notify = () => listeners.forEach((l) => l());
+  stream.onmessage = notify;
+  // On a daemon restart the browser reconnects by itself; the graph may have
+  // changed meanwhile, so a reopen counts as an event too.
+  stream.onopen = notify;
+}
+
 /** A counter that increments on every daemon event, for re-running queries. */
 export function useEvents(): number {
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const es = new EventSource("/api/events");
-    es.onmessage = () => setTick((t) => t + 1);
-    // On a daemon restart the browser reconnects by itself; the graph may
-    // have changed meanwhile, so count the reopen as an event too.
-    es.onopen = () => setTick((t) => t + 1);
-    return () => es.close();
+    ensureStream();
+    const l = () => setTick((t) => t + 1);
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
   }, []);
   return tick;
 }
