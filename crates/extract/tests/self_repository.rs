@@ -41,3 +41,25 @@ fn extracts_this_repository() {
     assert!(file.decls.iter().any(|d| d.path == "Reference" && d.kind == "type"));
     assert!(file.decls.iter().any(|d| d.path == "Reference::split_hash" && d.kind == "method"));
 }
+
+#[test]
+fn extracts_the_web_ui() {
+    let x = Extractor::for_languages(repo_root(), &["typescript".to_string()]);
+    let files = x.walk().unwrap();
+    assert!(files.contains(&"web/src/api.ts".to_string()), "{files:?}");
+    assert!(!files.iter().any(|f| f.contains("node_modules") || f.starts_with("web/dist")), "gitignore not honoured");
+
+    let (extracted, errors) = x.extract_all().unwrap();
+    assert!(errors.is_empty(), "{errors:?}");
+    let joined = Extraction::from_files(&extracted);
+
+    let api = &joined.modules["web/src/api"];
+    assert!(api.expects_contract);
+    assert!(api.purpose.is_some(), "{:?}", api.contract_error);
+    let map = &joined.modules["web/src/views/Map"];
+    assert!(map.imports.contains(&"web/src/api".to_string()), "{:?}", map.imports);
+    assert!(map.imports.contains(&"web/src/components".to_string()));
+    let file = &joined.files["web/src/api.ts"];
+    assert!(file.decls.iter().any(|d| d.path == "useQuery" && d.kind == "function"));
+    assert!(!joined.modules.contains_key("web/vite.config") || !joined.modules["web/vite.config"].expects_contract);
+}

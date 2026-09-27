@@ -19,3 +19,4 @@ ignore.workspace = true
 toml.workspace = true
 tree-sitter.workspace = true
 tree-sitter-rust.workspace = true
+tree-sitter-typescript = "0.23"

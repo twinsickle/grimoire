@@ -1,3 +1,11 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"A node page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind has a rendering: page, requirement, ticket, module, criterion, file and declaration."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
+ * ```
+ */
+
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, useQuery } from "../api";

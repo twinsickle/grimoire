@@ -1,3 +1,11 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"The map: the outline rendered as nested regions with coverage as fill and lint findings as marks.","criteria":[{"id":"outline-driven","statement":"The map is drawn from the outline tool alone at a chosen depth; it derives no structure of its own."},{"id":"marks","statement":"A region shows its coverage percentage and its finding count; an uncovered criterion is marked as such."}]}
+ * ```
+ */
+
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";

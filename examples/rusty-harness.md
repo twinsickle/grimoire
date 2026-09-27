@@ -1,8 +1,8 @@
 # Example: rusty-harness
 
-The first project Grimoire is pointed at, and the one whose problems produced
-the proposal. Everything here is specific to that repository; nothing in it is
-part of Grimoire.
+The first project other than itself that Grimoire is pointed at, and the one
+whose problems produced it. Everything here is specific to that repository;
+nothing in it is part of Grimoire.
 
 ## The problems it had
 
@@ -100,13 +100,14 @@ to see whether it could supply the code level of the graph.
   marker into the checkout, and its design keeps them current through Git
   hooks. Its `update` command has no option to put them elsewhere.
 
-Why not adopted: it leaves state in the target repository, which the proposal
-rules out; the part that worked, the file inventory, is a small amount of
+Why not adopted: it leaves state in the target repository, which Grimoire's
+constraints rule out; the part that worked, the file inventory, is a small amount of
 tree-sitter code Grimoire can run in process; the part that did not, call
 resolution, needs a language-aware resolver that Graphify is not; and an
 incremental update rewrote the whole graph. The output was deleted and the
 package uninstalled after the trial. The findings shaped the extractor's
-scope in the proposal: inventory and imports, no guessed calls.
+scope, recorded as the decision on Grimoire's "No guessed call edges"
+requirement: inventory and imports, no guessed calls.
 
 ## Notes for Grimoire's own development
 

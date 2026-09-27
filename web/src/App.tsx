@@ -1,3 +1,11 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"The shell: routes to the map, the board and node pages, the header with status and finding count, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the map at /, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."}]}
+ * ```
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import { api, useQuery } from "./api";

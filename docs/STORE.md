@@ -151,7 +151,7 @@ means the ticket both depends on and alters it; that is worth knowing and is
 shown, not forbidden.
 
 On close, `body` is replaced by the empty string and `decision` is set. The
-plan and notes go, as the proposal says. A closed ticket cannot be reopened;
+plan and notes go. A closed ticket cannot be reopened;
 a new ticket links to it in `relies_on` if the decision is being revisited.
 
 ## Derived nodes

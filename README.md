@@ -3,10 +3,15 @@
 A manual and ticketing tool for software projects: one graph joining what a
 project is meant to do now, what is intended to change, the module contracts
 in its code, and the code itself, served to people through a web UI and to
-agents through MCP. See [PROPOSAL.md](./PROPOSAL.md) for the design,
-[docs/STORE.md](./docs/STORE.md) for the store schema,
-[docs/TOOLS.md](./docs/TOOLS.md) for the MCP tools, and
-[examples/](./examples/) for the projects it is pointed at.
+agents through MCP.
+
+Grimoire's own manual is its design document and lives in its own store,
+not in this repository: run the daemon (below) and read it at
+http://127.0.0.1:4242, starting from the goal, architecture, constraints and
+glossary pages, or ask it over the tools. [docs/STORE.md](./docs/STORE.md)
+is the store schema, [docs/TOOLS.md](./docs/TOOLS.md) the MCP tools, and
+[examples/](./examples/) the notes on other projects it is pointed at. The
+original proposal is in the git history before the manual replaced it.
 
 ## Layout
 
@@ -44,8 +49,12 @@ unless `--store` is given a path. The only file written into a repository is
 ## Development loop
 
 Grimoire is developed pointed at itself: `.grimoire.toml` names the store
-`grimoire`, seeded from this repository's own module contracts. See
-"Development loop" in the proposal.
+`grimoire`, seeded from this repository's own module contracts and refined
+through the tools. Its own repository is the first target, its own manual the
+first store, and the daemon under development is the one its developers and
+their agents use. Four layers: content is live (the daemon re-parses a saved
+file), the daemon restarts on change (bacon), the UI hot-reloads (Vite), and
+agents reach the dev daemon directly (`.mcp.json` and the skill).
 
 ```
 cargo install bacon          # once

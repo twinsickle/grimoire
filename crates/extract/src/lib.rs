@@ -6,6 +6,7 @@
 
 pub mod contract;
 pub mod rust;
+pub mod typescript;
 
 use std::path::{Path, PathBuf};
 
@@ -98,8 +99,10 @@ impl Extractor {
         let root: PathBuf = root.into();
         let mut adapters: Vec<Box<dyn Adapter>> = Vec::new();
         for l in languages {
-            if l == "rust" {
-                adapters.push(Box::new(rust::RustAdapter::new(&root)));
+            match l.as_str() {
+                "rust" => adapters.push(Box::new(rust::RustAdapter::new(&root))),
+                "typescript" => adapters.push(Box::new(typescript::TypeScriptAdapter::new(&root))),
+                _ => {}
             }
         }
         Extractor::new(root, adapters)

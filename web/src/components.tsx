@@ -1,3 +1,11 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority and status tags, the ticket table, and the error box.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."}]}
+ * ```
+ */
+
 import { Link } from "react-router-dom";
 import { idOf, kindOf, type Priority, type Ref, type Status, type Summary } from "./types";
 

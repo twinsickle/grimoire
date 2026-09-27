@@ -1,3 +1,11 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"The board: tickets from the board tool with kind, status and priority toggles.","criteria":[{"id":"first-screen","statement":"The default filter is open and active change tickets, so gaps and questions are off the first screen."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them; the view does not re-sort."}]}
+ * ```
+ */
+
 import { useState } from "react";
 import { api, useQuery } from "../api";
 import { ErrorBox, TicketTable } from "../components";

@@ -14,8 +14,8 @@ pub const ROOT_SLUG: &str = "overview";
 pub const ARCHITECTURE_SLUG: &str = "architecture";
 
 /// The story pages every manual starts with, in reading order, with the
-/// prompt each carries until someone writes it. The convention is the
-/// proposal's: what this is, what it does, and how.
+/// prompt each carries until someone writes it. The convention: what this
+/// is, what it does, and how.
 pub const STORY: [(&str, &str, &str); 4] = [
     ("goal", "Goal", "What this project is for and who it is for, in a few paragraphs. What it is not: the neighbouring things it deliberately does not do. This is the first page a person or agent reads."),
     (ARCHITECTURE_SLUG, "Architecture", "How the project is built: its parts and how they fit, as prose. The pages below are its areas, one per module group, seeded from the module contracts."),

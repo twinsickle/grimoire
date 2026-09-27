@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place, so a reader never sees a partial file."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"only-writer","statement":"Nothing outside the daemon and the CLI commands that own a store call these write functions."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place, so a reader never sees a partial file."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"only-writer","statement":"Nothing outside the daemon and the CLI commands that own a store call these write functions."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -91,7 +91,8 @@ pub fn write_project_file(repo: &Path, store: &str) -> Result<PathBuf, StoreIoEr
 
 fn read_json<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> Result<T, String> {
     let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| e.to_string())
+    // A hand edit from a Windows editor may leave a byte-order mark.
+    serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())
 }
 
 fn rel(store: &Path, path: &Path) -> String {
@@ -278,6 +279,18 @@ mod tests {
         write_project_file(&dir, "./local-store").unwrap();
         let (_, store) = find_project(&nested).unwrap();
         assert_eq!(store, dir.join("./local-store"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn tolerates_a_byte_order_mark() {
+        let dir = temp();
+        let store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![] });
+        write_all(&dir, &store, false).unwrap();
+        let cfg = dir.join(CONFIG_FILE);
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        std::fs::write(&cfg, format!("\u{feff}{text}")).unwrap();
+        assert!(load(&dir).is_ok());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

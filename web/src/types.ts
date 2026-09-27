@@ -1,5 +1,10 @@
-// The tool shapes from docs/TOOLS.md. Hand-written for now; the proposal
-// wants these generated from the Rust model once the surface settles.
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"The TypeScript shapes of every node, summary and tool answer, plus the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Each type matches the shape the corresponding tool returns; hand-written until generated from the Rust model."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing."}]}
+ * ```
+ */
 
 export type Kind = "page" | "req" | "ticket" | "module" | "criterion" | "file" | "decl";
 export type Ref = string; // `${Kind}:${id}`

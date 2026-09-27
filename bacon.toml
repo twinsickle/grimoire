@@ -1,6 +1,6 @@
 # Development loop. `bacon serve` rebuilds and restarts the daemon on every
 # save, pointed at this repository's own store (see .grimoire.toml).
-# See PROPOSAL.md, "Development loop".
+# See "Development loop" in README.md.
 
 default_job = "check"
 

@@ -1,5 +1,10 @@
-// One function per tool over POST /api/<tool>, plus the event stream. Every
-// tool the UI uses is one the agents use; there is no UI-only endpoint.
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response is thrown as an ApiError carrying the tool's error code and message."}]}
+ * ```
+ */
 
 import { useEffect, useState } from "react";
 import type {
