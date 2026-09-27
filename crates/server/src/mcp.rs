@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."}]}
+//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the manual moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them."}]}
 //! ```
 
 use std::sync::Arc;
@@ -46,10 +46,14 @@ impl ServerHandler for McpServer {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("grimoire", env!("CARGO_PKG_VERSION")))
             .with_instructions(
-                "Grimoire holds a project's manual (pages, requirements, module contracts, code) and its tickets as one graph. \
-                 Orient with `outline` and `board`; before changing anything call `rests_on` on the ticket or node to see what it depends on and the decisions behind it; \
-                 `rests_on_me` shows the blast radius. Writes: `put_page`, `put_requirement`, `record_decision`, `file_ticket`, `update_ticket`, `start_ticket`, `close_ticket`. \
-                 `lint` is the same check as `grimoire check`.",
+                "Grimoire holds this project's manual (pages of intent, requirements with decisions, the module contracts in the code, the code itself) and its tickets as one graph. \
+                 The manual is the truth of what the project is meant to do; the code and the manual move together in the same piece of work. \
+                 Orient before reading code: `outline` at depth 2, then the goal, architecture and constraints pages, then your area. \
+                 Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the manual before the code (`put_requirement`, `patch_page`, `record_decision`); \
+                 `lint` before `close_ticket`, and fix every finding your work created. Every module under src/ carries a `# Module contract`; a new module gets one, a changed guarantee changes one, a new criterion gets a requirement. \
+                 Resolve every reference with `find` before writing it. Never write the store's files; these tools are the only interface. \
+                 A gap or question is resolved by laying out options for the person, never by deciding alone; their answer is the decision it closes with. \
+                 `lint` is the same check as `grimoire check`; `status` shows the build's version and languages next to the store's.",
             )
     }
 

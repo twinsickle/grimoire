@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, scaffold or init.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, and exits non-zero when there are findings."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill, the MCP entry and a pre-commit hook. Every other command reads it."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, scaffold or init.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, and exits non-zero when there are findings."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
 //! ```
 
 mod init;
@@ -63,7 +63,8 @@ enum Command {
         force: bool,
     },
     /// Point a repository at a store and install the integration: .grimoire.toml,
-    /// the agent skill, the MCP entry and a pre-commit hook running `check`.
+    /// the agent skill and its references, a marked section in CLAUDE.md and
+    /// AGENTS.md, the MCP entry and a pre-commit hook running `check`.
     Init {
         #[arg(long)]
         repo: Option<PathBuf>,

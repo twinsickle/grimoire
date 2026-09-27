@@ -34,8 +34,11 @@ created in `warnings`. Treat every warning as work to do now.
 
 - **References** are `kind:id`: `page:<slug>`, `req:<slug>`,
   `ticket:<slug>`, `module:<module id>`, `criterion:<module id>#<criterion id>`,
-  `file:<path>`, `decl:<path>#<decl path>`. Resolve a name with `find` before
-  writing it into a link; never guess a reference.
+  `file:<path>`, `decl:<path>#<decl path>`. **`find` precedes every
+  reference you write.** Not as a fallback when unsure: as the step before
+  any `touches`, `relies_on`, `links` or `covered_by`. A guessed slug that
+  happens to be wrong comes back as a dangling warning; a guessed slug that
+  happens to name the wrong node does not.
 - **Slugs** are `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters.
 - A **requirement** has a normative `statement` (SHALL / MUST), scenarios
   (given, when, then), `covered_by` criteria, and dated **decisions**:
@@ -52,7 +55,19 @@ created in `warnings`. Treat every warning as work to do now.
 - Module contracts live in the code as a JSON block under a
   `# Module contract` heading in the file's leading doc comment. Changing a
   criterion's id or removing one is a manual change: the requirements that
-  named it go dangling, and the lint will say so.
+  named it go dangling, and the lint will say so. The exact format per
+  language and what makes a good criterion: `references/contracts.md`.
+  Which code change requires which manual update: `references/changes.md`.
+  Read the second before starting any ticket that touches a module.
+- **Under the development loop** (Grimoire's own repository, or any project
+  running `bacon serve`), a source edit rebuilds and restarts the daemon and
+  the tools are unavailable for the rebuild. Do the manual writes before the
+  code edits, and retry a refused call after a moment rather than falling
+  back to editing the store.
+- **When a `check` fails for a reason that makes no sense**, compare
+  `status`'s `version` and `supported_languages` with the store's
+  `languages`. An installed binary older than the store's needs is the
+  usual cause.
 
 ## Orienting
 
@@ -104,7 +119,10 @@ the code.
    today.
 3. A criterion the code will need to satisfy goes into the module contract in
    the source, and the requirement's `covered_by` names it. Until the code
-   lands the reference dangles; that is allowed and expected. Say so.
+   lands the reference dangles; that is allowed and expected. Say so. If
+   the behaviour lands in a module the ticket does not list, `update_ticket`
+   to add it to `touches` first; `touches` is a claim about what changed and
+   has to stay true.
 4. `lint`. Fix every finding this work created. Findings that predate it are
    not this ticket's, unless it touches them.
 5. `update_ticket` if `touches` or `relies_on` changed while specifying.
