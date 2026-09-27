@@ -19,7 +19,7 @@ need_stdout = true
 # The daemon. Long-running, so bacon kills and restarts it when the source
 # changes. The store is the one .grimoire.toml names.
 [jobs.serve]
-command = ["cargo", "run", "--quiet", "--", "serve", "--port", "4242"]
+command = ["cargo", "run", "--quiet", "--", "serve", "--port", "4242", "--ui-dir", "web/dist"]
 need_stdout = true
 background = false
 on_change_strategy = "kill_then_restart"

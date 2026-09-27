@@ -2,10 +2,23 @@
   "name": "@grimoire/web",
   "version": "0.0.0",
   "private": true,
-  "description": "React/Vite UI: the map, the board, node pages. Dark only. Built by Node at build time into the server's embedded files; built last, per PROPOSAL.md.",
+  "description": "React/Vite UI: the map, the board, node pages. Dark only. Built by Node at build time into web/dist, which the daemon serves with --ui-dir.",
   "type": "module",
   "scripts": {
-    "build": "echo \"not scaffolded yet\"",
-    "dev": "echo \"not scaffolded yet: when it is, this runs Vite with /api and /mcp proxied to the daemon on 4242\""
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
   }
 }

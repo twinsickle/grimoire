@@ -16,7 +16,7 @@ A Cargo workspace and one web package.
 - `crates/extract` — code extractor: tree-sitter parsing, module contracts, language adapters (Rust so far).
 - `crates/server` — the `grimoire serve` daemon: store I/O, watcher, JSON API, MCP over streamable HTTP, SSE.
 - `crates/cli` — the `grimoire` binary: `serve`, `check`, `scaffold`, `init`, `tool`.
-- `web` — React/Vite UI, not yet scaffolded. Built last, per the proposal.
+- `web` — React/Vite UI: the map, the board, node pages. Dark only. `npm run build` writes `web/dist`, which `serve --ui-dir web/dist` serves.
 - `examples/` — per-project notes: what each target repository has, and how it is migrated.
 
 ## Building and testing
@@ -52,7 +52,11 @@ cargo install bacon          # once
 bacon serve                  # rebuild and restart the daemon on every save, port 4242
 bacon lint                   # grimoire check on save
 bacon test
+cd web && npm install && npm run dev   # the UI with hot reload on 5173, proxied to the daemon
 ```
+
+`bacon serve` also serves a built UI from `web/dist` on 4242 when one exists
+(`npm run build`). During UI work use the Vite server on 5173 instead.
 
 `.mcp.json` points agents working in this repository at the dev daemon, so
 the tools are available as tools once the daemon is up (a fresh session or an
@@ -68,4 +72,6 @@ cargo run -- init --repo . --store grimoire
 cargo run -- check
 ```
 
-Status: core, extractor, CLI and daemon implemented; web UI not started.
+Status: core, extractor, CLI, daemon and a first web UI implemented. Not yet
+done: embedding the UI in the release binary, generating the UI's types from
+the Rust model, and a graph view on the ticket page.
