@@ -155,6 +155,11 @@ the code.
    findings on the nodes the ticket touched; if any are present, fix them and
    re-run `lint`. Closing is allowed with findings; leaving them is not.
    `baselined` counts the inherited ones there; they are not this ticket's.
+   `untouched` lists the nodes in `touches` that never changed since the
+   ticket started. For each, the change was missed (make it, in a new
+   ticket, since this one is closed) or the node did not need changing
+   (say so in the decision, and next time remove it from `touches` before
+   closing). `null` means the ticket was started before snapshots existed.
 5. If the project documents a review step (in its `CLAUDE.md`, a skill, or
    a hook), run it now. Grimoire has no opinion on what the review is.
    If the project has a visual check for a user interface, run it and look

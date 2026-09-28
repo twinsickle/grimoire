@@ -11,6 +11,7 @@
 //! contracts; [`tools`] dispatches all of it by name over JSON.
 
 pub mod extraction;
+pub mod fingerprint;
 pub mod graph;
 pub mod lint;
 pub mod model;

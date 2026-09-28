@@ -65,6 +65,10 @@ pub enum Changed {
     Deleted(Reference),
     Baseline,
     Config,
+    /// A ticket started: its record and its snapshot.
+    Started(String),
+    /// A ticket closed: its record, and its snapshot removed.
+    Closed(String),
 }
 
 /// The config fields `configure` may change; the repository is not one.

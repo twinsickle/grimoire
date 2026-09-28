@@ -142,6 +142,7 @@ impl Daemon {
                 grimoire_core::ops::Changed::Deleted(r) => r.to_string(),
                 grimoire_core::ops::Changed::Baseline => "baseline".to_string(),
                 grimoire_core::ops::Changed::Config => "config".to_string(),
+                grimoire_core::ops::Changed::Started(s) | grimoire_core::ops::Changed::Closed(s) => format!("ticket:{s}"),
             };
             let _ = self.events.send(Event::Store { tool: name.to_string(), changed: vec![what] });
             if state.store().config.languages != languages {

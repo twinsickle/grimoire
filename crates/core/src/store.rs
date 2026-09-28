@@ -19,6 +19,8 @@ pub struct Store {
     pub tickets: BTreeMap<String, Ticket>,
     /// The findings accepted as inherited at adoption; none until `adopt`.
     pub baseline: Option<Baseline>,
+    /// The snapshot taken when each active ticket started, by slug.
+    pub starts: BTreeMap<String, Start>,
 }
 
 impl Default for StoreConfig {

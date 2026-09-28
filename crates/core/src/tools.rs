@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."}]}
 //! ```
 
 use serde::Deserialize;
@@ -368,7 +368,12 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
         }
         "start_ticket" => {
             let i: RefIn = parse(input)?;
-            let (_, changed) = ops::start_ticket(state.store_mut(), &i.r#ref)?;
+            ops::start_ticket(state.store_mut(), &i.r#ref)?;
+            // Every node, not only what touches lists now: nodes are often
+            // added to touches after they changed.
+            let fingerprints = crate::fingerprint::all(state.graph()).into_iter().map(|(r, fp)| (r.to_string(), fp)).collect();
+            state.store_mut().starts.insert(i.r#ref.id.clone(), Start { ticket: i.r#ref.id.clone(), fingerprints });
+            let changed = Changed::Started(i.r#ref.id.clone());
             let g = state.graph();
             let view = query::view(g, &i.r#ref).expect("just written");
             let rests = query::rests_on(g, &i.r#ref, None);
@@ -394,12 +399,16 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 Some(t) if i.r#ref.kind == Kind::Ticket => t.touches.clone(),
                 _ => return Err(ToolError::not_found(&i.r#ref)),
             };
+            // Compared before the close, which changes the ticket's own record.
+            let untouched = state.store.starts.get(&i.r#ref.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
             let decision = Decision { date: i.decision.date.unwrap_or_else(|| today.to_string()), text: i.decision.text };
-            let (_, changed) = ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
+            ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
+            state.store_mut().starts.remove(&i.r#ref.id);
+            let changed = Changed::Closed(i.r#ref.id.clone());
             let g = state.graph();
             let view = query::view(g, &i.r#ref).expect("just written");
             let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
-            Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined }), changed: Some(changed) })
+            Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined, "untouched": untouched }), changed: Some(changed) })
         }
         "configure" => {
             let change: ops::ConfigChange = parse(input)?;
@@ -810,6 +819,34 @@ mod tests {
         s.set_extraction(Extraction::from_files(&files));
         let gone = call(&mut s, "get", json!({ "ref": "module:src/b/unrelated" }), "2026-09-28").unwrap_err();
         assert!(matches!(gone, ToolError::NotFound { .. }), "a read after an extraction change sees it");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-close-names-what-never-changed", "checks": ["crates/core/src/tools#untouched"]}
+    /// ```
+    #[test]
+    fn a_close_names_what_never_changed() {
+        let mut s = state();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-09-28").unwrap();
+        assert!(s.store().starts.contains_key("phase-62"), "the start is recorded");
+        // phase-62 touches req:ready-only-with-commit and module:src/a/ready. Change
+        // the requirement, and add to touches a page changed before it was listed.
+        call(&mut s, "patch_page", json!({ "ref": "page:orphan", "body": "Changed before being listed." }), "2026-09-28").unwrap();
+        call(&mut s, "put_requirement", json!({ "slug": "ready-only-with-commit", "title": "Changed", "statement": "It SHALL.", "scenarios": [{ "title": "T", "given": "g", "when": "w", "then": "t" }], "covered_by": ["criterion:src/a/ready#guarantee"] }), "2026-09-28").unwrap();
+        call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "touches": ["req:ready-only-with-commit", "module:src/a/ready", "page:orphan", "req:never-was"] }), "2026-09-28").unwrap();
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-28").unwrap();
+        assert_eq!(out.output["untouched"], json!(["module:src/a/ready"]), "the requirement and the page changed; a reference that never existed is the lint's");
+        assert!(matches!(out.changed, Some(Changed::Closed(ref slug)) if slug == "phase-62"));
+        assert!(!s.store().starts.contains_key("phase-62"), "the start is removed on close");
+    }
+
+    #[test]
+    fn a_ticket_with_no_start_answers_null() {
+        let mut s = state();
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-09-28").unwrap();
+        assert!(out.output["untouched"].is_null(), "unknown, not none");
     }
 
     #[test]

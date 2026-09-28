@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place: no temporary file is left behind, and a reader running while records are rewritten never reads a partial one."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted and serve.json while a daemon serves it; a record file whose name differs from its record's slug is malformed, and so is a baseline.json that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place: no temporary file is left behind, and a reader running while records are rewritten never reads a partial one."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, and starts/<slug>.json for each active ticket; a record file whose name differs from its record's slug is malformed, and so is a baseline or start that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -32,6 +32,7 @@ pub enum StoreIoError {
 pub const CONFIG_FILE: &str = "grimoire.json";
 pub const BASELINE_FILE: &str = "baseline.json";
 pub const SERVE_FILE: &str = "serve.json";
+pub const STARTS_DIR: &str = "starts";
 
 /// `serve.json`: which daemon serves this store. A hint, never trusted
 /// without asking the daemon itself (see `client::serving`).
@@ -160,6 +161,20 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             }
         }
     }
+    if let Ok(entries) = std::fs::read_dir(store_dir.join(STARTS_DIR)) {
+        let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        paths.sort();
+        for path in paths {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            match read_json::<Start>(&path) {
+                Ok(s) if s.ticket == stem => {
+                    store.starts.insert(stem, s);
+                }
+                Ok(s) => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("file is named `{stem}` but its ticket is `{}`", s.ticket) }),
+                Err(reason) => malformed.push(Malformed { path: rel(store_dir, &path), reason }),
+            }
+        }
+    }
     let baseline_path = store_dir.join(BASELINE_FILE);
     if baseline_path.is_file() {
         let result = read_json::<Baseline>(&baseline_path).and_then(|b| {
@@ -224,6 +239,15 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             write_atomic(&store_dir.join("tickets").join(format!("{slug}.json")), &to_pretty(t))
         }
         Changed::Config => write_atomic(&store_dir.join(CONFIG_FILE), &to_pretty(&store.config)),
+        Changed::Started(slug) => {
+            persist(store_dir, store, &Changed::Ticket(slug.clone()))?;
+            let s = store.starts.get(slug).expect("a started ticket has a start");
+            write_atomic(&store_dir.join(STARTS_DIR).join(format!("{slug}.json")), &to_pretty(s))
+        }
+        Changed::Closed(slug) => {
+            persist(store_dir, store, &Changed::Ticket(slug.clone()))?;
+            remove_if_present(&store_dir.join(STARTS_DIR).join(format!("{slug}.json")))
+        }
         Changed::Baseline => match &store.baseline {
             Some(b) => write_atomic(&store_dir.join(BASELINE_FILE), &to_pretty(b)),
             None => remove_if_present(&store_dir.join(BASELINE_FILE)),
@@ -456,6 +480,30 @@ mod tests {
         assert!(reader.join().unwrap() > 0, "the reader saw records");
         let leftovers: Vec<_> = std::fs::read_dir(dir.join("pages")).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".tmp")).collect();
         assert!(leftovers.is_empty(), "no temporary file is left behind");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-start-is-written-and-removed", "checks": ["crates/server/src/store_io#layout", "crates/core/src/model#start-record"]}
+    /// ```
+    #[test]
+    fn a_start_is_written_and_removed() {
+        let dir = temp();
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        store.tickets.insert("0040".into(), Ticket { slug: "0040".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+        store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
+        write_all(&dir, &store, false).unwrap();
+        persist(&dir, &store, &Changed::Started("0040".into())).unwrap();
+        let text = std::fs::read_to_string(dir.join(STARTS_DIR).join("0040.json")).unwrap();
+        assert!(!text.contains("date"), "a start carries no date");
+        let (loaded, malformed) = load(&dir).unwrap();
+        assert!(malformed.is_empty(), "{malformed:?}");
+        assert_eq!(loaded.starts, store.starts);
+        store.starts.remove("0040");
+        persist(&dir, &store, &Changed::Closed("0040".into())).unwrap();
+        assert!(!dir.join(STARTS_DIR).join("0040.json").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

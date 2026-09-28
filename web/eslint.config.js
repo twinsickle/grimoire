@@ -7,7 +7,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/", "node_modules/", "visual/out/"] },
+  { ignores: ["dist/", "node_modules/", "visual/out/", "behaviour/out/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -23,7 +23,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["visual/**/*.{ts,mjs}", "*.config.{ts,js}"],
+    files: ["visual/**/*.{ts,mjs}", "behaviour/**/*.{ts,mjs}", "*.config.{ts,js}"],
     languageOptions: { globals: globals.node },
   },
 );

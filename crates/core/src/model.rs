@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract and an optional contract scope of include and exclude prefixes; a version this build does not know is refused."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract and an optional contract scope of include and exclude prefixes; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."}]}
 //! ```
 
 use std::fmt;
@@ -332,6 +332,16 @@ pub struct Baseline {
     pub findings: Vec<FindingKey>,
 }
 
+/// `starts/<slug>.json`: the graph's fingerprints when a ticket started, so
+/// its close can name the touched nodes that never changed. Undated, like
+/// every record but a decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Start {
+    pub ticket: String,
+    pub fingerprints: std::collections::BTreeMap<String, String>,
+}
+
 /// `grimoire.json` at the root of a store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -423,6 +433,9 @@ pub struct File {
     pub module: String,
     pub language: String,
     pub decls: Vec<Decl>,
+    /// The fingerprint of the file's text as read.
+    #[serde(default)]
+    pub digest: String,
 }
 
 /// A test, from a `# Test contract` block: its name, where the block is, and

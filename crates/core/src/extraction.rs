@@ -24,6 +24,9 @@ pub struct FileExtraction {
     /// modules that exist.
     pub imports: Vec<Vec<String>>,
     pub expects_contract: bool,
+    /// The fingerprint of the file's text as read.
+    #[serde(default)]
+    pub digest: String,
     /// Tests declared by `# Test contract` blocks anywhere in the file.
     #[serde(default)]
     pub tests: Vec<Test>,
@@ -93,7 +96,7 @@ impl Extraction {
             raw_imports.entry(f.module.clone()).or_default().extend(f.imports.iter().cloned());
             out_files.insert(
                 f.path.clone(),
-                File { path: f.path.clone(), module: f.module.clone(), language: f.language.clone(), decls: f.decls.clone() },
+                File { path: f.path.clone(), module: f.module.clone(), language: f.language.clone(), decls: f.decls.clone(), digest: f.digest.clone() },
             );
         }
 
@@ -150,6 +153,7 @@ pub(crate) mod fixtures {
             decls: vec![Decl { path: "run".into(), kind: "function".into(), line: 10 }],
             imports: imports.iter().map(|c| c.iter().map(|s| s.to_string()).collect()).collect(),
             expects_contract: true,
+            digest: crate::fingerprint::of_text(path),
             tests: Vec::new(),
             test_errors: Vec::new(),
             contract,

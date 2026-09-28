@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."}]}
 //! ```
 
 pub mod contract;
@@ -128,6 +128,7 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         decls: parsed.decls,
         imports: parsed.imports,
         expects_contract: adapter.expects_contract(rel_path),
+        digest: grimoire_core::fingerprint::of_text(source),
         tests,
         test_errors,
         contract,
@@ -302,6 +303,22 @@ mod tests {
     /// ```json
     /// {"test": "one-file-is-extracted-alone", "checks": ["crates/extract/src#per-file"]}
     /// ```
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "each-file-is-fingerprinted", "checks": ["crates/extract/src#digest"]}
+    /// ```
+    #[test]
+    fn each_file_is_fingerprinted_as_read() {
+        let dir = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n")]);
+        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let first = x.extract_path("src/lib.rs").unwrap().digest;
+        assert_eq!(first, grimoire_core::fingerprint::of_text("pub fn a() {}\n"));
+        std::fs::write(dir.join("src").join("lib.rs"), "pub fn a() { }\n").unwrap();
+        assert_ne!(x.extract_path("src/lib.rs").unwrap().digest, first, "one byte changes it");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn one_file_is_extracted_alone() {
         let dir = temp_repo(&[("src/a.rs", b"pub fn a() {}\n"), ("src/b.rs", &[0xff, 0xfe, 0x00])]);
