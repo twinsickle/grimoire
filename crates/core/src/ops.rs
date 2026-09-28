@@ -288,6 +288,26 @@ mod tests {
     use super::*;
     use crate::graph::fixtures::store;
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "put-page-creates-and-replaces", "checks": ["crates/core/src/ops#put-page"]}
+    /// ```
+    #[test]
+    fn put_page_creates_and_replaces() {
+        let mut s = store();
+        let page = |body: &str| Page { slug: "glossary".into(), title: "Glossary".into(), body: body.into(), links: vec![] };
+        put_page(&mut s, page("first")).unwrap();
+        let (again, _) = put_page(&mut s, page("second")).unwrap();
+        assert_eq!(again.body, "second", "replacing by slug is not a conflict");
+        assert_eq!(s.pages["glossary"].body, "second");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "patch-page-is-partial", "checks": ["crates/core/src/ops#patch-is-partial"]}
+    /// ```
     #[test]
     fn patch_page_is_partial() {
         let mut s = store();
@@ -308,6 +328,11 @@ mod tests {
         assert_eq!(patch_page(&mut s, &Reference::page("nope"), PagePatch::default()).unwrap_err().code(), "not_found");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "put-requirement-keeps-decisions", "checks": ["crates/core/src/ops#decisions-append-only", "crates/core/src/ops#put-requirement"]}
+    /// ```
     #[test]
     fn put_requirement_keeps_decisions() {
         let mut s = store();
@@ -319,6 +344,11 @@ mod tests {
         assert_eq!(out.title, "Changed");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "record-decision-appends-and-validates", "checks": ["crates/core/src/ops#validate-first", "crates/core/src/ops#decisions-append-only", "crates/core/src/ops#record-decision"]}
+    /// ```
     #[test]
     fn record_decision_appends_and_validates() {
         let mut s = store();
@@ -331,6 +361,11 @@ mod tests {
         assert_eq!(record_decision(&mut s, &Reference::req("nope"), "x".into(), "2026-01-01".into()).unwrap_err().code(), "not_found");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ticket-lifecycle", "checks": ["crates/core/src/ops#close-keeps-only-decision", "crates/core/src/ops#update-ticket", "crates/core/src/ops#start-ticket"]}
+    /// ```
     #[test]
     fn ticket_lifecycle() {
         let mut s = store();
@@ -346,6 +381,11 @@ mod tests {
         assert_eq!(close_ticket(&mut s, &r, Decision { date: "2026-09-27".into(), text: "again".into() }).unwrap_err().code(), "conflict");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "file-ticket-generates-ids", "checks": ["crates/core/src/ops#file-ticket"]}
+    /// ```
     #[test]
     fn file_ticket_generates_ids() {
         let mut s = store();
@@ -365,6 +405,11 @@ mod tests {
         assert_eq!(next_ticket_id(&s), "10000");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "delete-only-store-kinds", "checks": ["crates/core/src/ops#delete-node"]}
+    /// ```
     #[test]
     fn delete_only_store_kinds() {
         let mut s = store();

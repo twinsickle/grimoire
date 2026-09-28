@@ -516,6 +516,11 @@ mod tests {
         State::new(store(), extraction(), vec![])
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "definitions-cover-the-dispatcher", "checks": ["crates/core/src/tools#definitions-match"]}
+    /// ```
     #[test]
     fn definitions_cover_the_dispatcher() {
         let defs = definitions();
@@ -534,6 +539,11 @@ mod tests {
         }
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "status-reports-the-build-it-was-told", "checks": ["crates/core/src/tools#status"]}
+    /// ```
     #[test]
     fn status_reports_the_build_it_was_told() {
         let mut s = state();
@@ -552,6 +562,11 @@ mod tests {
         assert!(out.output["edges"].is_number());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "coverage-of-each-kind", "checks": ["crates/core/src/query#coverage"]}
+    /// ```
     #[test]
     fn coverage_of_each_kind() {
         let mut s = state();
@@ -573,6 +588,11 @@ mod tests {
         assert!(matches!(c(&mut s, "page:overview"), Err(ToolError::Invalid { .. })));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "write-then-read-sees-it", "checks": ["crates/core/src/ops#never-fails-on-lint", "crates/core/src/query#node-view", "crates/core/src/query#get", "crates/core/src/tools#graph-current"]}
+    /// ```
     #[test]
     fn write_then_read_sees_it() {
         let mut s = state();
@@ -592,6 +612,11 @@ mod tests {
         assert!(e.to_string().contains("no longer takes a slug"));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "put-requirement-warns-when-unspecified", "checks": ["crates/core/src/ops#never-fails-on-lint"]}
+    /// ```
     #[test]
     fn put_requirement_warns_when_unspecified() {
         let mut s = state();
@@ -606,6 +631,11 @@ mod tests {
         assert!(out.output["warnings"].as_array().unwrap().is_empty());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "adopt-baselines-what-is-present", "checks": ["crates/core/src/ops#adopt", "crates/core/src/tools#status", "crates/core/src/tools#lint-tool", "crates/core/src/model#baseline-record"]}
+    /// ```
     #[test]
     fn adopt_baselines_what_is_present() {
         let mut s = state();
@@ -629,6 +659,11 @@ mod tests {
         assert_eq!(again.output["replaced"], total);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-fix-prunes-and-a-regression-is-new", "checks": ["crates/core/src/tools#lint-tool"]}
+    /// ```
     #[test]
     fn a_fix_prunes_and_a_regression_is_new() {
         let mut s = state();
@@ -650,6 +685,11 @@ mod tests {
         s
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "configure-changes-only-what-it-is-given", "checks": ["crates/core/src/ops#configure"]}
+    /// ```
     #[test]
     fn configure_changes_only_what_it_is_given() {
         let mut s = built(state(), &["rust", "typescript"]);
@@ -661,6 +701,11 @@ mod tests {
         assert_eq!(s.store().config.repository, before.repository);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "configure-refuses-what-it-may-not-change", "checks": ["crates/core/src/ops#configure", "crates/core/src/ops#validate-first"]}
+    /// ```
     #[test]
     fn configure_refuses_what_it_may_not_change() {
         let mut s = built(state(), &["rust"]);
@@ -675,6 +720,11 @@ mod tests {
         assert_eq!(s.store().config, before, "nothing changed");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "widening-the-scope-makes-new-findings", "checks": ["crates/core/src/tools#status"]}
+    /// ```
     #[test]
     fn widening_the_scope_makes_new_findings() {
         let mut s = built(state(), &["rust"]);
@@ -697,6 +747,11 @@ mod tests {
         assert!(call(&mut u, "lint", json!({ "kinds": ["malformed"] }), "2026-09-28").unwrap().output["findings"].as_array().unwrap().is_empty(), "an unknown build flags nothing");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "coverage-lists-the-tests-of-a-criterion", "checks": ["crates/core/src/query#find", "crates/core/src/query#coverage"]}
+    /// ```
     #[test]
     fn coverage_lists_the_tests_of_a_criterion() {
         let mut s = state();
@@ -729,6 +784,34 @@ mod tests {
         assert_eq!(fresh["baselined"], 0);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "record-decision-defaults-to-today", "checks": ["crates/core/src/ops#record-decision"]}
+    /// ```
+    #[test]
+    fn record_decision_defaults_to_today() {
+        let mut s = state();
+        let out = call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "Why." }), "2026-09-28").unwrap().output;
+        let last = out["node"]["decisions"].as_array().unwrap().last().unwrap().clone();
+        assert_eq!(last, json!({ "date": "2026-09-28", "text": "Why." }));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-graph-follows-the-extraction", "checks": ["crates/core/src/tools#graph-current"]}
+    /// ```
+    #[test]
+    fn the_graph_follows_the_extraction() {
+        let mut s = state();
+        assert!(call(&mut s, "get", json!({ "ref": "module:src/b/unrelated" }), "2026-09-28").is_ok());
+        let files: Vec<_> = crate::extraction::fixtures::extraction_files().into_iter().filter(|f| f.path != "src/b/unrelated.rs").collect();
+        s.set_extraction(Extraction::from_files(&files));
+        let gone = call(&mut s, "get", json!({ "ref": "module:src/b/unrelated" }), "2026-09-28").unwrap_err();
+        assert!(matches!(gone, ToolError::NotFound { .. }), "a read after an extraction change sees it");
+    }
+
     #[test]
     fn start_and_close_return_context() {
         let mut s = state();
@@ -749,6 +832,11 @@ mod tests {
         assert!(w.iter().any(|f| f["ref"] == "ticket:phase-62"));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "errors-carry-codes", "checks": ["crates/core/src/query#get", "crates/core/src/tools#error-codes"]}
+    /// ```
     #[test]
     fn errors_carry_codes() {
         let mut s = state();

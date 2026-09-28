@@ -481,6 +481,11 @@ mod tests {
     use super::*;
     use crate::graph::fixtures::graph;
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "find-ranks-exact-slug-first", "checks": ["crates/core/src/query#find"]}
+    /// ```
     #[test]
     fn find_ranks_exact_slug_first() {
         let g = graph();
@@ -491,6 +496,11 @@ mod tests {
         assert!(!only_reqs.is_empty());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "view-has-both-directions", "checks": ["crates/core/src/query#node-view"]}
+    /// ```
     #[test]
     fn view_has_both_directions() {
         let g = graph();
@@ -502,6 +512,11 @@ mod tests {
         assert!(json["purpose"].is_string());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "outline-names-the-checks-on-each-node", "checks": ["crates/core/src/query#outline"]}
+    /// ```
     #[test]
     fn outline_names_the_checks_on_each_node() {
         let g = graph();
@@ -511,6 +526,11 @@ mod tests {
         assert_eq!(checks("guarantee"), Some(vec![]), "named by a requirement and checked by a test");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "outline-from-roots", "checks": ["crates/core/src/query#outline"]}
+    /// ```
     #[test]
     fn outline_from_roots() {
         let g = graph();
@@ -530,6 +550,11 @@ mod tests {
         assert!(shallow[0].children.is_empty());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "rests-on-ticket-reaches-modules-and-decisions", "checks": ["crates/core/src/query#nearest-first"]}
+    /// ```
     #[test]
     fn rests_on_ticket_reaches_modules_and_decisions() {
         let g = graph();
@@ -548,6 +573,11 @@ mod tests {
         assert_eq!(rests_on(&g, &Reference::ticket("phase-62"), Some(1)).len(), 3);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "rests-on-is-bounded-at-tickets-and-pages", "checks": ["crates/core/src/query#bounded-walk"]}
+    /// ```
     #[test]
     fn rests_on_is_bounded_at_tickets_and_pages() {
         let mut store = crate::graph::fixtures::store();
@@ -574,6 +604,11 @@ mod tests {
         assert!(refs.contains(&"module:src/a/layout".to_string()), "imports stay transitive");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "rests-on-me-climbs-to-pages-and-tickets", "checks": ["crates/core/src/query#rests-on-me"]}
+    /// ```
     #[test]
     fn rests_on_me_climbs_to_pages_and_tickets() {
         let g = graph();
@@ -587,6 +622,11 @@ mod tests {
         assert_eq!(tickets, vec!["gap-1", "phase-62"]);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "requirement-coverage-in-order-with-modules", "checks": ["crates/core/src/query#coverage"]}
+    /// ```
     #[test]
     fn requirement_coverage_in_order_with_modules() {
         let mut store = crate::graph::fixtures::store();
@@ -614,6 +654,11 @@ mod tests {
         assert!(requirement_coverage(&g, &empty).is_empty());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "board-orders-and-filters", "checks": ["crates/core/src/query#board"]}
+    /// ```
     #[test]
     fn board_orders_and_filters() {
         let g = graph();
@@ -626,6 +671,11 @@ mod tests {
         assert_eq!(b[0].r#ref.id, "gap-1");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "related-finds-gaps-on-shared-nodes", "checks": ["crates/core/src/query#related-tickets"]}
+    /// ```
     #[test]
     fn related_finds_gaps_on_shared_nodes() {
         let g = graph();

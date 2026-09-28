@@ -337,7 +337,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "tests-point-down-at-criteria", "checks": ["crates/core/src/graph#tests"]}
+    /// {"test": "tests-point-down-at-criteria", "checks": ["crates/core/src/graph#tests", "crates/core/src/query#module-source"]}
     /// ```
     #[test]
     fn tests_point_down_at_criteria() {
@@ -379,6 +379,11 @@ mod tests {
         assert!(!g.contains(&e.to));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "source-of-criterion-is-the-contract-line", "checks": ["crates/core/src/query#module-source"]}
+    /// ```
     #[test]
     fn source_of_criterion_is_the_contract_line() {
         let g = graph();

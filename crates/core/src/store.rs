@@ -240,6 +240,11 @@ impl Store {
 mod tests {
     use super::*;
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "scope-prefixes-stay-inside-the-repository", "checks": ["crates/core/src/store#scope-rules"]}
+    /// ```
     #[test]
     fn scope_prefixes_stay_inside_the_repository() {
         for ok in ["crates/core", "web", "a/b/c"] {
@@ -250,6 +255,62 @@ mod tests {
         }
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "requirement-rules", "checks": ["crates/core/src/model#requirement-record"]}
+    /// ```
+    #[test]
+    fn requirement_rules() {
+        let req = |covered_by: Vec<Reference>, dates: &[&str]| Requirement {
+            slug: "r".into(),
+            title: "R".into(),
+            statement: "It SHALL hold.".into(),
+            scenarios: vec![],
+            covered_by,
+            decisions: dates.iter().map(|d| Decision { date: d.to_string(), text: "why".into() }).collect(),
+        };
+        assert!(validate_requirement(&req(vec![Reference::criterion("m", "c")], &["2026-01-01", "2026-02-01"])).is_empty());
+        let e = validate_requirement(&req(vec![Reference::module("m")], &[]));
+        assert_eq!(e[0].field, "covered_by", "covered_by names only criteria");
+        let e = validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"]));
+        assert_eq!(e[0].field, "decisions", "decisions are oldest first");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "config-rules", "checks": ["crates/core/src/model#config-record"]}
+    /// ```
+    #[test]
+    fn config_rules() {
+        let config = |version: u32, roots: Vec<String>| StoreConfig { version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default() };
+        assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
+        assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
+        assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![]))[0].field, "roots");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "field-rules", "checks": ["crates/core/src/store#field-rules"]}
+    /// ```
+    #[test]
+    fn field_rules() {
+        let page = |title: &str| Page { slug: "p".into(), title: title.into(), body: "b".into(), links: vec![] };
+        assert!(validate_page(&page("One line")).iter().all(|e| e.field != "title"));
+        assert!(validate_page(&page("Two\nlines")).iter().any(|e| e.field == "title"));
+        assert!(validate_page(&page("   ")).iter().any(|e| e.field == "title"), "required strings are non-empty after trimming");
+        let ticket = |body: String| Ticket { slug: "t".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Open, touches: vec![], relies_on: vec![], body, decision: None };
+        assert!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX))).is_empty());
+        assert_eq!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX + 1)))[0].field, "body");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "slug-rules", "checks": ["crates/core/src/store#slug-rule"]}
+    /// ```
     #[test]
     fn slug_rules() {
         assert!(is_slug("a"));
@@ -262,6 +323,11 @@ mod tests {
         assert!(!is_slug(&"a".repeat(65)));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "date-rules", "checks": ["crates/core/src/store#field-rules"]}
+    /// ```
     #[test]
     fn date_rules() {
         assert!(is_date("2026-09-27"));
@@ -270,6 +336,11 @@ mod tests {
         assert!(!is_date("2026/09/27"));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ticket-decision-rules", "checks": ["crates/core/src/store#field-rules"]}
+    /// ```
     #[test]
     fn ticket_decision_rules() {
         let mut t = Ticket {
@@ -293,6 +364,11 @@ mod tests {
         assert_eq!(validate_ticket(&t)[0].field, "decision");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "page-link-kinds", "checks": ["crates/core/src/model#page-record", "crates/core/src/store#whole-record"]}
+    /// ```
     #[test]
     fn page_link_kinds() {
         let p = Page {

@@ -351,6 +351,11 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "baseline-round-trips-and-a-broken-one-is-collected", "checks": ["crates/core/src/model#baseline-record"]}
+    /// ```
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {
         let dir = temp();

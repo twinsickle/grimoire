@@ -469,6 +469,56 @@ mod tests {
         assert!(!s(&[], &["vendor"]).covers(&files(&["vendor/x.rs"])), "an exclude alone narrows everything");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "kinds-and-their-ids", "checks": ["crates/core/src/model#kinds"]}
+    /// ```
+    #[test]
+    fn kinds_and_their_ids() {
+        for k in Kind::ALL {
+            assert_eq!(Kind::parse(k.as_str()), Some(k));
+            assert_eq!(k.is_stored(), matches!(k, Kind::Page | Kind::Req | Kind::Ticket));
+        }
+        assert_eq!(Reference::criterion("src/a", "c").to_string(), "criterion:src/a#c");
+        assert_eq!(Reference::decl("src/a.rs", "Repo::open").to_string(), "decl:src/a.rs#Repo::open");
+        assert_eq!(Reference::test("src/a.rs", "opens").to_string(), "test:src/a.rs#opens");
+        assert_eq!(Reference::test("src/a.rs", "opens").split_hash(), Some(("src/a.rs", "opens")));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "records-carry-nothing-else", "checks": ["crates/core/src/model#ticket-bounded", "crates/core/src/model#decisions-only-dates"]}
+    /// ```
+    #[test]
+    fn records_carry_nothing_else() {
+        let ticket = |extra: &str| format!(r#"{{"slug":"t","title":"T","kind":"change","priority":"next","status":"open","touches":[],"relies_on":[],"body":"b","decision":null{extra}}}"#);
+        assert!(serde_json::from_str::<Ticket>(&ticket("")).is_ok());
+        for field in ["assignee", "plan", "notes", "history", "created", "closed"] {
+            assert!(serde_json::from_str::<Ticket>(&ticket(&format!(r#","{field}":"x""#))).is_err(), "a ticket has no {field}");
+        }
+        let page = r#"{"slug":"p","title":"P","body":"b","links":[],"modified":"2026-01-01"}"#;
+        assert!(serde_json::from_str::<Page>(page).is_err(), "no record carries a timestamp");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-config-without-a-scope-loads", "checks": ["crates/core/src/model#config-record"]}
+    /// ```
+    #[test]
+    fn a_config_without_a_scope_loads() {
+        let c: StoreConfig = serde_json::from_str(r#"{"version":1,"repository":"C:/repo","roots":["overview"],"languages":["rust"]}"#).unwrap();
+        assert!(c.scope.is_empty());
+        assert!(!serde_json::to_string(&c).unwrap().contains("scope"), "an empty scope is not written");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reference-round-trips", "checks": ["crates/core/src/model#reference-form"]}
+    /// ```
     #[test]
     fn reference_round_trips() {
         let r: Reference = "criterion:crates/core/src/git/ready#guarantee".parse().unwrap();
@@ -481,6 +531,11 @@ mod tests {
         assert_eq!(back, r);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reference-rejects-bad-forms", "checks": ["crates/core/src/model#reference-form"]}
+    /// ```
     #[test]
     fn reference_rejects_bad_forms() {
         assert!("page".parse::<Reference>().is_err());
@@ -488,6 +543,11 @@ mod tests {
         assert!("page:".parse::<Reference>().is_err());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "records-reject-unknown-fields", "checks": ["crates/core/src/model#strict-records"]}
+    /// ```
     #[test]
     fn records_reject_unknown_fields() {
         let bad = r#"{"slug":"a","title":"A","body":"b","links":[],"extra":1}"#;
