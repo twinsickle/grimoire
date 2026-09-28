@@ -191,3 +191,8 @@ export function kindOf(ref: Ref): Kind {
 export function idOf(ref: Ref): string {
   return ref.slice(ref.indexOf(":") + 1);
 }
+
+/** The UI route for a node's page. */
+export function nodePath(ref: Ref): string {
+  return `/n/${encodeURIComponent(ref)}`;
+}

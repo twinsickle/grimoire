@@ -8,8 +8,8 @@
 
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { Badge, ErrorBox, KindTag, Markdown, card, empty, mono, nodePath } from "../components";
-import { kindOf, type PageNode, type Tree } from "../types";
+import { Badge, ErrorBox, KindTag, Markdown, card, empty, mono } from "../components";
+import { kindOf, nodePath, type PageNode, type Tree } from "../types";
 
 /** Read the grimoire top-down: what this is, how it is built, what must hold, and what the code guarantees. */
 export function HomeView() {

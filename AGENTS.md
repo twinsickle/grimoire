@@ -30,5 +30,10 @@ repository only.
 - Touched `web/`? In `web/`: `npm run shots` and look at them;
   `npm run visual` compares with the baselines; `npm run visual:update`
   accepts a change you have seen.
+- Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
+  `npm run check` in `web/` (tsc and ESLint). Under bacon they are the
+  `clippy` and `web` jobs. They gate a push, not a commit: install with
+  `cp scripts/pre-push .git/hooks/pre-push`. The pre-commit hook stays
+  `grimoire check` alone; `init` owns it.
 - The skill and its `references/` are installed verbatim into other
   repositories. Nothing about this repository goes in them; it goes here.

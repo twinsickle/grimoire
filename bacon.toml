@@ -12,6 +12,14 @@ need_stdout = false
 command = ["cargo", "clippy", "--workspace", "--all-targets", "--color", "always"]
 need_stdout = false
 
+# The frontend lint and type check, re-run when web/src changes. The same
+# two commands the pre-push hook runs (scripts/pre-push).
+[jobs.web]
+command = ["npm", "--prefix", "web", "run", "--silent", "check"]
+need_stdout = true
+watch = ["web/src", "web/visual", "web/eslint.config.js", "web/tsconfig.json"]
+default_watch = false
+
 [jobs.test]
 command = ["cargo", "test", "--workspace", "--color", "always"]
 need_stdout = true
@@ -34,3 +42,5 @@ allow_warnings = true
 [keybindings]
 s = "job:serve"
 l = "job:lint"
+c = "job:clippy"
+w = "job:web"

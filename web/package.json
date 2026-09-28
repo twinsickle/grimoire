@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "check": "tsc --noEmit && eslint .",
     "shots": "node visual/shots.mjs",
     "visual": "playwright test",
     "visual:update": "playwright test --update-snapshots"
@@ -19,13 +21,19 @@
     "react-router-dom": "^7.6.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.12.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.0",
+    "typescript-eslint": "^8.70.1",
     "vite": "^6.3.0"
   }
 }

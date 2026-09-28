@@ -9,7 +9,7 @@
 import { marked } from "marked";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { idOf, kindOf, type Kind, type Priority, type Ref, type Status, type Summary } from "./types";
+import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary } from "./types";
 
 /** Class sets several views share. Colours are always theme tokens. */
 export const card = "bg-bg-1 border border-line rounded-md px-3 py-2.5 mb-3";
@@ -27,10 +27,6 @@ export const pressed = "bg-accent-dim border-accent";
 export function Markdown({ text }: { text: string }) {
   const html = marked.parse(text, { async: false, gfm: true, breaks: false }) as string;
   return <div className="md" dangerouslySetInnerHTML={{ __html: html }} />;
-}
-
-export function nodePath(ref: Ref): string {
-  return `/n/${encodeURIComponent(ref)}`;
 }
 
 /** One background per kind; written out so Tailwind sees every class it must generate. */

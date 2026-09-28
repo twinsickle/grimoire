@@ -9,8 +9,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, useQuery } from "./api";
-import { KindTag, mono, nodePath } from "./components";
-import { idOf, kindOf, type Summary } from "./types";
+import { KindTag, mono } from "./components";
+import { idOf, kindOf, nodePath, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
 import { MapView } from "./views/Map";
@@ -130,13 +130,12 @@ function Search() {
   const nav = useNavigate();
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!q.trim()) {
-      setHits([]);
-      return;
-    }
+    if (!q.trim()) return;
     const t = setTimeout(() => api.find(q, undefined, 12).then((r) => setHits(r.nodes)).catch(() => setHits([])), 120);
     return () => clearTimeout(t);
   }, [q]);
+  // An empty box shows nothing, derived rather than cleared in the effect.
+  const shown = q.trim() ? hits : [];
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (!box.current?.contains(e.target as Node)) setOpen(false);
@@ -156,16 +155,16 @@ function Search() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && hits[0]) {
-            nav(nodePath(hits[0].ref));
+          if (e.key === "Enter" && shown[0]) {
+            nav(nodePath(shown[0].ref));
             setOpen(false);
           }
           if (e.key === "Escape") setOpen(false);
         }}
       />
-      {open && hits.length > 0 && (
+      {open && shown.length > 0 && (
         <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-bg-2 border border-line rounded-md max-h-[60vh] overflow-auto shadow-xl shadow-bg">
-          {hits.map((h) => (
+          {shown.map((h) => (
             <Link key={h.ref} to={nodePath(h.ref)} onClick={() => setOpen(false)} className="block px-2.5 py-1.5 text-fg hover:bg-bg-3 hover:no-underline">
               <KindTag ref={h.ref} /> {h.title} <span className={`text-fg-faint ${mono}`}>{idOf(h.ref)}</span>
             </Link>

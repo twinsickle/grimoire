@@ -9,8 +9,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { Badge, ErrorBox, KindTag, empty, nodePath, pressed } from "../components";
-import { kindOf, type Tree } from "../types";
+import { Badge, ErrorBox, KindTag, empty, pressed } from "../components";
+import { kindOf, nodePath, type Tree } from "../types";
 
 /**
  * The grimoire as nested regions: pages hold the pages they link to, those hold

@@ -88,18 +88,21 @@ export function useEvents(): number {
 /** Run a query, again whenever `deps` change or the daemon emits an event. */
 export function useQuery<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | undefined; error: ApiError | Error | undefined; loading: boolean } {
   const tick = useEvents();
-  const [state, setState] = useState<{ data?: T; error?: ApiError | Error; loading: boolean }>({ loading: true });
+  // The answer remembers which request it answered; loading is "not this one",
+  // derived rather than set, so the previous data stays visible meanwhile.
+  const key = JSON.stringify([...deps, tick]);
+  const [state, setState] = useState<{ key?: string; data?: T; error?: ApiError | Error }>({});
   useEffect(() => {
     let live = true;
-    setState((s) => ({ ...s, loading: true }));
     fn().then(
-      (data) => live && setState({ data, loading: false }),
-      (error) => live && setState({ error, loading: false }),
+      (data) => live && setState({ key, data }),
+      (error) => live && setState({ key, error }),
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
-  return { data: state.data, error: state.error, loading: state.loading };
+  }, [key]);
+  const fresh = state.key === key;
+  return { data: state.data, error: fresh ? state.error : undefined, loading: !fresh };
 }
