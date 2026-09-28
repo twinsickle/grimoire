@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository: the project file naming the store, the agent skill with its references, the always-loaded guidance section, the MCP entry pointing at the daemon, and a pre-commit hook running the check.","criteria":[{"id":"listed-writes","statement":"Every path init writes or would have written is returned, so the command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers and an existing pre-commit hook is left alone with a note; only Grimoire's own files are overwritten."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed."}]}
+//! {"purpose":"Install Grimoire's integration into a repository: the project file naming the store, the agent skill with its references, the always-loaded guidance section, the MCP entry pointing at the daemon, and a pre-commit hook running the check.","criteria":[{"id":"listed-writes","statement":"Every path init writes or would have written is returned, so the command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers and an existing pre-commit hook is left alone with a note; only Grimoire's own files are overwritten."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, since they are installed verbatim into every repository."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -199,6 +199,36 @@ mod tests {
         assert!(!after.contains("old stuff"));
         assert!(after.contains("## Grimoire"));
         assert_eq!(with_guidance(""), format!("{}\n", GUIDANCE_MD.trim_end()));
+    }
+
+    /// Criterion project-agnostic: what init installs is the same for every
+    /// repository, so nothing in it may be about this one.
+    #[test]
+    fn installed_texts_name_no_project() {
+        let repo_only = [
+            "bacon",
+            "web/",
+            "npm ",
+            "npx ",
+            "crates/",
+            "Grimoire's own repository",
+            "Tailwind",
+            "Playwright",
+            "cargo install",
+        ];
+        for (name, text) in [
+            ("SKILL.md", SKILL_MD),
+            ("contracts.md", CONTRACTS_MD),
+            ("changes.md", CHANGES_MD),
+            ("guidance-section.md", GUIDANCE_MD),
+        ] {
+            for token in repo_only {
+                if let Some(at) = text.find(token) {
+                    let line = text[..at].matches('\n').count() + 1;
+                    panic!("{name}:{line} mentions {token:?}; the installed skill must not know about this repository");
+                }
+            }
+        }
     }
 
     #[test]

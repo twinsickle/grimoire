@@ -59,13 +59,13 @@ created in `warnings`. Treat every warning as work to do now.
   language and what makes a good criterion: `references/contracts.md`.
   Which code change requires which manual update: `references/changes.md`.
   Read the second before starting any ticket that touches a module.
-- **Under the development loop** (Grimoire's own repository, or any project
-  running `bacon serve`), a source edit rebuilds and restarts the daemon and
-  the tools are unavailable for the rebuild. Do the manual writes before the
-  code edits, and retry a refused call after a moment rather than falling
-  back to editing the store. If you add a tool or change the server's
-  instructions, your own MCP client keeps the old list until it reconnects;
-  call the new tool over HTTP until then, and say so.
+- **When the daemon is rebuilt and restarted while you work** (a project
+  that develops Grimoire itself, or runs it under a watch-and-restart
+  loop), the tools are unavailable during each rebuild. Do the manual
+  writes before the code edits, and retry a refused call after a moment
+  rather than falling back to editing the store. If a tool is added or the
+  server's instructions change, your MCP client keeps the old list until it
+  reconnects; call the new tool over HTTP until then, and say so.
 - **When a `check` fails for a reason that makes no sense**, compare
   `status`'s `version` and `supported_languages` with the store's
   `languages`. An installed binary older than the store's needs is the
@@ -162,12 +162,8 @@ the code.
    `lint`. Closing is allowed with findings; leaving them is not.
 5. If the project documents a review step (in its `CLAUDE.md`, a skill, or
    a hook), run it now. Grimoire has no opinion on what the review is.
-   In Grimoire's own repository, a ticket touching `web/` runs
-   `npm run shots` in `web/` and the screenshots in `web/visual/out/` are
-   looked at, not just produced; `npm run visual` compares them with the
-   committed baselines, and `npm run visual:update` accepts an intended
-   change. Passing type checks proved nothing about the Tailwind migration;
-   the screenshots did.
+   If the project has a visual check for a user interface, run it and look
+   at the output; a type check proves nothing about how a view renders.
 6. Commit the code and the manual changes together only when the user has
    asked for a commit. The store is outside the repository; the commit is the
    code and its contracts.
