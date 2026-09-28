@@ -14,7 +14,7 @@ same piece of work; the pre-commit hook checks they agree.
   for anything you find; `/grimoire adopt` for code without contracts.
 - Never write the store's files. The tools are the only interface.
 - Propose, don't decide. A gap or question closes on the person's answer to
-  options you lay out.
+  options you lay out (`/grimoire resolve`).
 
 Sequences: `.claude/skills/grimoire/SKILL.md`.
 <!-- /grimoire -->

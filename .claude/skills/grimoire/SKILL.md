@@ -1,7 +1,7 @@
 ---
 name: grimoire
-description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "what does this rest on", "adopt", "write contracts for the existing code", or asks what the project is meant to do. It wraps the Grimoire tools into the sequences that keep the grimoire honest: start a ticket, write its spec, finish it, file one, and adopt code that predates its contracts.
-argument-hint: start|spec|finish|file|adopt <ticket-slug, title or area>
+description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "resolve", "answer the question", "what does this rest on", "adopt", "write contracts for the existing code", or asks what the project is meant to do. It wraps the Grimoire tools into the sequences that keep the grimoire honest: start a ticket, write its spec, finish it, file one, resolve a gap or question with the person, and adopt code that predates its contracts or tests.
+argument-hint: start|spec|finish|file|resolve|adopt <ticket-slug, title or area>
 ---
 
 # Grimoire
@@ -177,13 +177,43 @@ the code.
 3. Any `warnings` in the response are new dangling references. Fix them
    with `update_ticket` now.
 
+## Sequence: resolve a gap or question
+
+`/grimoire resolve <slug>`
+
+A gap or question closes on the person's decision, never on yours.
+
+1. `start_ticket`; read what it rests on and the related tickets, as for
+   any ticket.
+2. Lay out two to four resolutions for the person: what each costs, what
+   each rules out, and which you would pick and why. Write nothing yet.
+3. The person chooses, amends or adds one. Their choice, in their terms, is
+   the decision; your reasoning is its why.
+4. `close_ticket` with that decision, opening "Decided by the user". If the
+   answer implies work, `file_ticket` the change with `relies_on` naming the
+   gap or question, and put what the person said (scope, what to avoid,
+   priority) in its body. A question is never edited into a change: the
+   record that it was asked, and how it was answered, is what the change
+   rests on.
+5. With no person to ask (an autonomous run), do not resolve. Add the
+   options to the ticket's body with `update_ticket` and leave it open.
+
+A change that turns out to be a question is closed with a decision saying
+so and the question filed, or deleted if nothing was decided.
+
 ## Sequence: adopt existing code
 
 `/grimoire adopt [area]`
 
-For code that predates its contracts. `init` recorded what it found as the
-baseline, so the check passes while this runs; each batch shrinks the
-baseline and leaves the check green.
+For code that predates its contracts or its tests. `init` recorded what it
+found as the baseline, so the check passes while this runs; each batch
+shrinks the baseline and leaves the check green. Take every batch from
+`lint`, never from a list you write: a module or criterion left off a
+hand-made list is simply never reached. Note the baseline's count in
+`status` before a batch and read it after; a count that did not fall by
+what the batch covered is something missed.
+
+### Contracts
 
 1. `lint {"kinds":["uncovered"]}` and take the findings whose `check` is
    `no-contract`; `status` shows the contract scope. Group the modules into
@@ -220,6 +250,29 @@ Code that will never carry a contract (generated, vendored) is a scope
 question: propose `configure` with an `exclude` to the person. Never run
 `scaffold` on an existing store; it replaces the whole store.
 
+### Tests
+
+For an area whose contracts are in, its criteria that no test checks.
+
+1. `lint {"kinds":["uncovered"]}` and take the findings whose `check` is
+   `untested`, in this area. `coverage` on each module lists its criteria
+   with the tests that already check them.
+2. For each criterion, find the test that checks it and read its assertions
+   against the criterion's statement. A test's name is not evidence; a
+   test block is a claim. If a test holds the criterion, draft a
+   `# Test contract` block for it (`references/contracts.md`). If none
+   does, draft a test.
+3. A criterion about how the parts are arranged, not what the module does
+   (a layer does no I/O, one component is the only writer), is a
+   constraint: propose moving it to a requirement on the Constraints page
+   with no criterion, held by a test that names `req:<slug>`, often one
+   that reads the source. A behavioural criterion no test can check:
+   propose rewording it to what a test can. Never leave one untested
+   because it is hard.
+4. Show the batch, write what the person approves, then `lint`. The batch's
+   `untested` findings are gone and pruned from the baseline, and nothing
+   new appears; a constraint no test holds shows as `unheld`.
+
 ## What not to do
 
 - Do not write to the store's files directly. The tools are the only writer.
@@ -228,5 +281,7 @@ question: propose `configure` with an `exclude` to the person. Never run
 - Do not infer call edges or dependencies the graph does not show. Blast
   radius is at module level, from imports; say so when it matters.
 - Do not reopen a closed ticket. File a new one that `relies_on` it.
+- Do not decide a gap or question yourself. Lay out the options; the person
+  chooses, and their choice is the decision.
 - Do not call `adopt` to make a finding go away. It turns every present
   finding into inherited work; it is the person's call, made with a reason.
