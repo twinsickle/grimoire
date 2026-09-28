@@ -250,7 +250,7 @@ pub enum Status {
     Closed,
 }
 
-/// An intended change to the manual, or a gap or question about it.
+/// An intended change to the grimoire, or a gap or question about it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ticket {

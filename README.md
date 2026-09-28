@@ -1,19 +1,19 @@
 # Grimoire
 
-A manual and ticketing tool for software projects: one graph joining what a
+Gives a software project its grimoire and its tickets: one graph joining what a
 project is meant to do now, what is intended to change, the module contracts
 in its code, and the code itself, served to people through a web UI and to
 agents through MCP.
 
-Grimoire's own manual is its design document and lives in its own store,
+Grimoire's own grimoire is its design document and lives in its own store,
 not in this repository: run the daemon (below) and read it at
 http://127.0.0.1:4242, starting from the goal, architecture, constraints and
 glossary pages, or ask it over the tools. The tool surface and the store
-schema are requirements in the manual too, under the Tools and Store pages,
+schema are requirements in the grimoire too, under the Tools and Store pages,
 and `GET /api/tools` on a running daemon lists every tool with its input
 schema. [examples/](./examples/) holds the notes on other projects it is
 pointed at. The original proposal and the early schema documents are in the
-git history before the manual replaced them.
+git history before the grimoire replaced them.
 
 ## Layout
 
@@ -52,7 +52,7 @@ unless `--store` is given a path. The only file written into a repository is
 
 Grimoire is developed pointed at itself: `.grimoire.toml` names the store
 `grimoire`, seeded from this repository's own module contracts and refined
-through the tools. Its own repository is the first target, its own manual the
+through the tools. Its own repository is the first target, its own grimoire the
 first store, and the daemon under development is the one its developers and
 their agents use. Four layers: content is live (the daemon re-parses a saved
 file), the daemon restarts on change (bacon), the UI hot-reloads (Vite), and

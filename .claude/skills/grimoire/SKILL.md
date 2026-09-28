@@ -1,16 +1,16 @@
 ---
 name: grimoire
-description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "what does this rest on", or asks what the project is meant to do. It wraps the Grimoire tools into the three sequences that keep the manual honest: start a ticket, write its spec, finish it.
+description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "what does this rest on", or asks what the project is meant to do. It wraps the Grimoire tools into the three sequences that keep the grimoire honest: start a ticket, write its spec, finish it.
 argument-hint: start|spec|finish|file <ticket-slug or title>
 ---
 
 # Grimoire
 
-Grimoire holds a project's **manual** (pages of intent, requirements with
+Grimoire holds a project's **grimoire** (pages of intent, requirements with
 scenarios and dated decisions, the module contracts in the code, the code)
-and its **tickets** (changes, gaps, questions) as one graph. The manual and
+and its **tickets** (changes, gaps, questions) as one graph. The grimoire and
 the code record what the project does; a ticket never does. Landing a ticket
-updates the manual in the same piece of work. This skill is a thin client of
+updates the grimoire in the same piece of work. This skill is a thin client of
 the tools.
 
 ## Reaching the tools
@@ -51,10 +51,10 @@ it created in `warnings`. Every warning is work to do now.
 - Module contracts are a JSON block under `# Module contract` in a file's
   leading doc comment. Renaming or removing a criterion leaves the
   requirements naming it dangling; the lint says so. Format per language:
-  `references/contracts.md`. Which code change needs which manual update:
+  `references/contracts.md`. Which code change needs which update to the grimoire:
   `references/changes.md`; read it before a ticket that touches a module.
 - **If the daemon is rebuilt while you work**, the tools drop out during
-  each rebuild. Write the manual before editing code; retry a refused call
+  each rebuild. Write the grimoire before editing code; retry a refused call
   after a moment, never edit the store instead. A new tool or changed
   instructions reach your MCP client only when it reconnects; call over
   HTTP until then, and say so.
@@ -104,14 +104,14 @@ edges.
    requirements and pages above it and the other open tickets reaching it.
    Then `get` the module for its files and declarations before opening any
    of them.
-5. Plan the work. Include the manual updates in the plan: which pages and
+5. Plan the work. Include the grimoire updates in the plan: which pages and
    requirements change, which decisions get recorded, which contracts change.
 
 ## Sequence: write the spec
 
 `/grimoire spec <slug>`
 
-The spec is not a document; it is the manual after the change, written before
+The spec is not a document; it is the grimoire after the change, written before
 the code.
 
 1. For each node in the ticket's `touches`: `get` it. For a page,
@@ -136,7 +136,7 @@ the code.
 
 `/grimoire finish <slug>`
 
-1. `get ticket:<slug>`. Copy from its body anything the manual still needs;
+1. `get ticket:<slug>`. Copy from its body anything the grimoire still needs;
    the body is discarded on close.
 2. `lint`. Resolve what this work created: a criterion added to a contract
    needs a requirement naming it; a criterion renamed or removed leaves a
@@ -155,7 +155,7 @@ the code.
    a hook), run it now. Grimoire has no opinion on what the review is.
    If the project has a visual check for a user interface, run it and look
    at the output; a type check proves nothing about how a view renders.
-6. Commit the code and the manual changes together only when the user has
+6. Commit the code and the grimoire changes together only when the user has
    asked for a commit. The store is outside the repository; the commit is the
    code and its contracts.
 
@@ -176,7 +176,7 @@ the code.
 ## What not to do
 
 - Do not write to the store's files directly. The tools are the only writer.
-- Do not put in a ticket what belongs in the manual. A ticket's body dies on
+- Do not put in a ticket what belongs in the grimoire. A ticket's body dies on
   close; a page, requirement or decision does not.
 - Do not infer call edges or dependencies the graph does not show. Blast
   radius is at module level, from imports; say so when it matters.

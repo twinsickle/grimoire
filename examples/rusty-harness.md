@@ -18,7 +18,7 @@ earlier assumptions sat unchallenged under new work.
   (`specs/phase-21-module-acceptance-criteria.md`): a `# Module contract`
   heading in the leading `//!` block with a strict JSON object of `purpose`
   and `criteria`. Around a hundred modules across three crates. This is the
-  code level of the manual, already present.
+  code level of the grimoire, already present.
 - **Canonical module identity** rules, defined in that spec's M4: the
   workspace-relative path with `.rs` or a terminal `/mod.rs` removed; a
   `tests.rs` or `*_tests.rs` maps to its parent; crate roots map to their
@@ -28,7 +28,7 @@ earlier assumptions sat unchallenged under new work.
   not. The Rust adapter implements these too, so the uncovered lint can report
   a module with no contract.
 - `SYSTEM.md` and `LIFECYCLE.md`, which record intent and become the top of
-  the manual.
+  the grimoire.
 - An open question in `PLAN.md` §6.2 about giving agents a code graph, naming
   Graphify. Grimoire answers it for the harness's own development with its
   own in-process extraction; see the trial below for why not Graphify.
@@ -45,7 +45,7 @@ reaches its first milestone.
   gaps as gap tickets, §6.2 questions as question tickets, each linked to the
   nodes it touches. `PLAN.md` and `PLAN-completed.md` are then deleted; Git
   keeps them.
-- `SYSTEM.md` and `LIFECYCLE.md` become the manual's top pages, in the store.
+- `SYSTEM.md` and `LIFECYCLE.md` become the grimoire's top pages, in the store.
 - `specs/` is mined for requirements that are still true, which go into the
   store by area, then deleted. Superseded specs are not carried.
 - `trials/` and `design/` are decided ticket by ticket; the default is delete.
@@ -72,7 +72,7 @@ What `grimoire init` puts there, plus what the harness adopts alongside:
 
 ## First milestone, for this project
 
-Grimoire pointed at the rusty-harness repository renders the manual's four
+Grimoire pointed at the rusty-harness repository renders the grimoire's four
 levels from the migrated store and the parsed crates with the two lints
 passing, rebuilds the
 existing-state skeleton from the module contracts alone, shows the board with

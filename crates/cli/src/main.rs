@@ -17,7 +17,7 @@ use grimoire_extract::Extractor;
 use grimoire_server::store_io;
 
 #[derive(Parser)]
-#[command(name = "grimoire", version, about = "A manual and ticketing tool for software projects: one graph of intent, requirements, module contracts and code, served to people and agents.")]
+#[command(name = "grimoire", version, about = "Gives a software project its grimoire and its tickets: one graph of intent, requirements, module contracts and code, served to people and agents.")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

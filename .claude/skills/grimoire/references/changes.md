@@ -1,10 +1,10 @@
-# What change requires what manual update
+# What change requires what update to the grimoire
 
-The rule is that the manual moves with the code in the same piece of work.
+The rule is that the grimoire moves with the code in the same piece of work.
 This is the mapping. "Page" means the area page that covers the module;
 find it with `rests_on_me` on the module, or `find`.
 
-| Change in the code | Update in the manual |
+| Change in the code | Update in the grimoire |
 |---|---|
 | New module | Contract in the file. A requirement per criterion (`put_requirement`). Link each requirement and the module from its area page (`patch_page` with `add_links`). |
 | New behaviour in an existing module | New criterion in the contract. A requirement covering it. Link the requirement from the page. |
@@ -17,11 +17,11 @@ find it with `rests_on_me` on the module, or `find`.
 | A question or gap discovered while working | `file_ticket` with kind `question` or `gap`, `relies_on` this ticket. Do not resolve it alone. |
 | Code that turns out to contradict a requirement | Stop. Either the code is wrong (fix it) or the requirement is (reword it and `record_decision` why). Never leave both standing. |
 
-## What does not need a manual update
+## What does not change the grimoire
 
 - Refactors that change no guarantee: renamed locals, extracted helpers,
   moved private functions. If a criterion still reads true, nothing moves.
-- Test changes. Tests are not manual material.
+- Test changes. Tests are not part of the grimoire.
 - Dependency bumps, formatting, comments that are not the contract.
 
 ## Checking your own work before `finish`

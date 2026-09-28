@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the manual moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them."}]}
+//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them."}]}
 //! ```
 
 use std::sync::Arc;
@@ -46,9 +46,9 @@ impl ServerHandler for McpServer {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("grimoire", env!("CARGO_PKG_VERSION")))
             .with_instructions(
-                "This project's manual (pages, requirements with decisions, the module contracts in the code) is the truth of what it is meant to do; code and manual change in the same piece of work. \
+                "This project's grimoire (pages, requirements with decisions, the module contracts in the code) is the truth of what it is meant to do; code and grimoire change in the same piece of work. \
                  Orient first: `outline` at depth 2, then the goal, architecture and constraints pages; `get` a module before opening its files. \
-                 Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the manual before the code; `lint`, fix what you created, `close_ticket`. \
+                 Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the grimoire before the code; `lint`, fix what you created, `close_ticket`. \
                  Every module under src/ carries a `# Module contract`; a new criterion gets a requirement. `find` before writing any reference. Never write the store's files. \
                  A gap or question closes on the person's answer to options you lay out, never on your own decision. \
                  `lint` is `grimoire check`; `status` shows the build's version and languages beside the store's.",

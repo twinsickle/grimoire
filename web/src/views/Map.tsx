@@ -13,7 +13,7 @@ import { Badge, ErrorBox, KindTag, empty, nodePath, pressed } from "../component
 import { kindOf, type Tree } from "../types";
 
 /**
- * The manual as nested regions: pages hold the pages they link to, those hold
+ * The grimoire as nested regions: pages hold the pages they link to, those hold
  * requirements and modules, modules hold criteria. Coverage is the fill
  * behind a region's head; lint findings are the mark on the right.
  */

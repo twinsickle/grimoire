@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes and malformed store files over the joined graph.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"manual-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not manual material."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes and malformed store files over the joined graph.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -123,9 +123,9 @@ fn uncovered(g: &Graph, out: &mut Vec<Finding>) {
                 }
             }
             Node::Module(m) => {
-                // Only modules that are part of the manual: those expected to
+                // Only modules that are part of the grimoire: those expected to
                 // carry a contract or that carry one anyway. Test files, build
-                // scripts and examples are code, not manual.
+                // scripts and examples are code, not part of the grimoire.
                 let manual_material = m.expects_contract || m.purpose.is_some();
                 if manual_material && g.inbound_with(r, Relation::Links).next().is_none() {
                     out.push(Finding::node(Rule::Uncovered, r, "no page links to this module"));

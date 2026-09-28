@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The default view: the top of the manual as a page to read, in the root page's order, ending with every module contract grouped by area.","criteria":[{"id":"story-order","statement":"The story pages are rendered as Markdown in the root page's link order, each followed by its requirements as a compact list, and the pages under architecture as cards with their first paragraph and coverage."},{"id":"contracts-grouped","statement":"Every module with a purpose is listed once, one line each, grouped under the page that links it; files and declarations are not shown."}]}
+ * {"purpose":"The default view: the top of the grimoire as a page to read, in the root page's order, ending with every module contract grouped by area.","criteria":[{"id":"story-order","statement":"The story pages are rendered as Markdown in the root page's link order, each followed by its requirements as a compact list, and the pages under architecture as cards with their first paragraph and coverage."},{"id":"contracts-grouped","statement":"Every module with a purpose is listed once, one line each, grouped under the page that links it; files and declarations are not shown."}]}
  * ```
  */
 
@@ -11,7 +11,7 @@ import { api, useQuery } from "../api";
 import { Badge, ErrorBox, KindTag, Markdown, card, empty, mono, nodePath } from "../components";
 import { kindOf, type PageNode, type Tree } from "../types";
 
-/** Read the manual top-down: what this is, how it is built, what must hold, and what the code guarantees. */
+/** Read the grimoire top-down: what this is, how it is built, what must hold, and what the code guarantees. */
 export function HomeView() {
   const { data, error } = useQuery(() => api.outline(3), []);
   if (error) return <ErrorBox error={error} />;
@@ -148,7 +148,7 @@ function Contracts({ root }: { root: Tree }) {
   return (
     <section id="contracts">
       <h2 className={sectionHead}>Contracts</h2>
-      <p className="text-fg-dim">What each module guarantees, in its own words. The code level of the manual, grouped by area.</p>
+      <p className="text-fg-dim">What each module guarantees, in its own words. The code level of the grimoire, grouped by area.</p>
       {groups.map((g) => (
         <div key={g.page.ref} className="mt-3">
           <h3 className="mb-1">

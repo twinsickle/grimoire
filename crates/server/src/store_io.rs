@@ -84,7 +84,7 @@ pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
 /// Write `.grimoire.toml` into a repository.
 pub fn write_project_file(repo: &Path, store: &str) -> Result<PathBuf, StoreIoError> {
     let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names the store that holds this project's manual.\nstore = {}\n", toml::Value::String(store.to_string()));
+    let text = format!("# Written once by `grimoire init`. Names the store that holds this project's grimoire.\nstore = {}\n", toml::Value::String(store.to_string()));
     std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
     Ok(f)
 }

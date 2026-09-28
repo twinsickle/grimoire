@@ -1,2 +1,2 @@
-# Written once by `grimoire init`. Names the store that holds this project's manual.
+# Written once by `grimoire init`. Names the store that holds this project's grimoire.
 store = "grimoire"

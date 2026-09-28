@@ -65,9 +65,9 @@ pub fn with_guidance(existing: &str) -> String {
     }
 }
 
-/// The hook script: fails the commit when the manual is inconsistent.
+/// The hook script: fails the commit when the grimoire is inconsistent.
 pub fn hook_script() -> String {
-    "#!/bin/sh\n# Installed by `grimoire init`. Fails the commit when the manual and the code disagree.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"pre-commit: grimoire is not on PATH; the manual was not checked\" >&2\n  exit 0\nfi\nexec grimoire check\n".to_string()
+    "#!/bin/sh\n# Installed by `grimoire init`. Fails the commit when the grimoire and the code disagree.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"pre-commit: grimoire is not on PATH; the grimoire was not checked\" >&2\n  exit 0\nfi\nexec grimoire check\n".to_string()
 }
 
 /// Write the integration into `repo`. `.grimoire.toml` is written by the

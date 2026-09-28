@@ -25,7 +25,7 @@ background = false
 on_change_strategy = "kill_then_restart"
 allow_warnings = true
 
-# The lints over this repository's own manual, as a hook or CI would run them.
+# The lints over this repository's own grimoire, as a hook or CI would run them.
 [jobs.lint]
 command = ["cargo", "run", "--quiet", "--", "check"]
 need_stdout = true

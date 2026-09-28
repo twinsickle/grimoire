@@ -1,6 +1,6 @@
 # Module contracts
 
-A module contract is the code level of the manual: a purpose and criteria,
+A module contract is the code level of the grimoire: a purpose and criteria,
 written in the source file, read by Grimoire on every change and never
 stored. Requirements name criteria in `covered_by`; the lints report a
 criterion no requirement names and a module expected to carry a contract
@@ -24,7 +24,7 @@ contract` followed by a fenced `json` block holding one object:
 - The block is strict JSON: unknown fields, a missing `purpose` or a
   duplicate id make the contract malformed, and the module is reported.
 - A criterion is addressed as `criterion:<module id>#<id>`. Renaming an id
-  is a manual change: the requirement naming it goes dangling and the lint
+  is a change to the grimoire: the requirement naming it goes dangling and the lint
   says so; update the requirement's `covered_by` in the same piece of work.
 
 Keep it on one line inside the fence; the extractor does not care, but

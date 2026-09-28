@@ -13,7 +13,7 @@ use crate::store::{is_slug, Store, SLUG_MAX};
 pub const ROOT_SLUG: &str = "overview";
 pub const ARCHITECTURE_SLUG: &str = "architecture";
 
-/// The story pages every manual starts with, in reading order, with the
+/// The story pages every grimoire starts with, in reading order, with the
 /// prompt each carries until someone writes it. The convention: what this
 /// is, what it does, and how.
 pub const STORY: [(&str, &str, &str); 4] = [
