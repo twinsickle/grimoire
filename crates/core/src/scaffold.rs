@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,10 +16,11 @@ pub const ARCHITECTURE_SLUG: &str = "architecture";
 /// The story pages every grimoire starts with, in reading order, with the
 /// prompt each carries until someone writes it. The convention: what this
 /// is, what it does, and how.
-pub const STORY: [(&str, &str, &str); 4] = [
+pub const STORY: [(&str, &str, &str); 5] = [
     ("goal", "Goal", "What this project is and what it is not, as short statements a reader can check against the code. No motivation, no history, no milestones. This is the first page a person or agent reads."),
     (ARCHITECTURE_SLUG, "Architecture", "A high-level inventory of what exists and why: one line saying what the system is; the pipeline, how data moves through the parts; the layers with their responsibilities and what each is built from; the design principles behind them; and the physical layout. Every line checkable against the repository. The pages below are its areas, one per module group, seeded from the module contracts."),
     ("constraints", "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
+    ("conventions", "Conventions", "How things are done here, as opposed to what must hold: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong; a convention a lint could check belongs under constraints as a requirement instead."),
     ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
 ];
 
@@ -223,7 +224,7 @@ mod tests {
         // The story outline: root links the four story pages in order, and
         // the top-level group hangs under architecture.
         let root_links: Vec<String> = s.pages["overview"].links.iter().map(|r| r.to_string()).collect();
-        assert_eq!(root_links, vec!["page:goal", "page:architecture", "page:constraints", "page:glossary"]);
+        assert_eq!(root_links, vec!["page:goal", "page:architecture", "page:constraints", "page:conventions", "page:glossary"]);
         assert!(s.pages["architecture"].links.iter().any(|r| r.kind == Kind::Page && r.id == "src-a"), "{:?}", s.pages["architecture"].links);
         assert!(s.pages["overview"].links.iter().all(|r| r.id != "src-a"));
         assert!(s.pages["goal"].body.contains("What this project is and what it is not"));

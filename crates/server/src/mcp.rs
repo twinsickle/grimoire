@@ -47,7 +47,7 @@ impl ServerHandler for McpServer {
             .with_server_info(Implementation::new("grimoire", env!("CARGO_PKG_VERSION")))
             .with_instructions(
                 "This project's grimoire (pages, requirements with decisions, the module contracts in the code) is the truth of what it is meant to do; code and grimoire change in the same piece of work. \
-                 Orient first: `outline` at depth 2, then the goal, architecture and constraints pages; `get` a module before opening its files. \
+                 Orient first: `outline` at depth 2, then the goal, architecture, constraints and conventions pages; `get` a module before opening its files. \
                  Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the grimoire before the code; `lint`, fix what you created, `close_ticket`. \
                  Every module under src/ carries a `# Module contract`; a new criterion gets a requirement. `find` before writing any reference. Never write the store's files. \
                  A gap or question closes on the person's answer to options you lay out, never on your own decision. \
