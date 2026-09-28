@@ -20,7 +20,7 @@ export function HomeView() {
   if (!root) return <p className={empty}>No root page. The store's `roots` names none that exist.</p>;
   const story = root.children.filter((c) => kindOf(c.ref) === "page");
   return (
-    <div className="max-w-[96ch] flex flex-col gap-7">
+    <div className="max-w-[96ch] w-full mx-auto flex flex-col gap-7">
       <RootHead tree={root} />
       {story.map((s) => (
         <StorySection key={s.ref} tree={s} />

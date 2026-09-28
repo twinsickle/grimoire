@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node.","criteria":[{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a dangling edge succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision and is a conflict when the slug exists."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node.","criteria":[{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a dangling edge succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
@@ -126,7 +126,6 @@ pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: Str
 }
 
 pub struct NewTicket {
-    pub slug: String,
     pub title: String,
     pub kind: TicketKind,
     pub priority: Priority,
@@ -135,12 +134,18 @@ pub struct NewTicket {
     pub body: String,
 }
 
+/// The next ticket id: one past the highest all-digit id in the store,
+/// zero-padded to four digits. Tickets filed before ids were generated keep
+/// their names and are not counted.
+pub fn next_ticket_id(store: &Store) -> String {
+    let max = store.tickets.keys().filter_map(|k| k.parse::<u64>().ok()).max().unwrap_or(0);
+    format!("{:04}", max + 1)
+}
+
 pub fn file_ticket(store: &mut Store, t: NewTicket) -> Result<(Ticket, Changed), ToolError> {
-    if store.tickets.contains_key(&t.slug) {
-        return Err(ToolError::conflict(format!("ticket:{} already exists", t.slug)));
-    }
+    let slug = next_ticket_id(store);
     let ticket = Ticket {
-        slug: t.slug,
+        slug,
         title: t.title,
         kind: t.kind,
         priority: t.priority,
@@ -298,10 +303,22 @@ mod tests {
     }
 
     #[test]
-    fn file_ticket_conflicts_on_slug() {
+    fn file_ticket_generates_ids() {
         let mut s = store();
-        let t = NewTicket { slug: "phase-62".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, touches: vec![], relies_on: vec![], body: "b".into() };
-        assert_eq!(file_ticket(&mut s, t).unwrap_err().code(), "conflict");
+        // Existing tickets have names, not numbers: the first generated id is 0001.
+        assert_eq!(next_ticket_id(&s), "0001");
+        let t = || NewTicket { title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, touches: vec![], relies_on: vec![], body: "b".into() };
+        let (a, _) = file_ticket(&mut s, t()).unwrap();
+        let (b, _) = file_ticket(&mut s, t()).unwrap();
+        assert_eq!(a.slug, "0001");
+        assert_eq!(b.slug, "0002");
+        assert!(crate::store::is_slug(&a.slug));
+        // Deleting the latest does not reuse its number's predecessor's successor incorrectly.
+        s.tickets.remove("0002");
+        assert_eq!(next_ticket_id(&s), "0002");
+        // Ten thousand tickets still get distinct ids, just longer.
+        s.tickets.insert("9999".into(), Ticket { slug: "9999".into(), ..a.clone() });
+        assert_eq!(next_ticket_id(&s), "10000");
     }
 
     #[test]

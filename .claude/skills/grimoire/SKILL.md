@@ -171,10 +171,12 @@ the code.
 `/grimoire file <title>`
 
 1. `find` the nodes it touches and relies on; resolve every reference.
-2. `file_ticket` with a slug, title, kind, priority, `touches`,
-   `relies_on`, and a body of a few paragraphs: the problem, the direction,
-   the decision if one was already taken (it is recorded on the requirement
-   later, when the work lands).
+2. `file_ticket` with a title, kind, priority, `touches`, `relies_on`, and
+   a body of a few paragraphs: the problem, the direction, the decision if
+   one was already taken (it is recorded on the requirement later, when the
+   work lands). The id is generated; do not send a slug. Refer to the
+   ticket afterwards by the `ref` the response returns, with its title
+   beside it in prose.
 3. Any `warnings` in the response are dangling references. Fix them with
    `update_ticket` now.
 

@@ -14,6 +14,8 @@ export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "conta
 export interface EdgeView {
   ref: Ref;
   relation: Relation;
+  /** The other end's one-line name, or null when it is dangling. */
+  title: string | null;
 }
 
 export interface Decision {

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the manual gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation}."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body and declaration path, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the manual as a tree from the root pages (or a given page) to a depth, each node with its coverage and its count of lint findings on or below it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it, and for a module, each criterion with the requirements naming it, empty where uncovered."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file or declaration, with the contract heading's line for criteria."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the manual gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body and declaration path, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the manual as a tree from the root pages (or a given page) to a depth, each node with its coverage and its count of lint findings on or below it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it, and for a module, each criterion with the requirements naming it, empty where uncovered."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file or declaration, with the contract heading's line for criteria."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -23,19 +23,24 @@ pub struct NodeView {
     pub out: Vec<EdgeView>,
 }
 
+/// One edge as a node view lists it: the other end, the relation, and the
+/// other end's title when it exists, so a generated ticket id is never read
+/// alone. `None` when the target is dangling.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EdgeView {
     pub r#ref: Reference,
     pub relation: Relation,
+    pub title: Option<String>,
 }
 
 pub fn view(g: &Graph, r: &Reference) -> Option<NodeView> {
     let node = g.get(r)?.clone();
+    let edge = |other: &Reference, relation: Relation| EdgeView { r#ref: other.clone(), relation, title: g.get(other).map(Node::title) };
     Some(NodeView {
         r#ref: r.clone(),
         node,
-        r#in: g.inbound(r).map(|e| EdgeView { r#ref: e.from.clone(), relation: e.relation }).collect(),
-        out: g.out(r).map(|e| EdgeView { r#ref: e.to.clone(), relation: e.relation }).collect(),
+        r#in: g.inbound(r).map(|e| edge(&e.from, e.relation)).collect(),
+        out: g.out(r).map(|e| edge(&e.to, e.relation)).collect(),
     })
 }
 

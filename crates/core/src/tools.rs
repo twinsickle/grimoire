@@ -313,7 +313,6 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct In {
-                slug: String,
                 title: String,
                 kind: TicketKind,
                 priority: Priority,
@@ -321,8 +320,11 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 relies_on: Option<Vec<Reference>>,
                 body: String,
             }
+            if input.get("slug").is_some() {
+                return Err(ToolError::invalid("file_ticket no longer takes a slug: the id is generated. Give a title.", vec![]));
+            }
             let i: In = parse(input)?;
-            let t = ops::NewTicket { slug: i.slug, title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
+            let t = ops::NewTicket { title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
             let (node, changed) = ops::file_ticket(state.store_mut(), t)?;
             let r = Reference::ticket(&node.slug);
             written(state, &r, changed)
@@ -437,7 +439,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "patch_page", description: "Change a page's title or body, or add and remove links, leaving everything else as it was. The usual way to link a new requirement or page from its area.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "body": {"type":"string","description":"Markdown"}, "add_links": refs, "remove_links": refs })) },
         ToolDef { name: "put_requirement", description: "Create or replace a requirement. Existing decisions are preserved; use record_decision to add one.", input_schema: obj(&["slug","title","statement","scenarios","covered_by"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "statement": {"type":"string","description":"One normative paragraph (SHALL / MUST)"}, "scenarios": {"type":"array","items": scenario}, "covered_by": {"type":"array","items": reference, "description":"criterion references"} })) },
         ToolDef { name: "record_decision", description: "Append a dated decision to a requirement: what was chosen and why.", input_schema: obj(&["ref","text"], json!({ "ref": reference, "text": {"type":"string"}, "date": date })) },
-        ToolDef { name: "file_ticket", description: "Create an open ticket: a change, gap or question, with the nodes it touches and relies on.", input_schema: obj(&["slug","title","kind","priority","body"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "kind": {"type":"string","enum":["change","gap","question"]}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string","description":"Markdown, at most 4000 characters"} })) },
+        ToolDef { name: "file_ticket", description: "Create an open ticket: a change, gap or question, with the nodes it touches and relies on. The id is generated; the title is the ticket's name.", input_schema: obj(&["title","kind","priority","body"], json!({ "title": {"type":"string"}, "kind": {"type":"string","enum":["change","gap","question"]}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string","description":"Markdown, at most 4000 characters"} })) },
         ToolDef { name: "update_ticket", description: "Change an open or active ticket's title, priority, touches, relies_on or body.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string"} })) },
         ToolDef { name: "start_ticket", description: "Move a ticket from open to active and return what it rests on and the related gaps and questions.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the lint findings on the nodes it touched.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
@@ -495,13 +497,20 @@ mod tests {
     #[test]
     fn write_then_read_sees_it() {
         let mut s = state();
-        let out = call(&mut s, "file_ticket", json!({ "slug": "new-1", "title": "New", "kind": "change", "priority": "high", "touches": ["page:nope"], "body": "x" }), "2026-09-27").unwrap();
+        let out = call(&mut s, "file_ticket", json!({ "title": "New", "kind": "change", "priority": "high", "touches": ["page:nope"], "body": "x" }), "2026-09-27").unwrap();
         assert_eq!(out.output["warnings"].as_array().unwrap().len(), 1);
-        assert!(matches!(out.changed, Some(Changed::Ticket(ref s)) if s == "new-1"));
-        let got = call(&mut s, "get", json!({ "ref": "ticket:new-1" }), "2026-09-27").unwrap();
+        assert!(matches!(out.changed, Some(Changed::Ticket(ref s)) if s == "0001"));
+        let got = call(&mut s, "get", json!({ "ref": "ticket:0001" }), "2026-09-27").unwrap();
         assert_eq!(got.output["node"]["status"], "open");
+        // Edges carry titles so an id is never read alone.
+        assert_eq!(got.output["node"]["out"][0]["ref"], "page:nope");
+        assert!(got.output["node"]["out"][0]["title"].is_null(), "a dangling target has no title");
+        let page = call(&mut s, "get", json!({ "ref": "page:git-readiness" }), "2026-09-27").unwrap();
+        assert!(page.output["node"]["in"].as_array().unwrap().iter().any(|e| e["ref"] == "ticket:phase-62" && e["title"] == "PHASE-62"));
         let board = call(&mut s, "board", json!({}), "2026-09-27").unwrap();
-        assert!(board.output["tickets"].as_array().unwrap().iter().any(|t| t["ref"] == "ticket:new-1"));
+        assert!(board.output["tickets"].as_array().unwrap().iter().any(|t| t["ref"] == "ticket:0001"));
+        let e = call(&mut s, "file_ticket", json!({ "slug": "x", "title": "New", "kind": "change", "priority": "high", "body": "x" }), "2026-09-27").unwrap_err();
+        assert!(e.to_string().contains("no longer takes a slug"));
     }
 
     #[test]

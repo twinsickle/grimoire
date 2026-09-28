@@ -2,15 +2,15 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the summary, the map, the board and node pages, the header with status and finding count, and search over find.","criteria":[{"id":"four-views","statement":"The routes are the summary at /, the map at /map, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."}]}
+ * {"purpose":"The shell: routes to the summary, the map, the board and node pages, the header with the section tabs, status and finding count, and search over find.","criteria":[{"id":"four-views","statement":"The routes are the summary at /, the map at /map, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand; exactly one tab is lit at all times: the current section on /, /map and /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."}]}
  * ```
  */
 
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, useQuery } from "./api";
 import { KindTag, mono, nodePath } from "./components";
-import { idOf, type Summary } from "./types";
+import { idOf, kindOf, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
 import { MapView } from "./views/Map";
@@ -34,29 +34,77 @@ export function App() {
   );
 }
 
-const navLink = ({ isActive }: { isActive: boolean }) =>
-  `px-2.5 py-1 rounded-md hover:bg-bg-2 hover:text-fg hover:no-underline ${isActive ? "bg-bg-2 text-fg" : "text-fg-dim"}`;
+type Section = "grimoire" | "map" | "board";
+
+const SECTION_PATH: Record<Section, string> = { grimoire: "/", map: "/map", board: "/board" };
+
+function sectionOfPath(pathname: string): Section | null {
+  if (pathname === "/") return "grimoire";
+  if (pathname.startsWith("/map")) return "map";
+  if (pathname.startsWith("/board")) return "board";
+  return null;
+}
+
+/**
+ * Which tab is lit. On a section route, that section. On a node page, the
+ * section the node was reached from, remembered as the route changes; when
+ * the page was opened cold, the node's kind decides.
+ */
+function useLitSection(): Section {
+  const { pathname } = useLocation();
+  const last = useRef<Section | null>(null);
+  const here = sectionOfPath(pathname);
+  if (here) last.current = here;
+  if (here) return here;
+  if (last.current) return last.current;
+  const m = pathname.match(/^\/n\/(.+)$/);
+  const ref = m ? decodeURIComponent(m[1]) : "";
+  return ref && kindOf(ref) === "ticket" ? "board" : "grimoire";
+}
+
+function BookIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 6.5c-1.6-1.4-3.9-2-7-2v13c3.1 0 5.4.6 7 2 1.6-1.4 3.9-2 7-2v-13c-3.1 0-5.4.6-7 2z" />
+      <path d="M12 6.5v13" />
+    </svg>
+  );
+}
+
+function Tab({ section, lit, children }: { section: Section; lit: Section; children: React.ReactNode }) {
+  const on = section === lit;
+  return (
+    <Link
+      to={SECTION_PATH[section]}
+      aria-current={on ? "page" : undefined}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 -mb-[9px] border-b-2 hover:no-underline ${
+        on ? "text-accent border-accent" : "text-fg-dim border-transparent hover:text-fg"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 function Top() {
   const status = useQuery(() => api.status(), []);
   const lint = useQuery(() => api.lint(), []);
+  const lit = useLitSection();
   const findings = lint.data?.findings.length ?? 0;
   const repo = status.data?.repository.split("/").pop();
   return (
     <header className="flex items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
-      <Link to="/" className="font-bold tracking-wide text-fg">
-        grimoire
-      </Link>
-      <nav className="flex gap-1">
-        <NavLink to="/" end className={navLink}>
-          Manual
-        </NavLink>
-        <NavLink to="/map" className={navLink}>
+      <nav className="flex gap-1 items-center">
+        <Tab section="grimoire" lit={lit}>
+          <BookIcon />
+          <span className="font-bold tracking-wide">Grimoire</span>
+        </Tab>
+        <Tab section="map" lit={lit}>
           Map
-        </NavLink>
-        <NavLink to="/board" className={navLink}>
+        </Tab>
+        <Tab section="board" lit={lit}>
           Board
-        </NavLink>
+        </Tab>
       </nav>
       <Search />
       <span className="flex-1" />

@@ -52,7 +52,7 @@ export function NodeView() {
   const node = data.node;
   const kind = kindOf(ref);
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start max-w-[150ch] mx-auto">
       <div>
         <div className="flex flex-col gap-1.5 mb-3">
           <div className="flex gap-2.5 items-center">
@@ -368,7 +368,7 @@ function RestsOnMe({ ref }: { ref: Ref }) {
   );
 }
 
-function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: string }[] }) {
+function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: string; title: string | null }[] }) {
   if (edges.length === 0) return null;
   return (
     <div className={card}>
@@ -377,7 +377,7 @@ function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: s
         {edges.map((e, i) => (
           <li key={i} className={item}>
             <span className={rel}>{e.relation}</span>
-            <RefLink ref={e.ref} />
+            <RefLink ref={e.ref} title={e.title ?? undefined} />
           </li>
         ))}
       </ul>
