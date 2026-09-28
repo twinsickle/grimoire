@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // The dev server proxies the daemon so the UI hot-reloads while the daemon
 // restarts under bacon. See "Development loop" in README.md.
@@ -9,7 +10,7 @@ export default defineConfig(({ mode }) => {
 });
 
 const config = (daemon: string) => ({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {

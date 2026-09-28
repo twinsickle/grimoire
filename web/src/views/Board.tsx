@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { api, useQuery } from "../api";
-import { ErrorBox, TicketTable } from "../components";
+import { ErrorBox, TicketTable, pressed } from "../components";
 
 const KINDS = ["change", "gap", "question"] as const;
 const STATUS = ["open", "active", "closed"] as const;
@@ -16,10 +16,10 @@ const PRIORITY = ["next", "high", "later"] as const;
 
 function Toggle<T extends string>({ label, all, on, set }: { label: string; all: readonly T[]; on: T[]; set: (v: T[]) => void }) {
   return (
-    <div className="group">
-      <span>{label}</span>
+    <div className="flex gap-1 items-center">
+      <span className="text-fg-faint text-xs mr-1">{label}</span>
       {all.map((v) => (
-        <button key={v} className={on.includes(v) ? "on" : ""} onClick={() => set(on.includes(v) ? on.filter((x) => x !== v) : [...on, v])}>
+        <button key={v} className={on.includes(v) ? pressed : ""} onClick={() => set(on.includes(v) ? on.filter((x) => x !== v) : [...on, v])}>
           {v}
         </button>
       ))}
@@ -34,8 +34,8 @@ export function BoardView() {
   const [priority, setPriority] = useState<(typeof PRIORITY)[number][]>([...PRIORITY]);
   const { data, error } = useQuery(() => api.board({ kinds, status, priority }), [kinds.join(), status.join(), priority.join()]);
   return (
-    <div className="board">
-      <div className="filters">
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-3 flex-wrap items-center">
         <Toggle label="Kind" all={KINDS} on={kinds} set={setKinds} />
         <Toggle label="Status" all={STATUS} on={status} set={setStatus} />
         <Toggle label="Priority" all={PRIORITY} on={priority} set={setPriority} />

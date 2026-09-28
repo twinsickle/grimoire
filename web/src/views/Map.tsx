@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { ErrorBox, KindTag, nodePath } from "../components";
+import { Badge, ErrorBox, KindTag, empty, nodePath, pressed } from "../components";
 import { kindOf, type Tree } from "../types";
 
 /**
@@ -21,22 +21,25 @@ export function MapView() {
   const [depth, setDepth] = useState(4);
   const { data, error } = useQuery(() => api.outline(depth), [depth]);
   return (
-    <div className="map">
-      <div className="map-controls">
+    <div className="flex flex-col gap-2.5">
+      <div className="flex gap-2 items-center text-fg-dim">
         <span>Depth</span>
         {[2, 3, 4, 6].map((d) => (
-          <button key={d} className={d === depth ? "on" : ""} onClick={() => setDepth(d)}>
+          <button key={d} className={d === depth ? pressed : ""} onClick={() => setDepth(d)}>
             {d}
           </button>
         ))}
-        <span className="faint">Fill is criteria covered by a requirement; the badge counts lint findings on or below.</span>
+        <span className="text-fg-faint">Fill is criteria covered by a requirement; the badge counts lint findings on or below.</span>
       </div>
       {error && <ErrorBox error={error} />}
-      {data?.roots.length === 0 && <p className="empty">No root page. The store's `roots` names none that exist.</p>}
+      {data?.roots.length === 0 && <p className={empty}>No root page. The store's `roots` names none that exist.</p>}
       {data?.roots.map((t) => <Region key={t.ref} tree={t} depth={0} />)}
     </div>
   );
 }
+
+/** Alternating backgrounds so nested regions read as levels. */
+const DEPTH_BG = ["bg-bg-1", "bg-bg-2", "bg-bg-1", "bg-bg-2"];
 
 function Region({ tree, depth }: { tree: Tree; depth: number }) {
   const kind = kindOf(tree.ref);
@@ -44,18 +47,24 @@ function Region({ tree, depth }: { tree: Tree; depth: number }) {
   if (isLeaf) return <Leaf tree={tree} />;
   const pct = tree.coverage == null ? null : Math.round(tree.coverage * 100);
   return (
-    <div className={`region depth-${depth % 4}`}>
-      {pct != null && <div className="fill" style={{ width: `${pct}%` }} />}
-      <div className="head">
+    <div className={`border border-line rounded-md pt-2 px-2.5 pb-2.5 relative overflow-hidden ${DEPTH_BG[depth % 4]}`}>
+      {pct != null && <div className="absolute left-0 top-0 bottom-0 bg-module/10 pointer-events-none" style={{ width: `${pct}%` }} />}
+      <div className="flex items-center gap-2 relative">
         <KindTag ref={tree.ref} />
-        <span className="title">
-          <Link to={nodePath(tree.ref)}>{tree.title}</Link>
+        <span className="font-semibold">
+          <Link to={nodePath(tree.ref)} className="text-fg">
+            {tree.title}
+          </Link>
         </span>
-        {pct != null && <span className={`badge ${pct === 100 ? "ok" : pct < 50 ? "warn" : ""}`}>{pct}% covered</span>}
-        {tree.findings > 0 && <span className="badge bad">{tree.findings} finding{tree.findings === 1 ? "" : "s"}</span>}
+        {pct != null && <Badge tone={pct === 100 ? "ok" : pct < 50 ? "warn" : "plain"}>{pct}% covered</Badge>}
+        {tree.findings > 0 && (
+          <Badge tone="bad">
+            {tree.findings} finding{tree.findings === 1 ? "" : "s"}
+          </Badge>
+        )}
       </div>
       {tree.children.length > 0 && (
-        <div className="body">
+        <div className="flex flex-wrap gap-2 mt-2 relative">
           {tree.children.map((c) => (
             <Region key={c.ref} tree={c} depth={depth + 1} />
           ))}
@@ -70,14 +79,19 @@ function Leaf({ tree }: { tree: Tree }) {
   const uncovered = kind === "criterion" && tree.findings > 0;
   const count = kind === "req" && typeof tree.coverage === "number" ? tree.coverage : null;
   return (
-    <div className={`leaf ${kind} ${uncovered ? "uncovered" : ""}`} title={tree.title}>
+    <div
+      className={`border rounded-md px-2 py-[5px] bg-bg inline-flex gap-2 items-center max-w-full ${kind === "criterion" ? "border-dashed" : ""} ${uncovered ? "border-warn" : "border-line"}`}
+      title={tree.title}
+    >
       <KindTag ref={tree.ref} />
-      <span className="title">
-        <Link to={nodePath(tree.ref)}>{tree.title}</Link>
+      <span className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[46ch]">
+        <Link to={nodePath(tree.ref)} className="text-fg">
+          {tree.title}
+        </Link>
       </span>
-      {count != null && <span className={`badge ${count === 0 ? "warn" : ""}`}>{count} crit</span>}
-      {tree.findings > 0 && kind !== "criterion" && <span className="badge bad">{tree.findings}</span>}
-      {uncovered && <span className="badge warn">uncovered</span>}
+      {count != null && <Badge tone={count === 0 ? "warn" : "plain"}>{count} crit</Badge>}
+      {tree.findings > 0 && kind !== "criterion" && <Badge tone="bad">{tree.findings}</Badge>}
+      {uncovered && <Badge tone="warn">uncovered</Badge>}
     </div>
   );
 }

@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import { api, useQuery } from "./api";
-import { KindTag, nodePath } from "./components";
+import { KindTag, mono, nodePath } from "./components";
 import { idOf, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
@@ -19,9 +19,9 @@ import { NodeView } from "./views/Node";
 export function App() {
   return (
     <BrowserRouter>
-      <div className="shell">
+      <div className="grid grid-rows-[auto_1fr] h-full">
         <Top />
-        <div className="main">
+        <div className="overflow-auto px-5 pt-4 pb-10">
           <Routes>
             <Route path="/" element={<HomeView />} />
             <Route path="/map" element={<MapView />} />
@@ -34,31 +34,38 @@ export function App() {
   );
 }
 
+const navLink = ({ isActive }: { isActive: boolean }) =>
+  `px-2.5 py-1 rounded-md hover:bg-bg-2 hover:text-fg hover:no-underline ${isActive ? "bg-bg-2 text-fg" : "text-fg-dim"}`;
+
 function Top() {
   const status = useQuery(() => api.status(), []);
   const lint = useQuery(() => api.lint(), []);
   const findings = lint.data?.findings.length ?? 0;
   const repo = status.data?.repository.split("/").pop();
   return (
-    <header className="top">
-      <Link to="/" className="brand">
+    <header className="flex items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
+      <Link to="/" className="font-bold tracking-wide text-fg">
         grimoire
       </Link>
-      <nav>
-        <NavLink to="/" end>
+      <nav className="flex gap-1">
+        <NavLink to="/" end className={navLink}>
           Manual
         </NavLink>
-        <NavLink to="/map">Map</NavLink>
-        <NavLink to="/board">Board</NavLink>
+        <NavLink to="/map" className={navLink}>
+          Map
+        </NavLink>
+        <NavLink to="/board" className={navLink}>
+          Board
+        </NavLink>
       </nav>
       <Search />
-      <span className="spacer" />
-      <span className="status">
-        {status.error && <span className="bad">daemon unreachable</span>}
+      <span className="flex-1" />
+      <span className="text-fg-faint text-xs">
+        {status.error && <span className="text-bad">daemon unreachable</span>}
         {status.data && (
           <>
             {repo} · {status.data.nodes.page} pages · {status.data.nodes.req} reqs · {status.data.nodes.module} modules · {status.data.nodes.ticket} tickets ·{" "}
-            <Link to="/map" className={findings ? "bad" : ""}>
+            <Link to="/map" className={findings ? "text-bad" : ""}>
               {findings} finding{findings === 1 ? "" : "s"}
             </Link>
           </>
@@ -90,8 +97,9 @@ function Search() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
   return (
-    <div className="search" ref={box}>
+    <div className="relative" ref={box}>
       <input
+        className="w-80"
         placeholder="Find a page, requirement, module, ticket…"
         value={q}
         onChange={(e) => {
@@ -108,10 +116,10 @@ function Search() {
         }}
       />
       {open && hits.length > 0 && (
-        <div className="results">
+        <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-bg-2 border border-line rounded-md max-h-[60vh] overflow-auto shadow-xl shadow-bg">
           {hits.map((h) => (
-            <Link key={h.ref} to={nodePath(h.ref)} onClick={() => setOpen(false)}>
-              <KindTag ref={h.ref} /> {h.title} <span className="faint mono">{idOf(h.ref)}</span>
+            <Link key={h.ref} to={nodePath(h.ref)} onClick={() => setOpen(false)} className="block px-2.5 py-1.5 text-fg hover:bg-bg-3 hover:no-underline">
+              <KindTag ref={h.ref} /> {h.title} <span className={`text-fg-faint ${mono}`}>{idOf(h.ref)}</span>
             </Link>
           ))}
         </div>

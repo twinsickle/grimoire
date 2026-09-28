@@ -9,7 +9,25 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { ErrorBox, KindTag, Markdown, PriorityTag, RefLink, StatusTag, TicketTable } from "../components";
+import {
+  Badge,
+  ErrorBox,
+  KindTag,
+  Markdown,
+  PriorityTag,
+  RefLink,
+  StatusTag,
+  TicketTable,
+  card,
+  decision as decisionBox,
+  decisionDate,
+  empty,
+  errorBox,
+  item,
+  list,
+  mono,
+  rel,
+} from "../components";
 import {
   idOf,
   kindOf,
@@ -30,16 +48,16 @@ export function NodeView() {
   const ref = decodeURIComponent(raw ?? "");
   const { data, error } = useQuery(() => api.get(ref), [ref]);
   if (error) return <ErrorBox error={error} />;
-  if (!data) return <p className="dim">Loading…</p>;
+  if (!data) return <p className="text-fg-dim">Loading…</p>;
   const node = data.node;
   const kind = kindOf(ref);
   return (
-    <div className="node">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
       <div>
-        <div className="head">
-          <div className="refline">
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex gap-2.5 items-center">
             <KindTag ref={ref} />
-            <code className="dim">{idOf(ref)}</code>
+            <code className="text-fg-dim">{idOf(ref)}</code>
           </div>
           <h1>{titleOf(node)}</h1>
         </div>
@@ -69,14 +87,23 @@ function titleOf(n: AnyNode): string {
   return n.path;
 }
 
+function Decision({ date, text }: { date: string; text: string }) {
+  return (
+    <div className={decisionBox}>
+      <span className={decisionDate}>{date}</span>
+      {text}
+    </div>
+  );
+}
+
 function Page({ n }: { n: PageNode }) {
   return (
     <>
       <Markdown text={n.body} />
       <h2>Links</h2>
-      <ul className="plain">
+      <ul className={list}>
         {n.links.map((l) => (
-          <li key={l}>
+          <li key={l} className={item}>
             <RefLink ref={l} />
           </li>
         ))}
@@ -86,39 +113,35 @@ function Page({ n }: { n: PageNode }) {
 }
 
 function Req({ n }: { n: ReqNode }) {
+  const label = "text-fg-dim font-semibold text-xs uppercase tracking-[0.04em] mr-1.5";
   return (
     <>
       <p>{n.statement}</p>
       {n.scenarios.length > 0 && <h2>Scenarios</h2>}
       {n.scenarios.map((s, i) => (
-        <div className="scenario" key={i}>
+        <div className="bg-bg border border-line rounded-md px-2.5 py-2 my-1.5" key={i}>
           <div>
             <strong>{s.title}</strong>
           </div>
           <div>
-            <b>Given</b> {s.given}
+            <b className={label}>Given</b> {s.given}
           </div>
           <div>
-            <b>When</b> {s.when}
+            <b className={label}>When</b> {s.when}
           </div>
           <div>
-            <b>Then</b> {s.then}
+            <b className={label}>Then</b> {s.then}
           </div>
         </div>
       ))}
       <h2>Decisions</h2>
-      {n.decisions.length === 0 && <p className="empty">None recorded. `record_decision` adds one.</p>}
-      {[...n.decisions].reverse().map((d, i) => (
-        <div className="decision" key={i}>
-          <span className="date">{d.date}</span>
-          {d.text}
-        </div>
-      ))}
+      {n.decisions.length === 0 && <p className={empty}>None recorded. `record_decision` adds one.</p>}
+      {[...n.decisions].reverse().map((d, i) => <Decision key={i} date={d.date} text={d.text} />)}
       <h2>Covered by</h2>
-      {n.covered_by.length === 0 && <p className="empty">No criterion yet: the code does not satisfy this.</p>}
-      <ul className="plain">
+      {n.covered_by.length === 0 && <p className={empty}>No criterion yet: the code does not satisfy this.</p>}
+      <ul className={list}>
         {n.covered_by.map((c) => (
-          <li key={c}>
+          <li key={c} className={item}>
             <RefLink ref={c} />
           </li>
         ))}
@@ -152,26 +175,26 @@ function Ticket({ n }: { n: TicketNode }) {
   return (
     <>
       <p>
-        <PriorityTag p={n.priority} /> · <span className="dim">{n.kind}</span> · <StatusTag s={n.status} />
+        <PriorityTag p={n.priority} /> · <span className="text-fg-dim">{n.kind}</span> · <StatusTag s={n.status} />
       </p>
       {n.body && <Markdown text={n.body} />}
-      {n.decision && (
-        <div className="decision">
-          <span className="date">{n.decision.date}</span>
-          {n.decision.text}
-        </div>
-      )}
+      {n.decision && <Decision date={n.decision.date} text={n.decision.text} />}
       {n.status !== "closed" && (
-        <div className="card">
-          <h3>Actions</h3>
-          <div className="actions">
+        <div className={card}>
+          <h3 className="mb-2">Actions</h3>
+          <div className="flex gap-2 items-center flex-wrap">
             {n.status === "open" && <button onClick={start}>Start</button>}
-            <textarea placeholder="Decision: what was chosen and why. Closing discards the body." value={decision} onChange={(e) => setDecision(e.target.value)} />
+            <textarea
+              className="flex-1 min-w-60 min-h-[60px]"
+              placeholder="Decision: what was chosen and why. Closing discards the body."
+              value={decision}
+              onChange={(e) => setDecision(e.target.value)}
+            />
             <button disabled={!decision.trim()} onClick={close}>
               Close
             </button>
           </div>
-          {busy && <p className="error">{busy}</p>}
+          {busy && <p className={errorBox}>{busy}</p>}
         </div>
       )}
       <h2>Touches</h2>
@@ -184,12 +207,12 @@ function Ticket({ n }: { n: TicketNode }) {
   );
 }
 
-function RefList({ refs, empty }: { refs: Ref[]; empty: string }) {
-  if (refs.length === 0) return <p className="empty">{empty}</p>;
+function RefList({ refs, empty: emptyText }: { refs: Ref[]; empty: string }) {
+  if (refs.length === 0) return <p className={empty}>{emptyText}</p>;
   return (
-    <ul className="plain">
+    <ul className={list}>
       {refs.map((r) => (
-        <li key={r}>
+        <li key={r} className={item}>
           <RefLink ref={r} />
         </li>
       ))}
@@ -202,24 +225,24 @@ function Module({ n }: { n: ModuleNode }) {
   const cov = useQuery(() => api.coverage(ref), [ref]);
   return (
     <>
-      {n.contract_error && <p className="error">Contract: {n.contract_error}</p>}
+      {n.contract_error && <p className={errorBox}>Contract: {n.contract_error}</p>}
       {n.contract_at && (
-        <p className="dim mono">
+        <p className={`text-fg-dim ${mono}`}>
           {n.contract_at[0]}:{n.contract_at[1]}
         </p>
       )}
       <h2>Criteria</h2>
-      {n.criteria.length === 0 && <p className="empty">None.</p>}
-      <ul className="plain">
+      {n.criteria.length === 0 && <p className={empty}>None.</p>}
+      <ul className={list}>
         {cov.data?.criteria?.map((c) => (
-          <li key={c.ref} style={{ flexDirection: "column", alignItems: "stretch", gap: 2 }}>
+          <li key={c.ref} className="flex flex-col items-stretch gap-0.5">
             <RefLink ref={c.ref} title={c.statement} />
-            <span className="faint" style={{ paddingLeft: 8 }}>
+            <span className="text-fg-faint pl-2">
               {c.requirements.length === 0 ? (
-                <span className="badge warn">uncovered</span>
+                <Badge tone="warn">uncovered</Badge>
               ) : (
                 c.requirements.map((r) => (
-                  <span key={r.ref} style={{ marginRight: 8 }}>
+                  <span key={r.ref} className="mr-2">
                     <RefLink ref={r.ref} title={r.title} />
                   </span>
                 ))
@@ -243,20 +266,20 @@ function Criterion({ n }: { n: CriterionNode }) {
   return (
     <>
       <p>{n.statement}</p>
-      <p className="dim">
+      <p className="text-fg-dim">
         In <RefLink ref={`module:${n.module}`} />
         {src.data && (
-          <span className="mono">
+          <span className={mono}>
             {" "}
             · {src.data.file}:{src.data.line}
           </span>
         )}
       </p>
       <h2>Covered by</h2>
-      {cov.data?.requirements?.length === 0 && <p className="empty">No requirement names this criterion.</p>}
-      <ul className="plain">
+      {cov.data?.requirements?.length === 0 && <p className={empty}>No requirement names this criterion.</p>}
+      <ul className={list}>
         {cov.data?.requirements?.map((r) => (
-          <li key={r.ref}>
+          <li key={r.ref} className={item}>
             <RefLink ref={r.ref} title={r.title} />
           </li>
         ))}
@@ -266,20 +289,21 @@ function Criterion({ n }: { n: CriterionNode }) {
 }
 
 function File({ n }: { n: FileNode }) {
+  const cell = `pr-2.5 py-0.5 ${mono}`;
   return (
     <>
-      <p className="dim">
+      <p className="text-fg-dim">
         {n.language} · in <RefLink ref={`module:${n.module}`} />
       </p>
       <h2>Declarations</h2>
-      {n.decls.length === 0 && <p className="empty">None.</p>}
-      <table className="decls">
+      {n.decls.length === 0 && <p className={empty}>None.</p>}
+      <table className="border-collapse">
         <tbody>
           {n.decls.map((d) => (
             <tr key={d.path}>
-              <td className="faint">{d.line}</td>
-              <td className="dim">{d.kind}</td>
-              <td>
+              <td className={`${cell} text-fg-faint`}>{d.line}</td>
+              <td className={`${cell} text-fg-dim`}>{d.kind}</td>
+              <td className={cell}>
                 <RefLink ref={`decl:${n.path}#${d.path}`} mono />
               </td>
             </tr>
@@ -293,7 +317,7 @@ function File({ n }: { n: FileNode }) {
 function Decl({ n, ref }: { n: DeclNode; ref: Ref }) {
   const file = idOf(ref).split("#")[0];
   return (
-    <p className="dim">
+    <p className="text-fg-dim">
       {n.kind} at <RefLink ref={`file:${file}`} /> line {n.line}
     </p>
   );
@@ -303,22 +327,17 @@ function RestsOn({ ref }: { ref: Ref }) {
   const { data } = useQuery(() => api.restsOn(ref, 3), [ref]);
   if (!data) return null;
   return (
-    <div className="card">
-      <h3>Rests on</h3>
-      {data.nodes.length === 0 && <p className="empty">Nothing below this node.</p>}
-      <ul className="plain">
+    <div className={card}>
+      <h3 className="mb-2">Rests on</h3>
+      {data.nodes.length === 0 && <p className={empty}>Nothing below this node.</p>}
+      <ul className={list}>
         {data.nodes.slice(0, 40).map((r) => (
-          <li key={r.ref} style={{ flexDirection: "column", alignItems: "stretch", gap: 0 }}>
+          <li key={r.ref} className="flex flex-col items-stretch">
             <RefLink ref={r.ref} title={r.title} />
-            {r.decisions[0] && (
-              <div className="decision">
-                <span className="date">{r.decisions[0].date}</span>
-                {r.decisions[0].text}
-              </div>
-            )}
+            {r.decisions[0] && <Decision date={r.decisions[0].date} text={r.decisions[0].text} />}
           </li>
         ))}
-        {data.nodes.length > 40 && <li className="faint">…and {data.nodes.length - 40} more</li>}
+        {data.nodes.length > 40 && <li className="text-fg-faint">…and {data.nodes.length - 40} more</li>}
       </ul>
     </div>
   );
@@ -328,20 +347,20 @@ function RestsOnMe({ ref }: { ref: Ref }) {
   const { data } = useQuery(() => api.restsOnMe(ref), [ref]);
   if (!data) return null;
   return (
-    <div className="card">
-      <h3>Rests on this</h3>
-      {data.nodes.length === 0 && <p className="empty">Nothing depends on this node.</p>}
-      <ul className="plain">
+    <div className={card}>
+      <h3 className="mb-2">Rests on this</h3>
+      {data.nodes.length === 0 && <p className={empty}>Nothing depends on this node.</p>}
+      <ul className={list}>
         {data.nodes.map((a) => (
-          <li key={a.ref}>
-            <span className="rel">{a.relation}</span>
+          <li key={a.ref} className={item}>
+            <span className={rel}>{a.relation}</span>
             <RefLink ref={a.ref} title={a.title} />
           </li>
         ))}
       </ul>
       {data.tickets.length > 0 && (
         <>
-          <h3 style={{ marginTop: 10 }}>Open tickets reaching it</h3>
+          <h3 className="mt-2.5 mb-2">Open tickets reaching it</h3>
           <TicketTable tickets={data.tickets} />
         </>
       )}
@@ -352,12 +371,12 @@ function RestsOnMe({ ref }: { ref: Ref }) {
 function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: string }[] }) {
   if (edges.length === 0) return null;
   return (
-    <div className="card">
-      <h3>{title}</h3>
-      <ul className="plain">
+    <div className={card}>
+      <h3 className="mb-2">{title}</h3>
+      <ul className={list}>
         {edges.map((e, i) => (
-          <li key={i}>
-            <span className="rel">{e.relation}</span>
+          <li key={i} className={item}>
+            <span className={rel}>{e.relation}</span>
             <RefLink ref={e.ref} />
           </li>
         ))}
@@ -373,10 +392,10 @@ function Findings({ ref }: { ref: Ref }) {
   return (
     <>
       <h2>Lint findings</h2>
-      <ul className="plain findings">
+      <ul className={list}>
         {mine.map((f, i) => (
-          <li key={i} className={f.rule}>
-            <span className="rel">{f.rule}</span>
+          <li key={i} className={`${item} ${f.rule === "dangling" ? "text-bad" : "text-warn"}`}>
+            <span className={rel}>{f.rule}</span>
             {f.reason}
           </li>
         ))}
