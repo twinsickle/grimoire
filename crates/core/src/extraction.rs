@@ -160,6 +160,11 @@ pub(crate) mod fixtures {
     /// Three modules: `a/ready` imports `a/layout`; `b/unrelated` has no contract.
     /// One test, in `a/ready`, checks `guarantee`; every other criterion is untested.
     pub fn extraction() -> Extraction {
+        Extraction::from_files(&extraction_files())
+    }
+
+    /// The per-file records `extraction` joins.
+    pub fn extraction_files() -> Vec<FileExtraction> {
         let mut ready = file("src/a/ready.rs", "src/a/ready", &[&["src/a/layout/thing", "src/a/layout"], &["std/fs"]], contract("Decide readiness.", &[("guarantee", "Ready only with a commit."), ("reads-only", "Never writes.")]));
         ready.tests = vec![Test { file: "src/a/ready.rs".into(), name: "ready-needs-a-commit".into(), line: 20, checks: vec!["src/a/ready#guarantee".into()] }];
         let files = vec![
@@ -167,14 +172,38 @@ pub(crate) mod fixtures {
             file("src/a/layout.rs", "src/a/layout", &[], contract("Lay out the workspace.", &[("stable", "Paths do not move.")])),
             file("src/b/unrelated.rs", "src/b/unrelated", &[], None),
         ];
-        Extraction::from_files(&files)
+        files
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::fixtures::*;
+    use super::Extraction;
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "one-file-is-replaced-and-rejoined", "checks": ["crates/core/src/extraction#per-file-input"]}
+    /// ```
+    #[test]
+    fn one_file_is_replaced_and_rejoined() {
+        let mut files = extraction_files();
+        let before = Extraction::from_files(&files);
+        // Replace one file's record, as a watcher would after a save, and join again.
+        let layout = files.iter_mut().find(|f| f.path == "src/a/layout.rs").expect("fixture has layout");
+        *layout = file("src/a/layout.rs", "src/a/layout", &[], contract("Lay out the workspace.", &[("stable", "Paths do not move."), ("new", "A second promise.")]));
+        let after = Extraction::from_files(&files);
+        assert_eq!(after.modules["src/a/layout"].criteria.len(), 2);
+        assert_eq!(after.modules["src/a/ready"], before.modules["src/a/ready"], "the other records are used as they were");
+        assert_eq!(after.modules["src/b/unrelated"], before.modules["src/b/unrelated"]);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "joins-modules-and-resolves-imports", "checks": ["crates/core/src/extraction#imports-resolve-to-known"]}
+    /// ```
     #[test]
     fn joins_modules_and_resolves_imports() {
         let x = extraction();

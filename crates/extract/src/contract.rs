@@ -133,6 +133,11 @@ fn validate(c: &Contract) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "parses-a-contract", "checks": ["crates/extract/src/contract#language-neutral"]}
+    /// ```
     #[test]
     fn parses_a_contract() {
         let text = "# Module contract\n\n```json\n{\"purpose\":\"P\",\"criteria\":[{\"id\":\"a\",\"statement\":\"S\"}]}\n```\n\nMore prose.";
@@ -143,6 +148,11 @@ mod tests {
         assert_eq!(c.criteria[0].id, "a");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reports-malformed", "checks": ["crates/extract/src/contract#malformed-is-reported"]}
+    /// ```
     #[test]
     fn reports_malformed() {
         let f = find("intro\n# Module contract\nnot a fence", 3).unwrap();

@@ -332,6 +332,11 @@ mod tests {
         TypeScriptAdapter::with_packages(vec![Package { name: "@grimoire/web".into(), dir: "web".into() }])
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "identity-and-coverage", "checks": ["crates/extract/src/typescript#identity", "crates/extract/src/typescript#coverage"]}
+    /// ```
     #[test]
     fn identity_and_coverage() {
         let a = adapter();
@@ -345,6 +350,11 @@ mod tests {
         assert!(!a.handles("web/src/types.d.ts"));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "leading-block-and-line-comments", "checks": ["crates/extract/src/typescript#leading-block-comment"]}
+    /// ```
     #[test]
     fn leading_block_and_line_comments() {
         let a = adapter();
@@ -359,6 +369,11 @@ mod tests {
         assert!(a.leading_doc("const a = 1;").is_none());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/typescript#imports-as-candidates"]}
+    /// ```
     #[test]
     fn parses_decls_and_imports() {
         let a = adapter();
@@ -430,6 +445,11 @@ function inner() { const nested = () => 1; }
         assert_eq!(x.test_errors[0].line, 7);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "package-specifiers", "checks": ["crates/extract/src/typescript#imports-as-candidates"]}
+    /// ```
     #[test]
     fn package_specifiers() {
         let a = adapter();

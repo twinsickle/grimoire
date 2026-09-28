@@ -374,6 +374,11 @@ mod tests {
         ])
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "identity-rules", "checks": ["crates/extract/src/rust#identity"]}
+    /// ```
     #[test]
     fn identity_rules() {
         let a = adapter();
@@ -387,6 +392,11 @@ mod tests {
         assert_eq!(a.module_id("lib.rs"), "lib");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "coverage-rules", "checks": ["crates/extract/src/rust#coverage"]}
+    /// ```
     #[test]
     fn coverage_rules() {
         let a = adapter();
@@ -409,6 +419,11 @@ mod tests {
         assert!(a.leading_doc("fn main() {}").is_none());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/rust#imports-as-candidates", "crates/extract/src/rust#test-bodies-skipped"]}
+    /// ```
     #[test]
     fn parses_decls_and_imports() {
         let a = adapter();
@@ -462,7 +477,7 @@ mod tests { use crate::nope; fn t() {} }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "test-blocks-inside-tests-modules", "checks": ["crates/extract/src/rust#comments"]}
+    /// {"test": "test-blocks-inside-tests-modules", "checks": ["crates/extract/src/rust#comments", "crates/extract/src/rust#test-bodies-skipped"]}
     /// ```
     #[test]
     fn test_blocks_inside_a_tests_module_are_found() {

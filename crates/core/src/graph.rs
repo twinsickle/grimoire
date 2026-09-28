@@ -350,6 +350,11 @@ mod tests {
         assert_eq!(g.source_of(&t).map(|s| (s.file, s.line)), Some(("src/a/ready.rs".to_string(), 20)));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "derives-reverse-edges", "checks": ["crates/core/src/graph#downward-only-input"]}
+    /// ```
     #[test]
     fn derives_reverse_edges() {
         let g = graph();
@@ -361,6 +366,11 @@ mod tests {
         assert!(g.inbound_with(&Reference::module("src/a/layout"), Relation::Imports).any(|e| e.from == module));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "keeps-dangling-edges", "checks": ["crates/core/src/graph#dangling-kept"]}
+    /// ```
     #[test]
     fn keeps_dangling_edges() {
         let g = graph();

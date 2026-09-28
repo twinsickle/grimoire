@@ -231,6 +231,11 @@ mod tests {
         f.iter().map(|f| format!("{:?} {}", f.rule, f.r#ref)).collect()
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "dangling-reports-open-not-closed", "checks": ["crates/core/src/lint#closed-exempt"]}
+    /// ```
     #[test]
     fn dangling_reports_open_not_closed() {
         let g = graph();
@@ -258,8 +263,21 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "findings-are-stable", "checks": ["crates/core/src/lint#stable-order"]}
+    /// {"test": "findings-are-stable", "checks": ["crates/core/src/lint#stable-order", "crates/core/src/lint#grimoire-material-only"]}
     /// ```
+    #[test]
+    fn test_files_are_not_grimoire() {
+        // A test file's module: no contract expected, none carried, linked by no page.
+        let mut files = crate::extraction::fixtures::extraction_files();
+        let mut t = crate::extraction::fixtures::file("tests/it.rs", "tests/it", &[], None);
+        t.expects_contract = false;
+        files.push(t);
+        let g = Graph::build(&crate::graph::fixtures::store(), &crate::extraction::Extraction::from_files(&files), &[]);
+        let r = refs(&lint(&g, &[Rule::Uncovered]));
+        assert!(!r.iter().any(|x| x.ends_with("module:tests/it")), "{r:?}");
+        assert!(r.iter().any(|x| x.ends_with("module:src/b/unrelated")), "a module expected to carry a contract still is");
+    }
+
     #[test]
     fn stable_order() {
         let g = graph();
@@ -280,6 +298,11 @@ mod tests {
         assert_eq!(r, vec!["Dangling req:stale".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string()]);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "unspecified-reports-requirements-without-scenarios", "checks": ["crates/core/src/lint#unspecified"]}
+    /// ```
     #[test]
     fn unspecified_reports_requirements_without_scenarios() {
         let g = graph();
@@ -288,6 +311,11 @@ mod tests {
         assert_eq!(f[0].reason, "no scenario checks this requirement's criteria");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "unspecified-sorts-last", "checks": ["crates/core/src/lint#unspecified"]}
+    /// ```
     #[test]
     fn unspecified_sorts_last() {
         let g = graph();
@@ -309,6 +337,11 @@ mod tests {
         Graph::build(&s, &crate::extraction::fixtures::extraction(), &[])
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "baselined-findings-are-marked-not-hidden", "checks": ["crates/core/src/lint#baselined"]}
+    /// ```
     #[test]
     fn baselined_findings_are_marked_not_hidden() {
         let key = FindingKey { rule: Rule::Unspecified, check: "no-scenario".into(), r#ref: Reference::req("stale"), edge: None };
@@ -319,6 +352,11 @@ mod tests {
         assert_eq!(new_count(&all), all.len() - 1);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "matching-ignores-the-reason-but-not-the-edge", "checks": ["crates/core/src/lint#baselined"]}
+    /// ```
     #[test]
     fn matching_ignores_the_reason_but_not_the_edge() {
         let dangling = lint(&graph(), &[Rule::Dangling]).remove(0);
@@ -330,6 +368,11 @@ mod tests {
         assert!(!lint(&g, &[Rule::Dangling])[0].baselined, "a different edge is a different finding");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "two-checks-on-one-node-are-two-findings", "checks": ["crates/core/src/lint#baselined"]}
+    /// ```
     #[test]
     fn two_checks_on_one_node_are_two_findings() {
         // `unrelated` is both unlinked and without a contract.
@@ -343,6 +386,11 @@ mod tests {
         assert_eq!(marked.iter().filter(|b| **b).count(), 1);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "pruning-drops-only-what-is-fixed", "checks": ["crates/core/src/lint#baseline-pruned"]}
+    /// ```
     #[test]
     fn pruning_drops_only_what_is_fixed() {
         let present = FindingKey { rule: Rule::Unspecified, check: "no-scenario".into(), r#ref: Reference::req("stale"), edge: None };
@@ -357,6 +405,11 @@ mod tests {
         assert!(super::pruned(&g, None).is_none());
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "scope-narrows-what-must-carry-a-contract", "checks": ["crates/core/src/graph#contract-scope"]}
+    /// ```
     #[test]
     fn scope_narrows_what_must_carry_a_contract() {
         let mut s = crate::graph::fixtures::store();
@@ -367,6 +420,11 @@ mod tests {
         assert!(r.contains(&"Uncovered module:src/a/layout".to_string()), "a contracted module is still grimoire: {r:?}");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "unsupported-languages-are-malformed", "checks": ["crates/core/src/lint#unsupported-language"]}
+    /// ```
     #[test]
     fn unsupported_languages_are_malformed() {
         let mut g = graph();
