@@ -449,12 +449,9 @@ pub fn module_source(g: &Graph, r: &Reference) -> Option<SourceLocation> {
 
 /// Count findings per rule, for `lint`'s `counts`.
 pub fn counts(findings: &[crate::lint::Finding]) -> BTreeMap<String, usize> {
-    let mut m = BTreeMap::new();
-    for r in Rule::ALL {
-        m.insert(serde_json::to_value(r).unwrap().as_str().unwrap().to_string(), 0usize);
-    }
+    let mut m: BTreeMap<String, usize> = Rule::ALL.iter().map(|r| (r.name().to_string(), 0)).collect();
     for f in findings {
-        *m.get_mut(serde_json::to_value(f.rule).unwrap().as_str().unwrap()).unwrap() += 1;
+        *m.entry(f.rule.name().to_string()).or_insert(0) += 1;
     }
     m
 }

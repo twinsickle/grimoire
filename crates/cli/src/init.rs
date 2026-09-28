@@ -98,14 +98,13 @@ pub fn install(repo: &Path, port: u16) -> Result<Vec<Wrote>, InitError> {
     } else {
         json!({})
     };
-    if !doc.is_object() {
+    let Some(root) = doc.as_object_mut() else {
         return Err(InitError::BadJson(mcp, "top level is not an object".into()));
-    }
-    let servers = doc.as_object_mut().unwrap().entry("mcpServers").or_insert_with(|| json!({}));
-    if !servers.is_object() {
+    };
+    let Some(servers) = root.entry("mcpServers").or_insert_with(|| json!({})).as_object_mut() else {
         return Err(InitError::BadJson(mcp, "mcpServers is not an object".into()));
-    }
-    servers.as_object_mut().unwrap().insert("grimoire".into(), json!({ "type": "http", "url": format!("http://127.0.0.1:{port}/mcp") }));
+    };
+    servers.insert("grimoire".into(), json!({ "type": "http", "url": format!("http://127.0.0.1:{port}/mcp") }));
     let mut text = serde_json::to_string_pretty(&doc).expect("serialisable");
     text.push('\n');
     write(&mcp, &text)?;

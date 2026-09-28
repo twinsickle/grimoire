@@ -3,6 +3,11 @@ resolver = "2"
 members = ["crates/core", "crates/extract", "crates/server", "crates/cli"]
 default-members = ["crates/cli"]
 
+# Convention, checked: no unwrap outside tests. A missing value in the daemon or
+# a command is an error for the caller, not a crash. Tests are exempt (clippy.toml).
+[workspace.lints.clippy]
+unwrap_used = "deny"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

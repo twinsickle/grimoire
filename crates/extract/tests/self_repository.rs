@@ -1,4 +1,6 @@
 //! Extract Grimoire's own repository and check what the adapter sees.
+// An integration test is not cfg(test), so clippy's tests exemption misses it.
+#![allow(clippy::unwrap_used)]
 
 use std::path::PathBuf;
 

@@ -21,6 +21,15 @@ pub enum Rule {
 
 impl Rule {
     pub const ALL: [Rule; 3] = [Rule::Dangling, Rule::Uncovered, Rule::Malformed];
+
+    /// The rule's name as it serialises, for keys in `counts`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Rule::Dangling => "dangling",
+            Rule::Uncovered => "uncovered",
+            Rule::Malformed => "malformed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
