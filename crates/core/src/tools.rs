@@ -221,11 +221,13 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 kinds: Option<Vec<TicketKind>>,
                 priority: Option<Vec<Priority>>,
                 touching: Option<Reference>,
+                #[serde(default)]
+                closed: usize,
             }
             let i: In = parse(input)?;
             let g = state.graph();
-            let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref() };
-            ok(json!({ "tickets": query::board(g, &f) }))
+            let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref(), closed: i.closed };
+            ok(json!(query::board(g, &f)))
         }
         "related_tickets" => {
             let i: RefIn = parse(input)?;
@@ -531,7 +533,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "rests_on", description: "What a node depends on, transitively downward, with the decisions behind each. The planning and review question. For a ticket, starts from relies_on and touches.", input_schema: obj(&["ref"], json!({ "ref": reference, "depth": {"type":"integer"} })) },
         ToolDef { name: "rests_on_me", description: "Everything that would be affected if this node changed, and the open tickets that reach it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "coverage", description: "What requirements cover a criterion, each criterion of a module with its requirements, or each criterion a requirement names with its module.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "board", description: "Tickets for the first screen: open and active change tickets ordered next, high, later. Filter by status, kind, priority or a node they touch.", input_schema: obj(&[], json!({ "status": {"type":"array","items":{"type":"string","enum":["open","active","closed"]}}, "kinds": {"type":"array","items":{"type":"string","enum":["change","gap","question"]}}, "priority": {"type":"array","items":{"type":"string","enum":["next","high","later"]}}, "touching": reference })) },
+        ToolDef { name: "board", description: "What can be worked on: open and active change tickets ordered next, high, later, each with the gaps and questions it waits on (ready when none is open); the open gaps and questions no change relies on; and, when asked, the most recently closed tickets. Filter by status, kind, priority or a node they touch.", input_schema: obj(&[], json!({ "status": {"type":"array","items":{"type":"string","enum":["open","active","closed"]}}, "kinds": {"type":"array","items":{"type":"string","enum":["change","gap","question"]}}, "priority": {"type":"array","items":{"type":"string","enum":["next","high","later"]}}, "touching": reference, "closed": {"type":"integer","default":0,"description":"How many of the most recently closed tickets to return"} })) },
         ToolDef { name: "related_tickets", description: "The open gaps and questions that touch what this ticket touches.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "lint", description: "The dangling, uncovered, malformed and unspecified checks over the whole graph. Same output as `grimoire check`.", input_schema: obj(&[], json!({ "kinds": {"type":"array","items":{"type":"string","enum":["dangling","uncovered","malformed","unspecified"]}} })) },
         ToolDef { name: "module_source", description: "Where a module, criterion, file or declaration lives: file and line, plus the contract line for criteria.", input_schema: obj(&["ref"], json!({ "ref": reference })) },

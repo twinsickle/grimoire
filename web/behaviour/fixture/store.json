@@ -127,6 +127,36 @@
       ],
       "body": "Closed by the fixture.",
       "close": "Named ready."
+    },
+    {
+      "title": "Should readiness count submodules?",
+      "kind": "question",
+      "priority": "high",
+      "touches": [
+        "module:src/ready"
+      ],
+      "body": "A question the per-workspace report waits on."
+    },
+    {
+      "title": "Report readiness per workspace",
+      "kind": "change",
+      "priority": "later",
+      "touches": [
+        "module:src/ready"
+      ],
+      "relies_on": [
+        "ticket:0005"
+      ],
+      "body": "Needs refinement: it waits on whether submodules count."
+    },
+    {
+      "title": "Cache readiness",
+      "kind": "change",
+      "priority": "later",
+      "touches": [
+        "module:src/ready"
+      ],
+      "body": "Ready: it relies on nothing open."
     }
   ],
   "after_adoption": {

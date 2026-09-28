@@ -2,12 +2,13 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the error box, the Markdown renderer for page bodies, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."}]}
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."}]}
  * ```
  */
 
 import { marked } from "marked";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { api } from "./api";
 import { Link } from "react-router-dom";
 import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary } from "./types";
 
@@ -131,4 +132,82 @@ export const errorBox = "text-bad px-3 py-2 border border-bad rounded-md bg-bad/
 
 export function ErrorBox({ error }: { error: Error }) {
   return <div className={errorBox}>{error.message}</div>;
+}
+
+/** A body of up to five lines shows whole; a longer one shows five and a Show more. */
+export function Folded({ text }: { text: string }) {
+  const body = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    // Measured while folded, the last block's trailing margin removed: more
+    // than half a line beyond the five-line box means there is text to show.
+    const measure = () => {
+      // The Markdown's own line height, which the five-line box is sized in.
+      const line = parseFloat(getComputedStyle(el.querySelector(".md") ?? el).lineHeight) || 20;
+      setLong((was) => was || el.scrollHeight - el.clientHeight > line / 2);
+    };
+    measure();
+    const seen = new ResizeObserver(measure);
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [text]);
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <div
+        ref={body}
+        data-folded={(long && !open) || undefined}
+        className={`w-full leading-[1.55] [&_.md>:last-child]:mb-0 ${open ? "" : "max-h-[5lh] overflow-hidden"} ${long && !open ? "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]" : ""}`}
+      >
+        <Markdown text={text} />
+      </div>
+      {long && (
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-[13px] text-accent bg-transparent border-none p-0 hover:underline">
+          {open ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Start an open ticket, or close an open or active one with a decision,
+ * through the start_ticket and close_ticket tools.
+ */
+export function TicketActions({ ticket, status }: { ticket: Ref; status: Status }) {
+  const [decisionText, setDecision] = useState("");
+  const [failed, setFailed] = useState<string | null>(null);
+  async function run(act: () => Promise<unknown>) {
+    setFailed(null);
+    try {
+      await act();
+    } catch (e) {
+      setFailed((e as Error).message);
+    }
+  }
+  async function close() {
+    await api.closeTicket(ticket, decisionText);
+    setDecision("");
+  }
+  if (status === "closed") return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2 items-center flex-wrap">
+        {status === "open" && <button onClick={() => run(() => api.startTicket(ticket))}>Start</button>}
+        <textarea
+          className="flex-1 min-w-60 min-h-[60px]"
+          aria-label="Decision"
+          placeholder="Decision: what was chosen and why. Closing discards the body."
+          value={decisionText}
+          onChange={(e) => setDecision(e.target.value)}
+        />
+        <button disabled={!decisionText.trim()} onClick={() => run(close)}>
+          Close
+        </button>
+      </div>
+      {failed && <p className={errorBox}>{failed}</p>}
+    </div>
+  );
 }

@@ -12,7 +12,7 @@ mkdirSync(out, { recursive: true });
 const views = [
   ["grimoire", "/", "#pages"],
   ["grimoire-page", "/n/page%3Aweb-ui", "#modules"],
-  ["board", "/board", "table"],
+  ["board", "/board", "section[id^='band-']"],
   ["node-requirement", "/n/req%3Atool-coverage", "h1"],
   ["node-module", "/n/module%3Acrates%2Fcore%2Fsrc%2Fquery", "h1"],
   ["node-ticket", "/n/ticket%3A0001", "h1"],

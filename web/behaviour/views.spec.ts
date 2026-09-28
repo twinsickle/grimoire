@@ -52,7 +52,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
     ["/", rail],
     ["/n/page%3Agoal", rail],
     ["/unplaced", rail],
-    ["/board", "table"],
+    ["/board", "section[id^='band-']"],
     ["/n/req%3Aready-needs-commit", "h1"],
   ] as const) {
     await page.goto(path);
@@ -209,20 +209,70 @@ test("a page body is rendered as Markdown", async ({ page }) => {
   await expect(page.locator("main")).not.toContainText("**What it is.**");
 });
 
+/** A row on the board, found by its ticket reference. */
+function row(page: Page, ref: string) {
+  return page.locator(`li[data-ticket="${ref}"]`);
+}
+
+/** The ticket references in a band, top to bottom, as the board draws them. */
+async function bandRefs(page: Page, band: string): Promise<string[]> {
+  return page.locator(`#band-${band} li[data-ticket]`).evaluateAll((ls) => ls.map((l) => l.getAttribute("data-ticket") ?? ""));
+}
+
+type BoardAnswer = { tickets: { ref: string; priority: string; waits_on?: { ref: string; status: string }[] }[]; unattached: { ref: string }[]; closed: { ref: string }[] };
+
 /**
  * # Test contract
  *
  * ```json
- * {"test": "board-opens-on-change-tickets", "checks": ["web/src/views/Board#first-screen"]}
+ * {"test": "board-shows-readiness-and-the-unattached", "checks": ["web/src/views/Board#first-screen"]}
  * ```
  */
-test("the board opens on open and active change tickets; gaps are a toggle away", async ({ page }) => {
+test("the board lists changes with their readiness, then the unattached gaps, with filters", async ({ page }) => {
   await page.goto("/board");
-  await expect(page.getByRole("link", { name: "Make readiness faster" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Readiness ignores submodules" })).toHaveCount(0);
+  // The per-workspace report waits on the submodules question; Explain readiness waits on nothing.
+  await expect(row(page, "ticket:0006")).toContainText("waits on 1");
+  await expect(row(page, "ticket:0006")).toContainText("1 question");
+  await expect(row(page, "ticket:0002")).toContainText("ready");
+  // The gap no change relies on is unattached; the question a change relies on is not.
+  await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toBeVisible();
+  await expect(page.locator("#unattached li[data-ticket='ticket:0005']")).toHaveCount(0);
+  // Closed tickets are hidden until asked for.
   await expect(page.getByRole("link", { name: "Name the readiness module" })).toHaveCount(0);
-  await page.getByRole("button", { name: "gap" }).click();
-  await expect(page.getByRole("link", { name: "Readiness ignores submodules" })).toBeVisible();
+  await page.getByRole("button", { name: /^Ready/ }).click();
+  await expect(row(page, "ticket:0002")).toHaveCount(0);
+  await expect(row(page, "ticket:0006")).toBeVisible();
+  await page.getByRole("button", { name: /^Ready/ }).click();
+  await page.getByRole("button", { name: /^Closed/ }).click();
+  await expect(page.locator("#closed").getByRole("link", { name: "Name the readiness module" })).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place"]}
+ * ```
+ */
+test("a board row opens into the whole ticket, with what it waits on and its actions", async ({ page }) => {
+  await page.goto("/board");
+  await page.getByRole("button", { name: "Show Report readiness per workspace" }).click();
+  const opened = row(page, "ticket:0006");
+  await expect(opened.getByText("Waits on")).toBeVisible();
+  await expect(opened.getByRole("link", { name: "Should readiness count submodules?" })).toBeVisible();
+  await expect(opened).toContainText("open");
+  await expect(opened).toContainText("Needs refinement: it waits on whether submodules count.");
+  await expect(opened.locator("a[href='/n/module%3Asrc%2Fready']").first()).toBeVisible();
+  await expect(opened.getByRole("button", { name: "Start" })).toBeVisible();
+  await expect(opened.getByRole("link", { name: "Open the ticket's page" })).toHaveAttribute("href", "/n/ticket%3A0006");
+  // A gap opens the same way, and can be closed from there.
+  await page.getByRole("button", { name: "Show Readiness ignores submodules" }).click();
+  const gap = row(page, "ticket:0003");
+  await expect(gap).toContainText("A gap, off the first screen.");
+  await gap.getByLabel("Decision").fill("Submodules are out of scope for readiness.");
+  await gap.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toHaveCount(0);
+  expect((await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0003" })).node.status).toBe("closed");
 });
 
 /**
@@ -232,12 +282,51 @@ test("the board opens on open and active change tickets; gaps are a toggle away"
  * {"test": "board-keeps-the-tools-order", "checks": ["web/src/views/Board#order-from-tool"]}
  * ```
  */
-test("the board's rows are in the order the board tool returns", async ({ page }) => {
+test("the board keeps the tool's order, and a change is moved by dragging or from the keyboard", async ({ page }) => {
   await page.goto("/board");
-  await expect(page.locator("tbody tr").first()).toBeVisible();
-  const shown = await linkedRefs(page, "tbody");
-  const answer = await tool<{ tickets: { ref: string }[] }>(page, "board", { kinds: ["change"], status: ["open", "active"], priority: ["next", "high", "later"] });
-  expect(shown).toEqual(answer.tickets.map((t) => t.ref));
+  const answer = async () => tool<BoardAnswer>(page, "board");
+  const inBand = async (band: string) => (await answer()).tickets.filter((x) => x.priority === band).map((x) => x.ref);
+  await expect(row(page, "ticket:0007")).toBeVisible();
+  expect(await bandRefs(page, "later")).toEqual(await inBand("later"));
+  expect(await inBand("later")).toEqual(["ticket:0007", "ticket:0006"]);
+  const grip = (ref: string) => row(page, ref).getByRole("button", { name: /^Move / });
+
+  // Dropped on itself, top half or bottom half: nothing changes.
+  await grip("ticket:0006").dragTo(row(page, "ticket:0006"), { targetPosition: { x: 40, y: 4 } });
+  await grip("ticket:0006").dragTo(row(page, "ticket:0006"), { targetPosition: { x: 40, y: 30 } });
+  await page.waitForTimeout(300);
+  expect(await inBand("later")).toEqual(["ticket:0007", "ticket:0006"]);
+
+  // Dragged within its band: the band's order is set.
+  await grip("ticket:0006").dragTo(row(page, "ticket:0007"), { targetPosition: { x: 40, y: 4 } });
+  await expect.poll(() => inBand("later")).toEqual(["ticket:0006", "ticket:0007"]);
+  await expect.poll(() => bandRefs(page, "later")).toEqual(["ticket:0006", "ticket:0007"]);
+
+  // From the keyboard: Alt+Down moves it one place, and says so.
+  await grip("ticket:0006").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect.poll(() => inBand("later")).toEqual(["ticket:0007", "ticket:0006"]);
+  await expect(page.locator("[aria-live]")).toContainText("moved to position 2 of 2 in later");
+
+  // Two quick presses move it two places, the second from where the first left it:
+  // up within later, then past the edge into the end of high.
+  await grip("ticket:0006").focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(async () => (await answer()).tickets.find((x) => x.ref === "ticket:0006")?.priority).toBe("high");
+  await expect.poll(() => inBand("high")).toEqual(["ticket:0002", "ticket:0006"]);
+  expect(await inBand("later")).toEqual(["ticket:0007"]);
+  // Back down past the edge: the start of later.
+  await grip("ticket:0006").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect.poll(() => inBand("later")).toEqual(["ticket:0006", "ticket:0007"]);
+
+  // Dropped in another band: its priority changes and it lands where it was dropped.
+  await grip("ticket:0007").dragTo(row(page, "ticket:0002"), { targetPosition: { x: 40, y: 4 } });
+  await expect.poll(async () => (await answer()).tickets.find((x) => x.ref === "ticket:0007")?.priority).toBe("high");
+  await expect.poll(() => inBand("high")).toEqual(["ticket:0007", "ticket:0002"]);
+  await expect.poll(() => bandRefs(page, "high")).toEqual(["ticket:0007", "ticket:0002"]);
+  expect(await inBand("later")).toEqual(["ticket:0006"]);
 });
 
 /**

@@ -9,9 +9,11 @@
 import { useEffect, useState } from "react";
 import type {
   AnyNode,
+  Board,
   CriterionCoverage,
   Finding,
   LintResult,
+  Priority,
   Ref,
   RestsOn,
   RestsOnMe,
@@ -47,7 +49,9 @@ export const api = {
   restsOn: (ref: Ref, depth?: number) => call<{ nodes: RestsOn[] }>("rests_on", { ref, depth }),
   restsOnMe: (ref: Ref) => call<RestsOnMe>("rests_on_me", { ref }),
   coverage: (ref: Ref) => call<{ criteria?: CriterionCoverage[]; requirements?: Summary[] }>("coverage", { ref }),
-  board: (input: { status?: string[]; kinds?: string[]; priority?: string[]; touching?: Ref }) => call<{ tickets: Summary[] }>("board", input),
+  board: (input: { status?: string[]; kinds?: string[]; priority?: string[]; touching?: Ref; closed?: number }) => call<Board>("board", input),
+  updateTicket: (ref: Ref, fields: { priority?: Priority }) => call<{ node: AnyNode }>("update_ticket", { ref, ...fields }),
+  reorder: (priority: Priority, order: Ref[]) => call<{ priority: Priority; order: Ref[] }>("reorder", { priority, order }),
   relatedTickets: (ref: Ref) => call<{ tickets: Summary[] }>("related_tickets", { ref }),
   lint: () => call<LintResult>("lint"),
   moduleSource: (ref: Ref) => call<SourceLocation>("module_source", { ref }),

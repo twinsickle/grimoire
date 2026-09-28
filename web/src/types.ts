@@ -155,6 +155,18 @@ export interface Outline {
   unplaced: Tree[];
 }
 
+/** A ticket on the board. A change carries the gaps and questions it relies on, with their status. */
+export interface BoardTicket extends Summary {
+  waits_on?: Summary[];
+}
+
+/** The board's answer: the tickets asked for, the gaps and questions no change relies on, and the recently closed. */
+export interface Board {
+  tickets: BoardTicket[];
+  unattached: Summary[];
+  closed: Summary[];
+}
+
 export interface RestsOn {
   ref: Ref;
   title: string;

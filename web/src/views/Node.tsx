@@ -6,7 +6,6 @@
  * ```
  */
 
-import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import {
@@ -17,6 +16,7 @@ import {
   PriorityTag,
   RefLink,
   StatusTag,
+  TicketActions,
   TicketTable,
   card,
   decision as decisionBox,
@@ -138,25 +138,6 @@ function Req({ n }: { n: ReqNode }) {
 function Ticket({ n }: { n: TicketNode }) {
   const ref = `ticket:${n.slug}`;
   const related = useQuery(() => api.relatedTickets(ref), [ref]);
-  const [decision, setDecision] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  async function start() {
-    setBusy(null);
-    try {
-      await api.startTicket(ref);
-    } catch (e) {
-      setBusy((e as Error).message);
-    }
-  }
-  async function close() {
-    setBusy(null);
-    try {
-      await api.closeTicket(ref, decision);
-      setDecision("");
-    } catch (e) {
-      setBusy((e as Error).message);
-    }
-  }
   return (
     <>
       <p>
@@ -167,19 +148,7 @@ function Ticket({ n }: { n: TicketNode }) {
       {n.status !== "closed" && (
         <div className={card}>
           <h3 className="mb-2">Actions</h3>
-          <div className="flex gap-2 items-center flex-wrap">
-            {n.status === "open" && <button onClick={start}>Start</button>}
-            <textarea
-              className="flex-1 min-w-60 min-h-[60px]"
-              placeholder="Decision: what was chosen and why. Closing discards the body."
-              value={decision}
-              onChange={(e) => setDecision(e.target.value)}
-            />
-            <button disabled={!decision.trim()} onClick={close}>
-              Close
-            </button>
-          </div>
-          {busy && <p className={errorBox}>{busy}</p>}
+          <TicketActions ticket={ref} status={n.status} />
         </div>
       )}
       <h2>Touches</h2>

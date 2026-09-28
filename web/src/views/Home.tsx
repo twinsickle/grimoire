@@ -6,10 +6,9 @@
  * ```
  */
 
-import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { Badge, ErrorBox, KindTag, Markdown, card, empty, mono } from "../components";
+import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
 import { idOf, kindOf, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
 /** Deep enough to reach every page, so the rail is the whole outline. */
@@ -241,43 +240,6 @@ function PagePane({ tree, above }: { tree: Tree; above: Tree[] }) {
           </h2>
           <RequirementList reqs={reqs} />
         </section>
-      )}
-    </div>
-  );
-}
-
-/** A body of up to five lines shows whole; a longer one shows five and a Show more. */
-function Folded({ text }: { text: string }) {
-  const body = useRef<HTMLDivElement>(null);
-  const [long, setLong] = useState(false);
-  const [open, setOpen] = useState(false);
-  useLayoutEffect(() => {
-    const el = body.current;
-    if (!el) return;
-    // Measured while folded, the last block's trailing margin removed: more
-    // than half a line beyond the five-line box means there is text to show.
-    const measure = () => {
-      const line = parseFloat(getComputedStyle(el).lineHeight) || 20;
-      setLong((was) => was || el.scrollHeight - el.clientHeight > line / 2);
-    };
-    measure();
-    const seen = new ResizeObserver(measure);
-    seen.observe(el);
-    return () => seen.disconnect();
-  }, [text]);
-  return (
-    <div className="flex flex-col gap-1 items-start">
-      <div
-        ref={body}
-        data-folded={(long && !open) || undefined}
-        className={`w-full [&_.md>:last-child]:mb-0 ${open ? "" : "max-h-[5lh] overflow-hidden"} ${long && !open ? "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]" : ""}`}
-      >
-        <Markdown text={text} />
-      </div>
-      {long && (
-        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-[13px] text-accent bg-transparent border-none p-0 hover:underline">
-          {open ? "Show less" : "Show more"}
-        </button>
       )}
     </div>
   );
