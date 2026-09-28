@@ -1,7 +1,7 @@
 // Serve the behaviour fixture: copy its repository to a temporary directory
 // (the sources are kept as .rs.txt so Grimoire's own extraction never reads
 // them), initialise a store there, fill it from store.json through the tools,
-// and run `grimoire serve` with the built UI until Playwright stops it.
+// adopt what it finds as the baseline, add the new work, and run `grimoire serve` with the built UI until Playwright stops it.
 //
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
 
@@ -40,6 +40,12 @@ for (const { close, ...ticket } of records.tickets) {
     grimoire("tool", "close_ticket", JSON.stringify({ ref, decision: { text: close } }));
   }
 }
+
+// Everything so far is inherited; what follows is new work, so the views
+// have both to show apart.
+grimoire("tool", "adopt", JSON.stringify({ reason: "The fixture's findings are inherited, so the views show them apart from new ones." }));
+for (const req of records.after_adoption.requirements) grimoire("tool", "put_requirement", JSON.stringify(req));
+for (const [ref, add_links] of Object.entries(records.after_adoption.links)) grimoire("tool", "patch_page", JSON.stringify({ ref, add_links }));
 
 const ui = join(here, "..", "dist");
 const daemon = spawn(bin, ["serve", "--port", port, "--ui-dir", ui], { cwd: repo, stdio: "inherit" });

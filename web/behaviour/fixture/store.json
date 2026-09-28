@@ -27,7 +27,7 @@
     {
       "slug": "readiness",
       "title": "Readiness",
-      "body": "Whether a workspace is ready.\n\nA second paragraph.",
+      "body": "Whether a workspace is ready.\n\nParagraph 2 of a long area page, long enough that its body folds after five lines.\n\nParagraph 3 of a long area page, long enough that its body folds after five lines.\n\nParagraph 4 of a long area page, long enough that its body folds after five lines.\n\nParagraph 5 of a long area page, long enough that its body folds after five lines.\n\nParagraph 6 of a long area page, long enough that its body folds after five lines.\n\nParagraph 7 of a long area page, long enough that its body folds after five lines.\n\nParagraph 8 of a long area page, long enough that its body folds after five lines.\n\nThe last paragraph.",
       "links": [
         "req:ready-needs-commit",
         "module:src/ready",
@@ -128,5 +128,30 @@
       "body": "Closed by the fixture.",
       "close": "Named ready."
     }
-  ]
+  ],
+  "after_adoption": {
+    "requirements": [
+      {
+        "slug": "ready-names-its-errors",
+        "title": "Readiness names its errors",
+        "statement": "Readiness SHALL name each error it finds.",
+        "scenarios": [
+          {
+            "title": "Named",
+            "given": "a workspace with no commit",
+            "when": "readiness is asked",
+            "then": "the error names the missing commit"
+          }
+        ],
+        "covered_by": [
+          "criterion:src/ready#names-errors"
+        ]
+      }
+    ],
+    "links": {
+      "page:readiness": [
+        "req:ready-names-its-errors"
+      ]
+    }
+  }
 }

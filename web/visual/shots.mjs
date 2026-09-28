@@ -10,10 +10,9 @@ const out = join(dirname(fileURLToPath(import.meta.url)), "out");
 mkdirSync(out, { recursive: true });
 
 const views = [
-  ["summary", "/", "#contracts"],
-  ["map", "/map", "text=Depth"],
+  ["grimoire", "/", "#pages"],
+  ["grimoire-page", "/n/page%3Aweb-ui", "#modules"],
   ["board", "/board", "table"],
-  ["node-page", "/n/page%3Aarchitecture", "h1"],
   ["node-requirement", "/n/req%3Atool-coverage", "h1"],
   ["node-module", "/n/module%3Acrates%2Fcore%2Fsrc%2Fquery", "h1"],
   ["node-ticket", "/n/ticket%3A0001", "h1"],

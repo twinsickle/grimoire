@@ -20,10 +20,9 @@ async function settle(page: Page, content: string) {
 }
 
 const views: { name: string; path: string; content: string }[] = [
-  { name: "summary", path: "/", content: "#contracts" },
-  { name: "map", path: "/map", content: "text=Depth" },
+  { name: "grimoire", path: "/", content: "#pages" },
+  { name: "grimoire-page", path: "/n/page%3Aweb-ui", content: "#modules" },
   { name: "board", path: "/board", content: "table" },
-  { name: "node-page", path: "/n/page%3Aarchitecture", content: "h1" },
   { name: "node-requirement", path: "/n/req%3Atool-coverage", content: "h1" },
   { name: "node-module", path: "/n/module%3Acrates%2Fcore%2Fsrc%2Fquery", content: "h1" },
   { name: "node-ticket", path: "/n/ticket%3A0001", content: "h1" },

@@ -126,11 +126,33 @@ export interface Tree {
   title: string;
   coverage: number | null;
   findings: number;
+  /** How many of `findings` are in the baseline: inherited, not new. */
+  baselined: number;
   /** The checks of the findings on this node itself, e.g. `untested`. */
   checks: string[];
   /** How many tests check this node. */
   tests: number;
+  rollup: Rollup;
   children: Tree[];
+}
+
+/** How far adoption has come under a node, each node below counted once. */
+export interface Rollup {
+  /** Modules that are part of the grimoire, and how many carry a contract. */
+  modules: number;
+  contracted: number;
+  /** Those modules' criteria, and how many a test checks. */
+  criteria: number;
+  tested: number;
+  /** Requirements, and how many name a criterion or are held by a test. */
+  requirements: number;
+  held: number;
+}
+
+/** The outline's answer: the trees from the roots, and the modules no page links. */
+export interface Outline {
+  roots: Tree[];
+  unplaced: Tree[];
 }
 
 export interface RestsOn {

@@ -2,18 +2,17 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the summary, the map, the board and node pages, the header with the section tabs, status and finding count, and search over find.","criteria":[{"id":"four-views","statement":"The routes are the summary at /, the map at /map, the board at /board and a node page at /n/<ref>; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand; exactly one tab is lit at all times: the current section on /, /map and /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."},{"id":"visual-baselines","statement":"Every route this shell serves is screenshotted by the visual test in web/visual against a running Grimoire and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose."}]}
+ * {"purpose":"The shell: routes to the grimoire, the board and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the board at /board; a node page at /n/<ref> for every other kind; /map redirects to /; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand, the second Board; exactly one tab is lit at all times: Grimoire on the grimoire view, Board on /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."},{"id":"visual-baselines","statement":"Every route this shell serves is screenshotted by the visual test in web/visual against a running Grimoire and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."}]}
  * ```
  */
 
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, useQuery } from "./api";
 import { KindTag, mono } from "./components";
 import { idOf, kindOf, nodePath, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
-import { MapView } from "./views/Map";
 import { NodeView } from "./views/Node";
 
 export function App() {
@@ -23,10 +22,11 @@ export function App() {
         <Top />
         <main className="overflow-auto px-5 pt-4 pb-10">
           <Routes>
-            <Route path="/" element={<HomeView />} />
-            <Route path="/map" element={<MapView />} />
+            <Route path="/" element={<HomeView at={{ root: true }} />} />
+            <Route path="/unplaced" element={<HomeView at={{ unplaced: true }} />} />
+            <Route path="/map" element={<Navigate to="/" replace />} />
             <Route path="/board" element={<BoardView />} />
-            <Route path="/n/:ref" element={<NodeView />} />
+            <Route path="/n/:ref" element={<NodeRoute />} />
           </Routes>
         </main>
       </div>
@@ -34,13 +34,19 @@ export function App() {
   );
 }
 
-type Section = "grimoire" | "map" | "board";
+/** A page is shown by the grimoire view, which is its node page; every other kind by the node page. */
+function NodeRoute() {
+  const { ref: raw } = useParams();
+  const ref = decodeURIComponent(raw ?? "");
+  return kindOf(ref) === "page" ? <HomeView at={{ page: ref }} /> : <NodeView />;
+}
 
-const SECTION_PATH: Record<Section, string> = { grimoire: "/", map: "/map", board: "/board" };
+type Section = "grimoire" | "board";
+
+const SECTION_PATH: Record<Section, string> = { grimoire: "/", board: "/board" };
 
 function sectionOfPath(pathname: string): Section | null {
-  if (pathname === "/") return "grimoire";
-  if (pathname.startsWith("/map")) return "map";
+  if (pathname === "/" || pathname === "/unplaced" || pathname.startsWith("/n/page%3A") || pathname.startsWith("/n/page:")) return "grimoire";
   if (pathname.startsWith("/board")) return "board";
   return null;
 }
@@ -90,7 +96,8 @@ function Top() {
   const status = useQuery(() => api.status(), []);
   const lint = useQuery(() => api.lint(), []);
   const lit = useLitSection();
-  const findings = lint.data?.findings.length ?? 0;
+  const fresh = lint.data?.new ?? 0;
+  const inherited = (lint.data?.findings.length ?? 0) - fresh;
   const repo = status.data?.repository.split("/").pop();
   return (
     <header className="flex items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
@@ -98,9 +105,6 @@ function Top() {
         <Tab section="grimoire" lit={lit}>
           <BookIcon />
           <span className="font-bold tracking-wide">Grimoire</span>
-        </Tab>
-        <Tab section="map" lit={lit}>
-          Map
         </Tab>
         <Tab section="board" lit={lit}>
           Board
@@ -113,9 +117,10 @@ function Top() {
         {status.data && (
           <>
             {repo} · {status.data.nodes.page} pages · {status.data.nodes.req} reqs · {status.data.nodes.module} modules · {status.data.nodes.ticket} tickets ·{" "}
-            <Link to="/map" className={findings ? "text-bad" : ""}>
-              {findings} finding{findings === 1 ? "" : "s"}
-            </Link>
+            {fresh > 0 && <span className="text-bad font-semibold">{fresh} new</span>}
+            {fresh > 0 && inherited > 0 && " · "}
+            {inherited > 0 && <span>{inherited} inherited</span>}
+            {fresh === 0 && inherited === 0 && <span>no findings</span>}
           </>
         )}
       </span>

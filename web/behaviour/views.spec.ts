@@ -2,12 +2,16 @@
  * What each view does, against the fixture store serve.mjs builds: a root
  * page, an area with one requirement and two contracted modules, a module
  * without a contract, one test, and tickets open, high, closed and a gap.
+ * Every finding at that point is adopted as the baseline, and one requirement
+ * added after it, so the views have inherited and new findings to tell apart.
  * Every reference is a link to /n/<ref>, so a view's structure can be read
  * back from its links and compared with the tool answer it was drawn from.
  */
 import { expect, test, type Page } from "@playwright/test";
 
-type Tree = { ref: string; children: Tree[]; checks: string[] };
+type Rollup = { modules: number; contracted: number; criteria: number; tested: number; requirements: number; held: number };
+type Tree = { ref: string; title: string; children: Tree[]; checks: string[]; findings: number; baselined: number; rollup: Rollup };
+type Outline = { roots: Tree[]; unplaced: Tree[] };
 
 async function tool<T>(page: Page, name: string, input: object = {}): Promise<T> {
   const res = await page.request.post(`/api/${name}`, { data: input });
@@ -20,27 +24,46 @@ async function linkedRefs(page: Page, scope = "main"): Promise<string[]> {
   return hrefs.map((h) => decodeURIComponent(h.slice("/n/".length)));
 }
 
-function flatten(trees: Tree[]): Tree[] {
-  return trees.flatMap((t) => [t, ...flatten(t.children)]);
+/** The pages of an outline, depth first in link order: the order of the rail. */
+function pagesOf(trees: Tree[]): Tree[] {
+  return trees.filter((t) => t.ref.startsWith("page:")).flatMap((t) => [t, ...pagesOf(t.children)]);
 }
+
+function find(trees: Tree[], ref: string): Tree | undefined {
+  for (const t of trees) {
+    if (t.ref === ref) return t;
+    const below = find(t.children, ref);
+    if (below) return below;
+  }
+  return undefined;
+}
+
+const rail = "nav[aria-label='Pages']";
 
 /**
  * # Test contract
  *
  * ```json
- * {"test": "four-views-and-nothing-else", "checks": ["web/src/App#four-views"]}
+ * {"test": "three-views-and-nothing-else", "checks": ["web/src/App#three-views"]}
  * ```
  */
-test("the four views are served, and nothing else", async ({ page }) => {
+test("the three views are served, a page is the grimoire, and nothing else", async ({ page }) => {
   for (const [path, marker] of [
-    ["/", "#contracts"],
-    ["/map", "text=Depth"],
+    ["/", rail],
+    ["/n/page%3Agoal", rail],
+    ["/unplaced", rail],
     ["/board", "table"],
-    ["/n/page%3Agoal", "h1"],
+    ["/n/req%3Aready-needs-commit", "h1"],
   ] as const) {
     await page.goto(path);
-    await expect(page.locator(marker).first()).toBeVisible();
+    await expect(page.locator(marker).first(), path).toBeVisible();
   }
+  // A requirement's node page has no rail; a page's is the grimoire view.
+  await page.goto("/n/req%3Aready-needs-commit");
+  await expect(page.locator(rail)).toHaveCount(0);
+  await page.goto("/map");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(rail)).toBeVisible();
   await page.goto("/nowhere");
   await expect(page.locator("header")).toBeVisible();
   await expect(page.locator("main *")).toHaveCount(0);
@@ -55,10 +78,11 @@ test("the four views are served, and nothing else", async ({ page }) => {
  */
 test("exactly one tab is lit, following the section a node was reached from", async ({ page }) => {
   const lit = () => page.locator('header [aria-current="page"]');
-  await page.goto("/map");
-  await expect(lit()).toHaveCount(1);
-  await expect(lit()).toHaveText("Map");
   await page.goto("/");
+  await expect(lit()).toHaveCount(1);
+  await expect(lit()).toContainText("Grimoire");
+  await expect(page.locator("header nav a")).toHaveText(["Grimoire", "Board"]);
+  await page.goto("/n/page%3Areadiness");
   await expect(lit()).toContainText("Grimoire");
   // Reached from the board, a ticket keeps Board lit.
   await page.goto("/board");
@@ -67,6 +91,27 @@ test("exactly one tab is lit, following the section a node was reached from", as
   // Opened cold, a requirement lights Grimoire.
   await page.goto("/n/req%3Aready-needs-commit");
   await expect(lit()).toContainText("Grimoire");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "header-tells-new-from-inherited", "checks": ["web/src/App#header-findings"]}
+ * ```
+ */
+test("the header shows new findings as a warning and inherited ones dimmed", async ({ page }) => {
+  const lint = await tool<{ findings: unknown[]; new: number }>(page, "lint");
+  const inherited = lint.findings.length - lint.new;
+  expect(lint.new, "the fixture adds new work after adopting").toBeGreaterThan(0);
+  expect(inherited).toBeGreaterThan(0);
+  await page.goto("/board");
+  const fresh = page.locator("header").getByText(`${lint.new} new`, { exact: true });
+  await expect(fresh).toBeVisible();
+  await expect(fresh).toHaveClass(/text-bad/);
+  const old = page.locator("header").getByText(`${inherited} inherited`, { exact: true });
+  await expect(old).toBeVisible();
+  await expect(old).not.toHaveClass(/text-bad/);
 });
 
 /**
@@ -102,7 +147,7 @@ test("every request the UI makes is a tool call or the event stream", async ({ p
     const path = new URL(r.url()).pathname;
     if (path.startsWith("/api/")) api.push(`${r.method()} ${path}`);
   });
-  for (const path of ["/", "/map", "/board", "/n/module%3Asrc%2Fready", "/n/ticket%3A0001"]) {
+  for (const path of ["/", "/n/page%3Areadiness", "/unplaced", "/board", "/n/module%3Asrc%2Fready", "/n/ticket%3A0001"]) {
     await page.goto(path);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(400);
@@ -202,18 +247,22 @@ test("the board's rows are in the order the board tool returns", async ({ page }
  * {"test": "summary-reads-in-the-roots-order", "checks": ["web/src/views/Home#story-order"]}
  * ```
  */
-test("the summary renders the story in the root page's link order", async ({ page }) => {
+test("the root shows the grimoire's own level: its body, its bars and its pages as cards in link order", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#contracts")).toBeVisible();
+  await expect(page.locator("#pages")).toBeVisible();
   const root = await tool<{ node: { links: string[] } }>(page, "get", { ref: "page:overview" });
-  const sections = await page.locator("main section[id^='page-']").evaluateAll((s) => s.map((x) => x.id));
-  expect(sections).toEqual(root.node.links.filter((l) => l.startsWith("page:")).map((l) => l.replace(/[^a-z0-9]+/gi, "-")));
-  // The area under architecture is a card, and the requirement on a story page is listed compactly.
-  await expect(page.locator("main a[href='/n/page%3Areadiness']").first()).toBeVisible();
-  // A held constraint is not marked uncovered on its story page.
-  const listed = page.locator("#page-constraints li", { hasText: "Readiness writes nothing" });
-  await expect(listed).toBeVisible();
-  await expect(listed).not.toContainText("uncovered");
+  const cards = await linkedRefs(page, "#pages");
+  expect(cards).toEqual(root.node.links.filter((l) => l.startsWith("page:")));
+  // No story page is opened out at the root: none of its requirements or modules is listed.
+  expect((await linkedRefs(page)).some((r) => r.startsWith("req:") || r.startsWith("module:"))).toBe(false);
+  // Each card carries its page's rollup, and the whole grimoire's rollup heads the page.
+  const outline = await tool<Outline>(page, "outline", { depth: 64 });
+  const architecture = find(outline.roots, "page:architecture")!.rollup;
+  const card = page.locator("#pages a[href='/n/page%3Aarchitecture']");
+  await expect(card).toContainText(`${architecture.contracted} of ${architecture.modules}`);
+  await expect(card).toContainText(`${architecture.tested} of ${architecture.criteria}`);
+  const whole = outline.roots[0].rollup;
+  await expect(page.getByRole("meter", { name: "Requirements held" }).first()).toHaveAttribute("aria-valuemax", String(whole.requirements));
 });
 
 /**
@@ -223,54 +272,76 @@ test("the summary renders the story in the root page's link order", async ({ pag
  * {"test": "contracts-listed-once-by-area", "checks": ["web/src/views/Home#contracts-grouped"]}
  * ```
  */
-test("every module with a purpose is listed once, under the page that links it", async ({ page }) => {
+test("a page lists each module it links once, with its criteria beneath it", async ({ page }) => {
+  await page.goto("/n/page%3Areadiness");
+  const modules = page.locator("#modules");
+  await expect(modules).toBeVisible();
+  const refs = await linkedRefs(page, "#modules");
+  expect(refs.filter((r) => r.startsWith("module:")).sort()).toEqual(["module:src", "module:src/ready"]);
+  expect(refs.filter((r) => r.startsWith("criterion:src/ready#")).sort()).toEqual(["criterion:src/ready#needs-commit", "criterion:src/ready#reads-only"]);
+  expect((await linkedRefs(page)).some((r) => r.startsWith("file:") || r.startsWith("decl:")), "no files or declarations").toBe(false);
+  await expect(page.locator("main")).toContainText("Whether a workspace is ready.");
+  // A long body shows five lines and a Show more; a short one shows whole.
+  const more = page.getByRole("button", { name: "Show more" });
+  await expect(page.locator("[data-folded]")).toHaveCount(1);
+  await more.click();
+  await expect(page.locator("[data-folded]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show less" })).toBeVisible();
+  await page.goto("/n/page%3Agoal");
+  await expect(page.locator("main strong", { hasText: "What it is." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show more" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "rail-is-the-outline", "checks": ["web/src/views/Home#outline-driven"]}
+ * ```
+ */
+test("the rail is the outline's pages, ending with the unplaced modules", async ({ page }) => {
   await page.goto("/");
-  const contracts = page.locator("#contracts");
-  await expect(contracts).toBeVisible();
-  const refs = await linkedRefs(page, "#contracts");
-  const modules = refs.filter((r) => r.startsWith("module:"));
-  expect(modules.sort()).toEqual(["module:src", "module:src/ready"]);
-  expect(refs.some((r) => r.startsWith("file:") || r.startsWith("decl:")), "no files or declarations").toBe(false);
-  await expect(contracts.locator("h3")).toContainText(["Readiness"]);
+  await expect(page.locator(rail)).toBeVisible();
+  const outline = await tool<Outline>(page, "outline", { depth: 64 });
+  // The root links to /, every other page to its node page, in the outline's order.
+  const expected = pagesOf(outline.roots).slice(1).map((t) => t.ref);
+  expect(await linkedRefs(page, rail)).toEqual(expected);
+  expect(outline.unplaced.map((t) => t.ref)).toEqual(["module:src/loose"]);
+  const unplaced = page.locator(rail).getByRole("link", { name: /Unplaced/ });
+  await expect(unplaced).toContainText(String(outline.unplaced.length));
+  await unplaced.click();
+  await expect(page).toHaveURL(/\/unplaced$/);
+  await expect(page.locator("main a[href='/n/module%3Asrc%2Floose']")).toBeVisible();
+  await expect(page.locator("main")).toContainText("no contract");
 });
 
 /**
  * # Test contract
  *
  * ```json
- * {"test": "map-is-the-outline", "checks": ["web/src/views/Map#outline-driven"]}
+ * {"test": "marks-new-inherited-and-untested", "checks": ["web/src/views/Home#marks"]}
  * ```
  */
-test("the map is drawn from outline alone", async ({ page }) => {
-  await page.goto("/map");
-  await expect(page.getByText("Depth")).toBeVisible();
-  await expect(page.locator("main a[href='/n/criterion%3Asrc%2Fready%23reads-only']")).toBeVisible();
-  const outline = await tool<{ roots: Tree[] }>(page, "outline", { depth: 4 });
-  const expected = flatten(outline.roots).map((t) => t.ref);
-  expect(new Set(await linkedRefs(page))).toEqual(new Set(expected));
-});
-
-/**
- * # Test contract
- *
- * ```json
- * {"test": "map-marks-uncovered-and-untested", "checks": ["web/src/views/Map#marks"]}
- * ```
- */
-test("the map marks a criterion uncovered and untested from outline's checks", async ({ page }) => {
-  await page.goto("/map");
-  const leaf = (id: string) => page.locator(`main a[href='/n/criterion%3Asrc%2Fready%23${id}']`).locator("xpath=ancestor::div[1]");
-  await expect(leaf("reads-only")).toContainText("uncovered");
-  await expect(leaf("reads-only")).toContainText("untested");
-  await expect(leaf("needs-commit")).not.toContainText("uncovered");
-  await expect(leaf("needs-commit")).not.toContainText("untested");
-  await expect(page.locator("main").getByText("% covered").first()).toBeVisible();
-  // A constraint names no criterion; a test holds it, so it is not a warning. A requirement with neither is.
-  const req = (slug: string) => page.locator(`main a[href='/n/req%3A${slug}']`).locator("xpath=ancestor::div[1]");
+test("pages mark new findings apart from inherited ones, and criteria and requirements by what holds them", async ({ page }) => {
+  await page.goto("/n/page%3Areadiness");
+  const outline = await tool<Outline>(page, "outline", { depth: 64 });
+  const area = find(outline.roots, "page:readiness")!;
+  expect(area.baselined, "the fixture's adopted findings").toBeGreaterThan(0);
+  expect(area.findings - area.baselined, "the requirement added after adopting").toBe(1);
+  const inRail = page.locator(rail).locator("a[href='/n/page%3Areadiness']");
+  await expect(inRail).toContainText("1 new");
+  await expect(inRail).toContainText(String(area.baselined));
+  const chip = (id: string) => page.locator(`#modules a[href='/n/criterion%3Asrc%2Fready%23${id}']`);
+  await expect(chip("reads-only")).toContainText("untested");
+  await expect(chip("reads-only")).toContainText("inherited");
+  await expect(chip("needs-commit")).not.toContainText("untested");
+  const req = (slug: string) => page.locator("main li", { has: page.locator(`a[href='/n/req%3A${slug}']`) });
+  await expect(req("ready-needs-commit")).toContainText("1 criterion");
+  await expect(req("not-built")).toContainText("uncovered");
+  // A constraint names no criterion; a test holds it, so it is not a warning.
+  await page.goto("/n/page%3Aconstraints");
   await expect(req("ready-writes-nothing")).toContainText("held by 1 test");
-  await expect(req("ready-writes-nothing")).not.toContainText("0 crit");
-  await expect(req("not-built")).toContainText("0 crit");
-  await expect(req("ready-needs-commit")).toContainText("1 crit");
+  await expect(req("ready-writes-nothing")).not.toContainText("uncovered");
 });
 
 /**

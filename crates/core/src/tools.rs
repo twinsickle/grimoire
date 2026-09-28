@@ -180,7 +180,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 }
             }
             let g = state.graph();
-            ok(json!({ "roots": query::outline(g, i.depth.unwrap_or(2), i.root.as_ref()) }))
+            ok(json!(query::outline(g, i.depth.unwrap_or(2), i.root.as_ref())))
         }
         "rests_on" => {
             #[derive(Deserialize)]
@@ -527,7 +527,7 @@ pub fn definitions() -> Vec<ToolDef> {
     vec![
         ToolDef { name: "find", description: "Search nodes by text, optionally by kind. Matches slug, title, statement, purpose, body, declaration path and test name.", input_schema: obj(&["query"], json!({ "query": {"type":"string"}, "kinds": {"type":"array","items":{"type":"string","enum":["page","req","ticket","module","criterion","file","decl","test"]}}, "limit": {"type":"integer","default":20} })) },
         ToolDef { name: "get", description: "One node in full with its edges: `out` is what it links to, `in` is what links to it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "outline", description: "The grimoire as a tree from the root pages, with coverage and lint-finding counts per node.", input_schema: obj(&[], json!({ "depth": {"type":"integer","default":2}, "root": reference })) },
+        ToolDef { name: "outline", description: "The grimoire as a tree from the root pages, with coverage, lint-finding counts (and how many are baselined) and the adoption rollup per node, plus the modules no page links.", input_schema: obj(&[], json!({ "depth": {"type":"integer","default":2}, "root": reference })) },
         ToolDef { name: "rests_on", description: "What a node depends on, transitively downward, with the decisions behind each. The planning and review question. For a ticket, starts from relies_on and touches.", input_schema: obj(&["ref"], json!({ "ref": reference, "depth": {"type":"integer"} })) },
         ToolDef { name: "rests_on_me", description: "Everything that would be affected if this node changed, and the open tickets that reach it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "coverage", description: "What requirements cover a criterion, each criterion of a module with its requirements, or each criterion a requirement names with its module.", input_schema: obj(&["ref"], json!({ "ref": reference })) },

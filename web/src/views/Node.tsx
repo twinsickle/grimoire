@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind has a rendering: page, requirement, ticket, module, criterion, file, declaration and test."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file, declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
  * ```
  */
 
@@ -37,7 +37,6 @@ import {
   type TestNode,
   type FileNode,
   type ModuleNode,
-  type PageNode,
   type Ref,
   type ReqNode,
   type TicketNode,
@@ -62,7 +61,6 @@ export function NodeView() {
           </div>
           <h1>{titleOf(node)}</h1>
         </div>
-        {kind === "page" && <Page n={node as PageNode} />}
         {kind === "req" && <Req n={node as ReqNode} />}
         {kind === "ticket" && <Ticket n={node as TicketNode} />}
         {kind === "module" && <Module n={node as ModuleNode} />}
@@ -96,22 +94,6 @@ function Decision({ date, text }: { date: string; text: string }) {
       <span className={decisionDate}>{date}</span>
       {text}
     </div>
-  );
-}
-
-function Page({ n }: { n: PageNode }) {
-  return (
-    <>
-      <Markdown text={n.body} />
-      <h2>Links</h2>
-      <ul className={list}>
-        {n.links.map((l) => (
-          <li key={l} className={item}>
-            <RefLink ref={l} />
-          </li>
-        ))}
-      </ul>
-    </>
   );
 }
 

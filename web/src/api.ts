@@ -19,7 +19,7 @@ import type {
   StatusResult,
   Summary,
   ToolError,
-  Tree,
+  Outline,
 } from "./types";
 
 export class ApiError extends Error {
@@ -43,7 +43,7 @@ export const api = {
   status: () => call<StatusResult>("status"),
   find: (query: string, kinds?: string[], limit = 20) => call<{ nodes: Summary[] }>("find", { query, kinds, limit }),
   get: (ref: Ref) => call<{ node: AnyNode }>("get", { ref }),
-  outline: (depth: number, root?: Ref) => call<{ roots: Tree[] }>("outline", { depth, root }),
+  outline: (depth: number, root?: Ref) => call<Outline>("outline", { depth, root }),
   restsOn: (ref: Ref, depth?: number) => call<{ nodes: RestsOn[] }>("rests_on", { ref, depth }),
   restsOnMe: (ref: Ref) => call<RestsOnMe>("rests_on_me", { ref }),
   coverage: (ref: Ref) => call<{ criteria?: CriterionCoverage[]; requirements?: Summary[] }>("coverage", { ref }),

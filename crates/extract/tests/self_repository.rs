@@ -58,9 +58,9 @@ fn extracts_the_web_ui() {
     let api = &joined.modules["web/src/api"];
     assert!(api.expects_contract);
     assert!(api.purpose.is_some(), "{:?}", api.contract_error);
-    let map = &joined.modules["web/src/views/Map"];
-    assert!(map.imports.contains(&"web/src/api".to_string()), "{:?}", map.imports);
-    assert!(map.imports.contains(&"web/src/components".to_string()));
+    let home = &joined.modules["web/src/views/Home"];
+    assert!(home.imports.contains(&"web/src/api".to_string()), "{:?}", home.imports);
+    assert!(home.imports.contains(&"web/src/components".to_string()));
     let file = &joined.files["web/src/api.ts"];
     assert!(file.decls.iter().any(|d| d.path == "useQuery" && d.kind == "function"));
     assert!(!joined.modules.contains_key("web/vite.config") || !joined.modules["web/vite.config"].expects_contract);
