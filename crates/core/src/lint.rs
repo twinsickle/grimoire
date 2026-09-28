@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes and malformed store files over the joined graph.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -17,10 +17,11 @@ pub enum Rule {
     Dangling,
     Uncovered,
     Malformed,
+    Unspecified,
 }
 
 impl Rule {
-    pub const ALL: [Rule; 3] = [Rule::Dangling, Rule::Uncovered, Rule::Malformed];
+    pub const ALL: [Rule; 4] = [Rule::Dangling, Rule::Uncovered, Rule::Malformed, Rule::Unspecified];
 
     /// The rule's name as it serialises, for keys in `counts`.
     pub fn name(self) -> &'static str {
@@ -28,6 +29,7 @@ impl Rule {
             Rule::Dangling => "dangling",
             Rule::Uncovered => "uncovered",
             Rule::Malformed => "malformed",
+            Rule::Unspecified => "unspecified",
         }
     }
 }
@@ -82,6 +84,13 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
             out.push(Finding::node(Rule::Malformed, &r, format!("{}: {}", m.path, m.reason)));
         }
     }
+    if rules.contains(&Rule::Unspecified) {
+        for (r, node) in &g.nodes {
+            if let Some(f) = unspecified(r, node) {
+                out.push(f);
+            }
+        }
+    }
     out.sort_by_key(Finding::sort_key);
     out.dedup();
     out
@@ -97,8 +106,25 @@ pub fn lint_touching(g: &Graph, refs: &[Reference]) -> Vec<Finding> {
     lint(g, &Rule::ALL).into_iter().filter(|f| touched(&f.r#ref) || f.edge.as_ref().is_some_and(|e| touched(&e.to))).collect()
 }
 
-/// Dangling findings for the edges one node owns. What a write returns as
-/// `warnings`.
+/// The findings a write created on the node it wrote: its dangling edges and,
+/// for a requirement, a missing scenario. What a write returns as `warnings`.
+pub fn written(g: &Graph, r: &Reference) -> Vec<Finding> {
+    let mut out = dangling_from(g, r);
+    if let Some(f) = g.get(r).and_then(|node| unspecified(r, node)) {
+        out.push(f);
+    }
+    out.sort_by_key(Finding::sort_key);
+    out
+}
+
+fn unspecified(r: &Reference, node: &Node) -> Option<Finding> {
+    match node {
+        Node::Req(q) if q.scenarios.is_empty() => Some(Finding::node(Rule::Unspecified, r, "no scenario checks this requirement's criteria")),
+        _ => None,
+    }
+}
+
+/// Dangling findings for the edges one node owns.
 pub fn dangling_from(g: &Graph, r: &Reference) -> Vec<Finding> {
     let exempt = matches!(g.get(r), Some(Node::Ticket(t)) if t.status == Status::Closed);
     if exempt {
@@ -227,6 +253,29 @@ mod tests {
         let f = lint_touching(&g, &[Reference::module("src/a/ready")]);
         let r = refs(&f);
         assert_eq!(r, vec!["Dangling req:stale".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string()]);
+    }
+
+    #[test]
+    fn unspecified_reports_requirements_without_scenarios() {
+        let g = graph();
+        let f = lint(&g, &[Rule::Unspecified]);
+        assert_eq!(refs(&f), vec!["Unspecified req:stale".to_string()]);
+        assert_eq!(f[0].reason, "no scenario checks this requirement's criteria");
+    }
+
+    #[test]
+    fn unspecified_sorts_last() {
+        let g = graph();
+        let f = lint(&g, &Rule::ALL);
+        assert_eq!(f.last().map(|f| f.rule), Some(Rule::Unspecified));
+    }
+
+    #[test]
+    fn written_adds_unspecified_for_a_requirement() {
+        let g = graph();
+        let w = refs(&written(&g, &Reference::req("stale")));
+        assert_eq!(w, vec!["Dangling req:stale".to_string(), "Unspecified req:stale".to_string()]);
+        assert!(written(&g, &Reference::req("ready-only-with-commit")).is_empty());
     }
 
     #[test]

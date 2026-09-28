@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add the dangling warnings the write created, start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count and malformed file count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count and malformed file count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
 //! ```
 
 use serde::Deserialize;
@@ -405,7 +405,7 @@ struct RefIn {
 fn written(state: &mut State, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
     let g = state.graph();
     let view = query::view(g, r).expect("just written");
-    let warnings = lint::dangling_from(g, r);
+    let warnings = lint::written(g, r);
     Ok(Outcome { output: json!({ "node": view, "warnings": warnings }), changed: Some(changed) })
 }
 
@@ -434,7 +434,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "coverage", description: "What requirements cover a criterion, each criterion of a module with its requirements, or each criterion a requirement names with its module.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "board", description: "Tickets for the first screen: open and active change tickets ordered next, high, later. Filter by status, kind, priority or a node they touch.", input_schema: obj(&[], json!({ "status": {"type":"array","items":{"type":"string","enum":["open","active","closed"]}}, "kinds": {"type":"array","items":{"type":"string","enum":["change","gap","question"]}}, "priority": {"type":"array","items":{"type":"string","enum":["next","high","later"]}}, "touching": reference })) },
         ToolDef { name: "related_tickets", description: "The open gaps and questions that touch what this ticket touches.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "lint", description: "The dangling, uncovered and malformed checks over the whole graph. Same output as `grimoire check`.", input_schema: obj(&[], json!({ "kinds": {"type":"array","items":{"type":"string","enum":["dangling","uncovered","malformed"]}} })) },
+        ToolDef { name: "lint", description: "The dangling, uncovered, malformed and unspecified checks over the whole graph. Same output as `grimoire check`.", input_schema: obj(&[], json!({ "kinds": {"type":"array","items":{"type":"string","enum":["dangling","uncovered","malformed","unspecified"]}} })) },
         ToolDef { name: "module_source", description: "Where a module, criterion, file or declaration lives: file and line, plus the contract line for criteria.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "put_page", description: "Create or replace a page. Links may point to page, req and module references.", input_schema: obj(&["slug","title","body","links"], json!({ "slug": {"type":"string"}, "title": {"type":"string"}, "body": {"type":"string","description":"Markdown"}, "links": refs })) },
         ToolDef { name: "patch_page", description: "Change a page's title or body, or add and remove links, leaving everything else as it was. The usual way to link a new requirement or page from its area.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "body": {"type":"string","description":"Markdown"}, "add_links": refs, "remove_links": refs })) },
@@ -533,6 +533,20 @@ mod tests {
         assert!(board.output["tickets"].as_array().unwrap().iter().any(|t| t["ref"] == "ticket:0001"));
         let e = call(&mut s, "file_ticket", json!({ "slug": "x", "title": "New", "kind": "change", "priority": "high", "body": "x" }), "2026-09-27").unwrap_err();
         assert!(e.to_string().contains("no longer takes a slug"));
+    }
+
+    #[test]
+    fn put_requirement_warns_when_unspecified() {
+        let mut s = state();
+        let req = |scenarios: Value| json!({ "slug": "new-rule", "title": "New", "statement": "It SHALL hold.", "scenarios": scenarios, "covered_by": [] });
+        let out = call(&mut s, "put_requirement", req(json!([])), "2026-09-27").unwrap();
+        let w = out.output["warnings"].as_array().unwrap();
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0]["rule"], "unspecified");
+        assert_eq!(w[0]["ref"], "req:new-rule");
+        let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
+        let out = call(&mut s, "put_requirement", req(scenario), "2026-09-27").unwrap();
+        assert!(out.output["warnings"].as_array().unwrap().is_empty());
     }
 
     #[test]

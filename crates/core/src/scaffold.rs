@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion uncovered; its requirements carry no scenarios, so each is reported as unspecified."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -234,6 +234,9 @@ mod tests {
         let f = lint(&g, &[Rule::Uncovered]);
         // Only the uncontracted module remains uncovered.
         assert!(f.iter().all(|f| f.r#ref.id == "src/b/unrelated"), "{f:?}");
+        // Every scaffolded requirement is left for a person to give a case.
+        let f = lint(&g, &[Rule::Unspecified]);
+        assert_eq!(f.len(), s.requirements.len());
     }
 
     #[test]

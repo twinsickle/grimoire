@@ -231,12 +231,19 @@ pub(crate) mod fixtures {
         Page { slug: slug.into(), title: slug.to_uppercase(), body: format!("About {slug}."), links: links.iter().map(|l| l.parse().unwrap()).collect() }
     }
 
+    /// A requirement with one scenario; `stale` has none, so the unspecified
+    /// rule has something to report.
     pub fn req(slug: &str, covered_by: &[&str], decisions: &[(&str, &str)]) -> Requirement {
+        let scenarios = if slug == "stale" {
+            vec![]
+        } else {
+            vec![Scenario { title: "It holds".into(), given: "a repository".into(), when: format!("{slug} is checked"), then: "it holds".into() }]
+        };
         Requirement {
             slug: slug.into(),
             title: slug.to_uppercase(),
             statement: format!("The system SHALL {slug}."),
-            scenarios: vec![],
+            scenarios,
             covered_by: covered_by.iter().map(|l| l.parse().unwrap()).collect(),
             decisions: decisions.iter().map(|(d, t)| Decision { date: d.to_string(), text: t.to_string() }).collect(),
         }
@@ -258,7 +265,7 @@ pub(crate) mod fixtures {
 
     /// overview -> git-readiness -> {ready-only-with-commit -> guarantee, module ready}.
     /// `orphan` page is linked by nothing. `stale` req names a criterion that
-    /// does not exist. Criterion `reads-only` and `stable` are uncovered.
+    /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
         let mut s = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()] });
         for p in [

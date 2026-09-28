@@ -40,7 +40,7 @@ enum Command {
     Check {
         #[arg(long)]
         store: Option<String>,
-        /// Only these rules: dangling, uncovered, malformed.
+        /// Only these rules: dangling, uncovered, malformed, unspecified.
         #[arg(long, value_delimiter = ',')]
         rules: Vec<String>,
         /// Print findings as JSON, the same shape as the `lint` tool.

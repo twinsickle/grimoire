@@ -138,7 +138,7 @@ export interface RestsOnMe {
   tickets: Summary[];
 }
 
-export type Rule = "dangling" | "uncovered" | "malformed";
+export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
 
 export interface Finding {
   rule: Rule;

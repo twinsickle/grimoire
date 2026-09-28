@@ -38,9 +38,10 @@ it created in `warnings`. Every warning is work to do now.
   guess comes back as a dangling warning; a guess that names the wrong node
   does not.
 - **Slugs** are `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters.
-- A **requirement**: a normative `statement` (SHALL / MUST), scenarios
-  (given, when, then), `covered_by` criteria, dated append-only
-  **decisions** of one paragraph each: what was chosen and why.
+- A **requirement**: a normative `statement` (SHALL / MUST), at least one
+  scenario (given, when, then; without one it is `unspecified`),
+  `covered_by` criteria, dated append-only **decisions** of one paragraph
+  each: what was chosen and why.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
