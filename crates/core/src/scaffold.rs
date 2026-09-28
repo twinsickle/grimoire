@@ -18,7 +18,7 @@ pub const ARCHITECTURE_SLUG: &str = "architecture";
 /// is, what it does, and how.
 pub const STORY: [(&str, &str, &str); 4] = [
     ("goal", "Goal", "What this project is and what it is not, as short statements a reader can check against the code. No motivation, no history, no milestones. This is the first page a person or agent reads."),
-    (ARCHITECTURE_SLUG, "Architecture", "What the project uses to achieve the goal: its process shape, languages, frameworks, libraries and storage, as short statements a reader can check against the manifests, the configuration and the module contracts. The pages below are its areas, one per module group, seeded from the module contracts."),
+    (ARCHITECTURE_SLUG, "Architecture", "A high-level inventory of what exists and why: one line saying what the system is; the pipeline, how data moves through the parts; the layers with their responsibilities and what each is built from; the design principles behind them; and the physical layout. Every line checkable against the repository. The pages below are its areas, one per module group, seeded from the module contracts."),
     ("constraints", "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
     ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
 ];
