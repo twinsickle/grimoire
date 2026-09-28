@@ -189,6 +189,8 @@ export interface StatusResult {
   edges: number;
   unresolved_imports: number;
   malformed: number;
+  /** Repository-relative prefixes expected to carry contracts; an empty include means everything. */
+  scope: { include: string[]; exclude: string[] };
   baseline: BaselineSummary | null;
 }
 

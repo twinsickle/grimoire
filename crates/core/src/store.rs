@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"no-io","statement":"The store is a value; reading and writing files is the caller's job."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty after trimming, a date is ISO YYYY-MM-DD, a ticket body is at most 4000 characters, and a ticket's decision is present exactly when its status is closed."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"no-io","statement":"The store is a value; reading and writing files is the caller's job."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty after trimming, a date is ISO YYYY-MM-DD, a ticket body is at most 4000 characters, and a ticket's decision is present exactly when its status is closed."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -27,6 +27,7 @@ impl Default for StoreConfig {
             version: StoreConfig::CURRENT_VERSION,
             repository: String::new(),
             roots: Vec::new(),
+            scope: Scope::default(),
             languages: Vec::new(),
         }
     }
@@ -49,7 +50,7 @@ pub struct FieldError {
 }
 
 impl FieldError {
-    fn new(field: &str, reason: impl Into<String>) -> Self {
+    pub(crate) fn new(field: &str, reason: impl Into<String>) -> Self {
         FieldError { field: field.to_string(), reason: reason.into() }
     }
 }
@@ -203,7 +204,20 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     for r in &c.roots {
         check_slug(&mut e, "roots", r);
     }
+    for (field, prefixes) in [("scope.include", &c.scope.include), ("scope.exclude", &c.scope.exclude)] {
+        for p in prefixes {
+            if !is_scope_prefix(p) {
+                e.push(FieldError::new(field, format!("`{p}` is not a repository-relative path like `crates/core`")));
+            }
+        }
+    }
     e
+}
+
+/// A repository-relative, `/`-separated path with nothing that could climb
+/// out of the repository or name another drive.
+pub fn is_scope_prefix(p: &str) -> bool {
+    !p.is_empty() && !p.contains('\\') && !p.contains(':') && p.split('/').all(|s| !s.is_empty() && s != "." && s != "..")
 }
 
 impl Store {
@@ -225,6 +239,16 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scope_prefixes_stay_inside_the_repository() {
+        for ok in ["crates/core", "web", "a/b/c"] {
+            assert!(is_scope_prefix(ok), "{ok}");
+        }
+        for bad in ["", "/abs", "../out", "a/../b", "./a", "a/", "C:/x", "a\\b"] {
+            assert!(!is_scope_prefix(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn slug_rules() {

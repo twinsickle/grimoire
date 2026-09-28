@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -89,6 +89,10 @@ pub struct Graph {
     pub unresolved_imports: usize,
     /// The store's baseline, as identities to match findings against.
     pub baseline: HashSet<FindingKey>,
+    /// Configured languages the running build cannot extract, and the ones
+    /// it can; set by whoever knows the build (`State`), empty otherwise.
+    pub unsupported_languages: Vec<String>,
+    pub supported_languages: Vec<String>,
 }
 
 impl Graph {
@@ -138,7 +142,9 @@ impl Graph {
                 g.edge(&cref, &from, Relation::BelongsTo);
                 g.nodes.insert(cref, Node::Criterion(c.clone()));
             }
-            g.nodes.insert(from, Node::Module(m.clone()));
+            let mut m = m.clone();
+            m.expects_contract &= store.config.scope.covers(&m.files);
+            g.nodes.insert(from, Node::Module(m));
         }
         for f in extraction.files.values() {
             let from = Reference::file(&f.path);
@@ -275,7 +281,7 @@ pub(crate) mod fixtures {
     /// `orphan` page is linked by nothing. `stale` req names a criterion that
     /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
-        let mut s = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()] });
+        let mut s = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() });
         for p in [
             page("overview", &["page:git-readiness"]),
             page("git-readiness", &["req:ready-only-with-commit", "req:stale", "module:src/a/ready"]),

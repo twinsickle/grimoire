@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind, and adopt returns the new baseline's date, reason and count with the count it replaced."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
 //! ```
 
 use serde::Deserialize;
@@ -70,7 +70,14 @@ impl State {
     }
     pub fn graph(&mut self) -> &Graph {
         if self.graph.is_none() {
-            self.graph = Some(Graph::build(&self.store, &self.extraction, &self.malformed));
+            let mut g = Graph::build(&self.store, &self.extraction, &self.malformed);
+            let supported = &self.build.supported_languages;
+            // An unknown build (tests, or a caller that never said) flags nothing.
+            if !supported.is_empty() {
+                g.unsupported_languages = self.store.config.languages.iter().filter(|l| !supported.contains(l)).cloned().collect();
+                g.supported_languages = supported.clone();
+            }
+            self.graph = Some(g);
         }
         self.graph.as_ref().expect("just built")
     }
@@ -109,7 +116,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 21] = [
+pub const TOOL_NAMES: [&str; 22] = [
     "find",
     "get",
     "outline",
@@ -130,11 +137,12 @@ pub const TOOL_NAMES: [&str; 21] = [
     "close_ticket",
     "delete_node",
     "adopt",
+    "configure",
     "status",
 ];
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt" | "configure")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
@@ -264,6 +272,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 "edges": g.edges.len(),
                 "unresolved_imports": g.unresolved_imports,
                 "malformed": g.malformed.len(),
+                "scope": config.scope,
                 "baseline": baseline_summary(state.store.baseline.as_ref()),
             }))
         }
@@ -392,6 +401,13 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let findings = lint::lint_touching(g, &touched);
             Ok(Outcome { output: json!({ "node": view, "findings": findings }), changed: Some(changed) })
         }
+        "configure" => {
+            let change: ops::ConfigChange = parse(input)?;
+            let supported = state.build.supported_languages.clone();
+            let (config, changed) = ops::configure(state.store_mut(), change, &supported)?;
+            let new = lint::new_count(&lint::lint(state.graph(), &Rule::ALL));
+            Ok(Outcome { output: json!({ "config": config, "new": new }), changed: Some(changed) })
+        }
         "adopt" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -475,6 +491,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the lint findings on the nodes it touched.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
+        ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
 }
@@ -616,6 +633,58 @@ mod tests {
         let lint = call(&mut s, "lint", json!({ "kinds": ["unspecified"] }), "2026-09-28").unwrap().output;
         assert_eq!(lint["new"], 1);
         assert_eq!(lint["findings"][0]["baselined"], false);
+    }
+
+    fn built(mut s: State, languages: &[&str]) -> State {
+        s.set_build(Build { version: "0.0.0".into(), supported_languages: languages.iter().map(|l| l.to_string()).collect() });
+        s
+    }
+
+    #[test]
+    fn configure_changes_only_what_it_is_given() {
+        let mut s = built(state(), &["rust", "typescript"]);
+        let before = s.store().config.clone();
+        let out = call(&mut s, "configure", json!({ "languages": ["rust", "typescript"] }), "2026-09-28").unwrap();
+        assert!(matches!(out.changed, Some(Changed::Config)));
+        assert_eq!(out.output["config"]["languages"], json!(["rust", "typescript"]));
+        assert_eq!(s.store().config.roots, before.roots);
+        assert_eq!(s.store().config.repository, before.repository);
+    }
+
+    #[test]
+    fn configure_refuses_what_it_may_not_change() {
+        let mut s = built(state(), &["rust"]);
+        let before = s.store().config.clone();
+        let unsupported = call(&mut s, "configure", json!({ "languages": ["python"] }), "2026-09-28").unwrap_err();
+        assert!(matches!(unsupported, ToolError::Invalid { .. }));
+        assert!(unsupported.to_string().contains("config"), "{unsupported}");
+        let repo = call(&mut s, "configure", json!({ "repository": "D:/elsewhere" }), "2026-09-28").unwrap_err();
+        assert!(repo.to_string().contains("repository"), "{repo}");
+        let prefix = call(&mut s, "configure", json!({ "scope": { "include": ["../outside"] } }), "2026-09-28").unwrap_err();
+        assert!(serde_json::to_value(&prefix).unwrap()["details"][0]["field"] == "scope.include");
+        assert_eq!(s.store().config, before, "nothing changed");
+    }
+
+    #[test]
+    fn widening_the_scope_makes_new_findings() {
+        let mut s = built(state(), &["rust"]);
+        call(&mut s, "configure", json!({ "scope": { "include": ["src/a"] } }), "2026-09-28").unwrap();
+        call(&mut s, "adopt", json!({ "reason": "adopted with src/a in scope" }), "2026-09-28").unwrap();
+        let out = call(&mut s, "configure", json!({ "scope": { "include": ["src/a", "src/b"] } }), "2026-09-28").unwrap();
+        assert_eq!(out.output["new"], 2, "src/b/unrelated is now expected to carry a contract and a page");
+        assert_eq!(call(&mut s, "status", json!({}), "2026-09-28").unwrap().output["scope"]["include"], json!(["src/a", "src/b"]));
+    }
+
+    #[test]
+    fn a_language_the_build_lacks_is_a_finding() {
+        let mut s = built(state(), &["rust"]);
+        s.store_mut().config.languages = vec!["rust".into(), "typescript".into()];
+        let lint = call(&mut s, "lint", json!({ "kinds": ["malformed"] }), "2026-09-28").unwrap().output;
+        assert_eq!(lint["findings"][0]["check"], "unsupported-language");
+        let unknown_build = State::new(store(), extraction(), vec![]);
+        let mut u = unknown_build;
+        u.store_mut().config.languages = vec!["typescript".into()];
+        assert!(call(&mut u, "lint", json!({ "kinds": ["malformed"] }), "2026-09-28").unwrap().output["findings"].as_array().unwrap().is_empty(), "an unknown build flags nothing");
     }
 
     #[test]

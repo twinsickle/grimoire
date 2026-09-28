@@ -1,13 +1,13 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline.","criteria":[{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
 
 use crate::model::*;
-use crate::store::{validate_baseline, validate_page, validate_requirement, validate_ticket, FieldError, Store};
+use crate::store::{validate_baseline, validate_config, validate_page, validate_requirement, validate_ticket, FieldError, Store};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
 #[serde(tag = "error", rename_all = "snake_case")]
@@ -64,6 +64,40 @@ pub enum Changed {
     Ticket(String),
     Deleted(Reference),
     Baseline,
+    Config,
+}
+
+/// The config fields `configure` may change; the repository is not one.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigChange {
+    pub roots: Option<Vec<String>>,
+    pub languages: Option<Vec<String>>,
+    pub scope: Option<Scope>,
+}
+
+/// Change the fields given. `supported` is the languages the running build
+/// can extract; empty means unknown, and then any language is accepted.
+pub fn configure(store: &mut Store, change: ConfigChange, supported: &[String]) -> Result<(StoreConfig, Changed), ToolError> {
+    let mut config = store.config.clone();
+    if let Some(roots) = change.roots {
+        config.roots = roots;
+    }
+    if let Some(languages) = change.languages {
+        config.languages = languages;
+    }
+    if let Some(scope) = change.scope {
+        config.scope = scope;
+    }
+    let mut errors = validate_config(&config);
+    if !supported.is_empty() {
+        for l in config.languages.iter().filter(|l| !supported.contains(l)) {
+            errors.push(FieldError::new("languages", format!("`{l}` is not supported by this build, which supports {}", supported.join(", "))));
+        }
+    }
+    invalid_if(errors, "config")?;
+    store.config = config.clone();
+    Ok((config, Changed::Config))
 }
 
 /// Replace the baseline with `findings`. Returns the new baseline and how

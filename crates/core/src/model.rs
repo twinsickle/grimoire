@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file and decl (derived); a criterion's id is module id, #, criterion id, and a decl's is file path, #, declaration path."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, and the languages to extract; a version this build does not know is refused."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file and decl (derived); a criterion's id is module id, #, criterion id, and a decl's is file path, #, declaration path."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract and an optional contract scope of include and exclude prefixes; a version this build does not know is refused."}]}
 //! ```
 
 use std::fmt;
@@ -329,6 +329,35 @@ pub struct StoreConfig {
     pub repository: String,
     pub roots: Vec<String>,
     pub languages: Vec<String>,
+    #[serde(default, skip_serializing_if = "Scope::is_empty")]
+    pub scope: Scope,
+}
+
+/// Which paths are expected to carry contracts: repository-relative,
+/// `/`-separated prefixes matched on whole segments. An empty `include`
+/// means everything.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Scope {
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+impl Scope {
+    pub fn is_empty(&self) -> bool {
+        self.include.is_empty() && self.exclude.is_empty()
+    }
+
+    /// Whether a module with these files is in scope: some file under an
+    /// include (or no include at all) and none under an exclude.
+    pub fn covers(&self, files: &[String]) -> bool {
+        let under = |f: &str, p: &str| f == p || f.strip_prefix(p).is_some_and(|rest| rest.starts_with('/'));
+        let included = self.include.is_empty() || files.iter().any(|f| self.include.iter().any(|p| under(f, p)));
+        let excluded = files.iter().any(|f| self.exclude.iter().any(|p| under(f, p)));
+        included && !excluded
+    }
 }
 
 impl StoreConfig {
@@ -395,6 +424,21 @@ pub struct Decl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scope_matches_whole_segments() {
+        let s = |inc: &[&str], exc: &[&str]| Scope { include: inc.iter().map(|x| x.to_string()).collect(), exclude: exc.iter().map(|x| x.to_string()).collect() };
+        let files = |fs: &[&str]| fs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert!(Scope::default().covers(&files(&["anything/at/all.rs"])), "no scope is everything");
+        let core = s(&["crates/core"], &[]);
+        assert!(core.covers(&files(&["crates/core/src/lib.rs"])));
+        assert!(!core.covers(&files(&["crates/core-extra/src/lib.rs"])), "whole segments only");
+        assert!(!core.covers(&files(&["crates/cli/src/main.rs"])));
+        let carved = s(&["crates/core"], &["crates/core/src/generated"]);
+        assert!(!carved.covers(&files(&["crates/core/src/generated/parser.rs"])));
+        assert!(carved.covers(&files(&["crates/core/src/lint.rs"])));
+        assert!(!s(&[], &["vendor"]).covers(&files(&["vendor/x.rs"])), "an exclude alone narrows everything");
+    }
 
     #[test]
     fn reference_round_trips() {

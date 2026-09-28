@@ -223,6 +223,7 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             let t = store.tickets.get(slug).expect("changed ticket exists");
             write_atomic(&store_dir.join("tickets").join(format!("{slug}.json")), &to_pretty(t))
         }
+        Changed::Config => write_atomic(&store_dir.join(CONFIG_FILE), &to_pretty(&store.config)),
         Changed::Baseline => match &store.baseline {
             Some(b) => write_atomic(&store_dir.join(BASELINE_FILE), &to_pretty(b)),
             None => remove_if_present(&store_dir.join(BASELINE_FILE)),
@@ -306,7 +307,7 @@ mod tests {
     #[test]
     fn round_trip_and_malformed() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()] });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
         write_all(&dir, &store, false).unwrap();
         assert!(matches!(write_all(&dir, &store, false), Err(StoreIoError::Exists(_))));
@@ -341,7 +342,7 @@ mod tests {
     #[test]
     fn tolerates_a_byte_order_mark() {
         let dir = temp();
-        let store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![] });
+        let store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
         write_all(&dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&cfg).unwrap();
@@ -353,7 +354,7 @@ mod tests {
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![] });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
             reason: "adopted at init".into(),
@@ -385,6 +386,20 @@ mod tests {
         std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();
         remove_serving(&dir);
         assert!(read_serving(&dir).is_some(), "another process's marker is left alone");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn config_persists_its_scope() {
+        let dir = temp();
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        write_all(&dir, &store, false).unwrap();
+        let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
+        assert!(!text.contains("scope"), "an empty scope is not written");
+        store.config.scope = Scope { include: vec!["crates/core".into()], exclude: vec![] };
+        persist(&dir, &store, &Changed::Config).unwrap();
+        let (loaded, _) = load(&dir).unwrap();
+        assert_eq!(loaded.config.scope.include, vec!["crates/core".to_string()]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

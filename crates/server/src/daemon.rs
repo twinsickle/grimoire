@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."}]}
+//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"A configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."}]}
 //! ```
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 
-use grimoire_core::tools;
+use grimoire_core::{lint, tools};
 use grimoire_core::{Build, Extraction, FileExtraction, State, ToolError};
 use grimoire_extract::{Extractor, SUPPORTED_LANGUAGES};
 use serde::Serialize;
@@ -29,7 +29,8 @@ pub enum Event {
 pub struct Daemon {
     pub store_dir: PathBuf,
     pub repo: PathBuf,
-    pub extractor: Extractor,
+    /// Rebuilt when `configure` changes the languages.
+    pub extractor: RwLock<Extractor>,
     files: Mutex<BTreeMap<String, FileExtraction>>,
     state: Mutex<State>,
     events: broadcast::Sender<Event>,
@@ -84,7 +85,7 @@ impl Daemon {
         let daemon = Daemon {
             store_dir: store_dir.to_path_buf(),
             repo: loaded.repo,
-            extractor: loaded.extractor,
+            extractor: RwLock::new(loaded.extractor),
             files: Mutex::new(loaded.files),
             state: Mutex::new(loaded.state),
             events,
@@ -123,6 +124,7 @@ impl Daemon {
     pub fn call(&self, name: &str, input: Value) -> Result<Value, ToolError> {
         let today = store_io::today();
         let mut state = self.state.lock().expect("state lock");
+        let languages = state.store().config.languages.clone();
         let outcome = tools::call(&mut state, name, input, &today)?;
         if let Some(changed) = &outcome.changed {
             if let Err(e) = store_io::persist(&self.store_dir, state.store(), changed) {
@@ -139,11 +141,48 @@ impl Daemon {
                 grimoire_core::ops::Changed::Ticket(s) => format!("ticket:{s}"),
                 grimoire_core::ops::Changed::Deleted(r) => r.to_string(),
                 grimoire_core::ops::Changed::Baseline => "baseline".to_string(),
+                grimoire_core::ops::Changed::Config => "config".to_string(),
             };
             let _ = self.events.send(Event::Store { tool: name.to_string(), changed: vec![what] });
+            if state.store().config.languages != languages {
+                let now = state.store().config.languages.clone();
+                drop(state);
+                self.reextract_all(&now);
+                // configure answered with the count of new findings under the
+                // old extraction; answer with the one the new languages give.
+                let mut state = self.state.lock().expect("state lock");
+                self.prune(&mut state);
+                let mut output = outcome.output;
+                output["new"] = Value::from(lint::new_count(&lint::lint(state.graph(), &lint::Rule::ALL)));
+                return Ok(output);
+            }
             self.prune(&mut state);
         }
         Ok(outcome.output)
+    }
+
+    /// Replace the extractor with one for `languages` and extract the whole
+    /// repository again, as on opening.
+    fn reextract_all(&self, languages: &[String]) {
+        let extractor = Extractor::for_languages(&self.repo, languages);
+        let extracted = match extractor.extract_all() {
+            Ok((files, errors)) => {
+                for e in errors {
+                    tracing::warn!("{e}");
+                }
+                files
+            }
+            Err(e) => {
+                tracing::error!("re-extracting for languages {languages:?} failed: {e}");
+                return;
+            }
+        };
+        let mut files = self.files.lock().expect("files lock");
+        *files = extracted.into_iter().map(|f| (f.path.clone(), f)).collect();
+        self.state.lock().expect("state lock").set_extraction(Extraction::from_files(files.values()));
+        *self.extractor.write().expect("extractor lock") = extractor;
+        tracing::info!("languages are now {languages:?}; re-extracted {} file(s)", files.len());
+        let _ = self.events.send(Event::Graph { changed: vec!["*".to_string()] });
     }
 
     /// Re-extract the given repository-relative paths (deleted ones are
@@ -152,13 +191,14 @@ impl Daemon {
         let mut changed = Vec::new();
         {
             let mut files = self.files.lock().expect("files lock");
+            let extractor = self.extractor.read().expect("extractor lock");
             for rel in paths {
-                if !self.extractor.handles(rel) {
+                if !extractor.handles(rel) {
                     continue;
                 }
                 let full = self.repo.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
                 if full.is_file() {
-                    match self.extractor.extract_path(rel) {
+                    match extractor.extract_path(rel) {
                         Ok(f) => {
                             if files.get(rel) != Some(&f) {
                                 files.insert(rel.clone(), f);

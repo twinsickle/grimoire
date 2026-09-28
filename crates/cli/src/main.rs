@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
 //! ```
 
 mod init;
@@ -194,9 +194,15 @@ fn main() -> anyhow::Result<()> {
             if json {
                 println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::query::counts(&findings), "new": new }))?);
             } else {
-                // Inherited findings are counted, not listed: the list is the work
-                // this commit is answerable for.
-                for f in findings.iter().filter(|f| !f.baselined) {
+                // A build that cannot read part of the project explains the rest,
+                // so it comes first. Then the new findings; inherited ones are
+                // counted, not listed: the list is the work this commit is
+                // answerable for.
+                let unsupported = |f: &&lint::Finding| f.check == "unsupported-language";
+                for f in findings.iter().filter(unsupported) {
+                    println!("{:<11} {}  {}", f.rule.name(), f.r#ref, f.reason);
+                }
+                for f in findings.iter().filter(|f| !f.baselined && !unsupported(f)) {
                     println!("{:<11} {}  {}", f.rule.name(), f.r#ref, f.reason);
                 }
                 let counts = grimoire_core::query::counts(&findings);
@@ -250,6 +256,7 @@ fn main() -> anyhow::Result<()> {
                     repository: repo_str.clone(),
                     roots: vec![scaffold::ROOT_SLUG.to_string()],
                     languages,
+                    scope: grimoire_core::model::Scope::default(),
                 });
                 store_io::write_all(&store_dir, &empty, false)?;
                 println!("created empty store at {}", store_dir.display());

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -67,6 +67,10 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
         for m in &g.malformed {
             let r = malformed_ref(&m.path);
             out.push(Finding::node(Rule::Malformed, "malformed-file", &r, format!("{}: {}", m.path, m.reason)));
+        }
+        for l in &g.unsupported_languages {
+            let reason = format!("language `{l}` is not supported by this build, which supports {}", g.supported_languages.join(", "));
+            out.push(Finding::node(Rule::Malformed, "unsupported-language", &Reference::file("grimoire.json"), reason));
         }
     }
     if rules.contains(&Rule::Unspecified) {
@@ -339,6 +343,28 @@ mod tests {
         let unchanged = Baseline { findings: vec![present], ..b };
         assert!(super::pruned(&g, Some(&unchanged)).is_none(), "nothing fixed, nothing to write");
         assert!(super::pruned(&g, None).is_none());
+    }
+
+    #[test]
+    fn scope_narrows_what_must_carry_a_contract() {
+        let mut s = crate::graph::fixtures::store();
+        s.config.scope = Scope { include: vec!["src/a".into()], exclude: vec![] };
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let r = refs(&lint(&g, &[Rule::Uncovered]));
+        assert!(!r.iter().any(|x| x.ends_with("module:src/b/unrelated")), "out of scope, no contract, not reported: {r:?}");
+        assert!(r.contains(&"Uncovered module:src/a/layout".to_string()), "a contracted module is still grimoire: {r:?}");
+    }
+
+    #[test]
+    fn unsupported_languages_are_malformed() {
+        let mut g = graph();
+        g.unsupported_languages = vec!["typescript".into()];
+        g.supported_languages = vec!["rust".into()];
+        let f = lint(&g, &[Rule::Malformed]);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].check, "unsupported-language");
+        assert_eq!(f[0].r#ref, Reference::file("grimoire.json"));
+        assert_eq!(f[0].reason, "language `typescript` is not supported by this build, which supports rust");
     }
 
     #[test]

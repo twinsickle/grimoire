@@ -53,7 +53,7 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
                         continue;
                     }
                     if let Some(rel) = daemon.relative(p) {
-                        if daemon.extractor.handles(&rel) && !rels.contains(&rel) {
+                        if daemon.extractor.read().expect("extractor lock").handles(&rel) && !rels.contains(&rel) {
                             rels.push(rel);
                         }
                     }
