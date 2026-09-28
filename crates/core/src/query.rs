@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the manual gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body and declaration path, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the manual as a tree from the root pages (or a given page) to a depth, each node with its coverage and its count of lint findings on or below it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it, and for a module, each criterion with the requirements naming it, empty where uncovered."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file or declaration, with the contract heading's line for criteria."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the manual gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body and declaration path, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the manual as a tree from the root pages (or a given page) to a depth, each node with its coverage and its count of lint findings on or below it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it; for a module, each criterion with the requirements naming it, empty where uncovered; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file or declaration, with the contract heading's line for criteria."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -368,6 +368,44 @@ pub fn module_coverage(g: &Graph, module: &Module) -> Vec<CriterionCoverage> {
         .collect()
 }
 
+/// A criterion as a requirement's coverage lists it: what it says and the
+/// module it lives in. `statement` is `None` when the criterion is dangling.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CoveringCriterion {
+    pub r#ref: Reference,
+    pub statement: Option<String>,
+    pub module: ModuleSummary,
+}
+
+/// A module beside a criterion: its reference and purpose, `None` when the
+/// module does not exist or has no contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModuleSummary {
+    pub r#ref: Reference,
+    pub purpose: Option<String>,
+}
+
+/// The criteria a requirement names, in `covered_by` order, each with its
+/// module. Dangling entries are kept so a dangling requirement never looks covered.
+pub fn requirement_coverage(g: &Graph, req: &Requirement) -> Vec<CoveringCriterion> {
+    req.covered_by
+        .iter()
+        .map(|r| {
+            let statement = match g.get(r) {
+                Some(Node::Criterion(c)) => Some(c.statement.clone()),
+                _ => None,
+            };
+            let module_id = r.split_hash().map_or(r.id.as_str(), |(m, _)| m);
+            let module = Reference::module(module_id);
+            let purpose = match g.get(&module) {
+                Some(Node::Module(m)) => m.purpose.clone(),
+                _ => None,
+            };
+            CoveringCriterion { r#ref: r.clone(), statement, module: ModuleSummary { r#ref: module, purpose } }
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // board, related_tickets
 // ---------------------------------------------------------------------------
@@ -521,6 +559,33 @@ mod tests {
         assert!(refs.contains(&"page:overview".to_string()));
         let tickets: Vec<String> = r.tickets.iter().map(|t| t.r#ref.id.clone()).collect();
         assert_eq!(tickets, vec!["gap-1", "phase-62"]);
+    }
+
+    #[test]
+    fn requirement_coverage_in_order_with_modules() {
+        let mut store = crate::graph::fixtures::store();
+        let r = crate::graph::fixtures::req(
+            "spans",
+            &["criterion:src/a/layout#stable", "criterion:src/a/ready#gone", "criterion:src/a/ready#guarantee", "criterion:src/z/missing#x"],
+            &[],
+        );
+        store.requirements.insert(r.slug.clone(), r.clone());
+        let empty = crate::graph::fixtures::req("names-nothing", &[], &[]);
+        store.requirements.insert(empty.slug.clone(), empty.clone());
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+
+        let cov = requirement_coverage(&g, &r);
+        let refs: Vec<String> = cov.iter().map(|c| c.r#ref.to_string()).collect();
+        assert_eq!(refs, vec!["criterion:src/a/layout#stable", "criterion:src/a/ready#gone", "criterion:src/a/ready#guarantee", "criterion:src/z/missing#x"], "covered_by order");
+        assert_eq!(cov[0].statement.as_deref(), Some("Paths do not move."));
+        assert_eq!(cov[0].module, ModuleSummary { r#ref: Reference::module("src/a/layout"), purpose: Some("Lay out the workspace.".into()) });
+        // A dangling criterion stays, with no statement, beside its existing module.
+        assert_eq!(cov[1].statement, None);
+        assert_eq!(cov[1].module.purpose.as_deref(), Some("Decide readiness."));
+        // A criterion in a module that does not exist: both null.
+        assert_eq!(cov[3].statement, None);
+        assert_eq!(cov[3].module, ModuleSummary { r#ref: Reference::module("src/z/missing"), purpose: None });
+        assert!(requirement_coverage(&g, &empty).is_empty());
     }
 
     #[test]

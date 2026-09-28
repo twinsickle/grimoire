@@ -189,8 +189,9 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             match (i.r#ref.kind, g.get(&i.r#ref)) {
                 (Kind::Criterion, Some(_)) => ok(json!({ "requirements": query::requirements_covering(g, &i.r#ref) })),
                 (Kind::Module, Some(crate::graph::Node::Module(m))) => ok(json!({ "criteria": query::module_coverage(g, m) })),
-                (Kind::Criterion | Kind::Module, None) => Err(ToolError::not_found(&i.r#ref)),
-                _ => Err(ToolError::invalid(format!("{} is not a criterion or module", i.r#ref), vec![])),
+                (Kind::Req, Some(crate::graph::Node::Req(q))) => ok(json!({ "criteria": query::requirement_coverage(g, q) })),
+                (Kind::Criterion | Kind::Module | Kind::Req, None) => Err(ToolError::not_found(&i.r#ref)),
+                _ => Err(ToolError::invalid(format!("{} is not a criterion, module or requirement", i.r#ref), vec![])),
             }
         }
         "board" => {
@@ -430,7 +431,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "outline", description: "The manual as a tree from the root pages, with coverage and lint-finding counts per node.", input_schema: obj(&[], json!({ "depth": {"type":"integer","default":2}, "root": reference })) },
         ToolDef { name: "rests_on", description: "What a node depends on, transitively downward, with the decisions behind each. The planning and review question. For a ticket, starts from relies_on and touches.", input_schema: obj(&["ref"], json!({ "ref": reference, "depth": {"type":"integer"} })) },
         ToolDef { name: "rests_on_me", description: "Everything that would be affected if this node changed, and the open tickets that reach it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "coverage", description: "What requirements cover a criterion, or each criterion of a module.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
+        ToolDef { name: "coverage", description: "What requirements cover a criterion, each criterion of a module with its requirements, or each criterion a requirement names with its module.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "board", description: "Tickets for the first screen: open and active change tickets ordered next, high, later. Filter by status, kind, priority or a node they touch.", input_schema: obj(&[], json!({ "status": {"type":"array","items":{"type":"string","enum":["open","active","closed"]}}, "kinds": {"type":"array","items":{"type":"string","enum":["change","gap","question"]}}, "priority": {"type":"array","items":{"type":"string","enum":["next","high","later"]}}, "touching": reference })) },
         ToolDef { name: "related_tickets", description: "The open gaps and questions that touch what this ticket touches.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "lint", description: "The dangling, uncovered and malformed checks over the whole graph. Same output as `grimoire check`.", input_schema: obj(&[], json!({ "kinds": {"type":"array","items":{"type":"string","enum":["dangling","uncovered","malformed"]}} })) },
@@ -492,6 +493,27 @@ mod tests {
         // The rest of the answer is untouched by the build.
         assert!(out.output["nodes"].is_object());
         assert!(out.output["edges"].is_number());
+    }
+
+    #[test]
+    fn coverage_of_each_kind() {
+        let mut s = state();
+        let c = |s: &mut State, r: &str| call(s, "coverage", json!({ "ref": r }), "2026-09-27");
+        let out = c(&mut s, "criterion:src/a/ready#guarantee").unwrap();
+        assert_eq!(out.output["requirements"][0]["ref"], "req:ready-only-with-commit");
+        let out = c(&mut s, "module:src/a/ready").unwrap();
+        assert_eq!(out.output["criteria"].as_array().unwrap().len(), 2);
+        let out = c(&mut s, "req:ready-only-with-commit").unwrap();
+        assert_eq!(
+            out.output,
+            json!({ "criteria": [{
+                "ref": "criterion:src/a/ready#guarantee",
+                "statement": "Ready only with a commit.",
+                "module": { "ref": "module:src/a/ready", "purpose": "Decide readiness." }
+            }] })
+        );
+        assert!(matches!(c(&mut s, "req:nope"), Err(ToolError::NotFound { .. })));
+        assert!(matches!(c(&mut s, "page:overview"), Err(ToolError::Invalid { .. })));
     }
 
     #[test]
