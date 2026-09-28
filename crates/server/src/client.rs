@@ -82,6 +82,11 @@ mod tests {
         d
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "serving-when-the-daemon-answers-for-this-repository", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// ```
     #[test]
     fn serving_when_the_daemon_answers_for_this_repository() {
         let dir = temp_store();
@@ -91,6 +96,11 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "another-repository-is-not-this-store", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// ```
     #[test]
     fn another_repository_is_not_this_store() {
         let dir = temp_store();
@@ -100,6 +110,11 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-stale-marker-is-ignored", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// ```
     #[test]
     fn a_stale_marker_is_ignored() {
         let dir = temp_store();

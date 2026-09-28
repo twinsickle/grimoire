@@ -228,3 +228,214 @@ impl Daemon {
         grimoire_extract::relative(&self.repo, path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use grimoire_core::model::{Scope, StoreConfig};
+    use grimoire_core::Store;
+    use serde_json::json;
+
+    /// A repository with one contracted module and one without a contract,
+    /// and an empty store pointed at it.
+    struct Harness {
+        dir: PathBuf,
+        repo: PathBuf,
+        store: PathBuf,
+    }
+
+    impl Harness {
+        fn new() -> Harness {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!("grimoire-daemon-{}-{nanos}", std::process::id()));
+            let repo = dir.join("repo");
+            std::fs::create_dir_all(repo.join("src")).unwrap();
+            std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"h\"\nversion = \"0.1.0\"\n").unwrap();
+            std::fs::write(repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+            std::fs::write(repo.join("src").join("a.rs"), CONTRACTED).unwrap();
+            std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
+            let store = dir.join("store");
+            let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() };
+            store_io::write_all(&store, &Store::new(config), false).unwrap();
+            Harness { dir, repo, store }
+        }
+
+        fn open(&self) -> Daemon {
+            Daemon::open(&self.store).unwrap().0
+        }
+
+        /// Every path under the repository, to see that nothing was written there.
+        fn repo_files(&self) -> Vec<String> {
+            let mut out = Vec::new();
+            let mut stack = vec![self.repo.clone()];
+            while let Some(d) = stack.pop() {
+                for e in std::fs::read_dir(&d).unwrap().flatten() {
+                    if e.path().is_dir() {
+                        stack.push(e.path());
+                    } else {
+                        out.push(e.path().to_string_lossy().to_string());
+                    }
+                }
+            }
+            out.sort();
+            out
+        }
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Say a.\",\"criteria\":[{\"id\":\"says\",\"statement\":\"It says a.\"}]}\n//! ```\npub fn a() {}\n";
+
+    fn page(slug: &str) -> Value {
+        json!({ "slug": slug, "title": "T", "body": "b", "links": [] })
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-write-is-on-disk-before-its-answer", "checks": ["crates/server/src/daemon#persist-after-write"]}
+    /// ```
+    #[test]
+    fn a_write_is_on_disk_before_its_answer() {
+        let h = Harness::new();
+        let d = h.open();
+        d.call("put_page", page("goal")).unwrap();
+        assert!(h.store.join("pages").join("goal.json").is_file(), "persisted before the answer came back");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-failed-persist-leaves-memory-as-the-disk-is", "checks": ["crates/server/src/daemon#persist-after-write"]}
+    /// ```
+    #[test]
+    fn a_failed_persist_leaves_memory_as_the_disk_is() {
+        let h = Harness::new();
+        let d = h.open();
+        // Make the pages directory unwritable by putting a file where it should be.
+        std::fs::remove_dir_all(h.store.join("pages")).unwrap();
+        std::fs::write(h.store.join("pages"), "not a directory").unwrap();
+        let e = d.call("put_page", page("goal")).unwrap_err();
+        assert_eq!(serde_json::to_value(&e).unwrap()["error"], "store_unavailable");
+        let got = d.call("get", json!({ "ref": "page:goal" })).unwrap_err();
+        assert_eq!(serde_json::to_value(&got).unwrap()["error"], "not_found", "memory was reloaded from disk");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "writes-and-rebuilds-are-announced", "checks": ["crates/server/src/daemon#events"]}
+    /// ```
+    #[test]
+    fn writes_and_rebuilds_are_announced() {
+        let h = Harness::new();
+        let d = h.open();
+        let mut rx = d.subscribe();
+        d.call("put_page", page("goal")).unwrap();
+        match rx.try_recv().unwrap() {
+            Event::Store { tool, changed } => assert_eq!((tool.as_str(), changed), ("put_page", vec!["page:goal".to_string()])),
+            other => panic!("expected a store event, got {other:?}"),
+        }
+        std::fs::write(h.repo.join("src").join("b.rs"), "pub fn b2() {}\n").unwrap();
+        d.reextract(&["src/b.rs".to_string()]);
+        assert!(matches!(rx.try_recv().unwrap(), Event::Graph { changed } if changed == vec!["src/b.rs".to_string()]));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "one-changed-file-is-reextracted-alone", "checks": ["crates/server/src/daemon#one-file-reextract"]}
+    /// ```
+    #[test]
+    fn one_changed_file_is_reextracted_alone() {
+        let h = Harness::new();
+        let d = h.open();
+        // Change two files on disk, but tell the daemon about one.
+        std::fs::write(h.repo.join("src").join("a.rs"), CONTRACTED.replace("It says a.", "It says a, changed.")).unwrap();
+        std::fs::write(h.repo.join("src").join("b.rs"), "pub fn b_changed() {}\n").unwrap();
+        d.reextract(&["src/a.rs".to_string()]);
+        let a = d.call("get", json!({ "ref": "criterion:src/a#says" })).unwrap();
+        assert_eq!(a["node"]["statement"], "It says a, changed.");
+        let b = d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap();
+        assert!(b["node"]["decls"].as_array().unwrap().iter().any(|x| x["path"] == "b"), "the unchanged file was not read again");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-fix-shrinks-the-stored-baseline", "checks": ["crates/server/src/daemon#baseline-pruned"]}
+    /// ```
+    #[test]
+    fn a_fix_shrinks_the_stored_baseline() {
+        let h = Harness::new();
+        let d = h.open();
+        d.call("adopt", json!({ "reason": "adopted" })).unwrap();
+        let stored = || store_io::load(&h.store).unwrap().0.baseline.map(|b| b.findings.len()).unwrap_or(0);
+        let before = stored();
+        std::fs::write(h.repo.join("src").join("b.rs"), CONTRACTED.replace("Say a.", "Say b.")).unwrap();
+        d.reextract(&["src/b.rs".to_string()]);
+        assert!(stored() < before, "the contract fixed b's no-contract finding, and the file says so");
+        // Opening prunes too: fix another on disk, then open fresh.
+        drop(d);
+        std::fs::write(h.repo.join("src").join("lib.rs"), CONTRACTED.replace("Say a.", "Say the crate.")).unwrap();
+        let after_b = stored();
+        let _d = h.open();
+        assert!(stored() < after_b);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "configure-with-new-languages-reextracts", "checks": ["crates/server/src/daemon#reconfigure"]}
+    /// ```
+    #[test]
+    fn configure_with_new_languages_reextracts() {
+        let h = Harness::new();
+        std::fs::create_dir_all(h.repo.join("web").join("src")).unwrap();
+        std::fs::write(h.repo.join("web").join("package.json"), "{\"name\":\"w\"}").unwrap();
+        std::fs::write(h.repo.join("web").join("src").join("x.ts"), "export const x = 1;\n").unwrap();
+        let d = h.open();
+        assert!(d.call("get", json!({ "ref": "module:web/src/x" })).is_err());
+        let out = d.call("configure", json!({ "languages": ["rust", "typescript"] })).unwrap();
+        assert_eq!(out["config"]["languages"], json!(["rust", "typescript"]));
+        assert!(d.call("get", json!({ "ref": "module:web/src/x" })).is_ok(), "re-extracted before answering");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-serving-marker-comes-and-goes", "checks": ["crates/server/src/daemon#serving-marker"]}
+    /// ```
+    #[test]
+    fn the_serving_marker_comes_and_goes() {
+        let h = Harness::new();
+        let d = h.open();
+        d.mark_serving(4299).unwrap();
+        assert_eq!(store_io::read_serving(&h.store).map(|s| s.port), Some(4299));
+        d.unmark_serving();
+        assert!(store_io::read_serving(&h.store).is_none());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "serving-writes-nothing-into-the-repository", "checks": ["crates/server/src#no-repository-writes"]}
+    /// ```
+    #[test]
+    fn serving_writes_nothing_into_the_repository() {
+        let h = Harness::new();
+        let before = h.repo_files();
+        let d = h.open();
+        d.call("put_page", page("goal")).unwrap();
+        d.call("adopt", json!({ "reason": "adopted" })).unwrap();
+        std::fs::write(h.repo.join("src").join("b.rs"), "pub fn b3() {}\n").unwrap();
+        d.reextract(&["src/b.rs".to_string()]);
+        d.mark_serving(4299).unwrap();
+        assert_eq!(h.repo_files(), before, "no index, cache or marker in the repository");
+    }
+}
+

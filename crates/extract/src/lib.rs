@@ -272,4 +272,47 @@ mod tests {
         let x = Extractor::for_languages(root, &["rust".to_string(), "cobol".to_string(), "typescript".to_string()]);
         assert_eq!(x.languages(), vec!["rust", "typescript"]);
     }
+
+    fn temp_repo(files: &[(&str, &[u8])]) -> PathBuf {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("grimoire-extract-{}-{nanos}", std::process::id()));
+        for (rel, bytes) in files {
+            let p = dir.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, bytes).unwrap();
+        }
+        dir
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-walk-skips-what-gitignore-ignores", "checks": ["crates/extract/src#gitignore-respected"]}
+    /// ```
+    #[test]
+    fn the_walk_skips_what_gitignore_ignores() {
+        let dir = temp_repo(&[(".gitignore", b"target/\n"), ("src/lib.rs", b"pub fn a() {}\n"), ("target/debug/build/out.rs", b"pub fn generated() {}\n")]);
+        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        assert_eq!(x.walk().unwrap(), vec!["src/lib.rs".to_string()], "build output is never parsed, with or without git");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "one-file-is-extracted-alone", "checks": ["crates/extract/src#per-file"]}
+    /// ```
+    #[test]
+    fn one_file_is_extracted_alone() {
+        let dir = temp_repo(&[("src/a.rs", b"pub fn a() {}\n"), ("src/b.rs", &[0xff, 0xfe, 0x00])]);
+        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let a = x.extract_path("src/a.rs").unwrap();
+        assert_eq!(a.path, "src/a.rs");
+        assert!(a.decls.iter().any(|d| d.path == "a"));
+        // A broken neighbour does not stop the rest: it is an error beside the results.
+        let (files, errors) = x.extract_all().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(errors.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

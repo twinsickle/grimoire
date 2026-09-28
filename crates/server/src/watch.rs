@@ -72,3 +72,26 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
     debouncer.watch(&root, RecursiveMode::Recursive)?;
     Ok(debouncer)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#ignored-skipped"]}
+    /// ```
+    #[test]
+    fn ignored_paths_never_reach_the_daemon() {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("grimoire-watch-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join(".gitignore"), "target/\n").unwrap();
+        let i = Ignorer::new(&dir);
+        assert!(i.ignores(&dir.join(".git").join("index")), "anything under .git");
+        assert!(i.ignores(&dir.join("target").join("debug").join("x.rs")), "what .gitignore ignores");
+        assert!(!i.ignores(&dir.join("src").join("lib.rs")));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

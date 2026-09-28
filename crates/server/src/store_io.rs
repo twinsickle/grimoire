@@ -304,6 +304,11 @@ mod tests {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "round-trip-and-malformed", "checks": ["crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#layout"]}
+    /// ```
     #[test]
     fn round_trip_and_malformed() {
         let dir = temp();
@@ -324,6 +329,11 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "project-file-round-trip", "checks": ["crates/server/src/store_io#location"]}
+    /// ```
     #[test]
     fn project_file_round_trip() {
         let dir = temp();
@@ -339,6 +349,11 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "tolerates-a-byte-order-mark", "checks": ["crates/server/src/store_io#bom-tolerated"]}
+    /// ```
     #[test]
     fn tolerates_a_byte_order_mark() {
         let dir = temp();
@@ -354,7 +369,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "baseline-round-trips-and-a-broken-one-is-collected", "checks": ["crates/core/src/model#baseline-record"]}
+    /// {"test": "baseline-round-trips-and-a-broken-one-is-collected", "checks": ["crates/core/src/model#baseline-record", "crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected"]}
     /// ```
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {

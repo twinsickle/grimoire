@@ -152,6 +152,11 @@ mod tests {
         d
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber"]}
+    /// ```
     #[test]
     fn installs_and_merges() {
         let repo = temp();
@@ -193,6 +198,11 @@ mod tests {
         std::fs::remove_dir_all(&repo).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "guidance-replaces-only-its-own-section", "checks": ["crates/cli/src/init#guidance-section"]}
+    /// ```
     #[test]
     fn guidance_replaces_only_its_own_section() {
         let before = "intro\n\n<!-- grimoire -->\nold stuff\n<!-- /grimoire -->\n\nafter\n";
@@ -206,6 +216,11 @@ mod tests {
 
     /// Criterion project-agnostic: what init installs is the same for every
     /// repository, so nothing in it may be about this one.
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "installed-texts-name-no-project", "checks": ["crates/cli/src/init#project-agnostic"]}
+    /// ```
     #[test]
     fn installed_texts_name_no_project() {
         let repo_only = [
@@ -234,6 +249,11 @@ mod tests {
         }
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "skill-holds-every-sequence", "checks": ["crates/cli/src/init#skill-sequences"]}
+    /// ```
     #[test]
     fn skill_holds_every_sequence() {
         for s in ["start a ticket", "write the spec", "finish a ticket", "file a ticket", "adopt existing code"] {
@@ -243,6 +263,26 @@ mod tests {
         assert!(adopt.contains("record_decision") && adopt.contains("Never run\n`scaffold`"), "adopt records provenance and never scaffolds");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-skill-is-embedded-from-this-repository", "checks": ["crates/cli/src/init#skill-is-the-source"]}
+    /// ```
+    #[test]
+    fn the_skill_is_embedded_from_this_repository() {
+        let skill = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.claude/skills/grimoire/");
+        let on_disk = |rel: &str| std::fs::read_to_string(format!("{skill}{rel}")).expect("the skill is in the repository");
+        assert_eq!(SKILL_MD, on_disk("SKILL.md"), "one copy to maintain");
+        assert_eq!(CONTRACTS_MD, on_disk("references/contracts.md"));
+        assert_eq!(CHANGES_MD, on_disk("references/changes.md"));
+        assert_eq!(GUIDANCE_MD, on_disk("references/guidance-section.md"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "leaves-foreign-hook-alone", "checks": ["crates/cli/src/init#merge-not-clobber"]}
+    /// ```
     #[test]
     fn leaves_foreign_hook_alone() {
         let repo = temp();
