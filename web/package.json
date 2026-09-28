@@ -12,7 +12,9 @@
     "check": "tsc --noEmit && eslint .",
     "shots": "node visual/shots.mjs",
     "visual": "playwright test",
-    "visual:update": "playwright test --update-snapshots"
+    "visual:update": "playwright test --update-snapshots",
+    "test": "vitest run",
+    "behaviour": "vite build && playwright test -c behaviour/playwright.config.ts"
   },
   "dependencies": {
     "marked": "^18.0.14",
@@ -34,6 +36,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.70.1",
-    "vite": "^6.3.0"
+    "vite": "^6.3.0",
+    "vitest": "^3.2.7"
   }
 }

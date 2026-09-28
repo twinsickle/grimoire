@@ -21,14 +21,14 @@ export function App() {
     <BrowserRouter>
       <div className="grid grid-rows-[auto_1fr] h-full">
         <Top />
-        <div className="overflow-auto px-5 pt-4 pb-10">
+        <main className="overflow-auto px-5 pt-4 pb-10">
           <Routes>
             <Route path="/" element={<HomeView />} />
             <Route path="/map" element={<MapView />} />
             <Route path="/board" element={<BoardView />} />
             <Route path="/n/:ref" element={<NodeView />} />
           </Routes>
-        </div>
+        </main>
       </div>
     </BrowserRouter>
   );

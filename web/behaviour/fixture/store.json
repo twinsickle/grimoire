@@ -1,0 +1,17 @@
+{
+  "pages": [
+    {"slug": "overview", "title": "Fixture", "body": "A project the behaviour tests run against.", "links": ["page:goal", "page:architecture"]},
+    {"slug": "goal", "title": "Goal", "body": "**What it is.**\n\n- A fixture for the UI's behaviour tests.", "links": []},
+    {"slug": "architecture", "title": "Architecture", "body": "One area.", "links": ["page:readiness"]},
+    {"slug": "readiness", "title": "Readiness", "body": "Whether a workspace is ready.\n\nA second paragraph.", "links": ["req:ready-needs-commit", "module:src/ready", "module:src"]}
+  ],
+  "requirements": [
+    {"slug": "ready-needs-commit", "title": "Ready only with a commit", "statement": "A workspace SHALL be ready only when it has a commit.", "scenarios": [{"title": "Empty", "given": "an empty repository", "when": "readiness is asked", "then": "it is not ready"}], "covered_by": ["criterion:src/ready#needs-commit"]}
+  ],
+  "tickets": [
+    {"title": "Make readiness faster", "kind": "change", "priority": "next", "touches": ["module:src/ready"], "body": "Open, for the ticket actions."},
+    {"title": "Explain readiness", "kind": "change", "priority": "high", "touches": ["page:readiness"], "body": "Open, high."},
+    {"title": "Readiness ignores submodules", "kind": "gap", "priority": "high", "touches": ["module:src/ready"], "body": "A gap, off the first screen."},
+    {"title": "Name the readiness module", "kind": "change", "priority": "later", "touches": ["module:src/ready"], "body": "Closed by the fixture.", "close": "Named ready."}
+  ]
+}

@@ -11,3 +11,4 @@ build/
 !.env.example
 .claude/settings.local.json
 web/visual/out/
+web/behaviour/out/

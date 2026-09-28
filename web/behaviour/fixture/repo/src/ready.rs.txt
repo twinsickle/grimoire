@@ -1,0 +1,22 @@
+//! # Module contract
+//!
+//! ```json
+//! {"purpose":"Decide whether a workspace is ready.","criteria":[{"id":"needs-commit","statement":"A workspace is ready only with a commit."},{"id":"reads-only","statement":"Readiness never writes."}]}
+//! ```
+
+pub fn ready() -> bool {
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ready-needs-a-commit", "checks": ["src/ready#needs-commit"]}
+    /// ```
+    #[test]
+    fn ready_needs_a_commit() {
+        assert!(super::ready());
+    }
+}

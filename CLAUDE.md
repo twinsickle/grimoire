@@ -30,6 +30,10 @@ repository only.
 - Touched `web/`? In `web/`: `npm run shots` and look at them;
   `npm run visual` compares with the baselines; `npm run visual:update`
   accepts a change you have seen.
+- `npm test` in `web/` runs the Vitest unit tests (logic and source rules);
+  `npm run behaviour` builds the UI and runs the Playwright behaviour specs
+  against a fixture store it serves itself with the installed `grimoire`
+  (`GRIMOIRE_BIN` to use another), so they can start and close tickets.
 - Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
   `npm run check` in `web/` (tsc and ESLint). Under bacon they are the
   `clippy` and `web` jobs. They gate a push, not a commit: install with
