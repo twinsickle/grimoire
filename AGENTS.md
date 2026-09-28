@@ -7,11 +7,11 @@ same piece of work; the pre-commit hook checks they agree.
 
 - Orient first: `outline` at depth 2, then the goal, architecture,
   constraints and conventions pages, then your area. `get` a module before opening its files.
-- Every module under `src/` carries a `# Module contract`. New module, new
-  contract; changed guarantee, changed criterion; new criterion, a
+- Every module in the contract scope carries a `# Module contract`. New
+  module, new contract; changed guarantee, changed criterion; new criterion, a
   requirement covering it.
 - Work is a ticket: `/grimoire start`, `spec`, `finish`. `/grimoire file`
-  for anything you find.
+  for anything you find; `/grimoire adopt` for code without contracts.
 - Never write the store's files. The tools are the only interface.
 - Propose, don't decide. A gap or question closes on the person's answer to
   options you lay out.

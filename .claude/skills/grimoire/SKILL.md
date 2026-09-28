@@ -1,7 +1,7 @@
 ---
 name: grimoire
-description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "what does this rest on", or asks what the project is meant to do. It wraps the Grimoire tools into the three sequences that keep the grimoire honest: start a ticket, write its spec, finish it.
-argument-hint: start|spec|finish|file <ticket-slug or title>
+description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "what does this rest on", "adopt", "write contracts for the existing code", or asks what the project is meant to do. It wraps the Grimoire tools into the sequences that keep the grimoire honest: start a ticket, write its spec, finish it, file one, and adopt code that predates its contracts.
+argument-hint: start|spec|finish|file|adopt <ticket-slug, title or area>
 ---
 
 # Grimoire
@@ -175,6 +175,49 @@ the code.
    beside it in prose.
 3. Any `warnings` in the response are dangling references. Fix them with
    `update_ticket` now.
+
+## Sequence: adopt existing code
+
+`/grimoire adopt [area]`
+
+For code that predates its contracts. `init` recorded what it found as the
+baseline, so the check passes while this runs; each batch shrinks the
+baseline and leaves the check green.
+
+1. `lint {"kinds":["uncovered"]}` and take the findings whose `check` is
+   `no-contract`; `status` shows the contract scope. Group the modules into
+   areas, a directory the person agrees is one area. Propose the areas and
+   an order; the person picks the next.
+2. Within the area, leaves first: `get` each module for its `imports`, and
+   take first those no other uncontracted module in the area imports, so a
+   module's dependencies are contracted before it. About ten per batch.
+3. For each module, `get` it for its files and declarations and read the
+   code. Draft a contract in the format `references/contracts.md` gives for
+   its language: a one-sentence purpose, and criteria that each state what
+   holds, as something a test could check. For each criterion draft a
+   requirement: a SHALL statement, at least one scenario (given, when,
+   then) read off the code, `covered_by` the criterion. Describe what the
+   code does now, not what it should do.
+4. Show the batch: each module's contract and requirements together. Say
+   plainly that they were read off the code and describe it as it is,
+   faults included. Write only what the person approves, amended as they
+   say; a rejected module stays in the baseline.
+5. For each approved module: write the contract into the source file as an
+   ordinary edit. `find` the area's page; if there is none, propose one and
+   `put_page` it once approved, linked from the page above it with
+   `patch_page`. `put_requirement` each requirement, then `patch_page` the
+   area page with `add_links` for the module and its requirements. On each
+   requirement, `record_decision`: read off the code at adoption and
+   approved by the user, stating what the code did then rather than what it
+   was meant to do.
+6. `lint`. The batch's `no-contract` and `unlinked-module` findings are gone
+   and pruned from the baseline, and nothing new appears. Anything new is
+   this batch's to fix before the next.
+7. Commit only when the user asks. Then the next batch, or the next area.
+
+Code that will never carry a contract (generated, vendored) is a scope
+question: propose `configure` with an `exclude` to the person. Never run
+`scaffold` on an existing store; it replaces the whole store.
 
 ## What not to do
 

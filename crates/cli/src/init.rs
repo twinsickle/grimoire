@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository: the project file naming the store, the agent skill with its references, the always-loaded guidance section, the MCP entry pointing at the daemon, and a pre-commit hook running the check.","criteria":[{"id":"listed-writes","statement":"Every path init writes or would have written is returned, so the command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers and an existing pre-commit hook is left alone with a note; only Grimoire's own files are overwritten."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, since they are installed verbatim into every repository."}]}
+//! {"purpose":"Install Grimoire's integration into a repository: the project file naming the store, the agent skill with its references, the always-loaded guidance section, the MCP entry pointing at the daemon, and a pre-commit hook running the check.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket and to adopt existing code, each under its own heading."},{"id":"listed-writes","statement":"Every path init writes or would have written is returned, so the command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers and an existing pre-commit hook is left alone with a note; only Grimoire's own files are overwritten."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, since they are installed verbatim into every repository."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -232,6 +232,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn skill_holds_every_sequence() {
+        for s in ["start a ticket", "write the spec", "finish a ticket", "file a ticket", "adopt existing code"] {
+            assert!(SKILL_MD.contains(&format!("## Sequence: {s}")), "the skill has no `{s}` sequence");
+        }
+        let adopt = &SKILL_MD[SKILL_MD.find("## Sequence: adopt existing code").unwrap_or(0)..];
+        assert!(adopt.contains("record_decision") && adopt.contains("Never run\n`scaffold`"), "adopt records provenance and never scaffolds");
     }
 
     #[test]
