@@ -38,7 +38,7 @@ fn serve() -> Served {
     std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"s\"\nversion = \"0.1.0\"\n").unwrap();
     std::fs::write(repo.join("src").join("lib.rs"), "pub fn s() {}\n").unwrap();
     let store = dir.join("store");
-    let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() };
+    let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
     store_io::write_all(&store, &Store::new(config), false).unwrap();
     let daemon = Arc::new(Daemon::open(&store).unwrap().0);
     let runtime = tokio::runtime::Runtime::new().unwrap();

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it, the checks of the findings on the node itself, and how many tests check it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it, the checks of the findings on the node itself, and how many tests check it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -453,7 +453,31 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Vec<Summary> {
         .filter(|t| f.touching.is_none_or(|x| t.touches.contains(x) || t.relies_on.contains(x)))
         .collect();
     tickets.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| b.status.cmp(&a.status)).then_with(|| a.title.cmp(&b.title)));
-    tickets.into_iter().map(ticket_summary).collect()
+    let mut out = Vec::new();
+    for p in [Priority::Next, Priority::High, Priority::Later] {
+        let band: Vec<&Ticket> = tickets.iter().copied().filter(|t| t.priority == p).collect();
+        out.extend(band_order(g, band, g.order.band(p)).into_iter().map(ticket_summary));
+    }
+    out
+}
+
+/// One band: the tickets its order list names, in that order; then the rest,
+/// each after any open or active ticket it relies on, choosing among those
+/// ready by active before open, then title. A loop of relies_on is broken by
+/// the same rule. `band` arrives sorted by status and title.
+fn band_order<'a>(g: &Graph, band: Vec<&'a Ticket>, list: &[String]) -> Vec<&'a Ticket> {
+    let mut out: Vec<&Ticket> = list.iter().filter_map(|s| band.iter().copied().find(|t| &t.slug == s)).collect();
+    let mut rest: Vec<&Ticket> = band.into_iter().filter(|t| !list.contains(&t.slug)).collect();
+    let waiting_on = |t: &Ticket, pending: &[&Ticket]| {
+        t.relies_on.iter().any(|r| r.kind == Kind::Ticket && r.id != t.slug && pending.iter().any(|p| p.slug == r.id) && matches!(g.get(r), Some(Node::Ticket(x)) if x.status != Status::Closed))
+    };
+    while !rest.is_empty() {
+        // The first ready ticket in status-then-title order, or, when every one
+        // waits on another (a loop), the first of them.
+        let i = rest.iter().position(|t| !waiting_on(t, &rest)).unwrap_or(0);
+        out.push(rest.remove(i));
+    }
+    out
 }
 
 pub fn related_tickets(g: &Graph, ticket: &Ticket) -> Vec<Summary> {
@@ -665,6 +689,38 @@ mod tests {
     /// ```json
     /// {"test": "board-orders-and-filters", "checks": ["crates/core/src/query#board"]}
     /// ```
+    fn band(order: &[&str], tickets: &[(&str, Status, &[&str])]) -> Vec<String> {
+        let mut s = crate::graph::fixtures::store();
+        s.tickets.clear();
+        for (slug, status, relies) in tickets {
+            let rel: Vec<&str> = relies.to_vec();
+            let mut t = crate::graph::fixtures::ticket(slug, TicketKind::Change, Priority::High, *status, &[], &rel);
+            t.title = slug.to_uppercase();
+            s.tickets.insert(slug.to_string(), t);
+        }
+        s.config.order.high = order.iter().map(|o| o.to_string()).collect();
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None }).into_iter().map(|t| t.r#ref.id).collect()
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-band-is-ordered-by-list-then-dependency", "checks": ["crates/core/src/query#board"]}
+    /// ```
+    #[test]
+    fn a_band_is_ordered_by_list_then_dependency() {
+        use Status::*;
+        // No list: a ticket after the open ticket it relies on, otherwise active, then title.
+        assert_eq!(band(&[], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["b", "c", "a"]);
+        assert_eq!(band(&[], &[("a", Open, &[]), ("z", Active, &[])]), vec!["z", "a"], "active before open");
+        // A list comes first, in its order; the rest follow.
+        assert_eq!(band(&["b"], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["b", "c", "a"]);
+        assert_eq!(band(&["a", "c"], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["a", "c", "b"], "a person's order wins over dependency");
+        // A loop is broken by title, and a listed ticket that closed is ignored.
+        assert_eq!(band(&["gone"], &[("a", Open, &["ticket:b"]), ("b", Open, &["ticket:a"])]), vec!["a", "b"]);
+    }
+
     #[test]
     fn board_orders_and_filters() {
         let g = graph();

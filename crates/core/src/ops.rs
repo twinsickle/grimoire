@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
@@ -102,6 +102,25 @@ pub fn configure(store: &mut Store, change: ConfigChange, supported: &[String]) 
     invalid_if(errors, "config")?;
     store.config = config.clone();
     Ok((config, Changed::Config))
+}
+
+/// Replace one band's order with `order`, every entry an open or active
+/// ticket of that priority, named once.
+pub fn reorder(store: &mut Store, priority: Priority, order: &[Reference]) -> Result<(Vec<String>, Changed), ToolError> {
+    let mut errors = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for r in order {
+        let ok = r.kind == Kind::Ticket && store.tickets.get(&r.id).is_some_and(|t| t.status != Status::Closed && t.priority == priority);
+        if !ok {
+            errors.push(FieldError::new("order", format!("{r} is not an open or active {} ticket", format!("{priority:?}").to_lowercase())));
+        } else if !seen.insert(&r.id) {
+            errors.push(FieldError::new("order", format!("{r} is named twice")));
+        }
+    }
+    invalid_if(errors, "order")?;
+    let slugs: Vec<String> = order.iter().map(|r| r.id.clone()).collect();
+    *store.config.order.band_mut(priority) = slugs.clone();
+    Ok((slugs, Changed::Config))
 }
 
 /// Replace the baseline with `findings`. Returns the new baseline and how

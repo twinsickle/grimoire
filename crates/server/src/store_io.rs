@@ -336,7 +336,7 @@ mod tests {
     #[test]
     fn round_trip_and_malformed() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
         write_all(&dir, &store, false).unwrap();
         assert!(matches!(write_all(&dir, &store, false), Err(StoreIoError::Exists(_))));
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn tolerates_a_byte_order_mark() {
         let dir = temp();
-        let store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        let store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(&dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&cfg).unwrap();
@@ -398,7 +398,7 @@ mod tests {
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
             reason: "adopted at init".into(),
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn config_persists_its_scope() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(&dir, &store, false).unwrap();
         let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
         assert!(!text.contains("scope"), "an empty scope is not written");
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn writes_leave_no_partial_file() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(&dir, &store, false).unwrap();
         let path = dir.join("pages").join("big.json");
         let reader = {
@@ -491,7 +491,7 @@ mod tests {
     #[test]
     fn a_start_is_written_and_removed() {
         let dir = temp();
-        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.tickets.insert("0040".into(), Ticket { slug: "0040".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
         store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
         write_all(&dir, &store, false).unwrap();

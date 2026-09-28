@@ -30,6 +30,7 @@ impl Default for StoreConfig {
             repository: String::new(),
             roots: Vec::new(),
             scope: Scope::default(),
+            order: Order::default(),
             languages: Vec::new(),
         }
     }
@@ -286,7 +287,7 @@ mod tests {
     /// ```
     #[test]
     fn config_rules() {
-        let config = |version: u32, roots: Vec<String>| StoreConfig { version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default() };
+        let config = |version: u32, roots: Vec<String>| StoreConfig { version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default(), order: Default::default() };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
         assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![]))[0].field, "roots");

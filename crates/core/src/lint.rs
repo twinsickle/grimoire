@@ -1,10 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."},{"id":"ticket-cycle","statement":"An open or active ticket whose relies_on leads back to itself through other open or active tickets is malformed with the check ticket-cycle, naming the loop."}]}
 //! ```
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +72,9 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
             let r = malformed_ref(&m.path);
             out.push(Finding::node(Rule::Malformed, "malformed-file", &r, format!("{}: {}", m.path, m.reason)));
         }
+        for (r, members) in ticket_cycles(g) {
+            out.push(cycle_finding(&r, &members));
+        }
         for e in &g.test_errors {
             out.push(Finding::node(Rule::Malformed, "malformed-test", &Reference::file(&e.file), format!("line {}: {}", e.line, e.reason)));
         }
@@ -124,12 +127,55 @@ pub fn lint_touching(g: &Graph, refs: &[Reference]) -> Vec<Finding> {
     lint(g, &Rule::ALL).into_iter().filter(|f| touched(&f.r#ref) || f.edge.as_ref().is_some_and(|e| touched(&e.to))).collect()
 }
 
+/// For each open or active ticket in a loop of `relies_on` through other open
+/// or active tickets, the loop's members in order. Shared by the lint and the
+/// board, which breaks a loop by title.
+pub fn ticket_cycles(g: &Graph) -> BTreeMap<Reference, Vec<Reference>> {
+    let live: BTreeMap<Reference, &Ticket> = g.tickets().filter(|t| t.status != Status::Closed).map(|t| (Reference::ticket(&t.slug), t)).collect();
+    let next = |r: &Reference| -> Vec<Reference> { live.get(r).map(|t| t.relies_on.iter().filter(|x| live.contains_key(*x)).cloned().collect()).unwrap_or_default() };
+    let mut out = BTreeMap::new();
+    for start in live.keys() {
+        // Everything reachable from start; start is in a loop when it reaches itself.
+        let mut seen: BTreeSet<Reference> = BTreeSet::new();
+        let mut stack = next(start);
+        while let Some(r) = stack.pop() {
+            if seen.insert(r.clone()) {
+                stack.extend(next(&r));
+            }
+        }
+        if seen.contains(start) {
+            let members: Vec<Reference> = seen.into_iter().filter(|r| {
+                // A member of start's loop also reaches start.
+                let mut s: BTreeSet<Reference> = BTreeSet::new();
+                let mut st = next(r);
+                while let Some(x) = st.pop() {
+                    if s.insert(x.clone()) {
+                        st.extend(next(&x));
+                    }
+                }
+                s.contains(start)
+            }).collect();
+            out.insert(start.clone(), members);
+        }
+    }
+    out
+}
+
+fn cycle_finding(r: &Reference, members: &[Reference]) -> Finding {
+    let others: Vec<String> = members.iter().filter(|m| *m != r).map(|m| m.to_string()).collect();
+    let reason = if others.is_empty() { "relies on itself".to_string() } else { format!("relies on itself through {}", others.join(", ")) };
+    Finding::node(Rule::Malformed, "ticket-cycle", r, reason)
+}
+
 /// The findings a write created on the node it wrote: its dangling edges and,
 /// for a requirement, a missing scenario. What a write returns as `warnings`.
 pub fn written(g: &Graph, r: &Reference) -> Vec<Finding> {
     let mut out = dangling_from(g, r);
     if let Some(f) = g.get(r).and_then(|node| unspecified(r, node)) {
         out.push(f);
+    }
+    if let Some(members) = ticket_cycles(g).get(r) {
+        out.push(cycle_finding(r, members));
     }
     out.sort_by_key(Finding::sort_key);
     mark(g, &mut out);
@@ -500,6 +546,32 @@ mod tests {
         let mut files = crate::extraction::fixtures::extraction_files();
         files[0].tests.push(Test { file: "src/a/ready.rs".into(), name: "does-no-io".into(), line: 40, checks: vec!["req:no-io".into()] });
         assert!(unheld(&crate::extraction::Extraction::from_files(&files)).is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-loop-of-relies-on-is-malformed", "checks": ["crates/core/src/lint#ticket-cycle"]}
+    /// ```
+    #[test]
+    fn a_loop_of_relies_on_is_malformed() {
+        use crate::graph::fixtures::ticket;
+        let loop_of = |b_status: Status| {
+            let mut s = crate::graph::fixtures::store();
+            s.tickets.insert("a".into(), ticket("a", TicketKind::Change, Priority::High, Status::Open, &["ticket:b"], &["ticket:b"]));
+            s.tickets.insert("b".into(), ticket("b", TicketKind::Change, Priority::High, b_status, &["ticket:a"], &["ticket:a"]));
+            // touches alone never makes a loop.
+            s.tickets.insert("c".into(), ticket("c", TicketKind::Change, Priority::High, Status::Open, &["ticket:d"], &[]));
+            s.tickets.insert("d".into(), ticket("d", TicketKind::Change, Priority::High, Status::Open, &["ticket:c"], &[]));
+            Graph::build(&s, &crate::extraction::fixtures::extraction(), &[])
+        };
+        let g = loop_of(Status::Open);
+        let f: Vec<Finding> = lint(&g, &[Rule::Malformed]).into_iter().filter(|f| f.check == "ticket-cycle").collect();
+        assert_eq!(f.iter().map(|f| f.r#ref.id.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
+        assert_eq!(f[0].reason, "relies on itself through ticket:b");
+        assert!(written(&g, &Reference::ticket("b")).iter().any(|f| f.check == "ticket-cycle"), "the write that closed the loop hears of it");
+        let closed = loop_of(Status::Closed);
+        assert!(lint(&closed, &[Rule::Malformed]).iter().all(|f| f.check != "ticket-cycle"), "a closed ticket's decision is settled");
     }
 
     #[test]

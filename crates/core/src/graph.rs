@@ -99,6 +99,8 @@ pub struct Graph {
     pub supported_languages: Vec<String>,
     /// Test blocks that could not be read, for the lint.
     pub test_errors: Vec<TestError>,
+    /// The order set within each priority band, for the board.
+    pub order: Order,
 }
 
 impl Graph {
@@ -108,6 +110,7 @@ impl Graph {
             malformed: malformed.to_vec(),
             unresolved_imports: extraction.unresolved_imports,
             baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
+            order: store.config.order.clone(),
             ..Default::default()
         };
 
@@ -305,7 +308,7 @@ pub(crate) mod fixtures {
     /// `orphan` page is linked by nothing. `stale` req names a criterion that
     /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
-        let mut s = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() });
+        let mut s = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         for p in [
             page("overview", &["page:git-readiness"]),
             page("git-readiness", &["req:ready-only-with-commit", "req:stale", "module:src/a/ready"]),

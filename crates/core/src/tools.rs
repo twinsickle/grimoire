@@ -116,7 +116,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 22] = [
+pub const TOOL_NAMES: [&str; 23] = [
     "find",
     "get",
     "outline",
@@ -138,11 +138,12 @@ pub const TOOL_NAMES: [&str; 22] = [
     "delete_node",
     "adopt",
     "configure",
+    "reorder",
     "status",
 ];
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt" | "configure")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt" | "configure" | "reorder")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
@@ -410,6 +411,18 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
             Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined, "untouched": untouched }), changed: Some(changed) })
         }
+        "reorder" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                priority: Priority,
+                order: Vec<Reference>,
+            }
+            let i: In = parse(input)?;
+            let (slugs, changed) = ops::reorder(state.store_mut(), i.priority, &i.order)?;
+            let order: Vec<String> = slugs.iter().map(|s| format!("ticket:{s}")).collect();
+            Ok(Outcome { output: json!({ "priority": i.priority, "order": order }), changed: Some(changed) })
+        }
         "configure" => {
             let change: ops::ConfigChange = parse(input)?;
             let supported = state.build.supported_languages.clone();
@@ -511,6 +524,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
         ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
+        ToolDef { name: "reorder", description: "Set the order of one priority band on the board: the tickets listed come first, in that order; the rest follow by dependency, then title.", input_schema: obj(&["priority","order"], json!({ "priority": {"type":"string","enum":["next","high","later"]}, "order": {"type":"array","items": reference} })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
 }
@@ -847,6 +861,25 @@ mod tests {
         let mut s = state();
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-09-28").unwrap();
         assert!(out.output["untouched"].is_null(), "unknown, not none");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reorder-sets-one-band", "checks": ["crates/core/src/ops#reorder"]}
+    /// ```
+    #[test]
+    fn reorder_sets_one_band() {
+        let mut s = state();
+        // phase-62 is next and open; later-1 is later and active; old is closed.
+        let out = call(&mut s, "reorder", json!({ "priority": "next", "order": ["ticket:phase-62"] }), "2026-09-28").unwrap();
+        assert_eq!(out.output, json!({ "priority": "next", "order": ["ticket:phase-62"] }));
+        assert!(matches!(out.changed, Some(Changed::Config)));
+        assert_eq!(s.store().config.order.next, vec!["phase-62".to_string()]);
+        for bad in [json!(["ticket:later-1"]), json!(["ticket:old"]), json!(["ticket:phase-62", "ticket:phase-62"]), json!(["page:overview"])] {
+            let e = call(&mut s, "reorder", json!({ "priority": "next", "order": bad }), "2026-09-28").unwrap_err();
+            assert!(matches!(e, ToolError::Invalid { .. }), "{bad} is refused");
+        }
     }
 
     #[test]

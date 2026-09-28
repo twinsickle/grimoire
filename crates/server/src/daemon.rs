@@ -256,7 +256,7 @@ mod tests {
             std::fs::write(repo.join("src").join("a.rs"), CONTRACTED).unwrap();
             std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
             let store = dir.join("store");
-            let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default() };
+            let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
             store_io::write_all(&store, &Store::new(config), false).unwrap();
             Harness { dir, repo, store }
         }

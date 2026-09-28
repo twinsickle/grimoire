@@ -352,6 +352,43 @@ pub struct StoreConfig {
     pub languages: Vec<String>,
     #[serde(default, skip_serializing_if = "Scope::is_empty")]
     pub scope: Scope,
+    #[serde(default, skip_serializing_if = "Order::is_empty")]
+    pub order: Order,
+}
+
+/// The order a person set within each priority band, as ticket slugs. A
+/// ticket that has closed or changed band is ignored where it is read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Order {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub high: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<String>,
+}
+
+impl Order {
+    pub fn is_empty(&self) -> bool {
+        self.next.is_empty() && self.high.is_empty() && self.later.is_empty()
+    }
+
+    pub fn band(&self, p: Priority) -> &[String] {
+        match p {
+            Priority::Next => &self.next,
+            Priority::High => &self.high,
+            Priority::Later => &self.later,
+        }
+    }
+
+    pub fn band_mut(&mut self, p: Priority) -> &mut Vec<String> {
+        match p {
+            Priority::Next => &mut self.next,
+            Priority::High => &mut self.high,
+            Priority::Later => &mut self.later,
+        }
+    }
 }
 
 /// Which paths are expected to carry contracts: repository-relative,

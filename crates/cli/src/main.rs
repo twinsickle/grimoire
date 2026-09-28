@@ -257,6 +257,7 @@ fn main() -> anyhow::Result<()> {
                     roots: vec![scaffold::ROOT_SLUG.to_string()],
                     languages,
                     scope: grimoire_core::model::Scope::default(),
+                    order: Default::default(),
                 });
                 store_io::write_all(&store_dir, &empty, false)?;
                 println!("created empty store at {}", store_dir.display());
