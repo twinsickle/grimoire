@@ -17,7 +17,7 @@ pub const ARCHITECTURE_SLUG: &str = "architecture";
 /// prompt each carries until someone writes it. The convention: what this
 /// is, what it does, and how.
 pub const STORY: [(&str, &str, &str); 4] = [
-    ("goal", "Goal", "What this project is for and who it is for, in a few paragraphs. What it is not: the neighbouring things it deliberately does not do. This is the first page a person or agent reads."),
+    ("goal", "Goal", "What this project is and what it is not, as short statements a reader can check against the code. No motivation, no history, no milestones. This is the first page a person or agent reads."),
     (ARCHITECTURE_SLUG, "Architecture", "How the project is built: its parts and how they fit, as prose. The pages below are its areas, one per module group, seeded from the module contracts."),
     ("constraints", "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
     ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(root_links, vec!["page:goal", "page:architecture", "page:constraints", "page:glossary"]);
         assert!(s.pages["architecture"].links.iter().any(|r| r.kind == Kind::Page && r.id == "src-a"), "{:?}", s.pages["architecture"].links);
         assert!(s.pages["overview"].links.iter().all(|r| r.id != "src-a"));
-        assert!(s.pages["goal"].body.contains("What this project is for"));
+        assert!(s.pages["goal"].body.contains("What this project is and what it is not"));
         let g = Graph::build(&s, &x, &[]);
         let f = lint(&g, &[Rule::Dangling]);
         assert!(f.is_empty(), "{f:?}");
