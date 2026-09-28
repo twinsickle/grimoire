@@ -4,6 +4,7 @@
 //! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"single-writer","statement":"Every write to the store goes through this process."},{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."}]}
 //! ```
 
+pub mod client;
 pub mod daemon;
 pub mod http;
 pub mod mcp;
@@ -38,8 +39,11 @@ pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
     let app = http::router(daemon.clone(), opts.ui_dir.clone());
     let addr = SocketAddr::from(([127, 0, 0, 1], opts.port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    daemon.mark_serving(opts.port)?;
     tracing::info!("listening on http://{addr}  (api: /api/<tool>, mcp: /mcp, events: /api/events)");
-    axum::serve(listener, app).with_graceful_shutdown(shutdown()).await?;
+    let served = axum::serve(listener, app).with_graceful_shutdown(shutdown()).await;
+    daemon.unmark_serving();
+    served?;
     Ok(())
 }
 

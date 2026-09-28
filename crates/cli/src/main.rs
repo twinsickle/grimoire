@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, scaffold or init.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, and exits non-zero when there are findings."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
 //! ```
 
 mod init;
@@ -14,7 +14,8 @@ use grimoire_core::lint::{self, Rule};
 use grimoire_core::scaffold;
 use grimoire_core::Extraction;
 use grimoire_extract::Extractor;
-use grimoire_server::store_io;
+use grimoire_server::{client, store_io};
+use serde_json::{json, Value};
 
 #[derive(Parser)]
 #[command(name = "grimoire", version, about = "Gives a software project its grimoire and its tickets: one graph of intent, requirements, module contracts and code, served to people and agents.")]
@@ -77,7 +78,17 @@ enum Command {
         #[arg(long, default_value_t = 4242)]
         port: u16,
     },
-    /// Run one tool against the store without a daemon and print its output.
+    /// Record every present finding as the baseline, so the check fails only
+    /// on new ones. Resets any earlier baseline; the reason is kept.
+    Adopt {
+        #[arg(long)]
+        store: Option<String>,
+        /// Why the present findings are accepted as inherited work.
+        #[arg(long)]
+        reason: String,
+    },
+    /// Run one tool against the store and print its output: on the daemon
+    /// serving the store when there is one, directly otherwise.
     Tool {
         #[arg(long)]
         store: Option<String>,
@@ -98,6 +109,46 @@ fn store_dir(arg: Option<&str>) -> anyhow::Result<PathBuf> {
             let (_, store) = store_io::find_project(&cwd()?)?;
             Ok(store)
         }
+    }
+}
+
+/// Run one tool against the store. When a daemon serves it the call goes to
+/// the daemon, which stays the store's only writer; otherwise it runs here
+/// and any write is persisted, with the baseline pruned as the daemon would.
+/// The inner error is the tool's error object.
+fn run_tool(store_dir: &Path, name: &str, input: Value) -> anyhow::Result<Result<Value, Value>> {
+    let (store, _) = store_io::load(store_dir)?;
+    if let Some(port) = client::serving(store_dir, &store.config.repository) {
+        let (ok, v) = client::call(port, name, &input)?;
+        return Ok(if ok { Ok(v) } else { Err(v) });
+    }
+    let mut loaded = grimoire_server::load(store_dir)?;
+    match grimoire_core::tools::call(&mut loaded.state, name, input, &store_io::today()) {
+        Ok(out) => {
+            if let Some(changed) = &out.changed {
+                store_io::persist(store_dir, loaded.state.store(), changed)?;
+                if let Some(pruned) = loaded.state.prune_baseline() {
+                    store_io::persist(store_dir, loaded.state.store(), &pruned)?;
+                }
+            }
+            Ok(Ok(out.output))
+        }
+        Err(e) => Ok(Err(serde_json::to_value(&e)?)),
+    }
+}
+
+/// Adopt and say what it did, for `adopt` and the end of `init`.
+fn adopt(store_dir: &Path, reason: &str) -> anyhow::Result<()> {
+    match run_tool(store_dir, "adopt", json!({ "reason": reason }))? {
+        Ok(out) => {
+            let count = out["baseline"]["count"].as_u64().unwrap_or(0);
+            match out["replaced"].as_u64() {
+                Some(was) => println!("baselined {count} finding(s), replacing a baseline of {was}: {reason}"),
+                None => println!("baselined {count} finding(s): {reason}"),
+            }
+            Ok(())
+        }
+        Err(e) => bail!("adopt failed: {}", e["message"].as_str().unwrap_or("unknown error")),
     }
 }
 
@@ -124,6 +175,14 @@ fn main() -> anyhow::Result<()> {
             for e in &loaded.extract_errors {
                 eprintln!("warning: {e}");
             }
+            // A running daemon prunes the baseline on its own rebuilds and owns
+            // the store; without one, this command does it.
+            if client::serving(&store_dir, &loaded.state.store().config.repository).is_none() {
+                if let Some(changed) = loaded.state.prune_baseline() {
+                    store_io::persist(&store_dir, loaded.state.store(), &changed)?;
+                }
+            }
+            let adopted = loaded.state.store().baseline.is_some();
             let rules: Vec<Rule> = if rules.is_empty() {
                 Rule::ALL.to_vec()
             } else {
@@ -131,16 +190,23 @@ fn main() -> anyhow::Result<()> {
             };
             let g = loaded.state.graph();
             let findings = lint::lint(g, &rules);
+            let new = lint::new_count(&findings);
             if json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "findings": findings, "counts": grimoire_core::query::counts(&findings) }))?);
+                println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::query::counts(&findings), "new": new }))?);
             } else {
-                for f in &findings {
-                    println!("{:<9} {}  {}", format!("{:?}", f.rule).to_lowercase(), f.r#ref, f.reason);
+                // Inherited findings are counted, not listed: the list is the work
+                // this commit is answerable for.
+                for f in findings.iter().filter(|f| !f.baselined) {
+                    println!("{:<11} {}  {}", f.rule.name(), f.r#ref, f.reason);
                 }
                 let counts = grimoire_core::query::counts(&findings);
-                println!("{} finding(s): {}", findings.len(), counts.iter().map(|(k, v)| format!("{v} {k}")).collect::<Vec<_>>().join(", "));
+                let mut line = format!("{} finding(s): {}", findings.len(), counts.iter().map(|(k, v)| format!("{v} {k}")).collect::<Vec<_>>().join(", "));
+                if adopted {
+                    line.push_str(&format!("; {} baselined, {new} new", findings.len() - new));
+                }
+                println!("{line}");
             }
-            if findings.is_empty() {
+            if new == 0 {
                 Ok(())
             } else {
                 std::process::exit(1)
@@ -201,26 +267,24 @@ fn main() -> anyhow::Result<()> {
                     init::Wrote::Skipped { path, note } => println!("skipped {}: {note}", path.display()),
                 }
             }
+            adopt(&store_dir, "adopted at init")?;
             println!("done. Start the daemon with `grimoire serve --port {port}`; agents get the tools from .mcp.json and the sequences from the skill.");
             Ok(())
         }
+        Command::Adopt { store, reason } => adopt(&store_dir(store.as_deref())?, &reason),
         Command::Tool { store, name, input } => {
             let store_dir = store_dir(store.as_deref())?;
-            let mut loaded = grimoire_server::load(&store_dir)?;
-            let input: serde_json::Value = match input {
+            let input: Value = match input {
                 Some(s) => serde_json::from_str(&s).context("input is not JSON")?,
-                None => serde_json::json!({}),
+                None => json!({}),
             };
-            match grimoire_core::tools::call(&mut loaded.state, &name, input, &store_io::today()) {
+            match run_tool(&store_dir, &name, input)? {
                 Ok(out) => {
-                    if let Some(changed) = &out.changed {
-                        store_io::persist(&store_dir, loaded.state.store(), changed)?;
-                    }
-                    println!("{}", serde_json::to_string_pretty(&out.output)?);
+                    println!("{}", serde_json::to_string_pretty(&out)?);
                     Ok(())
                 }
                 Err(e) => {
-                    println!("{}", serde_json::to_string_pretty(&serde_json::to_value(&e)?)?);
+                    println!("{}", serde_json::to_string_pretty(&e)?);
                     std::process::exit(1)
                 }
             }

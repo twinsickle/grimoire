@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements and tickets as values and validate each record against the schema.","criteria":[{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"no-io","statement":"The store is a value; reading and writing files is the caller's job."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty after trimming, a date is ISO YYYY-MM-DD, a ticket body is at most 4000 characters, and a ticket's decision is present exactly when its status is closed."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"no-io","statement":"The store is a value; reading and writing files is the caller's job."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty after trimming, a date is ISO YYYY-MM-DD, a ticket body is at most 4000 characters, and a ticket's decision is present exactly when its status is closed."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -17,6 +17,8 @@ pub struct Store {
     pub pages: BTreeMap<String, Page>,
     pub requirements: BTreeMap<String, Requirement>,
     pub tickets: BTreeMap<String, Ticket>,
+    /// The findings accepted as inherited at adoption; none until `adopt`.
+    pub baseline: Option<Baseline>,
 }
 
 impl Default for StoreConfig {
@@ -177,6 +179,15 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
             check_required(&mut e, "body", &t.body);
         }
     }
+    e
+}
+
+pub fn validate_baseline(b: &Baseline) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    if !is_date(&b.date) {
+        e.push(FieldError::new("date", "must be an ISO date YYYY-MM-DD"));
+    }
+    check_required(&mut e, "reason", &b.reason);
     e
 }
 

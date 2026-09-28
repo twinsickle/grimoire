@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count and malformed file count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind, and adopt returns the new baseline's date, reason and count with the count it replaced."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
 //! ```
 
 use serde::Deserialize;
@@ -74,6 +74,15 @@ impl State {
         }
         self.graph.as_ref().expect("just built")
     }
+    /// Drop from the baseline every finding no longer produced. Returns what
+    /// changed when it shrank, so the owner of the store persists it.
+    pub fn prune_baseline(&mut self) -> Option<Changed> {
+        self.graph();
+        let g = self.graph.as_ref().expect("just built");
+        let pruned = lint::pruned(g, self.store.baseline.as_ref())?;
+        self.store_mut().baseline = Some(pruned);
+        Some(Changed::Baseline)
+    }
     fn store_mut(&mut self) -> &mut Store {
         self.graph = None;
         &mut self.store
@@ -100,7 +109,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 20] = [
+pub const TOOL_NAMES: [&str; 21] = [
     "find",
     "get",
     "outline",
@@ -120,11 +129,12 @@ pub const TOOL_NAMES: [&str; 20] = [
     "start_ticket",
     "close_ticket",
     "delete_node",
+    "adopt",
     "status",
 ];
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
@@ -225,7 +235,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let g = state.graph();
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
             let findings = lint::lint(g, &rules);
-            ok(json!({ "findings": findings, "counts": query::counts(&findings) }))
+            ok(json!({ "findings": findings, "counts": query::counts(&findings), "new": lint::new_count(&findings) }))
         }
         "module_source" => {
             let i: RefIn = parse(input)?;
@@ -254,6 +264,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 "edges": g.edges.len(),
                 "unresolved_imports": g.unresolved_imports,
                 "malformed": g.malformed.len(),
+                "baseline": baseline_summary(state.store.baseline.as_ref()),
             }))
         }
 
@@ -381,6 +392,18 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let findings = lint::lint_touching(g, &touched);
             Ok(Outcome { output: json!({ "node": view, "findings": findings }), changed: Some(changed) })
         }
+        "adopt" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                #[serde(default)]
+                reason: String,
+            }
+            let i: In = parse(input)?;
+            let keys = lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect();
+            let (baseline, replaced, changed) = ops::adopt(state.store_mut(), keys, i.reason, today.to_string())?;
+            Ok(Outcome { output: json!({ "baseline": baseline_summary(Some(&baseline)), "replaced": replaced }), changed: Some(changed) })
+        }
         "delete_node" => {
             let i: RefIn = parse(input)?;
             // Edges that pointed at the node become dangling: collect them first.
@@ -395,6 +418,12 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
         }
         other => Err(ToolError::invalid(format!("unknown tool `{other}`"), vec![])),
     }
+}
+
+/// `{date, reason, count}` of a baseline, or null. What `status` and
+/// `adopt` show; the entries themselves stay in the store.
+fn baseline_summary(b: Option<&Baseline>) -> Value {
+    b.map_or(Value::Null, |b| json!({ "date": b.date, "reason": b.reason, "count": b.findings.len() }))
 }
 
 #[derive(Deserialize)]
@@ -445,6 +474,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "start_ticket", description: "Move a ticket from open to active and return what it rests on and the related gaps and questions.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the lint findings on the nodes it touched.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
+        ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
 }
@@ -547,6 +577,45 @@ mod tests {
         let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
         let out = call(&mut s, "put_requirement", req(scenario), "2026-09-27").unwrap();
         assert!(out.output["warnings"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn adopt_baselines_what_is_present() {
+        let mut s = state();
+        let before = call(&mut s, "lint", json!({}), "2026-09-28").unwrap().output;
+        let total = before["findings"].as_array().unwrap().len();
+        assert_eq!(before["new"], total, "nothing baselined yet");
+        assert!(call(&mut s, "status", json!({}), "2026-09-28").unwrap().output["baseline"].is_null());
+
+        let e = call(&mut s, "adopt", json!({}), "2026-09-28").unwrap_err();
+        assert!(matches!(e, ToolError::Invalid { .. }), "a reason is required");
+
+        let out = call(&mut s, "adopt", json!({ "reason": "adopted at init" }), "2026-09-28").unwrap();
+        assert_eq!(out.output, json!({ "baseline": { "date": "2026-09-28", "reason": "adopted at init", "count": total }, "replaced": null }));
+        assert!(matches!(out.changed, Some(Changed::Baseline)));
+        let after = call(&mut s, "lint", json!({}), "2026-09-28").unwrap().output;
+        assert_eq!(after["new"], 0);
+        assert!(after["findings"].as_array().unwrap().iter().all(|f| f["baselined"] == true));
+        assert_eq!(call(&mut s, "status", json!({}), "2026-09-28").unwrap().output["baseline"]["count"], total);
+
+        let again = call(&mut s, "adopt", json!({ "reason": "again" }), "2026-09-29").unwrap();
+        assert_eq!(again.output["replaced"], total);
+    }
+
+    #[test]
+    fn a_fix_prunes_and_a_regression_is_new() {
+        let mut s = state();
+        call(&mut s, "adopt", json!({ "reason": "adopted" }), "2026-09-28").unwrap();
+        assert!(s.prune_baseline().is_none(), "nothing fixed yet");
+        // Fix the one unspecified requirement.
+        let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
+        call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": scenario, "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap();
+        assert!(matches!(s.prune_baseline(), Some(Changed::Baseline)));
+        // Break it again: now it is new.
+        call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap();
+        let lint = call(&mut s, "lint", json!({ "kinds": ["unspecified"] }), "2026-09-28").unwrap().output;
+        assert_eq!(lint["new"], 1);
+        assert_eq!(lint["findings"][0]["baselined"], false);
     }
 
     #[test]

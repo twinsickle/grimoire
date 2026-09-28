@@ -130,7 +130,9 @@ the code.
    to add it to `touches` first; `touches` is a claim about what changed and
    has to stay true.
 4. `lint`. Fix every finding this work created. Findings that predate it are
-   not this ticket's, unless it touches them.
+   not this ticket's, unless it touches them; those the project accepted when
+   it adopted Grimoire carry `baselined: true`, and the check fails only on
+   the rest (`new`).
 5. `update_ticket` if `touches` or `relies_on` changed while specifying.
 
 ## Sequence: finish a ticket
@@ -182,3 +184,5 @@ the code.
 - Do not infer call edges or dependencies the graph does not show. Blast
   radius is at module level, from imports; say so when it matters.
 - Do not reopen a closed ticket. File a new one that `relies_on` it.
+- Do not call `adopt` to make a finding go away. It turns every present
+  finding into inherited work; it is the person's call, made with a reason.

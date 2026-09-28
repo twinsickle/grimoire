@@ -142,14 +142,27 @@ export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
 
 export interface Finding {
   rule: Rule;
+  /** Which test within the rule produced it, e.g. `unlinked-module` or `no-contract`. */
+  check: string;
   ref: Ref;
   edge?: { from: Ref; to: Ref; relation: Relation };
   reason: string;
+  /** In the store's baseline: inherited at adoption, not new work. */
+  baselined: boolean;
 }
 
 export interface LintResult {
   findings: Finding[];
   counts: Record<Rule, number>;
+  /** How many findings are not baselined: what the check fails on. */
+  new: number;
+}
+
+/** When the baseline was recorded, why, and how many findings it holds now. */
+export interface BaselineSummary {
+  date: string;
+  reason: string;
+  count: number;
 }
 
 export interface SourceLocation {
@@ -176,6 +189,7 @@ export interface StatusResult {
   edges: number;
   unresolved_imports: number;
   malformed: number;
+  baseline: BaselineSummary | null;
 }
 
 export interface ToolError {

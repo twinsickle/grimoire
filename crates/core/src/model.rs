@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file and decl (derived); a criterion's id is module id, #, criterion id, and a decl's is file path, #, declaration path."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, and the languages to extract; a version this build does not know is refused."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file and decl (derived); a criterion's id is module id, #, criterion id, and a decl's is file path, #, declaration path."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, and decisions of date and text ordered oldest first."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, and the languages to extract; a version this build does not know is refused."}]}
 //! ```
 
 use std::fmt;
@@ -263,6 +263,62 @@ pub struct Ticket {
     pub relies_on: Vec<Reference>,
     pub body: String,
     pub decision: Option<Decision>,
+}
+
+/// A lint rule. Stored in a baseline, reported in every finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rule {
+    Dangling,
+    Uncovered,
+    Malformed,
+    Unspecified,
+}
+
+impl Rule {
+    pub const ALL: [Rule; 4] = [Rule::Dangling, Rule::Uncovered, Rule::Malformed, Rule::Unspecified];
+
+    /// The rule's name as it serialises, for keys in `counts`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Rule::Dangling => "dangling",
+            Rule::Uncovered => "uncovered",
+            Rule::Malformed => "malformed",
+            Rule::Unspecified => "unspecified",
+        }
+    }
+}
+
+/// The edge a dangling finding is about.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FindingEdge {
+    pub from: Reference,
+    pub to: Reference,
+    pub relation: Relation,
+}
+
+/// What makes two findings the same one: rule, check, node and edge. The
+/// check tells apart two problems on one node (a module unlinked and without
+/// a contract); the reason text is left out because it carries parser
+/// messages that change while the problem stays the same.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FindingKey {
+    pub rule: Rule,
+    pub check: String,
+    pub r#ref: Reference,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<FindingEdge>,
+}
+
+/// `baseline.json`: the findings accepted as inherited at adoption.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Baseline {
+    pub date: String,
+    pub reason: String,
+    pub findings: Vec<FindingKey>,
 }
 
 /// `grimoire.json` at the root of a store.

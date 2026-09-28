@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."}]}
+//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -81,17 +81,38 @@ impl Daemon {
     pub fn open(store_dir: &Path) -> Result<(Daemon, Vec<grimoire_extract::ExtractError>), OpenError> {
         let loaded = load(store_dir)?;
         let (events, _) = broadcast::channel(256);
-        Ok((
-            Daemon {
-                store_dir: store_dir.to_path_buf(),
-                repo: loaded.repo,
-                extractor: loaded.extractor,
-                files: Mutex::new(loaded.files),
-                state: Mutex::new(loaded.state),
-                events,
-            },
-            loaded.extract_errors,
-        ))
+        let daemon = Daemon {
+            store_dir: store_dir.to_path_buf(),
+            repo: loaded.repo,
+            extractor: loaded.extractor,
+            files: Mutex::new(loaded.files),
+            state: Mutex::new(loaded.state),
+            events,
+        };
+        daemon.prune(&mut daemon.state.lock().expect("state lock"));
+        Ok((daemon, loaded.extract_errors))
+    }
+
+    /// Say in the store that this process serves it on `port`, so a command
+    /// run beside it sends its writes here.
+    pub fn mark_serving(&self, port: u16) -> Result<(), StoreIoError> {
+        store_io::write_serving(&self.store_dir, port)
+    }
+
+    pub fn unmark_serving(&self) {
+        store_io::remove_serving(&self.store_dir);
+    }
+
+    /// Drop fixed findings from the baseline and persist it when it shrank.
+    fn prune(&self, state: &mut State) {
+        if let Some(changed) = state.prune_baseline() {
+            match store_io::persist(&self.store_dir, state.store(), &changed) {
+                Ok(()) => {
+                    let _ = self.events.send(Event::Store { tool: "prune".to_string(), changed: vec!["baseline".to_string()] });
+                }
+                Err(e) => tracing::error!("the pruned baseline could not be written: {e}"),
+            }
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -117,8 +138,10 @@ impl Daemon {
                 grimoire_core::ops::Changed::Requirement(s) => format!("req:{s}"),
                 grimoire_core::ops::Changed::Ticket(s) => format!("ticket:{s}"),
                 grimoire_core::ops::Changed::Deleted(r) => r.to_string(),
+                grimoire_core::ops::Changed::Baseline => "baseline".to_string(),
             };
             let _ = self.events.send(Event::Store { tool: name.to_string(), changed: vec![what] });
+            self.prune(&mut state);
         }
         Ok(outcome.output)
     }
@@ -152,7 +175,9 @@ impl Daemon {
                 return;
             }
             let extraction = Extraction::from_files(files.values());
-            self.state.lock().expect("state lock").set_extraction(extraction);
+            let mut state = self.state.lock().expect("state lock");
+            state.set_extraction(extraction);
+            self.prune(&mut state);
         }
         tracing::info!("re-extracted {} file(s): {}", changed.len(), changed.join(", "));
         let _ = self.events.send(Event::Graph { changed });

@@ -4,7 +4,7 @@
 //! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
 //! ```
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::Serialize;
 
@@ -87,11 +87,19 @@ pub struct Graph {
     pub roots: Vec<String>,
     pub malformed: Vec<Malformed>,
     pub unresolved_imports: usize,
+    /// The store's baseline, as identities to match findings against.
+    pub baseline: HashSet<FindingKey>,
 }
 
 impl Graph {
     pub fn build(store: &Store, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
-        let mut g = Graph { roots: store.config.roots.clone(), malformed: malformed.to_vec(), unresolved_imports: extraction.unresolved_imports, ..Default::default() };
+        let mut g = Graph {
+            roots: store.config.roots.clone(),
+            malformed: malformed.to_vec(),
+            unresolved_imports: extraction.unresolved_imports,
+            baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
+            ..Default::default()
+        };
 
         for p in store.pages.values() {
             let from = Reference::page(&p.slug);

@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place, so a reader never sees a partial file."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"only-writer","statement":"Nothing outside the daemon and the CLI commands that own a store call these write functions."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record; a file whose name differs from its record's slug is malformed."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place, so a reader never sees a partial file."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"only-writer","statement":"Nothing outside the daemon and the CLI commands that own a store call these write functions."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted and serve.json while a daemon serves it; a record file whose name differs from its record's slug is malformed, and so is a baseline.json that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use grimoire_core::model::*;
 use grimoire_core::ops::Changed;
-use grimoire_core::store::{validate_config, validate_page, validate_requirement, validate_ticket};
+use grimoire_core::store::{validate_baseline, validate_config, validate_page, validate_requirement, validate_ticket};
 use grimoire_core::{Malformed, Store};
 
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +30,32 @@ pub enum StoreIoError {
 }
 
 pub const CONFIG_FILE: &str = "grimoire.json";
+pub const BASELINE_FILE: &str = "baseline.json";
+pub const SERVE_FILE: &str = "serve.json";
+
+/// `serve.json`: which daemon serves this store. A hint, never trusted
+/// without asking the daemon itself (see `client::serving`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Serving {
+    pub port: u16,
+    pub pid: u32,
+}
+
+/// Record that this process serves the store on `port`.
+pub fn write_serving(store_dir: &Path, port: u16) -> Result<(), StoreIoError> {
+    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port, pid: std::process::id() }))
+}
+
+/// Remove the marker, if it is still this process's.
+pub fn remove_serving(store_dir: &Path) {
+    if read_serving(store_dir).is_some_and(|s| s.pid == std::process::id()) {
+        let _ = std::fs::remove_file(store_dir.join(SERVE_FILE));
+    }
+}
+
+pub fn read_serving(store_dir: &Path) -> Option<Serving> {
+    read_json(&store_dir.join(SERVE_FILE)).ok()
+}
 pub const PROJECT_FILE: &str = ".grimoire.toml";
 
 fn dir_of(kind: Kind) -> &'static str {
@@ -134,6 +160,21 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             }
         }
     }
+    let baseline_path = store_dir.join(BASELINE_FILE);
+    if baseline_path.is_file() {
+        let result = read_json::<Baseline>(&baseline_path).and_then(|b| {
+            let errors = validate_baseline(&b);
+            if errors.is_empty() {
+                Ok(b)
+            } else {
+                Err(errors.iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; "))
+            }
+        });
+        match result {
+            Ok(b) => store.baseline = Some(b),
+            Err(reason) => malformed.push(Malformed { path: BASELINE_FILE.to_string(), reason }),
+        }
+    }
     Ok((store, malformed))
 }
 
@@ -182,6 +223,10 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             let t = store.tickets.get(slug).expect("changed ticket exists");
             write_atomic(&store_dir.join("tickets").join(format!("{slug}.json")), &to_pretty(t))
         }
+        Changed::Baseline => match &store.baseline {
+            Some(b) => write_atomic(&store_dir.join(BASELINE_FILE), &to_pretty(b)),
+            None => remove_if_present(&store_dir.join(BASELINE_FILE)),
+        },
         Changed::Deleted(r) => {
             let path = store_dir.join(dir_of(r.kind)).join(format!("{}.json", r.id));
             match std::fs::remove_file(&path) {
@@ -190,6 +235,14 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
                 Err(e) => Err(StoreIoError::Io(path, e)),
             }
         }
+    }
+}
+
+fn remove_if_present(path: &Path) -> Result<(), StoreIoError> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(StoreIoError::Io(path.to_path_buf(), e)),
     }
 }
 
@@ -222,6 +275,9 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     }
     for t in store.tickets.values() {
         persist(store_dir, store, &Changed::Ticket(t.slug.clone()))?;
+    }
+    if store.baseline.is_some() {
+        persist(store_dir, store, &Changed::Baseline)?;
     }
     Ok(())
 }
@@ -291,6 +347,44 @@ mod tests {
         let text = std::fs::read_to_string(&cfg).unwrap();
         std::fs::write(&cfg, format!("\u{feff}{text}")).unwrap();
         assert!(load(&dir).is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn baseline_round_trips_and_a_broken_one_is_collected() {
+        let dir = temp();
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![] });
+        store.baseline = Some(Baseline {
+            date: "2026-09-28".into(),
+            reason: "adopted at init".into(),
+            findings: vec![FindingKey { rule: Rule::Unspecified, check: "no-scenario".into(), r#ref: Reference::req("x"), edge: None }],
+        });
+        write_all(&dir, &store, false).unwrap();
+        let (loaded, malformed) = load(&dir).unwrap();
+        assert!(malformed.is_empty());
+        assert_eq!(loaded.baseline, store.baseline);
+
+        std::fs::write(dir.join(BASELINE_FILE), "{ not json").unwrap();
+        let (loaded, malformed) = load(&dir).unwrap();
+        assert!(loaded.baseline.is_none(), "a broken baseline holds nothing: every finding is new");
+        assert_eq!(malformed[0].path, BASELINE_FILE);
+
+        store.baseline = None;
+        persist(&dir, &store, &Changed::Baseline).unwrap();
+        assert!(!dir.join(BASELINE_FILE).exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_serving_marker_is_this_process_s_to_remove() {
+        let dir = temp();
+        write_serving(&dir, 4242).unwrap();
+        assert_eq!(read_serving(&dir), Some(Serving { port: 4242, pid: std::process::id() }));
+        remove_serving(&dir);
+        assert!(read_serving(&dir).is_none());
+        std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();
+        remove_serving(&dir);
+        assert!(read_serving(&dir).is_some(), "another process's marker is left alone");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
