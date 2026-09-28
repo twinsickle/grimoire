@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it, and the checks of the findings on the node itself."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it, the checks of the findings on the node itself, and how many tests check it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -126,6 +126,9 @@ pub struct Tree {
     /// The checks of the findings on this node itself, sorted and distinct,
     /// so a view can say what is wrong and not only how much.
     pub checks: Vec<String>,
+    /// How many tests check this node: a criterion's evidence, or what holds
+    /// a constraint that names no criterion.
+    pub tests: usize,
     pub children: Vec<Tree>,
 }
 
@@ -177,7 +180,8 @@ fn tree(g: &Graph, r: &Reference, depth: usize, on: &Findings, path: &mut HashSe
     // requested depth, so a shallow outline still shows where the problems are.
     let findings = findings_below(g, r, &on.count, &mut HashSet::new());
     let checks = on.checks.get(r).map(|c| c.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
-    Tree { r#ref: r.clone(), title, coverage, findings, checks, children }
+    let tests = g.inbound_with(r, Relation::Checks).count();
+    Tree { r#ref: r.clone(), title, coverage, findings, checks, tests, children }
 }
 
 fn children_of(g: &Graph, r: &Reference) -> Vec<Reference> {
@@ -524,6 +528,8 @@ mod tests {
         let checks = |id: &str| t[0].children.iter().find(|c| c.r#ref == Reference::criterion("src/a/ready", id)).map(|c| c.checks.clone());
         assert_eq!(checks("reads-only"), Some(vec!["uncovered-criterion".to_string(), "untested".to_string()]));
         assert_eq!(checks("guarantee"), Some(vec![]), "named by a requirement and checked by a test");
+        let tests = |id: &str| t[0].children.iter().find(|c| c.r#ref == Reference::criterion("src/a/ready", id)).map(|c| c.tests);
+        assert_eq!((tests("guarantee"), tests("reads-only")), (Some(1), Some(0)), "outline counts the tests that check each node");
     }
 
     /// # Test contract

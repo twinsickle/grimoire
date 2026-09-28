@@ -210,6 +210,10 @@ test("the summary renders the story in the root page's link order", async ({ pag
   expect(sections).toEqual(root.node.links.filter((l) => l.startsWith("page:")).map((l) => l.replace(/[^a-z0-9]+/gi, "-")));
   // The area under architecture is a card, and the requirement on a story page is listed compactly.
   await expect(page.locator("main a[href='/n/page%3Areadiness']").first()).toBeVisible();
+  // A held constraint is not marked uncovered on its story page.
+  const listed = page.locator("#page-constraints li", { hasText: "Readiness writes nothing" });
+  await expect(listed).toBeVisible();
+  await expect(listed).not.toContainText("uncovered");
 });
 
 /**
@@ -261,6 +265,12 @@ test("the map marks a criterion uncovered and untested from outline's checks", a
   await expect(leaf("needs-commit")).not.toContainText("uncovered");
   await expect(leaf("needs-commit")).not.toContainText("untested");
   await expect(page.locator("main").getByText("% covered").first()).toBeVisible();
+  // A constraint names no criterion; a test holds it, so it is not a warning. A requirement with neither is.
+  const req = (slug: string) => page.locator(`main a[href='/n/req%3A${slug}']`).locator("xpath=ancestor::div[1]");
+  await expect(req("ready-writes-nothing")).toContainText("held by 1 test");
+  await expect(req("ready-writes-nothing")).not.toContainText("0 crit");
+  await expect(req("not-built")).toContainText("0 crit");
+  await expect(req("ready-needs-commit")).toContainText("1 crit");
 });
 
 /**

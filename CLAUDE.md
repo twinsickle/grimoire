@@ -34,6 +34,7 @@ repository only.
   `npm run behaviour` builds the UI and runs the Playwright behaviour specs
   against a fixture store it serves itself with the installed `grimoire`
   (`GRIMOIRE_BIN` to use another), so they can start and close tickets.
+  Reinstall after a Rust change first, or they test yesterday's daemon.
 - Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
   `npm run check` in `web/` (tsc and ESLint). Under bacon they are the
   `clippy` and `web` jobs. They gate a push, not a commit: install with

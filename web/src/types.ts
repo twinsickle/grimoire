@@ -128,6 +128,8 @@ export interface Tree {
   findings: number;
   /** The checks of the findings on this node itself, e.g. `untested`. */
   checks: string[];
+  /** How many tests check this node. */
+  tests: number;
   children: Tree[];
 }
 

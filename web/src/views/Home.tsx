@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The default view: the top of the grimoire as a page to read, in the root page's order, ending with every module contract grouped by area.","criteria":[{"id":"story-order","statement":"The story pages are rendered as Markdown in the root page's link order, each followed by its requirements as a compact list, and the pages under architecture as cards with their first paragraph and coverage."},{"id":"contracts-grouped","statement":"Every module with a purpose is listed once, one line each, grouped under the page that links it; files and declarations are not shown."}]}
+ * {"purpose":"The default view: the top of the grimoire as a page to read, in the root page's order, ending with every module contract grouped by area.","criteria":[{"id":"story-order","statement":"The story pages are rendered as Markdown in the root page's link order, each followed by its requirements as a compact list, one marked uncovered only when it names no criterion and no test holds it, and the pages under architecture as cards with their first paragraph and coverage."},{"id":"contracts-grouped","statement":"Every module with a purpose is listed once, one line each, grouped under the page that links it; files and declarations are not shown."}]}
  * ```
  */
 
@@ -87,7 +87,7 @@ function StorySection({ tree }: { tree: Tree }) {
           {reqs.map((r) => (
             <li key={r.ref} className="flex gap-2 items-baseline text-[13px]">
               <KindTag ref={r.ref} /> <Link to={nodePath(r.ref)}>{r.title}</Link>
-              {typeof r.coverage === "number" && r.coverage === 0 && <Badge tone="warn">uncovered</Badge>}
+              {typeof r.coverage === "number" && r.coverage === 0 && r.tests === 0 && <Badge tone="warn">uncovered</Badge>}
             </li>
           ))}
         </ul>

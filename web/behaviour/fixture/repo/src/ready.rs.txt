@@ -19,4 +19,14 @@ mod tests {
     fn ready_needs_a_commit() {
         assert!(super::ready());
     }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ready-writes-nothing", "checks": ["req:ready-writes-nothing"]}
+    /// ```
+    #[test]
+    fn ready_writes_nothing() {
+        assert!(super::ready());
+    }
 }

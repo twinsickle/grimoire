@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The map: the outline rendered as nested regions with coverage as fill and lint findings as marks.","criteria":[{"id":"outline-driven","statement":"The map is drawn from the outline tool alone at a chosen depth; it derives no structure of its own."},{"id":"marks","statement":"A region shows its coverage percentage and its finding count; a criterion no requirement names is marked uncovered and one no test checks is marked untested, from the checks outline reports."}]}
+ * {"purpose":"The map: the outline rendered as nested regions with coverage as fill and lint findings as marks.","criteria":[{"id":"outline-driven","statement":"The map is drawn from the outline tool alone at a chosen depth; it derives no structure of its own."},{"id":"marks","statement":"A region shows its coverage percentage and its finding count; a criterion no requirement names is marked uncovered and one no test checks is marked untested, from the checks outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
  * ```
  */
 
@@ -90,7 +90,9 @@ function Leaf({ tree }: { tree: Tree }) {
           {tree.title}
         </Link>
       </span>
-      {count != null && <Badge tone={count === 0 ? "warn" : "plain"}>{count} crit</Badge>}
+      {count != null && count > 0 && <Badge tone="plain">{count} crit</Badge>}
+      {count === 0 && tree.tests > 0 && <Badge tone="plain">held by {tree.tests} test{tree.tests === 1 ? "" : "s"}</Badge>}
+      {count === 0 && tree.tests === 0 && <Badge tone="warn">0 crit</Badge>}
       {tree.findings > 0 && kind !== "criterion" && <Badge tone="bad">{tree.findings}</Badge>}
       {uncovered && <Badge tone="warn">uncovered</Badge>}
       {untested && <Badge tone="warn">untested</Badge>}
