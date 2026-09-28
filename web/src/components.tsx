@@ -38,6 +38,7 @@ const KIND_BG: Record<Kind, string> = {
   ticket: "bg-ticket",
   file: "bg-file",
   decl: "bg-decl",
+  test: "bg-test",
 };
 
 export function KindTag({ ref }: { ref: Ref }) {

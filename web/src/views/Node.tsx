@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind has a rendering: page, requirement, ticket, module, criterion, file and declaration."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
+ * {"purpose":"A node page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind has a rendering: page, requirement, ticket, module, criterion, file, declaration and test."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
  * ```
  */
 
@@ -34,6 +34,7 @@ import {
   type AnyNode,
   type CriterionNode,
   type DeclNode,
+  type TestNode,
   type FileNode,
   type ModuleNode,
   type PageNode,
@@ -68,6 +69,7 @@ export function NodeView() {
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
         {kind === "file" && <File n={node as FileNode} />}
         {kind === "decl" && <Decl n={node as DeclNode} ref={ref} />}
+        {kind === "test" && <TestView n={node as TestNode} />}
         <Findings ref={ref} />
       </div>
       <aside>
@@ -84,6 +86,7 @@ function titleOf(n: AnyNode): string {
   if ("title" in n) return n.title;
   if ("purpose" in n) return n.purpose ?? n.id;
   if ("statement" in n) return n.statement;
+  if ("name" in n) return n.name;
   return n.path;
 }
 
@@ -327,6 +330,18 @@ function Decl({ n, ref }: { n: DeclNode; ref: Ref }) {
     <p className="text-fg-dim">
       {n.kind} at <RefLink ref={`file:${file}`} /> line {n.line}
     </p>
+  );
+}
+
+function TestView({ n }: { n: TestNode }) {
+  return (
+    <>
+      <p className="text-fg-dim">
+        Test block at <RefLink ref={`file:${n.file}`} /> line {n.line}
+      </p>
+      <h2>Checks</h2>
+      <RefList refs={n.checks.map((c) => `criterion:${c}`)} empty="Nothing." titles={titlesOf(n.out)} />
+    </>
   );
 }
 

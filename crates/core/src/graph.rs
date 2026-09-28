@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion it names; a criterion's tests are derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -22,6 +22,7 @@ pub enum Node {
     Criterion(Criterion),
     File(File),
     Decl(Decl),
+    Test(Test),
 }
 
 impl Node {
@@ -34,6 +35,7 @@ impl Node {
             Node::Criterion(_) => Kind::Criterion,
             Node::File(_) => Kind::File,
             Node::Decl(_) => Kind::Decl,
+            Node::Test(_) => Kind::Test,
         }
     }
 
@@ -47,6 +49,7 @@ impl Node {
             Node::Criterion(c) => c.statement.clone(),
             Node::File(f) => f.path.clone(),
             Node::Decl(d) => d.path.clone(),
+            Node::Test(t) => t.name.clone(),
         }
     }
 
@@ -66,6 +69,7 @@ impl Node {
             Node::Criterion(c) => vec![&c.id, &c.statement],
             Node::File(f) => vec![&f.path],
             Node::Decl(d) => vec![&d.path],
+            Node::Test(t) => vec![&t.name],
         }
     }
 }
@@ -93,6 +97,8 @@ pub struct Graph {
     /// it can; set by whoever knows the build (`State`), empty otherwise.
     pub unsupported_languages: Vec<String>,
     pub supported_languages: Vec<String>,
+    /// Test blocks that could not be read, for the lint.
+    pub test_errors: Vec<TestError>,
 }
 
 impl Graph {
@@ -146,6 +152,16 @@ impl Graph {
             m.expects_contract &= store.config.scope.covers(&m.files);
             g.nodes.insert(from, Node::Module(m));
         }
+        for t in &extraction.tests {
+            let from = Reference::test(&t.file, &t.name);
+            g.edge(&Reference::file(&t.file), &from, Relation::Contains);
+            for c in &t.checks {
+                let (module, id) = c.split_once('#').unwrap_or((c.as_str(), ""));
+                g.edge(&from, &Reference::criterion(module, id), Relation::Checks);
+            }
+            g.nodes.insert(from, Node::Test(t.clone()));
+        }
+        g.test_errors = extraction.test_errors.clone();
         for f in extraction.files.values() {
             let from = Reference::file(&f.path);
             for d in &f.decls {
@@ -222,6 +238,7 @@ impl Graph {
                 let (file, _) = r.split_hash()?;
                 Some(SourceLocation { file: file.to_string(), line: d.line, contract_line: None })
             }
+            (Kind::Test, Node::Test(t)) => Some(SourceLocation { file: t.file.clone(), line: t.line, contract_line: None }),
             _ => None,
         }
     }
@@ -316,6 +333,22 @@ pub(crate) mod fixtures {
 mod tests {
     use super::fixtures::graph;
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "tests-point-down-at-criteria", "checks": ["crates/core/src/graph#tests"]}
+    /// ```
+    #[test]
+    fn tests_point_down_at_criteria() {
+        let g = graph();
+        let t = Reference::test("src/a/ready.rs", "ready-needs-a-commit");
+        assert!(matches!(g.get(&t), Some(Node::Test(_))));
+        assert!(g.inbound_with(&t, Relation::Contains).any(|e| e.from == Reference::file("src/a/ready.rs")));
+        let criterion = Reference::criterion("src/a/ready", "guarantee");
+        assert!(g.inbound_with(&criterion, Relation::Checks).any(|e| e.from == t), "the reverse is derived");
+        assert_eq!(g.source_of(&t).map(|s| (s.file, s.line)), Some(("src/a/ready.rs".to_string(), 20)));
+    }
 
     #[test]
     fn derives_reverse_edges() {

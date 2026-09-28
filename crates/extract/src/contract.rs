@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find and parse the one contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment.","criteria":[{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
+//! {"purpose":"Find and parse the contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment, and under a `# Test contract` heading in any comment.","criteria":[{"id":"test-blocks","statement":"A # Test contract heading followed by a fenced JSON block {test, checks} names one test and the criteria it checks as module id#criterion id; a block whose JSON is invalid, whose test is not a slug, or whose checks is empty or holds something that is not module#criterion, is reported with the reason."},{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
 //! ```
 
 use grimoire_core::Contract;
@@ -14,48 +14,95 @@ pub struct Found {
     pub heading_line: u32,
 }
 
-fn is_heading(line: &str) -> bool {
+fn is_heading(line: &str, name: &str) -> bool {
     let t = line.trim();
     let Some(rest) = t.strip_prefix('#') else { return false };
     let rest = rest.trim_start_matches('#').trim();
-    rest.eq_ignore_ascii_case("module contract")
+    rest.eq_ignore_ascii_case(name)
+}
+
+/// The body of the ```json block that follows the heading at `heading`,
+/// skipping blank lines to the fence.
+fn fenced_json(lines: &[&str], heading: usize) -> Result<String, String> {
+    let mut i = heading + 1;
+    while i < lines.len() && lines[i].trim().is_empty() {
+        i += 1;
+    }
+    if i >= lines.len() || !lines[i].trim_start().starts_with("```") {
+        return Err("the heading is not followed by a ``` fenced block".to_string());
+    }
+    let lang = lines[i].trim().trim_start_matches('`').trim();
+    if !lang.is_empty() && !lang.eq_ignore_ascii_case("json") {
+        return Err(format!("the fenced block is `{lang}`, not json"));
+    }
+    let mut body = String::new();
+    for line in &lines[i + 1..] {
+        if line.trim() == "```" {
+            return Ok(body);
+        }
+        body.push_str(line);
+        body.push('\n');
+    }
+    Err("the fenced block is not closed".to_string())
+}
+
+/// One `# Test contract` block: the test's name and what it checks, or why
+/// it could not be read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundTest {
+    /// Line of the heading, 1-based, within the file.
+    pub line: u32,
+    pub test: Result<(String, Vec<String>), String>,
+}
+
+/// `{"test": string, "checks": [string]}` and nothing else.
+fn test_block(body: &str) -> Result<(String, Vec<String>), String> {
+    let v: serde_json::Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+    let obj = v.as_object().ok_or("expected an object")?;
+    if let Some(k) = obj.keys().find(|k| *k != "test" && *k != "checks") {
+        return Err(format!("unknown field `{k}`, expected `test` and `checks`"));
+    }
+    let name = obj.get("test").and_then(|t| t.as_str()).ok_or("`test` must be a string")?;
+    let checks = obj.get("checks").and_then(|c| c.as_array()).ok_or("`checks` must be a list")?;
+    let checks = checks.iter().map(|c| c.as_str().map(str::to_string).ok_or("every check must be a string")).collect::<Result<Vec<_>, _>>()?;
+    Ok((name.to_string(), checks))
+}
+
+/// Every test block in a comment. `text` has its markers stripped; its
+/// first line is `first_line` in the file.
+pub fn find_tests(text: &str, first_line: u32) -> Vec<FoundTest> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    for (h, line) in lines.iter().enumerate() {
+        if !is_heading(line, "test contract") {
+            continue;
+        }
+        let test = fenced_json(&lines, h).and_then(|body| {
+            let (name, checks) = test_block(&body).map_err(|e| format!("invalid test contract JSON: {e}"))?;
+            if !grimoire_core::store::is_slug(&name) {
+                return Err(format!("test name `{name}` is not a slug"));
+            }
+            if checks.is_empty() {
+                return Err(format!("test `{name}` checks nothing"));
+            }
+            if let Some(bad) = checks.iter().find(|c| c.split_once('#').is_none_or(|(m, id)| m.is_empty() || id.is_empty())) {
+                return Err(format!("`{bad}` is not a criterion as module id#criterion id"));
+            }
+            Ok((name, checks))
+        });
+        out.push(FoundTest { line: first_line + h as u32, test });
+    }
+    out
 }
 
 /// `text` is the comment with markers stripped; `first_line` is the file line
 /// of its first line, 1-based.
 pub fn find(text: &str, first_line: u32) -> Option<Found> {
     let lines: Vec<&str> = text.lines().collect();
-    let heading = lines.iter().position(|l| is_heading(l))?;
+    let heading = lines.iter().position(|l| is_heading(l, "module contract"))?;
     let heading_line = first_line + heading as u32;
-    let mut i = heading + 1;
-    // Skip blank lines to the fence.
-    while i < lines.len() && lines[i].trim().is_empty() {
-        i += 1;
-    }
     let contract = (|| {
-        if i >= lines.len() || !lines[i].trim_start().starts_with("```") {
-            return Err("the heading is not followed by a ``` fenced block".to_string());
-        }
-        let fence = lines[i].trim();
-        let lang = fence.trim_start_matches('`').trim();
-        if !lang.is_empty() && !lang.eq_ignore_ascii_case("json") {
-            return Err(format!("the fenced block is `{lang}`, not json"));
-        }
-        let mut body = String::new();
-        let mut j = i + 1;
-        let mut closed = false;
-        while j < lines.len() {
-            if lines[j].trim() == "```" {
-                closed = true;
-                break;
-            }
-            body.push_str(lines[j]);
-            body.push('\n');
-            j += 1;
-        }
-        if !closed {
-            return Err("the fenced block is not closed".to_string());
-        }
+        let body = fenced_json(&lines, heading)?;
         let contract: Contract = serde_json::from_str(&body).map_err(|e| format!("invalid contract JSON: {e}"))?;
         validate(&contract)?;
         Ok(contract)
@@ -105,6 +152,33 @@ mod tests {
         assert!(f.contract.unwrap_err().contains("invalid contract JSON"));
         let f = find("# Module contract\n```json\n{\"purpose\":\"P\",\"criteria\":[{\"id\":\"Bad Id\",\"statement\":\"S\"}]}\n```", 1).unwrap();
         assert!(f.contract.unwrap_err().contains("not a slug"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reads-test-blocks", "checks": ["crates/extract/src/contract#test-blocks"]}
+    /// ```
+    #[test]
+    fn reads_test_blocks() {
+        let text = "Checks ordering.\n\n# Test contract\n\n```json\n{\"test\":\"findings-are-stable\",\"checks\":[\"crates/core/src/lint#stable-order\"]}\n```\n";
+        let found = find_tests(text, 10);
+        assert_eq!(found, vec![FoundTest { line: 12, test: Ok(("findings-are-stable".into(), vec!["crates/core/src/lint#stable-order".into()])) }]);
+        assert!(find_tests("# Module contract\n```json\n{}\n```", 1).is_empty(), "a module contract is not a test");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reports-broken-test-blocks", "checks": ["crates/extract/src/contract#test-blocks"]}
+    /// ```
+    #[test]
+    fn reports_broken_test_blocks() {
+        let one = |json: &str| find_tests(&format!("# Test contract\n```json\n{json}\n```"), 1).remove(0).test.unwrap_err();
+        assert!(one(r#"{"test":"Bad Name","checks":["m#c"]}"#).contains("not a slug"));
+        assert!(one(r#"{"test":"t","checks":[]}"#).contains("checks nothing"));
+        assert!(one(r#"{"test":"t","checks":["no-hash"]}"#).contains("module id#criterion id"));
+        assert!(one(r#"{"test":"t"}"#).contains("invalid test contract JSON"));
     }
 
     #[test]

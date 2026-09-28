@@ -24,6 +24,12 @@ pub struct FileExtraction {
     /// modules that exist.
     pub imports: Vec<Vec<String>>,
     pub expects_contract: bool,
+    /// Tests declared by `# Test contract` blocks anywhere in the file.
+    #[serde(default)]
+    pub tests: Vec<Test>,
+    /// Test blocks that could not be read.
+    #[serde(default)]
+    pub test_errors: Vec<TestError>,
     /// `Some(Ok)` when a contract was found and parsed, `Some(Err)` when
     /// found and malformed, `None` when the file has none.
     pub contract: Option<Result<Contract, String>>,
@@ -37,6 +43,8 @@ pub struct Extraction {
     pub modules: BTreeMap<String, Module>,
     pub files: BTreeMap<String, File>,
     pub unresolved_imports: usize,
+    pub tests: Vec<Test>,
+    pub test_errors: Vec<TestError>,
 }
 
 impl Extraction {
@@ -113,7 +121,9 @@ impl Extraction {
             modules.get_mut(&module).expect("module exists").imports = resolved;
         }
 
-        Extraction { modules, files: out_files, unresolved_imports: unresolved }
+        let tests = files.iter().flat_map(|f| f.tests.iter().cloned()).collect();
+        let test_errors = files.iter().flat_map(|f| f.test_errors.iter().cloned()).collect();
+        Extraction { modules, files: out_files, unresolved_imports: unresolved, tests, test_errors }
     }
 
     pub fn criterion(&self, module: &str, id: &str) -> Option<&Criterion> {
@@ -140,15 +150,20 @@ pub(crate) mod fixtures {
             decls: vec![Decl { path: "run".into(), kind: "function".into(), line: 10 }],
             imports: imports.iter().map(|c| c.iter().map(|s| s.to_string()).collect()).collect(),
             expects_contract: true,
+            tests: Vec::new(),
+            test_errors: Vec::new(),
             contract,
             contract_line: Some(1),
         }
     }
 
     /// Three modules: `a/ready` imports `a/layout`; `b/unrelated` has no contract.
+    /// One test, in `a/ready`, checks `guarantee`; every other criterion is untested.
     pub fn extraction() -> Extraction {
+        let mut ready = file("src/a/ready.rs", "src/a/ready", &[&["src/a/layout/thing", "src/a/layout"], &["std/fs"]], contract("Decide readiness.", &[("guarantee", "Ready only with a commit."), ("reads-only", "Never writes.")]));
+        ready.tests = vec![Test { file: "src/a/ready.rs".into(), name: "ready-needs-a-commit".into(), line: 20, checks: vec!["src/a/ready#guarantee".into()] }];
         let files = vec![
-            file("src/a/ready.rs", "src/a/ready", &[&["src/a/layout/thing", "src/a/layout"], &["std/fs"]], contract("Decide readiness.", &[("guarantee", "Ready only with a commit."), ("reads-only", "Never writes.")])),
+            ready,
             file("src/a/layout.rs", "src/a/layout", &[], contract("Lay out the workspace.", &[("stable", "Paths do not move.")])),
             file("src/b/unrelated.rs", "src/b/unrelated", &[], None),
         ];

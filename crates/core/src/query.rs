@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body and declaration path, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage and its count of lint findings on or below it."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it; for a module, each criterion with the requirements naming it, empty where uncovered; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file or declaration, with the contract heading's line for criteria."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it, and the checks of the findings on the node itself."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later, then active before open, then title."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -123,29 +123,41 @@ pub struct Tree {
     pub title: String,
     pub coverage: Value,
     pub findings: usize,
+    /// The checks of the findings on this node itself, sorted and distinct,
+    /// so a view can say what is wrong and not only how much.
+    pub checks: Vec<String>,
     pub children: Vec<Tree>,
 }
 
 pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>) -> Vec<Tree> {
     let findings = lint(g, &Rule::ALL);
     let mut per_node: HashMap<&Reference, usize> = HashMap::new();
+    let mut checks: HashMap<&Reference, std::collections::BTreeSet<&str>> = HashMap::new();
     for f in &findings {
         *per_node.entry(&f.r#ref).or_default() += 1;
+        checks.entry(&f.r#ref).or_default().insert(f.check.as_str());
     }
     let roots: Vec<Reference> = match root {
         Some(r) => vec![r.clone()],
         None => g.roots.iter().map(|s| Reference::page(s)).collect(),
     };
-    roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, &per_node, &mut HashSet::new())).collect()
+    let on = Findings { count: per_node, checks };
+    roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, &on, &mut HashSet::new())).collect()
 }
 
-fn tree(g: &Graph, r: &Reference, depth: usize, per_node: &HashMap<&Reference, usize>, path: &mut HashSet<Reference>) -> Tree {
+/// Lint findings indexed by the node they are on.
+struct Findings<'a> {
+    count: HashMap<&'a Reference, usize>,
+    checks: HashMap<&'a Reference, std::collections::BTreeSet<&'a str>>,
+}
+
+fn tree(g: &Graph, r: &Reference, depth: usize, on: &Findings, path: &mut HashSet<Reference>) -> Tree {
     let node = g.get(r);
     let title = node.map(Node::title).unwrap_or_else(|| format!("(missing) {r}"));
     let mut children = Vec::new();
     if depth > 0 && path.insert(r.clone()) {
         for c in children_of(g, r) {
-            children.push(tree(g, &c, depth - 1, per_node, path));
+            children.push(tree(g, &c, depth - 1, on, path));
         }
         path.remove(r);
     }
@@ -163,8 +175,9 @@ fn tree(g: &Graph, r: &Reference, depth: usize, per_node: &HashMap<&Reference, u
     };
     // Findings on or below the node, over the whole subtree regardless of the
     // requested depth, so a shallow outline still shows where the problems are.
-    let findings = findings_below(g, r, per_node, &mut HashSet::new());
-    Tree { r#ref: r.clone(), title, coverage, findings, children }
+    let findings = findings_below(g, r, &on.count, &mut HashSet::new());
+    let checks = on.checks.get(r).map(|c| c.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
+    Tree { r#ref: r.clone(), title, coverage, findings, checks, children }
 }
 
 fn children_of(g: &Graph, r: &Reference) -> Vec<Reference> {
@@ -349,10 +362,17 @@ pub struct CriterionCoverage {
     pub r#ref: Reference,
     pub statement: String,
     pub requirements: Vec<Summary>,
+    pub tests: Vec<Summary>,
 }
 
 pub fn requirements_covering(g: &Graph, criterion: &Reference) -> Vec<Summary> {
     let mut v: Vec<Summary> = g.inbound_with(criterion, Relation::CoveredBy).filter_map(|e| g.get(&e.from).map(|n| summary(&e.from, n))).collect();
+    v.sort_by(|a, b| a.r#ref.cmp(&b.r#ref));
+    v
+}
+
+pub fn tests_checking(g: &Graph, criterion: &Reference) -> Vec<Summary> {
+    let mut v: Vec<Summary> = g.inbound_with(criterion, Relation::Checks).filter_map(|e| g.get(&e.from).map(|n| summary(&e.from, n))).collect();
     v.sort_by(|a, b| a.r#ref.cmp(&b.r#ref));
     v
 }
@@ -363,7 +383,7 @@ pub fn module_coverage(g: &Graph, module: &Module) -> Vec<CriterionCoverage> {
         .iter()
         .map(|c| {
             let r = Reference::criterion(&c.module, &c.id);
-            CriterionCoverage { requirements: requirements_covering(g, &r), r#ref: r, statement: c.statement.clone() }
+            CriterionCoverage { requirements: requirements_covering(g, &r), tests: tests_checking(g, &r), r#ref: r, statement: c.statement.clone() }
         })
         .collect()
 }
@@ -480,6 +500,15 @@ mod tests {
         let json = serde_json::to_value(&v).unwrap();
         assert_eq!(json["ref"], "module:src/a/ready");
         assert!(json["purpose"].is_string());
+    }
+
+    #[test]
+    fn outline_names_the_checks_on_each_node() {
+        let g = graph();
+        let t = outline(&g, 4, Some(&Reference::module("src/a/ready")));
+        let checks = |id: &str| t[0].children.iter().find(|c| c.r#ref == Reference::criterion("src/a/ready", id)).map(|c| c.checks.clone());
+        assert_eq!(checks("reads-only"), Some(vec!["uncovered-criterion".to_string(), "untested".to_string()]));
+        assert_eq!(checks("guarantee"), Some(vec![]), "named by a requirement and checked by a test");
     }
 
     #[test]

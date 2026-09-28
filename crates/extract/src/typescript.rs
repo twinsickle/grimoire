@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The TypeScript language adapter: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and import specifiers.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without extension, with a terminal /index folded away."},{"id":"coverage","statement":"Every .ts or .tsx file under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"imports-as-candidates","statement":"A relative import specifier resolves against the importing file's directory to one candidate module id; a bare specifier resolves against workspace package names or yields none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, with the comment markers stripped."}]}
+//! {"purpose":"The TypeScript language adapter: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and import specifiers.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line."},{"id":"identity","statement":"A module's id is its repository-relative path without extension, with a terminal /index folded away."},{"id":"coverage","statement":"Every .ts or .tsx file under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"imports-as-candidates","statement":"A relative import specifier resolves against the importing file's directory to one candidate module id; a bare specifier resolves against workspace package names or yields none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, with the comment markers stripped."}]}
 //! ```
 
 use std::path::Path;
@@ -201,6 +201,7 @@ impl Adapter for TypeScriptAdapter {
         let Some(tree) = parser.parse(source, None) else { return Parsed::default() };
         let mut w = Walker { src: source.as_bytes(), out: Parsed::default(), specs: Vec::new() };
         w.visit(tree.root_node(), &mut Vec::new());
+        w.out.comments = crate::slash_comments(tree.root_node(), source.as_bytes(), |k| k == "comment");
         // Imports are resolved from the file, which the caller identified by
         // module id; a module id plus the extension list is enough to find the
         // directory, since identity keeps the directory.
@@ -401,6 +402,32 @@ function inner() { const nested = () => 1; }
         assert!(p.imports.contains(&vec!["web/src/views/components".to_string()]));
         assert!(p.imports.contains(&vec!["web/src/views/styles.css".to_string()]));
         assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("react"))));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "test-block-in-a-spec", "checks": ["crates/extract/src/typescript#comments"]}
+    /// ```
+    #[test]
+    fn a_test_block_in_a_spec_whatever_its_titles() {
+        let src = "/**\n * Screenshots every view.\n *\n * # Test contract\n *\n * ```json\n * {\"test\": \"views-match-baselines\", \"checks\": [\"web/src/App#visual-baselines\"]}\n * ```\n */\nfor (const v of views) { test(v.name, async () => {}); }\n// a trailing note\n";
+        let x = crate::extract_source(&adapter(), "web/visual/views.spec.ts", src);
+        assert_eq!(x.tests.len(), 1, "{:?}", x.test_errors);
+        assert_eq!(x.tests[0].name, "views-match-baselines");
+        assert_eq!(x.tests[0].line, 4);
+        assert!(!x.expects_contract, "a spec carries no module contract");
+    }
+
+    #[test]
+    fn a_name_used_twice_is_malformed() {
+        let block = |n: &str| format!("// # Test contract\n// ```json\n// {{\"test\": \"{n}\", \"checks\": [\"m#c\"]}}\n// ```\n");
+        let src = format!("{}test('a', () => {{}});\n\n{}test('b', () => {{}});\n", block("same"), block("same"));
+        let x = crate::extract_source(&adapter(), "web/src/x.test.ts", &src);
+        assert_eq!(x.tests.len(), 1);
+        assert_eq!(x.test_errors.len(), 1);
+        assert!(x.test_errors[0].reason.contains("used twice"));
+        assert_eq!(x.test_errors[0].line, 7);
     }
 
     #[test]

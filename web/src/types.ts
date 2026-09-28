@@ -6,10 +6,10 @@
  * ```
  */
 
-export type Kind = "page" | "req" | "ticket" | "module" | "criterion" | "file" | "decl";
+export type Kind = "page" | "req" | "ticket" | "module" | "criterion" | "file" | "decl" | "test";
 export type Ref = string; // `${Kind}:${id}`
 
-export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to";
+export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks";
 
 export interface EdgeView {
   ref: Ref;
@@ -93,6 +93,14 @@ export interface Decl {
   line: number;
 }
 
+/** A test, from a `# Test contract` block. `checks` are `module id#criterion id`. */
+export interface Test {
+  file: string;
+  name: string;
+  line: number;
+  checks: string[];
+}
+
 export interface FileNode extends NodeBase {
   path: string;
   module: string;
@@ -101,8 +109,9 @@ export interface FileNode extends NodeBase {
 }
 
 export interface DeclNode extends NodeBase, Decl {}
+export interface TestNode extends NodeBase, Test {}
 
-export type AnyNode = PageNode | ReqNode | TicketNode | ModuleNode | CriterionNode | FileNode | DeclNode;
+export type AnyNode = PageNode | ReqNode | TicketNode | ModuleNode | CriterionNode | FileNode | DeclNode | TestNode;
 
 export interface Summary {
   ref: Ref;
@@ -117,6 +126,8 @@ export interface Tree {
   title: string;
   coverage: number | null;
   findings: number;
+  /** The checks of the findings on this node itself, e.g. `untested`. */
+  checks: string[];
   children: Tree[];
 }
 
@@ -175,6 +186,7 @@ export interface CriterionCoverage {
   ref: Ref;
   statement: string;
   requirements: Summary[];
+  tests: Summary[];
 }
 
 export interface StatusResult {

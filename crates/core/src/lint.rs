@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"same-check","statement":"The check run by the CLI and the lint tool served by the daemon are this one function."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -67,6 +67,9 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
         for m in &g.malformed {
             let r = malformed_ref(&m.path);
             out.push(Finding::node(Rule::Malformed, "malformed-file", &r, format!("{}: {}", m.path, m.reason)));
+        }
+        for e in &g.test_errors {
+            out.push(Finding::node(Rule::Malformed, "malformed-test", &Reference::file(&e.file), format!("line {}: {}", e.line, e.reason)));
         }
         for l in &g.unsupported_languages {
             let reason = format!("language `{l}` is not supported by this build, which supports {}", g.supported_languages.join(", "));
@@ -169,6 +172,9 @@ fn uncovered(g: &Graph, out: &mut Vec<Finding>) {
                 if g.inbound_with(r, Relation::CoveredBy).next().is_none() {
                     out.push(Finding::node(Rule::Uncovered, "uncovered-criterion", r, "no requirement names this criterion"));
                 }
+                if g.inbound_with(r, Relation::Checks).next().is_none() {
+                    out.push(Finding::node(Rule::Uncovered, "untested", r, "no test checks this criterion"));
+                }
             }
             Node::Module(m) => {
                 // Only modules that are part of the grimoire: those expected to
@@ -249,6 +255,11 @@ mod tests {
         assert_eq!(r.iter().filter(|s| s.ends_with("module:src/b/unrelated")).count(), 2);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "findings-are-stable", "checks": ["crates/core/src/lint#stable-order"]}
+    /// ```
     #[test]
     fn stable_order() {
         let g = graph();
@@ -265,7 +276,8 @@ mod tests {
         let g = graph();
         let f = lint_touching(&g, &[Reference::module("src/a/ready")]);
         let r = refs(&f);
-        assert_eq!(r, vec!["Dangling req:stale".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string()]);
+        // reads-only is named by no requirement and checked by no test: two findings.
+        assert_eq!(r, vec!["Dangling req:stale".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string(), "Uncovered criterion:src/a/ready#reads-only".to_string()]);
     }
 
     #[test]
@@ -365,6 +377,35 @@ mod tests {
         assert_eq!(f[0].check, "unsupported-language");
         assert_eq!(f[0].r#ref, Reference::file("grimoire.json"));
         assert_eq!(f[0].reason, "language `typescript` is not supported by this build, which supports rust");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "untested-criteria-are-uncovered", "checks": ["crates/core/src/lint#untested"]}
+    /// ```
+    #[test]
+    fn untested_criteria_are_uncovered() {
+        let f = lint(&graph(), &[Rule::Uncovered]);
+        let untested: Vec<String> = f.iter().filter(|f| f.check == "untested").map(|f| f.r#ref.to_string()).collect();
+        assert!(!untested.contains(&"criterion:src/a/ready#guarantee".to_string()), "a test checks it");
+        assert!(untested.contains(&"criterion:src/a/ready#reads-only".to_string()));
+        assert!(untested.contains(&"criterion:src/a/layout#stable".to_string()));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "unreadable-test-blocks-are-malformed", "checks": ["crates/core/src/lint#malformed-test"]}
+    /// ```
+    #[test]
+    fn unreadable_test_blocks_are_malformed() {
+        let mut g = graph();
+        g.test_errors = vec![TestError { file: "src/a/ready.rs".into(), line: 30, reason: "test name `Bad` is not a slug".into() }];
+        let f = lint(&g, &[Rule::Malformed]);
+        assert_eq!(f[0].check, "malformed-test");
+        assert_eq!(f[0].r#ref, Reference::file("src/a/ready.rs"));
+        assert_eq!(f[0].reason, "line 30: test name `Bad` is not a slug");
     }
 
     #[test]

@@ -2,9 +2,10 @@
 
 A module contract is the code level of the grimoire: a purpose and criteria,
 written in the source file, read by Grimoire on every change and never
-stored. Requirements name criteria in `covered_by`; the lints report a
-criterion no requirement names and a module expected to carry a contract
-that has none.
+stored. Requirements name criteria in `covered_by` and tests name them in a
+test contract; the lints report a criterion no requirement names, a
+criterion no test checks, and a module expected to carry a contract that has
+none.
 
 ## The grammar, for every language
 
@@ -74,6 +75,51 @@ Expected to carry a contract: every `.ts` or `.tsx` under a package's
 `*.test.*`, `*.spec.*`, `*.d.ts`, anything under `__tests__/`, and files
 outside `src/` such as `vite.config.ts`. Module identity is the path without
 extension; `index` folds into its directory.
+
+## Test contracts
+
+A test says which criteria it checks in a `# Test contract` block, in any
+comment, usually the one directly above the test. The grammar is the same
+for every language and every test framework; Grimoire never reads the test
+itself.
+
+```json
+{"test": "a-slug", "checks": ["<module id>#<criterion id>"]}
+```
+
+- `test`: a slug naming the test, unique within its file. The test is
+  `test:<file>#<test>`; the name survives renaming the function or moving
+  lines, so pick one that says what is checked.
+- `checks`: one or more criteria, each as module id, `#`, criterion id, the
+  same module id a requirement's `covered_by` uses after `criterion:`.
+- A broken block (bad JSON, a name that is not a slug or is used twice in
+  the file, an empty `checks`) is reported as malformed. A check naming a
+  criterion that does not exist is reported dangling.
+
+A Rust unit test:
+
+```rust
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ready-needs-a-commit", "checks": ["src/ready#ready-only-with-commit"]}
+    /// ```
+    #[test]
+    fn empty_repository_is_not_ready() { /* ... */ }
+```
+
+A TypeScript spec, even one whose tests are generated in a loop:
+
+```ts
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "every-view-matches-its-baseline", "checks": ["src/App#every-view-has-a-baseline"]}
+ * ```
+ */
+for (const v of views) test(v.name, async ({ page }) => { /* ... */ });
+```
 
 ## Writing a good criterion
 

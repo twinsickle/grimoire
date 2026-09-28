@@ -2,6 +2,12 @@
  * Every view, screenshotted and compared against a committed baseline in
  * visual/baseline/. Run `npm run visual`; after an intended change, look at
  * visual/out/ and run `npm run visual:update`.
+ *
+ * # Test contract
+ *
+ * ```json
+ * {"test": "every-view-matches-its-baseline", "checks": ["web/src/App#visual-baselines"]}
+ * ```
  */
 import { expect, test, type Page } from "@playwright/test";
 

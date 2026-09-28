@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The map: the outline rendered as nested regions with coverage as fill and lint findings as marks.","criteria":[{"id":"outline-driven","statement":"The map is drawn from the outline tool alone at a chosen depth; it derives no structure of its own."},{"id":"marks","statement":"A region shows its coverage percentage and its finding count; an uncovered criterion is marked as such."}]}
+ * {"purpose":"The map: the outline rendered as nested regions with coverage as fill and lint findings as marks.","criteria":[{"id":"outline-driven","statement":"The map is drawn from the outline tool alone at a chosen depth; it derives no structure of its own."},{"id":"marks","statement":"A region shows its coverage percentage and its finding count; a criterion no requirement names is marked uncovered and one no test checks is marked untested, from the checks outline reports."}]}
  * ```
  */
 
@@ -76,11 +76,12 @@ function Region({ tree, depth }: { tree: Tree; depth: number }) {
 
 function Leaf({ tree }: { tree: Tree }) {
   const kind = kindOf(tree.ref);
-  const uncovered = kind === "criterion" && tree.findings > 0;
+  const uncovered = kind === "criterion" && tree.checks.includes("uncovered-criterion");
+  const untested = kind === "criterion" && tree.checks.includes("untested");
   const count = kind === "req" && typeof tree.coverage === "number" ? tree.coverage : null;
   return (
     <div
-      className={`border rounded-md px-2 py-[5px] bg-bg inline-flex gap-2 items-center max-w-full ${kind === "criterion" ? "border-dashed" : ""} ${uncovered ? "border-warn" : "border-line"}`}
+      className={`border rounded-md px-2 py-[5px] bg-bg inline-flex gap-2 items-center max-w-full ${kind === "criterion" ? "border-dashed" : ""} ${uncovered || untested ? "border-warn" : "border-line"}`}
       title={tree.title}
     >
       <KindTag ref={tree.ref} />
@@ -92,6 +93,7 @@ function Leaf({ tree }: { tree: Tree }) {
       {count != null && <Badge tone={count === 0 ? "warn" : "plain"}>{count} crit</Badge>}
       {tree.findings > 0 && kind !== "criterion" && <Badge tone="bad">{tree.findings}</Badge>}
       {uncovered && <Badge tone="warn">uncovered</Badge>}
+      {untested && <Badge tone="warn">untested</Badge>}
     </div>
   );
 }

@@ -205,7 +205,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: RefIn = parse(input)?;
             let g = state.graph();
             match (i.r#ref.kind, g.get(&i.r#ref)) {
-                (Kind::Criterion, Some(_)) => ok(json!({ "requirements": query::requirements_covering(g, &i.r#ref) })),
+                (Kind::Criterion, Some(_)) => ok(json!({ "requirements": query::requirements_covering(g, &i.r#ref), "tests": query::tests_checking(g, &i.r#ref) })),
                 (Kind::Module, Some(crate::graph::Node::Module(m))) => ok(json!({ "criteria": query::module_coverage(g, m) })),
                 (Kind::Req, Some(crate::graph::Node::Req(q))) => ok(json!({ "criteria": query::requirement_coverage(g, q) })),
                 (Kind::Criterion | Kind::Module | Kind::Req, None) => Err(ToolError::not_found(&i.r#ref)),
@@ -248,8 +248,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
         "module_source" => {
             let i: RefIn = parse(input)?;
             let g = state.graph();
-            if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl) {
-                return Err(ToolError::invalid(format!("{} is not a module, criterion, file or declaration", i.r#ref), vec![]));
+            if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test) {
+                return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
             }
             let loc = query::module_source(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
             ok(to_value(&loc))
@@ -471,7 +471,7 @@ pub fn definitions() -> Vec<ToolDef> {
     let scenario = json!({ "type": "object", "required": ["title", "given", "when", "then"], "properties": { "title": {"type":"string"}, "given": {"type":"string"}, "when": {"type":"string"}, "then": {"type":"string"} } });
     let obj = |required: &[&str], props: Value| json!({ "type": "object", "required": required, "properties": props });
     vec![
-        ToolDef { name: "find", description: "Search nodes by text, optionally by kind. Matches slug, title, statement, purpose, body and declaration path.", input_schema: obj(&["query"], json!({ "query": {"type":"string"}, "kinds": {"type":"array","items":{"type":"string","enum":["page","req","ticket","module","criterion","file","decl"]}}, "limit": {"type":"integer","default":20} })) },
+        ToolDef { name: "find", description: "Search nodes by text, optionally by kind. Matches slug, title, statement, purpose, body, declaration path and test name.", input_schema: obj(&["query"], json!({ "query": {"type":"string"}, "kinds": {"type":"array","items":{"type":"string","enum":["page","req","ticket","module","criterion","file","decl","test"]}}, "limit": {"type":"integer","default":20} })) },
         ToolDef { name: "get", description: "One node in full with its edges: `out` is what it links to, `in` is what links to it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "outline", description: "The grimoire as a tree from the root pages, with coverage and lint-finding counts per node.", input_schema: obj(&[], json!({ "depth": {"type":"integer","default":2}, "root": reference })) },
         ToolDef { name: "rests_on", description: "What a node depends on, transitively downward, with the decisions behind each. The planning and review question. For a ticket, starts from relies_on and touches.", input_schema: obj(&["ref"], json!({ "ref": reference, "depth": {"type":"integer"} })) },
@@ -685,6 +685,18 @@ mod tests {
         let mut u = unknown_build;
         u.store_mut().config.languages = vec!["typescript".into()];
         assert!(call(&mut u, "lint", json!({ "kinds": ["malformed"] }), "2026-09-28").unwrap().output["findings"].as_array().unwrap().is_empty(), "an unknown build flags nothing");
+    }
+
+    #[test]
+    fn coverage_lists_the_tests_of_a_criterion() {
+        let mut s = state();
+        let out = call(&mut s, "coverage", json!({ "ref": "criterion:src/a/ready#guarantee" }), "2026-09-28").unwrap().output;
+        assert_eq!(out["tests"][0]["ref"], "test:src/a/ready.rs#ready-needs-a-commit");
+        let module = call(&mut s, "coverage", json!({ "ref": "module:src/a/ready" }), "2026-09-28").unwrap().output;
+        let reads_only = module["criteria"].as_array().unwrap().iter().find(|c| c["ref"] == "criterion:src/a/ready#reads-only").unwrap().clone();
+        assert!(reads_only["tests"].as_array().unwrap().is_empty());
+        let found = call(&mut s, "find", json!({ "query": "needs-a-commit", "kinds": ["test"] }), "2026-09-28").unwrap().output;
+        assert_eq!(found["nodes"][0]["ref"], "test:src/a/ready.rs#ready-needs-a-commit");
     }
 
     #[test]

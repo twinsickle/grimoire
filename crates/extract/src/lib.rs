@@ -19,6 +19,70 @@ pub struct Parsed {
     pub decls: Vec<Decl>,
     /// Each import as candidate module ids, most specific first.
     pub imports: Vec<Vec<String>>,
+    /// Every comment in the file, markers stripped, with the 1-based line it
+    /// starts on; where test blocks are looked for.
+    pub comments: Vec<(String, u32)>,
+}
+
+/// Every comment under `root`, in order, for a language whose comments are
+/// `//` lines and `/* */` blocks. `is_comment` says which syntax nodes are
+/// comments. Adjacent line comments merge into one, so a block written as a
+/// run of `///` lines reads as one text.
+pub(crate) fn slash_comments(root: tree_sitter::Node, src: &[u8], is_comment: fn(&str) -> bool) -> Vec<(String, u32)> {
+    let mut nodes = Vec::new();
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        if is_comment(n.kind()) {
+            nodes.push(n);
+            continue;
+        }
+        let mut cursor = n.walk();
+        let children: Vec<_> = n.children(&mut cursor).collect();
+        stack.extend(children.into_iter().rev());
+    }
+    let mut out: Vec<(String, u32)> = Vec::new();
+    let mut last_line_comment_row: Option<usize> = None;
+    for n in nodes {
+        let raw = n.utf8_text(src).unwrap_or_default();
+        let row = n.start_position().row;
+        let text = strip_slash_comment(raw);
+        let is_line = raw.starts_with("//");
+        match out.last_mut() {
+            Some(prev) if is_line && last_line_comment_row.is_some_and(|r| r + 1 == row) => prev.0.push_str(&text),
+            _ => out.push((text, row as u32 + 1)),
+        }
+        last_line_comment_row = is_line.then_some(n.end_position().row.saturating_sub(usize::from(raw.ends_with('\n'))));
+    }
+    out
+}
+
+/// Comment text without `//`, `///`, `//!`, `/*`, `/**`, `*/` or a leading
+/// ` * ` on each line, one line per source line.
+fn strip_slash_comment(raw: &str) -> String {
+    let mut out = String::new();
+    if let Some(body) = raw.strip_prefix("/*") {
+        let body = body.strip_suffix("*/").unwrap_or(body);
+        let body = body.strip_prefix('*').unwrap_or(body);
+        // One text line per source line, so a heading's line in the text plus
+        // the comment's first line is its line in the file. Only the closing
+        // line, when it holds nothing but `*/`, is dropped.
+        let lines: Vec<&str> = body.lines().collect();
+        let keep = if lines.len() > 1 && lines.last().is_some_and(|l| l.trim().is_empty()) { lines.len() - 1 } else { lines.len() };
+        for line in &lines[..keep] {
+            let t = line.trim_start();
+            let t = t.strip_prefix('*').map(|r| r.strip_prefix(' ').unwrap_or(r)).unwrap_or(t);
+            out.push_str(t.trim_end());
+            out.push('\n');
+        }
+        return out;
+    }
+    for line in raw.lines() {
+        let t = line.trim_start();
+        let t = ["//!", "///", "//"].iter().find_map(|m| t.strip_prefix(m)).unwrap_or(t);
+        out.push_str(t.strip_prefix(' ').unwrap_or(t).trim_end());
+        out.push('\n');
+    }
+    out
 }
 
 /// The four things a language supplies, plus how to find its leading comment.
@@ -45,6 +109,18 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         Some(found) => (Some(found.contract), Some(found.heading_line)),
         None => (None, None),
     };
+    let mut tests: Vec<grimoire_core::model::Test> = Vec::new();
+    let mut test_errors = Vec::new();
+    for (text, line) in &parsed.comments {
+        for found in contract::find_tests(text, *line) {
+            let error = |reason: String| grimoire_core::model::TestError { file: rel_path.to_string(), line: found.line, reason };
+            match found.test {
+                Ok((name, _)) if tests.iter().any(|t| t.name == name) => test_errors.push(error(format!("test name `{name}` is used twice in this file"))),
+                Ok((name, checks)) => tests.push(grimoire_core::model::Test { file: rel_path.to_string(), name, line: found.line, checks }),
+                Err(reason) => test_errors.push(error(reason)),
+            }
+        }
+    }
     FileExtraction {
         path: rel_path.to_string(),
         language: adapter.language().to_string(),
@@ -52,6 +128,8 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         decls: parsed.decls,
         imports: parsed.imports,
         expects_contract: adapter.expects_contract(rel_path),
+        tests,
+        test_errors,
         contract,
         contract_line,
     }

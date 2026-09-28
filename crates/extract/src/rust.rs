@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names; std and unknown crates yield none."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names; std and unknown crates yield none."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."}]}
 //! ```
 
 use std::path::Path;
@@ -201,6 +201,9 @@ impl Adapter for RustAdapter {
         let Some(tree) = parser.parse(source, None) else { return Parsed::default() };
         let mut w = Walker { src: source.as_bytes(), adapter: self, module_id, out: Parsed::default() };
         w.visit(tree.root_node(), &mut Vec::new());
+        // Over the whole tree: the walker skips test bodies, and tests are
+        // where test blocks live.
+        w.out.comments = crate::slash_comments(tree.root_node(), source.as_bytes(), |k| k == "line_comment" || k == "block_comment");
         w.out
     }
 }
@@ -454,6 +457,35 @@ mod tests { use crate::nope; fn t() {} }
         // std and serde produce no candidates... serde does, as a uniform path guess; std does not.
         assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("std"))));
         assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("nope"))));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "test-blocks-inside-tests-modules", "checks": ["crates/extract/src/rust#comments"]}
+    /// ```
+    #[test]
+    fn test_blocks_inside_a_tests_module_are_found() {
+        let src = "//! # Module contract\n//!\n//! text\n\nfn run() {}\n\n#[cfg(test)]\nmod tests {\n    /// # Test contract\n    ///\n    /// ```json\n    /// {\"test\": \"runs\", \"checks\": [\"crates/x/src#runs\"]}\n    /// ```\n    #[test]\n    fn runs() {}\n}\n";
+        let a = adapter();
+        let x = crate::extract_source(&a, "crates/x/src/lib.rs", src);
+        assert_eq!(x.tests.len(), 1, "{:?} {:?}", x.tests, x.test_errors);
+        assert_eq!(x.tests[0].name, "runs");
+        assert_eq!(x.tests[0].line, 9, "the heading's line");
+        assert_eq!(x.tests[0].checks, vec!["crates/x/src#runs".to_string()]);
+        assert!(!x.decls.iter().any(|d| d.path.contains("runs")), "test bodies are still not declarations");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "comments-merge-line-runs", "checks": ["crates/extract/src/rust#comments"]}
+    /// ```
+    #[test]
+    fn comments_merge_line_runs_and_keep_blocks() {
+        let src = "//! lead\n//! more\n\n/// doc\nfn a() {}\n/* block\n * two\n */\nfn b() { let s = \"http://not-a-comment\"; }\n";
+        let c = adapter().parse(src, "m").comments;
+        assert_eq!(c, vec![("lead\nmore\n".to_string(), 1), ("doc\n".to_string(), 4), ("block\ntwo\n".to_string(), 6)]);
     }
 
     #[test]
