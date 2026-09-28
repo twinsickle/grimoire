@@ -162,6 +162,12 @@ the code.
    `lint`. Closing is allowed with findings; leaving them is not.
 5. If the project documents a review step (in its `CLAUDE.md`, a skill, or
    a hook), run it now. Grimoire has no opinion on what the review is.
+   In Grimoire's own repository, a ticket touching `web/` runs
+   `npm run shots` in `web/` and the screenshots in `web/visual/out/` are
+   looked at, not just produced; `npm run visual` compares them with the
+   committed baselines, and `npm run visual:update` accepts an intended
+   change. Passing type checks proved nothing about the Tailwind migration;
+   the screenshots did.
 6. Commit the code and the manual changes together only when the user has
    asked for a commit. The store is outside the repository; the commit is the
    code and its contracts.

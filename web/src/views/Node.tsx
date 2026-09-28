@@ -198,22 +198,29 @@ function Ticket({ n }: { n: TicketNode }) {
         </div>
       )}
       <h2>Touches</h2>
-      <RefList refs={n.touches} empty="Nothing." />
+      <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} />
       <h2>Relies on</h2>
-      <RefList refs={n.relies_on} empty="Nothing declared." />
+      <RefList refs={n.relies_on} empty="Nothing declared." titles={titlesOf(n.out)} />
       <h2>Related gaps and questions</h2>
       {related.data && <TicketTable tickets={related.data.tickets} empty="None touch what this ticket touches." />}
     </>
   );
 }
 
-function RefList({ refs, empty: emptyText }: { refs: Ref[]; empty: string }) {
+/** Titles for the other ends of a node's edges, so lists of references read as names. */
+function titlesOf(edges: { ref: Ref; title: string | null }[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const e of edges) if (e.title) m[e.ref] = e.title;
+  return m;
+}
+
+function RefList({ refs, empty: emptyText, titles = {} }: { refs: Ref[]; empty: string; titles?: Record<string, string> }) {
   if (refs.length === 0) return <p className={empty}>{emptyText}</p>;
   return (
     <ul className={list}>
       {refs.map((r) => (
         <li key={r} className={item}>
-          <RefLink ref={r} />
+          <RefLink ref={r} title={titles[r]} />
         </li>
       ))}
     </ul>
@@ -254,7 +261,7 @@ function Module({ n }: { n: ModuleNode }) {
       <h2>Files</h2>
       <RefList refs={n.files.map((f) => `file:${f}`)} empty="None." />
       <h2>Imports</h2>
-      <RefList refs={n.imports.map((m) => `module:${m}`)} empty="No resolved imports." />
+      <RefList refs={n.imports.map((m) => `module:${m}`)} empty="No resolved imports." titles={titlesOf(n.out)} />
     </>
   );
 }

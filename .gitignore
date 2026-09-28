@@ -10,3 +10,4 @@ build/
 .env.*
 !.env.example
 .claude/settings.local.json
+web/visual/out/
