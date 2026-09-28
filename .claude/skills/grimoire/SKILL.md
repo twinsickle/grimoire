@@ -151,9 +151,10 @@ the code.
    say why it did not need changing.
 4. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
    paragraph: what was chosen and why, written so someone reading it in a
-   year without the ticket body understands. It returns `findings` limited to
-   the nodes the ticket touched; if any are present, fix them and re-run
-   `lint`. Closing is allowed with findings; leaving them is not.
+   year without the ticket body understands. It returns `findings`, the new
+   findings on the nodes the ticket touched; if any are present, fix them and
+   re-run `lint`. Closing is allowed with findings; leaving them is not.
+   `baselined` counts the inherited ones there; they are not this ticket's.
 5. If the project documents a review step (in its `CLAUDE.md`, a skill, or
    a hook), run it now. Grimoire has no opinion on what the review is.
    If the project has a visual check for a user interface, run it and look
@@ -173,8 +174,8 @@ the code.
    work lands). The id is generated; do not send a slug. Refer to the
    ticket afterwards by the `ref` the response returns, with its title
    beside it in prose.
-3. Any `warnings` in the response are dangling references. Fix them with
-   `update_ticket` now.
+3. Any `warnings` in the response are new dangling references. Fix them
+   with `update_ticket` now.
 
 ## Sequence: adopt existing code
 

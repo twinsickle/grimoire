@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario), start_ticket adds rests_on and related, close_ticket adds the findings on the nodes it touched, delete_node returns the deleted reference and the dangling edges left behind, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"one-dispatcher","statement":"A tool name and a JSON input produce the same JSON output whichever transport delivered them."},{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."}]}
 //! ```
 
 use serde::Deserialize;
@@ -398,8 +398,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let (_, changed) = ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
             let g = state.graph();
             let view = query::view(g, &i.r#ref).expect("just written");
-            let findings = lint::lint_touching(g, &touched);
-            Ok(Outcome { output: json!({ "node": view, "findings": findings }), changed: Some(changed) })
+            let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
+            Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined }), changed: Some(changed) })
         }
         "configure" => {
             let change: ops::ConfigChange = parse(input)?;
@@ -430,7 +430,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             for from in pointing {
                 warnings.extend(lint::dangling_from(g, &from).into_iter().filter(|f| f.edge.as_ref().is_some_and(|e| e.to == i.r#ref)));
             }
-            Ok(Outcome { output: json!({ "deleted": i.r#ref, "warnings": warnings }), changed: Some(changed) })
+            let (warnings, baselined) = split_new(warnings);
+            Ok(Outcome { output: json!({ "deleted": i.r#ref, "warnings": warnings, "baselined": baselined }), changed: Some(changed) })
         }
         other => Err(ToolError::invalid(format!("unknown tool `{other}`"), vec![])),
     }
@@ -450,8 +451,17 @@ struct RefIn {
 fn written(state: &mut State, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
     let g = state.graph();
     let view = query::view(g, r).expect("just written");
-    let warnings = lint::written(g, r);
-    Ok(Outcome { output: json!({ "node": view, "warnings": warnings }), changed: Some(changed) })
+    let (warnings, baselined) = split_new(lint::written(g, r));
+    Ok(Outcome { output: json!({ "node": view, "warnings": warnings, "baselined": baselined }), changed: Some(changed) })
+}
+
+/// The new findings, which are the caller's to act on, and how many
+/// baselined ones were left out: inherited work, listed by `lint`.
+fn split_new(findings: Vec<lint::Finding>) -> (Vec<lint::Finding>, usize) {
+    let total = findings.len();
+    let new: Vec<lint::Finding> = findings.into_iter().filter(|f| !f.baselined).collect();
+    let baselined = total - new.len();
+    (new, baselined)
 }
 
 /// A tool's name, description and JSON input schema, for MCP `tools/list`
@@ -488,7 +498,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "file_ticket", description: "Create an open ticket: a change, gap or question, with the nodes it touches and relies on. The id is generated; the title is the ticket's name.", input_schema: obj(&["title","kind","priority","body"], json!({ "title": {"type":"string"}, "kind": {"type":"string","enum":["change","gap","question"]}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string","description":"Markdown, at most 4000 characters"} })) },
         ToolDef { name: "update_ticket", description: "Change an open or active ticket's title, priority, touches, relies_on or body.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string"} })) },
         ToolDef { name: "start_ticket", description: "Move a ticket from open to active and return what it rests on and the related gaps and questions.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the lint findings on the nodes it touched.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
+        ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the new lint findings on the nodes it touched, and how many baselined ones sit there.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
         ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
@@ -697,6 +707,26 @@ mod tests {
         assert!(reads_only["tests"].as_array().unwrap().is_empty());
         let found = call(&mut s, "find", json!({ "query": "needs-a-commit", "kinds": ["test"] }), "2026-09-28").unwrap().output;
         assert_eq!(found["nodes"][0]["ref"], "test:src/a/ready.rs#ready-needs-a-commit");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "inherited-findings-are-counted", "checks": ["crates/core/src/tools#write-responses"]}
+    /// ```
+    #[test]
+    fn inherited_findings_are_counted_not_handed_over() {
+        let mut s = state();
+        call(&mut s, "adopt", json!({ "reason": "adopted" }), "2026-09-28").unwrap();
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-28").unwrap().output;
+        assert_eq!(out["findings"], json!([]), "everything on the touched nodes is inherited");
+        assert!(out["baselined"].as_u64().unwrap() > 0);
+        let w = call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap().output;
+        assert_eq!(w["warnings"], json!([]), "stale was already dangling and unspecified when adopted");
+        assert_eq!(w["baselined"], 2);
+        let fresh = call(&mut s, "put_requirement", json!({ "slug": "fresh", "title": "Fresh", "statement": "It SHALL.", "scenarios": [], "covered_by": [] }), "2026-09-28").unwrap().output;
+        assert_eq!(fresh["warnings"][0]["check"], "no-scenario", "new work is handed over");
+        assert_eq!(fresh["baselined"], 0);
     }
 
     #[test]
