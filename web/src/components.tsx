@@ -2,10 +2,11 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."}]}
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."}]}
  * ```
  */
 
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
@@ -24,9 +25,28 @@ export const mono = "font-mono text-[12.5px]";
 /** A pressed toggle button; the resting look is the button element default. */
 export const pressed = "bg-accent-dim border-accent";
 
-/** A page body rendered as Markdown. Bodies come from the store, which only the daemon writes. */
+/** Where a link or image in a body may point: the web, mail, or somewhere relative. */
+const SAFE_URL = /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i;
+
+/** Attributes that hold a URL. DOMPurify lets data URLs through on images; this holds every one to SAFE_URL. */
+const URL_ATTRIBUTES = new Set(["href", "src", "action", "formaction", "poster", "background", "cite", "longdesc", "xlink:href"]);
+DOMPurify.addHook("uponSanitizeAttribute", (_node, data) => {
+  if (URL_ATTRIBUTES.has(data.attrName) && !SAFE_URL.test(data.attrValue.trim())) data.keepAttr = false;
+});
+
+/**
+ * A body rendered as Markdown, made inert. A body is text an agent or a person
+ * wrote through the tools, and this origin can call every tool, so nothing in
+ * it may run.
+ */
 export function Markdown({ text }: { text: string }) {
-  const html = marked.parse(text, { async: false, gfm: true, breaks: false }) as string;
+  const raw = marked.parse(text, { async: false, gfm: true, breaks: false }) as string;
+  const html = DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "form", "iframe", "object", "embed"],
+    FORBID_ATTR: ["style", "srcset"],
+    ALLOWED_URI_REGEXP: SAFE_URL,
+  });
   return <div className="md" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

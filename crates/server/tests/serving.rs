@@ -61,6 +61,19 @@ fn request(port: u16, method: &str, path: &str, body: Option<&Value>) -> (u16, S
     (head.split_whitespace().nth(1).unwrap().parse().unwrap(), body.to_string())
 }
 
+/// One HTTP/1.0 exchange with the given Host and extra header lines: the
+/// status code, the response head and the body.
+fn request_as(port: u16, method: &str, path: &str, body: Option<&Value>, host: &str, extra: &str) -> (u16, String, String) {
+    let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    let body = body.map(|b| b.to_string()).unwrap_or_default();
+    write!(s, "{method} {path} HTTP/1.0\r\nHost: {host}\r\n{extra}Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let mut answer = String::new();
+    s.read_to_string(&mut answer).unwrap();
+    let (head, body) = answer.split_once("\r\n\r\n").unwrap();
+    (head.split_whitespace().nth(1).unwrap().parse().unwrap(), head.to_string(), body.to_string())
+}
+
 fn json(body: &str) -> Value {
     serde_json::from_str(body).unwrap()
 }
@@ -211,3 +224,66 @@ fn one_answer_whichever_transport() {
     }
 }
 
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "other-sites-are-refused-on-every-route", "checks": ["crates/server/src/http#same-origin"]}
+/// ```
+#[test]
+fn other_sites_are_refused_on_every_route() {
+    let s = serve();
+    let own = format!("127.0.0.1:{}", s.port);
+    let page = json!({ "slug": "overview", "title": "Overview", "body": "The root.", "links": [] });
+    // A page elsewhere posting a write: refused, and nothing written.
+    let (code, _, body) = request_as(s.port, "POST", "/api/put_page", Some(&page), &own, "Origin: https://example.com\r\n");
+    assert_eq!(code, 403, "{body}");
+    assert_eq!(json(&body)["error"], "invalid");
+    let (code, _) = request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview" })));
+    assert_eq!(code, 404, "the forged write wrote nothing");
+    // MCP and the event stream are guarded too; so is a rebound name.
+    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} });
+    assert_eq!(request_as(s.port, "POST", "/mcp", Some(&init), &own, "Sec-Fetch-Site: cross-site\r\n").0, 403);
+    assert_eq!(request_as(s.port, "GET", "/api/events", None, &own, "Origin: https://example.com\r\n").0, 403);
+    assert_eq!(request_as(s.port, "POST", "/api/status", None, &format!("evil.example:{}", s.port), "").0, 403);
+    // A preflight gets no CORS headers, so a browser never sends the real request.
+    let (_, head, _) = request_as(s.port, "OPTIONS", "/api/put_page", None, &own, "Origin: https://example.com\r\nAccess-Control-Request-Method: POST\r\n");
+    assert!(!head.to_ascii_lowercase().contains("access-control-allow"), "{head}");
+    // A form shaped as JSON, from a browser that sends no Origin or
+    // Sec-Fetch-Site: refused for its content type, and nothing written.
+    let form = r#"{"slug":"forged","title":"Forged","body":"=","links":[]}"#;
+    for ct in ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"] {
+        let mut s = TcpStream::connect(("127.0.0.1", s.port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        write!(s, "POST /api/put_page HTTP/1.0\r\nHost: {own}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\n\r\n{form}", form.len()).unwrap();
+        let mut answer = String::new();
+        s.read_to_string(&mut answer).unwrap();
+        assert!(answer.starts_with("HTTP/1.0 415") || answer.starts_with("HTTP/1.1 415"), "{ct}: {answer}");
+    }
+    assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:forged" }))).0, 404, "the form wrote nothing");
+    // A navigation from elsewhere still opens the UI's own files.
+    assert_eq!(request_as(s.port, "GET", "/", None, &own, "Sec-Fetch-Site: cross-site\r\nOrigin: https://example.com\r\n").0, 200);
+    // The daemon's own origin, and an agent sending none, are served.
+    let (code, head, _) = request_as(s.port, "POST", "/api/put_page", Some(&page), &own, &format!("Origin: http://{own}\r\nSec-Fetch-Site: same-origin\r\n"));
+    assert_eq!(code, 200);
+    assert!(!head.to_ascii_lowercase().contains("access-control-allow"), "no CORS headers on an answer either: {head}");
+    assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview" }))).0, 200);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "get-runs-reads-only", "checks": ["crates/server/src/http#reads-on-get"]}
+/// ```
+#[test]
+fn get_runs_reads_only() {
+    let s = serve();
+    let page = json!({ "slug": "overview", "title": "Overview", "body": "The root.", "links": [] });
+    let (code, body) = request(s.port, "POST", "/api/put_page", Some(&page));
+    assert_eq!(code, 200, "{body}");
+    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview", None).0, 200);
+    let (code, body) = request(s.port, "GET", "/api/delete_node?ref=page:overview", None);
+    assert_eq!(code, 405, "{body}");
+    assert_eq!(json(&body)["error"], "invalid");
+    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview", None).0, 200, "still there");
+}

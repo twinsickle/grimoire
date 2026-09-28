@@ -479,3 +479,51 @@ test("an open ticket is started and closed from its page; a closed one offers ne
   await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-hostile-body-renders-inert", "checks": ["web/src/components#markdown-inert"]}
+ * ```
+ */
+test("a body with script in it renders as Markdown and runs nothing", async ({ page }) => {
+  // Filed last: a new gap would otherwise join the unattached list other specs read.
+  const body = [
+    "**Still bold.**",
+    "",
+    '<img src="x" onerror="window.__pwned = true">',
+    "",
+    "<script>window.__pwned = true</script>",
+    "",
+    "[a link](javascript:window.__pwned=true)",
+    "",
+    '<a href="https://example.com/ok">a web link</a>',
+    "",
+    '<p style="position:fixed;inset:0">covers the page</p>',
+    "",
+    '<svg onload="window.__pwned = true"><circle r="4"></circle></svg>',
+    "",
+    '<iframe src="https://example.com"></iframe>',
+    "",
+    '<form action="https://example.com"><button>go</button></form>',
+    "",
+    '<img alt="data" src="data:image/png;base64,iVBORw0KGgo=">',
+    "",
+    '<img alt="set" src="https://example.com/a.png" srcset="https://example.com/a.png 1x, javascript:alert(1) 2x">',
+  ].join("\n");
+  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "A hostile body", kind: "gap", priority: "later", touches: [], body });
+  await page.goto(`/n/${encodeURIComponent(filed.node.ref)}`);
+  const md = page.locator("main .md").first();
+  await expect(md.locator("strong", { hasText: "Still bold." })).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as unknown as { __pwned?: boolean }).__pwned)).toBeUndefined();
+  await expect(md.locator("script")).toHaveCount(0);
+  await expect(md.locator("[onerror]")).toHaveCount(0);
+  expect(await md.locator("a").evaluateAll((as) => as.map((a) => a.getAttribute("href") ?? ""))).not.toContainEqual(expect.stringMatching(/^javascript:/i));
+  await expect(md.locator('a[href="https://example.com/ok"]')).toBeVisible();
+  for (const forbidden of ["[style]", "svg", "iframe", "form", "[srcset]", 'img[src^="data:"]']) {
+    await expect(md.locator(forbidden), forbidden).toHaveCount(0);
+  }
+  await expect(md.getByText("covers the page")).toBeVisible();
+});
