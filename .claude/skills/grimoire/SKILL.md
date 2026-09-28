@@ -6,13 +6,12 @@ argument-hint: start|spec|finish|file <ticket-slug or title>
 
 # Grimoire
 
-Grimoire holds a project's **manual** (what it is meant to do now: pages of
-intent, requirements with scenarios and dated decisions, the module contracts
-in the code, and the code itself) and its **tickets** (intended changes, gaps
-and questions) as one graph. A ticket is never the record of what the code
-does; the manual and the code are. When a ticket's work lands, the same piece
-of work updates the manual. This skill is the thin client of the tools; it
-holds no logic the tools do not.
+Grimoire holds a project's **manual** (pages of intent, requirements with
+scenarios and dated decisions, the module contracts in the code, the code)
+and its **tickets** (changes, gaps, questions) as one graph. The manual and
+the code record what the project does; a ticket never does. Landing a ticket
+updates the manual in the same piece of work. This skill is a thin client of
+the tools.
 
 ## Reaching the tools
 
@@ -27,49 +26,41 @@ In order of preference:
 
 Every tool takes and returns JSON. Errors are `{ "error": code, "message" }`
 with codes `not_found`, `invalid` (with `details`), `conflict`,
-`store_unavailable`. A write never fails on a lint; it returns the findings it
-created in `warnings`. Treat every warning as work to do now.
+`store_unavailable`. A write never fails on a lint; it returns the findings
+it created in `warnings`. Every warning is work to do now.
 
 ## Conventions
 
 - **References** are `kind:id`: `page:<slug>`, `req:<slug>`,
   `ticket:<slug>`, `module:<module id>`, `criterion:<module id>#<criterion id>`,
-  `file:<path>`, `decl:<path>#<decl path>`. **`find` precedes every
-  reference you write.** Not as a fallback when unsure: as the step before
-  any `touches`, `relies_on`, `links` or `covered_by`. A guessed slug that
-  happens to be wrong comes back as a dangling warning; a guessed slug that
-  happens to name the wrong node does not.
+  `file:<path>`, `decl:<path>#<decl path>`. **`find` before every reference
+  you write**, in `touches`, `relies_on`, `links` and `covered_by`. A wrong
+  guess comes back as a dangling warning; a guess that names the wrong node
+  does not.
 - **Slugs** are `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters.
-- A **requirement** has a normative `statement` (SHALL / MUST), scenarios
-  (given, when, then), `covered_by` criteria, and dated **decisions**:
-  one paragraph each, what was chosen and why. Decisions are append-only.
-- A **ticket** has `touches` (what it will change) and `relies_on` (what it
-  assumes true and does not change). Body is Markdown, at most 4,000
-  characters, and is discarded on close. Kinds: `change`, `gap`, `question`.
-  Priorities: `next`, `high`, `later`.
-- `put_page` and `put_requirement` **replace** the record. To change part of
-  a page, above all to link a new requirement or page from its area, use
-  `patch_page` with `add_links` or `remove_links`; it touches nothing else.
-  For a requirement, `get` it first and send the whole thing back;
-  `put_requirement` keeps the existing decisions regardless of what is sent.
-- Module contracts live in the code as a JSON block under a
-  `# Module contract` heading in the file's leading doc comment. Changing a
-  criterion's id or removing one is a manual change: the requirements that
-  named it go dangling, and the lint will say so. The exact format per
-  language and what makes a good criterion: `references/contracts.md`.
-  Which code change requires which manual update: `references/changes.md`.
-  Read the second before starting any ticket that touches a module.
-- **When the daemon is rebuilt and restarted while you work** (a project
-  that develops Grimoire itself, or runs it under a watch-and-restart
-  loop), the tools are unavailable during each rebuild. Do the manual
-  writes before the code edits, and retry a refused call after a moment
-  rather than falling back to editing the store. If a tool is added or the
-  server's instructions change, your MCP client keeps the old list until it
-  reconnects; call the new tool over HTTP until then, and say so.
-- **When a `check` fails for a reason that makes no sense**, compare
-  `status`'s `version` and `supported_languages` with the store's
-  `languages`. An installed binary older than the store's needs is the
-  usual cause.
+- A **requirement**: a normative `statement` (SHALL / MUST), scenarios
+  (given, when, then), `covered_by` criteria, dated append-only
+  **decisions** of one paragraph each: what was chosen and why.
+- A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
+  and leaves alone), a Markdown body under 4,000 characters that is
+  discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
+  `high`, `later`.
+- `put_page` and `put_requirement` **replace** the record. To add or remove
+  a page's links, `patch_page`; it touches nothing else. For a requirement,
+  `get` first and send the whole thing back; existing decisions are kept.
+- Module contracts are a JSON block under `# Module contract` in a file's
+  leading doc comment. Renaming or removing a criterion leaves the
+  requirements naming it dangling; the lint says so. Format per language:
+  `references/contracts.md`. Which code change needs which manual update:
+  `references/changes.md`; read it before a ticket that touches a module.
+- **If the daemon is rebuilt while you work**, the tools drop out during
+  each rebuild. Write the manual before editing code; retry a refused call
+  after a moment, never edit the store instead. A new tool or changed
+  instructions reach your MCP client only when it reconnects; call over
+  HTTP until then, and say so.
+- **A `check` that fails for no sensible reason**: compare `status`'s
+  `version` and `supported_languages` with the store's `languages`. A stale
+  installed binary is the usual cause.
 
 ## Orienting
 
