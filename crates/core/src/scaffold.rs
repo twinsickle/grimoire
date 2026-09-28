@@ -19,7 +19,7 @@ pub const ARCHITECTURE_SLUG: &str = "architecture";
 pub const STORY: [(&str, &str, &str); 5] = [
     ("goal", "Goal", "What this project is and what it is not, as short statements a reader can check against the code. No motivation, no history, no milestones. This is the first page a person or agent reads."),
     (ARCHITECTURE_SLUG, "Architecture", "A high-level inventory of what exists and why: one line saying what the system is; the pipeline, how data moves through the parts; the layers with their responsibilities and what each is built from; the design principles behind them; and the physical layout. Every line checkable against the repository. The pages below are its areas, one per module group, seeded from the module contracts."),
-    ("constraints", "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
+    (crate::lint::CONSTRAINTS_PAGE, "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
     ("conventions", "Conventions", "How things are done here, as opposed to what must hold: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong; a convention a lint could check belongs under constraints as a requirement instead."),
     ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
 ];

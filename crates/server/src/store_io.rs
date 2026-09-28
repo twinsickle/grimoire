@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place, so a reader never sees a partial file."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"only-writer","statement":"Nothing outside the daemon and the CLI commands that own a store call these write functions."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted and serve.json while a daemon serves it; a record file whose name differs from its record's slug is malformed, and so is a baseline.json that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed into place: no temporary file is left behind, and a reader running while records are rewritten never reads a partial one."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted and serve.json while a daemon serves it; a record file whose name differs from its record's slug is malformed, and so is a baseline.json that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a repository's .grimoire.toml names it by name, or by a path relative to the repository when it contains a separator."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -420,6 +420,42 @@ mod tests {
         persist(&dir, &store, &Changed::Config).unwrap();
         let (loaded, _) = load(&dir).unwrap();
         assert_eq!(loaded.config.scope.include, vec!["crates/core".to_string()]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "writes-leave-no-partial-file", "checks": ["crates/server/src/store_io#atomic-writes"]}
+    /// ```
+    #[test]
+    fn writes_leave_no_partial_file() {
+        let dir = temp();
+        let mut store = Store::new(StoreConfig { version: 1, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default() });
+        write_all(&dir, &store, false).unwrap();
+        let path = dir.join("pages").join("big.json");
+        let reader = {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                let mut whole = 0;
+                for _ in 0..2000 {
+                    // A reader may find no file for an instant where the rename replaces it; never half of one.
+                    if let Ok(text) = std::fs::read_to_string(&path) {
+                        assert!(serde_json::from_str::<Page>(&text).is_ok(), "a partial record: {} bytes", text.len());
+                        whole += 1;
+                    }
+                }
+                whole
+            })
+        };
+        for i in 0..200 {
+            let body = "x".repeat(20_000 + i * 97);
+            store.pages.insert("big".into(), Page { slug: "big".into(), title: "Big".into(), body, links: vec![] });
+            persist(&dir, &store, &Changed::Page("big".into())).unwrap();
+        }
+        assert!(reader.join().unwrap() > 0, "the reader saw records");
+        let leftovers: Vec<_> = std::fs::read_dir(dir.join("pages")).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".tmp")).collect();
+        assert!(leftovers.is_empty(), "no temporary file is left behind");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

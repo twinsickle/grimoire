@@ -46,7 +46,7 @@ test("a tool error is thrown with its code and message", async () => {
  * # Test contract
  *
  * ```json
- * {"test": "the-app-mounts-under-strict-mode", "checks": ["web/src/main#strict-mode"]}
+ * {"test": "the-app-mounts-under-strict-mode", "checks": ["req:web-strict-mode"]}
  * ```
  */
 test("the app mounts under StrictMode", () => {
@@ -57,7 +57,7 @@ test("the app mounts under StrictMode", () => {
  * # Test contract
  *
  * ```json
- * {"test": "colours-are-tokens", "checks": ["web/src/main#theme-tokens"]}
+ * {"test": "colours-are-tokens", "checks": ["req:web-theme-tokens"]}
  * ```
  */
 test("colours are named by token, never written as literals", () => {

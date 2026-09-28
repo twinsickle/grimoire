@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion it names; a criterion's tests are derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them; every upward relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -156,8 +156,15 @@ impl Graph {
             let from = Reference::test(&t.file, &t.name);
             g.edge(&Reference::file(&t.file), &from, Relation::Contains);
             for c in &t.checks {
-                let (module, id) = c.split_once('#').unwrap_or((c.as_str(), ""));
-                g.edge(&from, &Reference::criterion(module, id), Relation::Checks);
+                // A constraint is held by naming its requirement; anything else names a criterion.
+                let to = match c.strip_prefix("req:") {
+                    Some(slug) => Reference::req(slug),
+                    None => {
+                        let (module, id) = c.split_once('#').unwrap_or((c.as_str(), ""));
+                        Reference::criterion(module, id)
+                    }
+                };
+                g.edge(&from, &to, Relation::Checks);
             }
             g.nodes.insert(from, Node::Test(t.clone()));
         }

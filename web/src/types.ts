@@ -93,7 +93,7 @@ export interface Decl {
   line: number;
 }
 
-/** A test, from a `# Test contract` block. `checks` are `module id#criterion id`. */
+/** A test, from a `# Test contract` block. `checks` are `module id#criterion id` or `req:<slug>`. */
 export interface Test {
   file: string;
   name: string;

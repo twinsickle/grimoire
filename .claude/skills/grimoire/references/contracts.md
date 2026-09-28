@@ -91,7 +91,13 @@ itself.
   `test:<file>#<test>`; the name survives renaming the function or moving
   lines, so pick one that says what is checked.
 - `checks`: one or more criteria, each as module id, `#`, criterion id, the
-  same module id a requirement's `covered_by` uses after `criterion:`.
+  same module id a requirement's `covered_by` uses after `criterion:`; or a
+  constraint as `req:<slug>`.
+- A criterion says what one module does. A rule about how the parts are
+  arranged (a layer does no I/O, one component is the only writer) is a
+  constraint: a requirement on the Constraints page with no criterion, held
+  by a test that names it, often one that reads the source. A constraint no
+  test holds is reported as `unheld`.
 - A broken block (bad JSON, a name that is not a slug or is used twice in
   the file, an empty `checks`) is reported as malformed. A check naming a
   criterion that does not exist is reported dangling.

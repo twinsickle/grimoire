@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that .gitignore ignores, and anything under .git, never reach the daemon."},{"id":"debounced","statement":"A burst of events for one file becomes one re-extraction."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that .gitignore ignores, and anything under .git, never reach the daemon."},{"id":"debounced","statement":"File events are debounced over a fixed window of 300 milliseconds, so a burst of events for one file becomes one re-extraction."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -40,11 +40,16 @@ impl Ignorer {
     }
 }
 
+/// How long the watcher waits for a burst of events on one file to settle
+/// before handing it on: an editor's save-and-rewrite or a formatter's pass
+/// is one change.
+pub const DEBOUNCE: Duration = Duration::from_millis(300);
+
 /// Start watching. The returned debouncer must be kept alive.
 pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::RecommendedWatcher, RecommendedCache>> {
     let root = daemon.repo.clone();
     let ignorer = Ignorer::new(&root);
-    let mut debouncer = new_debouncer(Duration::from_millis(300), None, move |result: DebounceEventResult| match result {
+    let mut debouncer = new_debouncer(DEBOUNCE, None, move |result: DebounceEventResult| match result {
         Ok(events) => {
             let mut rels: Vec<String> = Vec::new();
             for ev in events {
@@ -82,6 +87,16 @@ mod tests {
     /// ```json
     /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#ignored-skipped"]}
     /// ```
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-debounce-window", "checks": ["crates/server/src/watch#debounced"]}
+    /// ```
+    #[test]
+    fn events_are_debounced_over_300_milliseconds() {
+        assert_eq!(DEBOUNCE, Duration::from_millis(300));
+    }
+
     #[test]
     fn ignored_paths_never_reach_the_daemon() {
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);

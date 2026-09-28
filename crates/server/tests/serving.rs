@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 struct Served {
     dir: PathBuf,
     port: u16,
+    daemon: Arc<Daemon>,
     /// Held, not read: dropping it stops the server.
     _runtime: tokio::runtime::Runtime,
 }
@@ -43,9 +44,9 @@ fn serve() -> Served {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
     let port = listener.local_addr().unwrap().port();
-    let app = http::router(daemon, None);
+    let app = http::router(daemon.clone(), None);
     runtime.spawn(async move { axum::serve(listener, app).await });
-    Served { dir, port, _runtime: runtime }
+    Served { dir, port, daemon, _runtime: runtime }
 }
 
 /// One HTTP/1.0 exchange: the status code and the body.
@@ -189,3 +190,24 @@ fn mcp_instructions_carry_the_rules() {
         assert!(text.contains(rule), "the instructions say {rule:?}: {text}");
     }
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "one-answer-whichever-transport", "checks": ["req:tools-one-dispatcher"]}
+/// ```
+#[test]
+fn one_answer_whichever_transport() {
+    let s = serve();
+    for (tool, input) in [("status", json!({})), ("get", json!({ "ref": "module:src" })), ("lint", json!({})), ("get", json!({ "ref": "page:nope" }))] {
+        let in_process = match s.daemon.call(tool, input.clone()) {
+            Ok(v) => v,
+            Err(e) => serde_json::to_value(&e).unwrap(),
+        };
+        let (_, body) = request(s.port, "POST", &format!("/api/{tool}"), Some(&input));
+        let over_mcp = mcp(s.port, 1, "tools/call", json!({ "name": tool, "arguments": input }))["result"]["structuredContent"].clone();
+        assert_eq!(json(&body), in_process, "{tool} over HTTP");
+        assert_eq!(over_mcp, in_process, "{tool} over MCP");
+    }
+}
+

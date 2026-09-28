@@ -425,6 +425,30 @@ mod tests {
     /// ```json
     /// {"test": "serving-writes-nothing-into-the-repository", "checks": ["crates/server/src#no-repository-writes"]}
     /// ```
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "nothing-derived-on-disk", "checks": ["req:src-one-graph"]}
+    /// ```
+    #[test]
+    fn nothing_derived_is_kept_on_disk() {
+        let h = Harness::new();
+        let d = h.open();
+        d.call("put_page", page("goal")).unwrap();
+        d.call("adopt", json!({ "reason": "adopted" })).unwrap();
+        std::fs::write(h.repo.join("src").join("b.rs"), "pub fn b4() {}\n").unwrap();
+        d.reextract(&["src/b.rs".to_string()]);
+        d.mark_serving(4299).unwrap();
+        let mut entries: Vec<String> = std::fs::read_dir(&h.store).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        entries.sort();
+        assert_eq!(entries, vec!["baseline.json", "grimoire.json", "pages", "requirements", "serve.json", "tickets"], "records, the baseline and the marker; no index or cache");
+        for dir in ["pages", "requirements", "tickets"] {
+            for e in std::fs::read_dir(h.store.join(dir)).unwrap().flatten() {
+                assert!(e.file_name().to_string_lossy().ends_with(".json"), "{dir} holds only records");
+            }
+        }
+    }
+
     #[test]
     fn serving_writes_nothing_into_the_repository() {
         let h = Harness::new();

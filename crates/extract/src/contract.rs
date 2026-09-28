@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find and parse the contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment, and under a `# Test contract` heading in any comment.","criteria":[{"id":"test-blocks","statement":"A # Test contract heading followed by a fenced JSON block {test, checks} names one test and the criteria it checks as module id#criterion id; a block whose JSON is invalid, whose test is not a slug, or whose checks is empty or holds something that is not module#criterion, is reported with the reason."},{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
+//! {"purpose":"Find and parse the contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment, and under a `# Test contract` heading in any comment.","criteria":[{"id":"test-blocks","statement":"A # Test contract heading followed by a fenced JSON block {test, checks} names one test and what it checks, each check a criterion as module id#criterion id or a requirement as req:<slug>; a block whose JSON is invalid, whose test is not a slug, or whose checks is empty or holds anything else, is reported with the reason."},{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
 //! ```
 
 use grimoire_core::Contract;
@@ -85,8 +85,10 @@ pub fn find_tests(text: &str, first_line: u32) -> Vec<FoundTest> {
             if checks.is_empty() {
                 return Err(format!("test `{name}` checks nothing"));
             }
-            if let Some(bad) = checks.iter().find(|c| c.split_once('#').is_none_or(|(m, id)| m.is_empty() || id.is_empty())) {
-                return Err(format!("`{bad}` is not a criterion as module id#criterion id"));
+            let criterion = |c: &str| c.split_once('#').is_some_and(|(m, id)| !m.is_empty() && !id.is_empty());
+            let requirement = |c: &str| c.strip_prefix("req:").is_some_and(grimoire_core::store::is_slug);
+            if let Some(bad) = checks.iter().find(|c| !criterion(c) && !requirement(c)) {
+                return Err(format!("`{bad}` is neither a criterion as module id#criterion id nor a requirement as req:<slug>"));
             }
             Ok((name, checks))
         });
@@ -188,6 +190,11 @@ mod tests {
         assert!(one(r#"{"test":"Bad Name","checks":["m#c"]}"#).contains("not a slug"));
         assert!(one(r#"{"test":"t","checks":[]}"#).contains("checks nothing"));
         assert!(one(r#"{"test":"t","checks":["no-hash"]}"#).contains("module id#criterion id"));
+        assert!(one(r#"{"test":"t","checks":["req:Not A Slug"]}"#).contains("req:<slug>"));
+        assert!(find_tests("# Test contract
+```json
+{\"test\":\"t\",\"checks\":[\"req:src-boundary\"]}
+```", 1)[0].test.is_ok(), "a requirement may be checked");
         assert!(one(r#"{"test":"t"}"#).contains("invalid test contract JSON"));
     }
 

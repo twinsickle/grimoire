@@ -340,7 +340,7 @@ function TestView({ n }: { n: TestNode }) {
         Test block at <RefLink ref={`file:${n.file}`} /> line {n.line}
       </p>
       <h2>Checks</h2>
-      <RefList refs={n.checks.map((c) => `criterion:${c}`)} empty="Nothing." titles={titlesOf(n.out)} />
+      <RefList refs={n.checks.map((c) => (c.startsWith("req:") ? c : `criterion:${c}`))} empty="Nothing." titles={titlesOf(n.out)} />
     </>
   );
 }

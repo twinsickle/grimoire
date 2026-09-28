@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"no-guessed-calls","statement":"The extractor reports declarations and imports it parsed and never infers a call edge by name."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."}]}
 //! ```
 
 pub mod contract;
@@ -313,6 +313,53 @@ mod tests {
         let (files, errors) = x.extract_all().unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(errors.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-call-is-not-an-edge", "checks": ["req:src-no-guessed-calls"]}
+    /// ```
+    #[test]
+    fn a_call_between_functions_makes_no_edge() {
+        let dir = temp_repo(&[("src/lib.rs", b"pub mod a;\npub mod b;\n"), ("src/a.rs", b"pub fn run() { crate::b::run(); }\n"), ("src/b.rs", b"pub fn run() {}\n")]);
+        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let (files, _) = x.extract_all().unwrap();
+        let g = grimoire_core::graph::Graph::build(&grimoire_core::Store::default(), &grimoire_core::Extraction::from_files(&files), &[]);
+        let decl_to_decl = g.edges.iter().filter(|e| e.from.kind == grimoire_core::model::Kind::Decl && e.to.kind == grimoire_core::model::Kind::Decl).count();
+        assert_eq!(decl_to_decl, 0, "a.rs calls b's run, and no edge says so");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "extraction-writes-nothing", "checks": ["crates/extract/src#read-only"]}
+    /// ```
+    #[test]
+    fn extraction_writes_nothing() {
+        let dir = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n"), ("src/b.rs", b"pub fn b() {}\n")]);
+        let snapshot = || {
+            // Every path, and each file's modification time. A directory's own time is
+            // left out: NTFS updates it lazily, after files already written.
+            let mut v: Vec<(PathBuf, Option<std::time::SystemTime>)> = ignore::WalkBuilder::new(&dir)
+                .hidden(false)
+                .build()
+                .flatten()
+                .map(|e| {
+                    let file = e.file_type().is_some_and(|t| t.is_file());
+                    (e.path().to_path_buf(), file.then(|| e.metadata().unwrap().modified().unwrap()))
+                })
+                .collect();
+            v.sort();
+            v
+        };
+        let before = snapshot();
+        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        x.extract_all().unwrap();
+        x.extract_path("src/b.rs").unwrap();
+        assert_eq!(snapshot(), before, "nothing created or modified");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

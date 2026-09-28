@@ -188,3 +188,22 @@ fn writes_go_through_a_serving_daemon() {
     assert!(ok);
     assert!(board["tickets"].as_array().unwrap().iter().any(|t| t["title"] == "Through the daemon"), "{board}");
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "check-and-lint-agree", "checks": ["req:lint-same-check"]}
+/// ```
+#[test]
+fn check_and_the_lint_tool_report_the_same_findings() {
+    let (p, _) = project();
+    // Something new and something inherited, so both kinds are compared.
+    std::fs::write(p.repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+    let check = run(&p.repo, &["check", "--json"]);
+    let lint = run(&p.repo, &["tool", "lint"]);
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    let lint: serde_json::Value = serde_json::from_slice(&lint.stdout).unwrap();
+    assert!(check["new"].as_u64().unwrap() > 0 && check["findings"].as_array().unwrap().len() > check["new"].as_u64().unwrap() as usize);
+    assert_eq!(check, lint, "a hook and an agent see the same findings and the same verdict");
+}
