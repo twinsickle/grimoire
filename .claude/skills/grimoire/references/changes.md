@@ -11,6 +11,7 @@ find it with `rests_on_me` on the module, or `find`.
 | Changed behaviour | Reword the criterion and the requirement's statement. `record_decision` on the requirement: what changed and why. |
 | Removed behaviour | Remove the criterion. The requirement naming it goes dangling: reword its `covered_by`, or delete the requirement (`delete_node`) and remove its link from the page. |
 | Renamed criterion id | Same as removed plus new: update `covered_by` on every requirement that named it and `checks` in every test contract that named it. `find` the old id first. |
+| Renamed page or requirement | `rename_node`, never delete and put: it keeps the requirement's decisions and rewrites links, open tickets, roots and the baseline. Then edit each test block it lists in `still_named_in`; the tool never writes code. |
 | A test now checks something else | Update its test contract's `checks`. A test deleted leaves its criteria untested unless another test checks them. |
 | New area (a group of modules with its own purpose) | A page under architecture (or the right parent), with intent in the body, linking its requirements and modules. `patch_page` the parent with `add_links`. |
 | A choice made while working, however small it feels | `record_decision` on the requirement it governs: what was chosen and why, one paragraph, written for a reader a year from now. |

@@ -78,6 +78,20 @@ pub fn build() -> Build {
     Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: SUPPORTED_LANGUAGES.iter().map(|l| l.to_string()).collect() }
 }
 
+/// What a write changed, as references, for the event it announces.
+fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
+    use grimoire_core::ops::Changed;
+    match changed {
+        Changed::Page(s) => vec![format!("page:{s}")],
+        Changed::Requirement(s) => vec![format!("req:{s}")],
+        Changed::Ticket(s) | Changed::Started(s) | Changed::Closed(s) => vec![format!("ticket:{s}")],
+        Changed::Deleted(r) => vec![r.to_string()],
+        Changed::Baseline => vec!["baseline".to_string()],
+        Changed::Config => vec!["config".to_string()],
+        Changed::Many(cs) => cs.iter().flat_map(describe).collect(),
+    }
+}
+
 impl Daemon {
     pub fn open(store_dir: &Path) -> Result<(Daemon, Vec<grimoire_extract::ExtractError>), OpenError> {
         let loaded = load(store_dir)?;
@@ -135,16 +149,8 @@ impl Daemon {
                 }
                 return Err(ToolError::unavailable(format!("the store could not be written: {e}")));
             }
-            let what = match changed {
-                grimoire_core::ops::Changed::Page(s) => format!("page:{s}"),
-                grimoire_core::ops::Changed::Requirement(s) => format!("req:{s}"),
-                grimoire_core::ops::Changed::Ticket(s) => format!("ticket:{s}"),
-                grimoire_core::ops::Changed::Deleted(r) => r.to_string(),
-                grimoire_core::ops::Changed::Baseline => "baseline".to_string(),
-                grimoire_core::ops::Changed::Config => "config".to_string(),
-                grimoire_core::ops::Changed::Started(s) | grimoire_core::ops::Changed::Closed(s) => format!("ticket:{s}"),
-            };
-            let _ = self.events.send(Event::Store { tool: name.to_string(), changed: vec![what] });
+            let what = describe(changed);
+            let _ = self.events.send(Event::Store { tool: name.to_string(), changed: what });
             if state.store().config.languages != languages {
                 let now = state.store().config.languages.clone();
                 drop(state);

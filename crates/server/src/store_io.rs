@@ -239,6 +239,12 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             write_atomic(&store_dir.join("tickets").join(format!("{slug}.json")), &to_pretty(t))
         }
         Changed::Config => write_atomic(&store_dir.join(CONFIG_FILE), &to_pretty(&store.config)),
+        Changed::Many(changes) => {
+            for c in changes {
+                persist(store_dir, store, c)?;
+            }
+            Ok(())
+        }
         Changed::Started(slug) => {
             persist(store_dir, store, &Changed::Ticket(slug.clone()))?;
             let s = store.starts.get(slug).expect("a started ticket has a start");

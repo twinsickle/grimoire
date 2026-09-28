@@ -116,7 +116,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 23] = [
+pub const TOOL_NAMES: [&str; 24] = [
     "find",
     "get",
     "outline",
@@ -136,6 +136,7 @@ pub const TOOL_NAMES: [&str; 23] = [
     "start_ticket",
     "close_ticket",
     "delete_node",
+    "rename_node",
     "adopt",
     "configure",
     "reorder",
@@ -143,7 +144,7 @@ pub const TOOL_NAMES: [&str; 23] = [
 ];
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "adopt" | "configure" | "reorder")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
@@ -411,6 +412,27 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
             Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined, "untouched": untouched }), changed: Some(changed) })
         }
+        "rename_node" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Reference,
+                to: String,
+            }
+            let i: In = parse(input)?;
+            // What the code names is read before the rename; the tool never edits it.
+            let g = state.graph();
+            let still_named_in: Vec<Value> = g
+                .inbound_with(&i.r#ref, crate::model::Relation::Checks)
+                .filter_map(|e| match g.get(&e.from) {
+                    Some(crate::graph::Node::Test(t)) => Some(json!({ "test": e.from, "file": t.file, "line": t.line })),
+                    _ => None,
+                })
+                .collect();
+            let (new, changed) = ops::rename_node(state.store_mut(), &i.r#ref, &i.to)?;
+            let view = query::view(state.graph(), &new).expect("just renamed");
+            Ok(Outcome { output: json!({ "node": view, "still_named_in": still_named_in }), changed: Some(changed) })
+        }
         "reorder" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -524,6 +546,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "delete_node", description: "Remove a page, requirement or ticket. Returns the dangling edges the deletion created.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
         ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
+        ToolDef { name: "rename_node", description: "Rename a page or requirement, keeping its decisions and rewriting the references the store holds to it. Closed tickets keep the old reference. Answers with the node and the test blocks in the code that still name the old reference, which the agent edits.", input_schema: obj(&["ref","to"], json!({ "ref": reference, "to": {"type":"string","description":"The new slug"} })) },
         ToolDef { name: "reorder", description: "Set the order of one priority band on the board: the tickets listed come first, in that order; the rest follow by dependency, then title.", input_schema: obj(&["priority","order"], json!({ "priority": {"type":"string","enum":["next","high","later"]}, "order": {"type":"array","items": reference} })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
@@ -880,6 +903,63 @@ mod tests {
             let e = call(&mut s, "reorder", json!({ "priority": "next", "order": bad }), "2026-09-28").unwrap_err();
             assert!(matches!(e, ToolError::Invalid { .. }), "{bad} is refused");
         }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-rename-keeps-decisions-and-rewrites-references", "checks": ["crates/core/src/ops#rename"]}
+    /// ```
+    #[test]
+    fn a_rename_keeps_decisions_and_rewrites_references() {
+        let mut s = state();
+        // ready-only-with-commit: one dated decision, linked from git-readiness,
+        // touched by the open ticket phase-62; and a closed ticket names it too.
+        call(&mut s, "file_ticket", json!({ "title": "Old", "kind": "change", "priority": "later", "touches": ["req:ready-only-with-commit"], "body": "b" }), "2026-09-28").unwrap();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:0001" }), "2026-09-28").unwrap();
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } }), "2026-09-28").unwrap();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-09-28").unwrap();
+        call(&mut s, "adopt", json!({ "reason": "adopted" }), "2026-09-28").unwrap();
+        let before = s.store().requirements["ready-only-with-commit"].clone();
+        let out = call(&mut s, "rename_node", json!({ "ref": "req:ready-only-with-commit", "to": "ready-with-a-commit" }), "2026-09-28").unwrap();
+        assert_eq!(out.output["node"]["ref"], "req:ready-with-a-commit");
+        let after = &s.store().requirements["ready-with-a-commit"];
+        assert_eq!(after.decisions, before.decisions, "decisions keep their dates");
+        assert!(!s.store().requirements.contains_key("ready-only-with-commit"));
+        assert!(s.store().pages["git-readiness"].links.contains(&Reference::req("ready-with-a-commit")));
+        assert!(s.store().tickets["phase-62"].touches.contains(&Reference::req("ready-with-a-commit")), "an open ticket follows");
+        assert!(s.store().tickets["0001"].touches.contains(&Reference::req("ready-only-with-commit")), "a closed ticket is history");
+        assert!(s.store().starts["phase-62"].fingerprints.contains_key("req:ready-with-a-commit"), "the start snapshot follows");
+        let lint = call(&mut s, "lint", json!({}), "2026-09-28").unwrap().output;
+        assert_eq!(lint["new"], 0, "inherited findings stay inherited");
+        // The changes persist new record first and old record last.
+        let Some(Changed::Many(cs)) = out.changed else { panic!("a rename is several changes") };
+        assert!(matches!(cs.first(), Some(Changed::Requirement(x)) if x == "ready-with-a-commit"));
+        assert!(matches!(cs.last(), Some(Changed::Deleted(r)) if r == &Reference::req("ready-only-with-commit")));
+    }
+
+    #[test]
+    fn rename_refuses_what_it_may_not_do() {
+        let mut s = state();
+        let code = |r: Result<Outcome, ToolError>| serde_json::to_value(r.unwrap_err()).unwrap()["error"].clone();
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "ticket:phase-62", "to": "x" }), "2026-09-28")), "invalid");
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "module:src/a/ready", "to": "x" }), "2026-09-28")), "invalid");
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:nope", "to": "x" }), "2026-09-28")), "not_found");
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "overview" }), "2026-09-28")), "conflict");
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "Not A Slug" }), "2026-09-28")), "invalid");
+        // A root page's rename moves the root.
+        call(&mut s, "rename_node", json!({ "ref": "page:overview", "to": "home" }), "2026-09-28").unwrap();
+        assert_eq!(s.store().config.roots, vec!["home".to_string()]);
+    }
+
+    #[test]
+    fn a_rename_reports_the_tests_that_name_it() {
+        let mut s = state();
+        let mut files = crate::extraction::fixtures::extraction_files();
+        files[0].tests.push(Test { file: "src/a/ready.rs".into(), name: "holds".into(), line: 50, checks: vec!["req:stale".into()] });
+        s.set_extraction(Extraction::from_files(&files));
+        let out = call(&mut s, "rename_node", json!({ "ref": "req:stale", "to": "fresh" }), "2026-09-28").unwrap();
+        assert_eq!(out.output["still_named_in"], json!([{ "test": "test:src/a/ready.rs#holds", "file": "src/a/ready.rs", "line": 50 }]));
     }
 
     #[test]

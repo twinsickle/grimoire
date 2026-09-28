@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries and start snapshots), leaving closed tickets as they were; it persists the new record first and removes the old one last."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
@@ -69,6 +69,8 @@ pub enum Changed {
     Started(String),
     /// A ticket closed: its record, and its snapshot removed.
     Closed(String),
+    /// Several changes from one write, persisted in this order.
+    Many(Vec<Changed>),
 }
 
 /// The config fields `configure` may change; the repository is not one.
@@ -102,6 +104,104 @@ pub fn configure(store: &mut Store, change: ConfigChange, supported: &[String]) 
     invalid_if(errors, "config")?;
     store.config = config.clone();
     Ok((config, Changed::Config))
+}
+
+/// Rename a page or requirement to `to`, keeping every field and decision,
+/// and rewrite the references the store holds. Closed tickets keep the old
+/// reference as history. The changes come back in the order they must be
+/// persisted: the new record, what refers to it, and the old record last, so
+/// a failure part way leaves both rather than a dangling link.
+pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Reference, Changed), ToolError> {
+    if !matches!(r.kind, Kind::Page | Kind::Req) {
+        return Err(ToolError::invalid(format!("{r} cannot be renamed: only pages and requirements can"), vec![]));
+    }
+    let exists = |s: &Store, slug: &str| match r.kind {
+        Kind::Page => s.pages.contains_key(slug),
+        _ => s.requirements.contains_key(slug),
+    };
+    if !exists(store, &r.id) {
+        return Err(ToolError::not_found(r));
+    }
+    if !crate::store::is_slug(to) {
+        return Err(ToolError::invalid("the new slug is not a slug", vec![FieldError::new("to", "must match ^[a-z0-9]+(-[a-z0-9]+)*$ and be at most 64 characters")]));
+    }
+    if exists(store, to) {
+        return Err(ToolError::conflict(format!("{} already exists", Reference::new(r.kind, to))));
+    }
+    let new = Reference::new(r.kind, to);
+    let mut changes = Vec::new();
+    // The record itself, under its new slug.
+    match r.kind {
+        Kind::Page => {
+            let mut p = store.pages.remove(&r.id).expect("checked above");
+            p.slug = to.to_string();
+            store.pages.insert(to.to_string(), p);
+            changes.push(Changed::Page(to.to_string()));
+        }
+        _ => {
+            let mut q = store.requirements.remove(&r.id).expect("checked above");
+            q.slug = to.to_string();
+            store.requirements.insert(to.to_string(), q);
+            changes.push(Changed::Requirement(to.to_string()));
+        }
+    }
+    let swap = |refs: &mut Vec<Reference>| {
+        let mut hit = false;
+        for x in refs.iter_mut() {
+            if x == r {
+                *x = new.clone();
+                hit = true;
+            }
+        }
+        hit
+    };
+    for p in store.pages.values_mut() {
+        if swap(&mut p.links) {
+            changes.push(Changed::Page(p.slug.clone()));
+        }
+    }
+    for t in store.tickets.values_mut().filter(|t| t.status != Status::Closed) {
+        let a = swap(&mut t.touches);
+        let b = swap(&mut t.relies_on);
+        if a || b {
+            changes.push(Changed::Ticket(t.slug.clone()));
+        }
+    }
+    if r.kind == Kind::Page && store.config.roots.contains(&r.id) {
+        for root in store.config.roots.iter_mut().filter(|x| **x == r.id) {
+            *root = to.to_string();
+        }
+        changes.push(Changed::Config);
+    }
+    if let Some(b) = store.baseline.as_mut() {
+        let mut hit = false;
+        for k in b.findings.iter_mut() {
+            if &k.r#ref == r {
+                k.r#ref = new.clone();
+                hit = true;
+            }
+            if let Some(e) = k.edge.as_mut() {
+                for end in [&mut e.from, &mut e.to] {
+                    if *end == *r {
+                        *end = new.clone();
+                        hit = true;
+                    }
+                }
+            }
+        }
+        if hit {
+            changes.push(Changed::Baseline);
+        }
+    }
+    let (old_key, new_key) = (r.to_string(), new.to_string());
+    for s in store.starts.values_mut() {
+        if let Some(fp) = s.fingerprints.remove(&old_key) {
+            s.fingerprints.insert(new_key.clone(), fp);
+            changes.push(Changed::Started(s.ticket.clone()));
+        }
+    }
+    changes.push(Changed::Deleted(r.clone()));
+    Ok((new, Changed::Many(changes)))
 }
 
 /// Replace one band's order with `order`, every entry an open or active
