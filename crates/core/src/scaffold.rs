@@ -216,6 +216,31 @@ mod tests {
         assert_eq!(parent_group("crates"), "");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-skeleton-carries-only-what-the-contracts-say", "checks": ["crates/core/src/scaffold#contracts-only"]}
+    /// ```
+    #[test]
+    fn the_skeleton_carries_only_what_the_contracts_say() {
+        let x = extraction();
+        let s = scaffold(&x, "C:/repo", &["rust".into()]);
+        // Each requirement states its criterion verbatim, with no case and no decision.
+        for r in s.requirements.values() {
+            let c = &r.covered_by[0];
+            let (module, id) = c.split_hash().expect("covered_by names a criterion");
+            let criterion = x.modules[module].criteria.iter().find(|k| k.id == id).expect("the criterion exists");
+            assert_eq!(r.statement, criterion.statement);
+            assert!(r.scenarios.is_empty() && r.decisions.is_empty());
+        }
+        assert_eq!(scaffold(&x, "C:/repo", &["rust".into()]), s, "a function of the extraction and nothing else");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "skeleton-is-lint-clean-for-contracted-modules", "checks": ["crates/core/src/scaffold#lint-clean", "crates/core/src/scaffold#story-outline"]}
+    /// ```
     #[test]
     fn skeleton_is_lint_clean_for_contracted_modules() {
         let x = extraction();
