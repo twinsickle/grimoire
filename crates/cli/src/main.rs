@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook. Every other command reads it."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it removes .grimoire.toml last and keeps the store, printing where it is. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion."}]}
 //! ```
 
 mod init;
@@ -77,6 +77,15 @@ enum Command {
         /// The port the daemon will serve on; written into .mcp.json.
         #[arg(long, default_value_t = 4242)]
         port: u16,
+    },
+    /// Remove exactly what init wrote, and nothing of yours. The store is kept
+    /// unless --delete-store is given.
+    Uninstall {
+        #[arg(long)]
+        repo: Option<PathBuf>,
+        /// Also delete the store, when it names this repository and no daemon serves it.
+        #[arg(long)]
+        delete_store: bool,
     },
     /// Record every present finding as the baseline, so the check fails only
     /// on new ones. Resets any earlier baseline; the reason is kept.
@@ -157,6 +166,103 @@ fn canonical(p: &Path) -> anyhow::Result<String> {
     let s = c.to_string_lossy().to_string();
     // Windows canonical paths carry a \\?\ prefix that nothing else wants.
     Ok(s.strip_prefix(r"\\?\").unwrap_or(&s).replace('\\', "/"))
+}
+
+/// What a store directory may hold. Anything else means the path is not
+/// only a store, and deleting it would take something else with it.
+const STORE_ENTRIES: [&str; 7] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::STARTS_DIR, "pages", "requirements", "tickets"];
+
+/// Why `store` may not be deleted on behalf of `repo`, if it may not: it is
+/// the repository, holds it, is a root, holds anything a store does not,
+/// names another repository, or a daemon is serving it.
+fn refuse_store_deletion(store: &Path, repo: &Path) -> anyhow::Result<Option<String>> {
+    let real = store.canonicalize().with_context(|| format!("store {} does not exist", store.display()))?;
+    let here = repo.canonicalize().with_context(|| format!("{} does not exist", repo.display()))?;
+    if real.parent().is_none() {
+        return Ok(Some(format!("{} is a filesystem root", real.display())));
+    }
+    if here.starts_with(&real) {
+        return Ok(Some(format!("{} is the repository or holds it", real.display())));
+    }
+    for e in std::fs::read_dir(&real)? {
+        let name = e?.file_name().to_string_lossy().to_string();
+        if !STORE_ENTRIES.contains(&name.as_str()) {
+            return Ok(Some(format!("{} holds `{name}`, which is not part of a store", real.display())));
+        }
+    }
+    let (s, _) = store_io::load(&real)?;
+    let repo_str = canonical(repo)?;
+    if s.config.repository != repo_str {
+        return Ok(Some(format!("store {} belongs to repository {}, not {repo_str}", real.display(), s.config.repository)));
+    }
+    if let Some(port) = grimoire_server::client::serving(&real, &s.config.repository) {
+        return Ok(Some(format!("a daemon is serving store {} on port {port}; stop it first", real.display())));
+    }
+    if real.join(store_io::SERVE_FILE).exists() {
+        return Ok(Some(format!("store {} is marked as served ({}); stop its daemon, or remove the marker if none runs", real.display(), store_io::SERVE_FILE)));
+    }
+    Ok(None)
+}
+
+/// Remove what init wrote. Without `--repo`, the project is the nearest
+/// `.grimoire.toml` above the working directory; with it, that directory's
+/// own. Every check runs before anything is removed.
+fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
+    let (repo, store) = match repo {
+        None => {
+            let (dir, store) = store_io::find_project(&cwd()?)?;
+            (dir, Some(store))
+        }
+        Some(r) => {
+            let r = r.canonicalize().with_context(|| format!("{} does not exist", r.display()))?;
+            if r.join(store_io::PROJECT_FILE).is_file() {
+                let (dir, store) = store_io::find_project(&r)?;
+                (dir, Some(store))
+            } else {
+                (r, None)
+            }
+        }
+    };
+    if delete_store {
+        let Some(store) = &store else { bail!("{} names no store, so there is none to delete; nothing was removed", repo.display()) };
+        if let Some(why) = refuse_store_deletion(store, &repo)? {
+            bail!("not deleting the store: {why}. Nothing was removed");
+        }
+    }
+    let plan = init::plan_uninstall(&repo);
+    let print = |u: &init::Undone| match u {
+        init::Undone::Removed(p) => println!("removed {}", p.display()),
+        init::Undone::Changed(p) => println!("changed {} (Grimoire's part taken out)", p.display()),
+        init::Undone::Left { path, note } => println!("left    {}: {note}", path.display()),
+        init::Undone::Absent(p) => println!("absent  {}", p.display()),
+    };
+    match plan.apply(&repo) {
+        Ok(done) => done.iter().for_each(print),
+        Err(stopped) => {
+            stopped.done.iter().for_each(print);
+            bail!("stopped part way: {}. What is listed above was done; .grimoire.toml is kept, so running uninstall again finishes the rest", stopped.error);
+        }
+    }
+    let project = repo.join(store_io::PROJECT_FILE);
+    if project.is_file() {
+        std::fs::remove_file(&project)?;
+        println!("removed {}", project.display());
+    } else {
+        println!("absent  {}", project.display());
+    }
+    match store {
+        Some(store) if delete_store => {
+            // Checked again at the last moment: a daemon may have started since.
+            if let Some(why) = refuse_store_deletion(&store, &repo)? {
+                bail!("the integration is removed, but not the store: {why}");
+            }
+            std::fs::remove_dir_all(&store)?;
+            println!("removed store {}", store.display());
+        }
+        Some(store) => println!("kept    store {} (--delete-store removes it)", store.display()),
+        None => {}
+    }
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -279,6 +385,7 @@ fn main() -> anyhow::Result<()> {
             println!("done. Start the daemon with `grimoire serve --port {port}`; agents get the tools from .mcp.json and the sequences from the skill.");
             Ok(())
         }
+        Command::Uninstall { repo, delete_store } => uninstall(repo, delete_store),
         Command::Adopt { store, reason } => adopt(&store_dir(store.as_deref())?, &reason),
         Command::Tool { store, name, input } => {
             let store_dir = store_dir(store.as_deref())?;

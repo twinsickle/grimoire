@@ -38,15 +38,18 @@ cargo run -- --help
 
 ```
 grimoire scaffold --repo <path> --store <name>   # skeleton store from the module contracts
-grimoire init --repo <path> --store <name>       # write .grimoire.toml into the repository
+grimoire init --repo <path> --store <name>       # install the integration into the repository
+grimoire uninstall [--delete-store]              # remove exactly what init wrote; keep the store unless asked
 grimoire check                                   # the lints, for hooks and CI; exit 1 on findings
 grimoire serve --port 4242                       # the daemon: /api/<tool>, /mcp, /api/events
 grimoire tool <name> '<json>'                    # one tool against the store, no daemon
 ```
 
 A store lives under the platform data directory (`<data>/grimoire/stores/<name>`)
-unless `--store` is given a path. The only file written into a repository is
-`.grimoire.toml`, by `init`.
+unless `--store` is given a path. Only `init` writes into a repository, and only
+the integration: `.grimoire.toml`, the agent skill, a marked section in
+`CLAUDE.md` and `AGENTS.md`, the `grimoire` entry in `.mcp.json` and a pre-commit
+hook. `uninstall` removes exactly that, leaving everything of yours as it was.
 
 ## Development loop
 

@@ -207,3 +207,122 @@ fn check_and_the_lint_tool_report_the_same_findings() {
     assert!(check["new"].as_u64().unwrap() > 0 && check["findings"].as_array().unwrap().len() > check["new"].as_u64().unwrap() as usize);
     assert_eq!(check, lint, "a hook and an agent see the same findings and the same verdict");
 }
+
+/// A repository before init: its files, and where its store will go.
+fn bare_repo() -> Project {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("grimoire-cli-u-{}-{nanos}", std::process::id()));
+    let repo = dir.join("repo");
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
+    std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"c\"\nversion = \"0.1.0\"\n").unwrap();
+    std::fs::write(repo.join("src").join("lib.rs"), CONTRACTED).unwrap();
+    std::fs::write(repo.join("CLAUDE.md"), "# Mine\n").unwrap();
+    let store = dir.join("store");
+    Project { dir, repo, store }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src#uninstall-store"]}
+/// ```
+#[test]
+fn init_then_uninstall_leaves_the_repository_as_it_was() {
+    let p = bare_repo();
+    let before = files(&p.repo);
+    let claude = std::fs::read_to_string(p.repo.join("CLAUDE.md")).unwrap();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    assert_ne!(files(&p.repo), before);
+    let out = run(&p.repo, &["uninstall"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before, "every file init wrote is gone, and no other");
+    assert_eq!(std::fs::read_to_string(p.repo.join("CLAUDE.md")).unwrap(), claude);
+    assert!(p.store.join("grimoire.json").is_file(), "the store is kept by default");
+    assert!(text(&out).contains("kept    store"), "{}", text(&out));
+    // And when asked, the store goes too.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src#uninstall-store"]}
+/// ```
+#[test]
+fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
+    // A store that names another repository: refused, and nothing removed.
+    let (a, _) = project();
+    let b = bare_repo();
+    std::fs::copy(a.repo.join(".grimoire.toml"), b.repo.join(".grimoire.toml")).unwrap();
+    let before = files(&b.repo);
+    let out = run(&b.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("belongs to repository"), "{}", text(&out));
+    assert_eq!(files(&b.repo), before, "a refusal changes nothing");
+    assert!(a.store.join("grimoire.json").is_file());
+
+    // A store a daemon is serving: refused, and nothing removed.
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(Command::new(BIN).args(["serve", "--port", &port.to_string()]).current_dir(&a.repo).spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !a.store.join("serve.json").is_file() {
+        assert!(Instant::now() < deadline, "the daemon never marked the store");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let before = files(&a.repo);
+    let out = run(&a.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("stop it first"), "{}", text(&out));
+    assert_eq!(files(&a.repo), before);
+    assert!(a.store.join("grimoire.json").is_file());
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src#uninstall-store"]}
+/// ```
+#[test]
+fn uninstall_never_deletes_more_than_a_store() {
+    // A store made in the repository's own parent: deleting it would take the repository.
+    let p = bare_repo();
+    let init = run(&p.repo, &["init", "--store", ".."]);
+    assert!(init.status.success(), "{}", text(&init));
+    let before = files(&p.dir);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("is the repository or holds it"), "{}", text(&out));
+    assert_eq!(files(&p.dir), before, "nothing removed, the repository and its parent intact");
+
+    // A store folder holding something a store does not: refused.
+    let q = bare_repo();
+    assert!(run(&q.repo, &["init", "--store", &q.store.to_string_lossy()]).status.success());
+    std::fs::write(q.store.join("notes.txt"), "mine").unwrap();
+    let out = run(&q.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("which is not part of a store"), "{}", text(&out));
+    assert!(q.store.join("notes.txt").is_file() && q.repo.join(".grimoire.toml").is_file());
+}
+
+#[test]
+fn uninstall_finds_the_project_from_below_and_refuses_a_broken_project_file() {
+    let p = bare_repo();
+    let before = files(&p.repo);
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    // Run from a subdirectory: the project above is uninstalled.
+    let out = run(&p.repo.join("src"), &["uninstall"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
+    // A project file that does not parse: an error, and nothing removed.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    std::fs::write(p.repo.join(".grimoire.toml"), "store = [not toml").unwrap();
+    let installed = files(&p.repo);
+    let out = run(&p.repo, &["uninstall"]);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert_eq!(files(&p.repo), installed);
+}
