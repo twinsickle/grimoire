@@ -145,7 +145,12 @@ export function BoardView() {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", ref);
       draggingRef.current = ref;
-      setDragging(ref);
+      // Drawing the drop targets changes the layout (an empty band appears),
+      // and a browser abandons a drag whose layout changes inside dragstart;
+      // so they are drawn just after it.
+      setTimeout(() => {
+        if (draggingRef.current === ref) setDragging(ref);
+      }, 0);
     },
     over: (e: DragEvent, target: Priority, rowRef: Ref | null) => {
       const dragged = draggingRef.current;

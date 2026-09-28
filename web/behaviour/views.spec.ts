@@ -527,3 +527,43 @@ test("a body with script in it renders as Markdown and runs nothing", async ({ p
   }
   await expect(md.getByText("covers the page")).toBeVisible();
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-real-drag-into-an-empty-band", "checks": ["web/src/views/Board#order-from-tool"]}
+ * ```
+ */
+test("a change dragged with the mouse into an empty band lands there and shows at once", async ({ page }) => {
+  // A real pointer drag, not dispatched events: a browser abandons a drag whose
+  // layout changes inside dragstart, and an empty band appears when one begins.
+  await page.goto("/board");
+  const row = (ref: string) => page.locator(`li[data-ticket="${ref}"]`);
+  const answer = async () => tool<BoardAnswer>(page, "board");
+  // Every priority as it was, put back afterwards so later specs see the fixture unchanged.
+  const was = (await answer()).tickets.map((x) => ({ ref: x.ref, priority: x.priority }));
+  try {
+    for (const t of was.filter((x) => x.priority === "next")) {
+      await tool(page, "update_ticket", { ref: t.ref, priority: "high" });
+    }
+    await expect(page.locator("#band-next")).toHaveCount(0);
+    const moving = (await answer()).tickets.find((t) => t.priority === "later")!.ref;
+    const from = (await row(moving).getByRole("button", { name: /^Move / }).boundingBox())!;
+    await page.mouse.move(from.x + 5, from.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 10, from.y + 10, { steps: 3 });
+    const zone = page.locator("#band-next li", { hasText: "Drop here" });
+    await expect(zone).toBeVisible();
+    const to = (await zone.boundingBox())!;
+    await page.mouse.move(to.x + 20, to.y + 10, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(async () => (await answer()).tickets.find((t) => t.ref === moving)?.priority).toBe("next");
+    await expect(page.locator(`#band-next li[data-ticket="${moving}"]`)).toBeVisible();
+  } finally {
+    const now = (await answer()).tickets;
+    for (const w of was) {
+      if (now.find((x) => x.ref === w.ref)?.priority !== w.priority) await tool(page, "update_ticket", { ref: w.ref, priority: w.priority });
+    }
+  }
+});
