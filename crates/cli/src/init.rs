@@ -117,8 +117,12 @@ pub fn install(repo: &Path, port: u16) -> Result<Vec<Wrote>, InitError> {
         let hook = repo.join(HOOK_REL);
         if hook.exists() {
             let existing = std::fs::read_to_string(&hook).unwrap_or_default();
-            if existing.contains("grimoire check") {
+            if existing.contains("Installed by `grimoire init`") {
+                // Ours: rewrite, so a changed script reaches the repository.
+                write(&hook, &hook_script())?;
                 out.push(Wrote::Written(hook));
+            } else if existing.contains("grimoire check") {
+                out.push(Wrote::Skipped { path: hook, note: "the existing pre-commit hook already runs `grimoire check`".into() });
             } else {
                 out.push(Wrote::Skipped { path: hook, note: "a pre-commit hook already exists; add `grimoire check` to it".into() });
             }
