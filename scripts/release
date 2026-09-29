@@ -1,0 +1,61 @@
+#!/bin/sh
+# Build a release binary with the web UI inside it, then check that the
+# binary serves the UI. This repository's own tooling; run from anywhere:
+#   sh scripts/release
+# RELEASE_CHECK_PORT picks the port the check serves on (default 4747).
+set -eu
+cd "$(dirname "$0")/.."
+
+echo "== web UI"
+# A fresh checkout installs exactly the lockfile; an existing node_modules is
+# left alone, since `npm ci` deletes it first, which breaks a running dev
+# server and fails on Windows while one holds its files open.
+if [ ! -d web/node_modules ]; then
+  (cd web && npm ci)
+elif [ web/package-lock.json -nt web/node_modules/.package-lock.json ]; then
+  echo "web/node_modules is older than web/package-lock.json, so a release would build with other"
+  echo "tools than the lockfile names. Stop the dev server, run \`npm ci\` in web/, and run this again."
+  exit 1
+fi
+(cd web && npm run build)
+
+echo "== release binary"
+cargo build --release --locked -p grimoire-cli
+bin="$PWD/target/release/grimoire"
+[ -f "$bin.exe" ] && bin="$bin.exe"
+
+echo "== checking the binary serves its UI"
+port="${RELEASE_CHECK_PORT:-4747}"
+# A port something already answers on would let the check pass against it.
+while curl -s -o /dev/null "http://127.0.0.1:$port/"; do port=$((port + 1)); done
+tmp="$(mktemp -d)"
+mkdir -p "$tmp/repo/src"
+printf '[package]\nname = "check"\nversion = "0.1.0"\n' > "$tmp/repo/Cargo.toml"
+printf 'pub fn check() {}\n' > "$tmp/repo/src/lib.rs"
+"$bin" init --repo "$tmp/repo" --store "$tmp/store" > /dev/null
+(cd "$tmp/repo" && exec "$bin" serve --port "$port") > "$tmp/serve.log" 2>&1 &
+pid=$!
+stop() { kill "$pid" 2> /dev/null || true; wait "$pid" 2> /dev/null || true; rm -rf "$tmp"; }
+trap stop EXIT
+fail() { echo "release check failed: $1"; cat "$tmp/serve.log"; exit 1; }
+alive() { kill -0 "$pid" 2> /dev/null || fail "the release binary exited"; }
+
+up=""
+for _ in $(seq 1 60); do
+  alive
+  if curl -s -f -o /dev/null "http://127.0.0.1:$port/api/tools"; then up=1; break; fi
+  sleep 0.5
+done
+[ -n "$up" ] || fail "the release binary never started serving on $port"
+
+base="http://127.0.0.1:$port"
+index="$(curl -s -f "$base/")" || fail "/ did not answer"
+alive
+printf '%s' "$index" | grep -q '<div id="root">' || fail "/ is not the UI"
+curl -s -f "$base/board" | grep -q '<div id="root">' || fail "/board is not the UI"
+script="$(printf '%s' "$index" | grep -o 'src="/assets/[^"]*\.js"' | head -n 1 | sed 's/^src="//; s/"$//')"
+[ -n "$script" ] || fail "the UI's index names no script"
+curl -s -f -D - -o /dev/null "$base$script" | tr 'A-Z' 'a-z' | grep -q '^content-type: .*javascript' || fail "$script is not served as JavaScript"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$base/assets/definitely-missing.js")" = 404 ] || fail "a missing asset is not a 404"
+
+echo "release binary: $bin (UI inside, checked on port $port)"

@@ -36,7 +36,8 @@ pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
     tracing::info!("graph: {}", serde_json::to_string(&status["nodes"]).unwrap_or_default());
 
     let _watcher = watch::start(daemon.clone())?;
-    let app = http::router(daemon.clone(), opts.ui_dir.clone());
+    let ui = opts.ui_dir.clone().map_or(http::Ui::Embedded, http::Ui::Dir);
+    let app = http::router(daemon.clone(), ui);
     let addr = SocketAddr::from(([127, 0, 0, 1], opts.port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     daemon.mark_serving(opts.port)?;

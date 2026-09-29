@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"When no UI directory is configured the API and MCP still serve; the UI is a static fallback, not a dependency."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own, whose Sec-Fetch-Site is cross-site or same-site, or whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."}]}
+//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own, whose Sec-Fetch-Site is cross-site or same-site, or whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."}]}
 //! ```
 
 use std::convert::Infallible;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use axum::body::Bytes;
 use axum::extract::{Path, Query, Request, State};
 use axum::http::header::{CONTENT_TYPE, HOST, ORIGIN};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -26,7 +26,26 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::daemon::Daemon;
 
-pub fn router(daemon: Arc<Daemon>, ui_dir: Option<PathBuf>) -> Router {
+/// Where the UI's files come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ui {
+    /// A directory given on the command line, which overrides the embedded copy.
+    Dir(PathBuf),
+    /// The copy embedded at build time, when the build had one.
+    Embedded,
+    /// None: the API and MCP only, and a page saying so.
+    None,
+}
+
+/// The built UI, `web/dist`. A release build embeds it; a debug build reads
+/// it from disk, so the dev loop is unchanged. A build without it still
+/// succeeds (its build script warns), and then holds no files.
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../../web/dist/"]
+#[allow_missing = true]
+struct Built;
+
+pub fn router(daemon: Arc<Daemon>, ui: Ui) -> Router {
     let mut app = Router::new()
         .route("/api/tools", get(list_tools))
         .route("/api/events", get(events))
@@ -36,11 +55,13 @@ pub fn router(daemon: Arc<Daemon>, ui_dir: Option<PathBuf>) -> Router {
         // Everything above is refused to other sites; the UI's files below are
         // served to any navigation, so a link to the UI from elsewhere opens it.
         .layer(middleware::from_fn(same_origin));
-    if let Some(dir) = ui_dir {
-        let index = dir.join("index.html");
-        app = app.fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(index)));
-    } else {
-        app = app.fallback(no_ui);
+    match ui {
+        Ui::Dir(dir) => {
+            let index = dir.join("index.html");
+            app = app.fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(index)));
+        }
+        Ui::Embedded => app = app.fallback(embedded),
+        Ui::None => app = app.fallback(no_ui),
     }
     app
 }
@@ -86,11 +107,43 @@ fn is_loopback(host: &str) -> bool {
     matches!(name.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "[::1]")
 }
 
+/// Whether this binary holds a UI. Asked on every request, so a debug daemon
+/// serves `web/dist` as soon as it is built, even when it was empty at start.
+pub fn embedded_ui_present() -> bool {
+    Built::get("index.html").is_some()
+}
+
+async fn embedded(uri: Uri) -> Response {
+    if !embedded_ui_present() {
+        return no_ui().await;
+    }
+    asset(uri.path(), |name| Built::get(name).map(|f| (f.data.into_owned(), f.metadata.mimetype().to_string())))
+}
+
+/// The answer for `path` from files looked up by name: the file with its
+/// content type; a 404 for a missing file under `/assets/`, where the build
+/// puts its files; and `index.html` for anything else, a client-side route,
+/// whose last segment may well hold a dot (`/n/file:src/lib.rs`).
+fn asset(path: &str, get: impl Fn(&str) -> Option<(Vec<u8>, String)>) -> Response {
+    let name = match path.trim_start_matches('/') {
+        "" => "index.html",
+        n => n,
+    };
+    let serve = |(bytes, mime): (Vec<u8>, String)| ([(CONTENT_TYPE, mime)], bytes).into_response();
+    if let Some(file) = get(name) {
+        return serve(file);
+    }
+    if name.starts_with("assets/") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    get("index.html").map_or_else(|| StatusCode::NOT_FOUND.into_response(), serve)
+}
+
 async fn no_ui() -> Response {
     (
         StatusCode::OK,
         [("content-type", "text/html; charset=utf-8")],
-        "<!doctype html><title>grimoire</title><body style=\"background:#111;color:#ddd;font-family:system-ui;padding:2rem\"><h1>grimoire</h1><p>The daemon is running. The API is under <code>/api/&lt;tool&gt;</code> (<a href=\"/api/tools\" style=\"color:#9cf\">list</a>), MCP at <code>/mcp</code>, events at <code>/api/events</code>. No UI directory is configured; run the Vite dev server for the UI.</p>",
+        "<!doctype html><title>grimoire</title><body style=\"background:#111;color:#ddd;font-family:system-ui;padding:2rem\"><h1>grimoire</h1><p>The daemon is running. The API is under <code>/api/&lt;tool&gt;</code> (<a href=\"/api/tools\" style=\"color:#9cf\">list</a>), MCP at <code>/mcp</code>, events at <code>/api/events</code>. This binary holds no UI: it was built without <code>web/dist</code>. Give one with <code>--ui-dir</code>, run the Vite dev server, or build with <code>scripts/release</code>.</p>",
     )
         .into_response()
 }
@@ -200,5 +253,29 @@ mod tests {
         assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("sec-fetch-site", "cross-site")])).is_some(), "an image tag elsewhere");
         assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("sec-fetch-site", "same-site")])).is_some(), "another port on localhost");
         assert!(refusal(&HeaderMap::new()).is_some());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-embedded-ui-serves-files-routes-and-404s", "checks": ["crates/server/src/http#ui-embedded"]}
+    /// ```
+    #[tokio::test]
+    async fn the_embedded_ui_serves_files_routes_and_404s() {
+        let files = |name: &str| match name {
+            "index.html" => Some((b"<div id=root></div>".to_vec(), "text/html".to_string())),
+            "assets/app.js" => Some((b"run()".to_vec(), "text/javascript".to_string())),
+            _ => None,
+        };
+        let body = |r: Response| async move { axum::body::to_bytes(r.into_body(), 1 << 20).await.map(|b| b.to_vec()).unwrap_or_default() };
+        for route in ["/", "/board", "/n/page%3Agoal", "/n/file%3Acrates%2Fcore%2Fsrc%2Flib.rs", "/unplaced"] {
+            let r = asset(route, files);
+            assert_eq!(r.status(), StatusCode::OK, "{route}");
+            assert_eq!(body(r).await, b"<div id=root></div>", "{route} is a client-side route");
+        }
+        let js = asset("/assets/app.js", files);
+        assert_eq!(js.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()), Some("text/javascript"));
+        assert_eq!(body(js).await, b"run()");
+        assert_eq!(asset("/assets/missing.js", files).status(), StatusCode::NOT_FOUND, "a missing built file is not the index");
     }
 }

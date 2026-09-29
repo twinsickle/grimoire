@@ -27,6 +27,10 @@ repository only.
 - Dev loop: `bacon serve --headless` runs the daemon on 4242; `npm run dev`
   in `web/` serves the UI on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
+- A release binary carries the built UI: `sh scripts/release` builds `web/`,
+  then `cargo build --release`, and checks the binary serves its UI. A debug
+  build reads `web/dist` from disk, so `bacon serve` alone serves the last
+  built UI on 4242; `npm run dev` is still the hot-reloading one.
 - Changed a tool's answer? `web/src/generated/tools.ts` is generated from the
   Rust answer types in `crates/core/src/answer.rs`; a test fails until
   `cargo test -p grimoire-core --test typescript -- --ignored`

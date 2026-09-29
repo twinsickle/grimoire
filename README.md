@@ -34,6 +34,9 @@ cargo test --workspace
 cargo run -- --help
 ```
 
+A release binary carries the web UI inside it: `sh scripts/release` builds it.
+`--ui-dir` serves another build instead.
+
 ## Using it on a project
 
 ```
@@ -41,7 +44,7 @@ grimoire scaffold --repo <path> --store <name>   # skeleton store from the modul
 grimoire init --repo <path> --store <name>       # install the integration into the repository
 grimoire uninstall [--delete-store]              # remove exactly what init wrote; keep the store unless asked
 grimoire check                                   # the lints, for hooks and CI; exit 1 on findings
-grimoire serve --port 4242                       # the daemon: /api/<tool>, /mcp, /api/events
+grimoire serve --port 4242                       # the daemon: the UI, /api/<tool>, /mcp, /api/events
 grimoire tool <name> '<json>'                    # one tool against the store, no daemon
 ```
 

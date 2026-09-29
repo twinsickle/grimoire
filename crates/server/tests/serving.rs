@@ -29,8 +29,13 @@ impl Drop for Served {
     }
 }
 
-/// A store over a one-file repository, served with no UI directory.
+/// A store over a one-file repository, served with no UI.
 fn serve() -> Served {
+    serve_with(http::Ui::None)
+}
+
+/// The same store, served with the given UI.
+fn serve_with(ui: http::Ui) -> Served {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let dir = std::env::temp_dir().join(format!("grimoire-serving-{}-{nanos}", std::process::id()));
     let repo = dir.join("repo");
@@ -44,7 +49,7 @@ fn serve() -> Served {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
     let port = listener.local_addr().unwrap().port();
-    let app = http::router(daemon.clone(), None);
+    let app = http::router(daemon.clone(), ui);
     runtime.spawn(async move { axum::serve(listener, app).await });
     Served { dir, port, daemon, _runtime: runtime }
 }
@@ -113,7 +118,7 @@ fn no_ui_still_serves() {
     let s = serve();
     let (code, body) = request(s.port, "GET", "/", None);
     assert_eq!(code, 200);
-    assert!(body.contains("No UI directory is configured"), "{body}");
+    assert!(body.contains("This binary holds no UI"), "{body}");
     assert_eq!(request(s.port, "POST", "/api/lint", Some(&json!({}))).0, 200);
     assert!(mcp(s.port, 1, "tools/list", json!({}))["result"]["tools"].is_array());
 }
@@ -286,4 +291,56 @@ fn get_runs_reads_only() {
     assert_eq!(code, 405, "{body}");
     assert_eq!(json(&body)["error"], "invalid");
     assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview", None).0, 200, "still there");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-ui-directory-overrides-and-routes-land-on-its-index", "checks": ["crates/server/src/http#ui-optional"]}
+/// ```
+#[test]
+fn a_ui_directory_overrides_and_routes_land_on_its_index() {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("grimoire-ui-{}-{nanos}", std::process::id()));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(dir.join("index.html"), "<div id=\"override\"></div>").unwrap();
+    std::fs::write(dir.join("assets").join("app.js"), "run()").unwrap();
+    let s = serve_with(http::Ui::Dir(dir.clone()));
+    for route in ["/", "/board", "/n/page%3Agoal"] {
+        let (code, body) = request(s.port, "GET", route, None);
+        assert_eq!(code, 200, "{route}");
+        assert!(body.contains("override"), "{route} is the given directory's index, not the embedded one: {body}");
+    }
+    let (_, head, body) = request_as(s.port, "GET", "/assets/app.js", None, "127.0.0.1", "");
+    assert_eq!(body, "run()");
+    assert!(head.to_ascii_lowercase().contains("javascript"), "{head}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-embedded-ui-or-a-page-saying-there-is-none", "checks": ["crates/server/src/http#ui-optional", "crates/server/src/http#ui-embedded"]}
+/// ```
+#[test]
+fn the_embedded_ui_or_a_page_saying_there_is_none() {
+    let s = serve_with(http::Ui::Embedded);
+    let (code, body) = request(s.port, "GET", "/board", None);
+    assert_eq!(code, 200);
+    if http::embedded_ui_present() {
+        assert!(body.contains("<div id=\"root\">"), "a client-side route gets the embedded index: {body}");
+        assert_eq!(request(s.port, "GET", "/assets/definitely-missing.js", None).0, 404);
+    } else {
+        assert!(body.contains("This binary holds no UI"), "{body}");
+    }
+    // HEAD answers like GET, without a body.
+    let (code, _, body) = request_as(s.port, "HEAD", "/", None, "127.0.0.1", "");
+    assert_eq!((code, body.as_str()), (200, ""));
+    // Nothing outside the UI is reachable through it, encoded or not.
+    for escape in ["/../Cargo.toml", "/..%2f..%2fCargo.toml", "/assets/..%2f..%2f..%2fCargo.toml", "/..\\..\\Cargo.toml"] {
+        let (_, body) = request(s.port, "GET", escape, None);
+        assert!(!body.contains("[package]") && !body.contains("[workspace]"), "{escape} reached a file outside the UI");
+    }
+    // The API and MCP serve whatever the UI.
+    assert_eq!(request(s.port, "POST", "/api/status", Some(&json!({}))).0, 200);
 }
