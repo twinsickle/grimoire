@@ -9,6 +9,7 @@
 import { Fragment, useEffect, useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
+import { TicketGraph } from "./TicketGraph";
 import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
 import {
   Badge,
@@ -158,6 +159,7 @@ function Ticket({ n }: { n: TicketNode }) {
           <TicketActions ticket={ref} status={n.status} />
         </div>
       )}
+      <TicketGraph key={ref} ticket={ref} title={n.title} />
       <h2>Touches</h2>
       <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} />
       <h2>Relies on</h2>

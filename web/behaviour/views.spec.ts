@@ -635,3 +635,76 @@ test("drilling down from a declaration ends at its line in the annotated source"
   await page.goto("/n/test%3Asrc%2Fready.rs%23ready-needs-a-commit");
   await expect(page.locator("a[href='/n/file%3Asrc%2Fready.rs#L13']")).toBeVisible();
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * ```
+ */
+test("a ticket's page draws what it rests on, and a node in the graph opens its page", async ({ page }) => {
+  await page.goto("/n/ticket%3A0006");
+  const graph = page.getByRole("region", { name: "What this ticket rests on" });
+  // The ticket at the left, what it relies on and touches beside it, the module's criteria a column further.
+  await expect(graph.locator("[data-graph-node='ticket:0006']")).toBeVisible();
+  await expect(graph.locator("[data-graph-node='ticket:0005']")).toContainText("Should readiness count submodules?");
+  await expect(graph.locator("[data-graph-node='module:src/ready']")).toBeVisible();
+  const [ticket, module] = await Promise.all([graph.locator("[data-graph-node='ticket:0006']").boundingBox(), graph.locator("[data-graph-node='module:src/ready']").boundingBox()]);
+  expect(module!.x).toBeGreaterThan(ticket!.x);
+  // A small walk is drawn whole: nothing to unfold.
+  await expect(graph.getByRole("button", { name: /^Show the / })).toHaveCount(0);
+  // Each node says what it hangs under, so the lines are read out too.
+  await expect(graph.getByRole("link", { name: "ticket Should readiness count submodules?, under Report readiness per workspace" })).toBeVisible();
+  await graph.locator("[data-graph-node='ticket:0005']").click();
+  await expect(page).toHaveURL(/\/n\/ticket%3A0005$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Should readiness count submodules?");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-large-graph-folds-and-unfolds", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * ```
+ */
+test("a ticket resting on many nodes folds them into counts that unfold, and folds them again", async ({ page }) => {
+  // The fixture is small, so the walk the graph asks for is a synthetic one of 46 nodes: a page with 44 requirements and a module.
+  const via = ["ticket:0006", "page:readiness"];
+  const nodes = [
+    { ref: "page:readiness", title: "Readiness", via: ["ticket:0006"], decisions: [] },
+    ...Array.from({ length: 44 }, (_, i) => ({ ref: `req:r${i}`, title: `Requirement ${i}`, via, decisions: [] })),
+    { ref: "module:src/ready", title: "Decide readiness", via, decisions: [] },
+  ];
+  await page.route("**/api/rests_on", async (route) => {
+    const input = route.request().postDataJSON();
+    if (input.depth !== undefined) return route.continue();
+    await route.fulfill({ json: { nodes } });
+  });
+  await page.goto("/n/ticket%3A0006");
+  const graph = page.getByRole("region", { name: "What this ticket rests on" });
+  await expect(graph).toContainText("46 nodes it rests on, deeper branches folded");
+  await expect(graph.locator("[data-graph-node='page:readiness']")).toBeVisible();
+  await expect(graph.locator("[data-graph-node^='req:']")).toHaveCount(0);
+  await expect(graph.getByRole("button", { name: "Fold all" })).toHaveCount(0);
+  await graph.getByRole("button", { name: "Show the 44 requirements under Readiness" }).click();
+  await expect(graph.locator("[data-graph-node^='req:']")).toHaveCount(44);
+  await expect(graph.getByRole("button", { name: "Show the 1 module under Readiness" })).toBeVisible();
+  await graph.getByRole("button", { name: "Fold all" }).click();
+  await expect(graph.locator("[data-graph-node^='req:']")).toHaveCount(0);
+  await expect(graph.getByRole("button", { name: "Fold all" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-ticket-resting-on-nothing-draws-no-graph", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * ```
+ */
+test("a ticket that rests on nothing draws no graph", async ({ page }) => {
+  await page.goto("/n/ticket%3A0008");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Should readiness follow symlinks?");
+  await expect(page.getByText("Nothing below this node.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "What this ticket rests on" })).toHaveCount(0);
+});
