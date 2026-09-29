@@ -109,6 +109,15 @@ pub fn new_count(findings: &[Finding]) -> usize {
     findings.iter().filter(|f| !f.baselined).count()
 }
 
+/// Count findings per rule, every rule present, for `lint`'s `counts`.
+pub fn counts(findings: &[Finding]) -> BTreeMap<String, usize> {
+    let mut m: BTreeMap<String, usize> = Rule::ALL.iter().map(|r| (r.name().to_string(), 0)).collect();
+    for f in findings {
+        *m.entry(f.rule.name().to_string()).or_insert(0) += 1;
+    }
+    m
+}
+
 /// The baseline the store should hold now: the stored one without the
 /// entries no longer produced, in their stored order. `None` when nothing
 /// was fixed, so the caller writes only when it shrank.

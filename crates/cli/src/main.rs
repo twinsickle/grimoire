@@ -298,7 +298,7 @@ fn main() -> anyhow::Result<()> {
             let findings = lint::lint(g, &rules);
             let new = lint::new_count(&findings);
             if json {
-                println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::query::counts(&findings), "new": new }))?);
+                println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::lint::counts(&findings), "new": new }))?);
             } else {
                 // A build that cannot read part of the project explains the rest,
                 // so it comes first. Then the new findings; inherited ones are
@@ -311,7 +311,7 @@ fn main() -> anyhow::Result<()> {
                 for f in findings.iter().filter(|f| !f.baselined && !unsupported(f)) {
                     println!("{:<11} {}  {}", f.rule.name(), f.r#ref, f.reason);
                 }
-                let counts = grimoire_core::query::counts(&findings);
+                let counts = grimoire_core::lint::counts(&findings);
                 let mut line = format!("{} finding(s): {}", findings.len(), counts.iter().map(|(k, v)| format!("{v} {k}")).collect::<Vec<_>>().join(", "));
                 if adopted {
                     line.push_str(&format!("; {} baselined, {new} new", findings.len() - new));

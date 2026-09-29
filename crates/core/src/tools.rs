@@ -279,7 +279,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let g = state.graph();
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
             let findings = lint::lint(g, &rules);
-            let (counts, new) = (query::counts(&findings), lint::new_count(&findings));
+            let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
             answer(name, LintAnswer { findings, counts, new }, None)
         }
         "module_source" => {
@@ -671,7 +671,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "coverage-of-each-kind", "checks": ["crates/core/src/query#coverage"]}
+    /// {"test": "coverage-of-each-kind", "checks": ["crates/core/src/query/coverage#coverage"]}
     /// ```
     #[test]
     fn coverage_of_each_kind() {
@@ -697,7 +697,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "write-then-read-sees-it", "checks": ["crates/core/src/ops#never-fails-on-lint", "crates/core/src/query#node-view", "crates/core/src/query#get", "crates/core/src/tools#graph-current"]}
+    /// {"test": "write-then-read-sees-it", "checks": ["crates/core/src/ops#never-fails-on-lint", "crates/core/src/query/lookup#node-view", "crates/core/src/query/lookup#get", "crates/core/src/tools#graph-current"]}
     /// ```
     #[test]
     fn write_then_read_sees_it() {
@@ -856,7 +856,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "coverage-lists-the-tests-of-a-criterion", "checks": ["crates/core/src/query#find", "crates/core/src/query#coverage"]}
+    /// {"test": "coverage-lists-the-tests-of-a-criterion", "checks": ["crates/core/src/query/lookup#find", "crates/core/src/query/coverage#coverage"]}
     /// ```
     #[test]
     fn coverage_lists_the_tests_of_a_criterion() {
@@ -1045,7 +1045,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "errors-carry-codes", "checks": ["crates/core/src/query#get", "crates/core/src/tools#error-codes"]}
+    /// {"test": "errors-carry-codes", "checks": ["crates/core/src/query/lookup#get", "crates/core/src/tools#error-codes"]}
     /// ```
     #[test]
     fn errors_carry_codes() {
@@ -1075,7 +1075,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "source-answers-a-nodes-file-with-its-annotations", "checks": ["crates/core/src/tools#source", "crates/core/src/query#source-annotations"]}
+    /// {"test": "source-answers-a-nodes-file-with-its-annotations", "checks": ["crates/core/src/tools#source", "crates/core/src/query/source#source-annotations"]}
     /// ```
     #[test]
     fn source_answers_a_nodes_file_with_its_annotations() {
