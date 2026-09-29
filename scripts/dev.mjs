@@ -110,7 +110,10 @@ const children = processes.map((p) => {
   });
   child.on("exit", (code, signal) => {
     if (reason !== null) return;
-    const status = signal ? bySignal(signal) : code === CONTROL_C_EXIT || code === -1073741510 ? 130 : (code ?? 1);
+    // Only 0 to 255 means anything as an exit status; a process killed outright
+    // on Windows reports -1 (4294967295), which the shell would misread.
+    const own = code === null ? 1 : code >= 0 && code <= 255 ? code : 1;
+    const status = signal ? bySignal(signal) : code === CONTROL_C_EXIT || code === -1073741510 ? 130 : own;
     write(p, process.stdout, `stopped (${signal ?? `exit ${code}`}); stopping the rest`);
     stopAll(status);
   });
