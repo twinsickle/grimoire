@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The kinds of node in the graph. The first three live in the store; the
 /// rest are derived from the repository on every read.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
@@ -77,6 +78,7 @@ impl fmt::Display for Kind {
 
 /// A reference to a node: `kind:id`. The only form a link takes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(type = "string", rename = "Ref"))]
 pub struct Reference {
     pub kind: Kind,
     pub id: String,
@@ -158,6 +160,7 @@ impl<'de> Deserialize<'de> for Reference {
 
 /// The relation an edge carries. Written on the owning node, pointing
 /// downward; the graph derives the reverse.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Relation {
@@ -199,6 +202,7 @@ impl fmt::Display for Relation {
 // ---------------------------------------------------------------------------
 
 /// A unit of intent.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Page {
@@ -209,6 +213,7 @@ pub struct Page {
 }
 
 /// One explicit requirement in the OpenSpec shape.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Requirement {
@@ -220,6 +225,7 @@ pub struct Requirement {
     pub decisions: Vec<Decision>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
@@ -230,6 +236,7 @@ pub struct Scenario {
 }
 
 /// A dated line saying what was chosen and why.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Decision {
@@ -237,6 +244,7 @@ pub struct Decision {
     pub text: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TicketKind {
@@ -245,6 +253,7 @@ pub enum TicketKind {
     Question,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Priority {
@@ -253,6 +262,7 @@ pub enum Priority {
     Later,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
@@ -262,6 +272,7 @@ pub enum Status {
 }
 
 /// An intended change to the grimoire, or a gap or question about it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ticket {
@@ -277,6 +288,7 @@ pub struct Ticket {
 }
 
 /// A lint rule. Stored in a baseline, reported in every finding.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Rule {
@@ -301,6 +313,7 @@ impl Rule {
 }
 
 /// The edge a dangling finding is about.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingEdge {
@@ -313,6 +326,7 @@ pub struct FindingEdge {
 /// check tells apart two problems on one node (a module unlinked and without
 /// a contract); the reason text is left out because it carries parser
 /// messages that change while the problem stays the same.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingKey {
@@ -320,10 +334,12 @@ pub struct FindingKey {
     pub check: String,
     pub r#ref: Reference,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub edge: Option<FindingEdge>,
 }
 
 /// `baseline.json`: the findings accepted as inherited at adoption.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Baseline {
@@ -335,6 +351,7 @@ pub struct Baseline {
 /// `starts/<slug>.json`: the graph's fingerprints when a ticket started, so
 /// its close can name the touched nodes that never changed. Undated, like
 /// every record but a decision.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Start {
@@ -343,6 +360,7 @@ pub struct Start {
 }
 
 /// `grimoire.json` at the root of a store.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoreConfig {
@@ -358,6 +376,7 @@ pub struct StoreConfig {
 
 /// The order a person set within each priority band, as ticket slugs. A
 /// ticket that has closed or changed band is ignored where it is read.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Order {
@@ -394,6 +413,7 @@ impl Order {
 /// Which paths are expected to carry contracts: repository-relative,
 /// `/`-separated prefixes matched on whole segments. An empty `include`
 /// means everything.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scope {
@@ -427,6 +447,7 @@ impl StoreConfig {
 // ---------------------------------------------------------------------------
 
 /// A module contract as it appears in source.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Contract {
@@ -434,6 +455,7 @@ pub struct Contract {
     pub criteria: Vec<ContractCriterion>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractCriterion {
@@ -441,6 +463,7 @@ pub struct ContractCriterion {
     pub statement: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Criterion {
     pub module: String,
@@ -448,6 +471,7 @@ pub struct Criterion {
     pub statement: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Module {
     pub id: String,
@@ -464,6 +488,7 @@ pub struct Module {
     pub contract_at: Option<(String, u32)>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct File {
     pub path: String,
@@ -477,6 +502,7 @@ pub struct File {
 
 /// A test, from a `# Test contract` block: its name, where the block is, and
 /// the criteria it checks as `module id#criterion id`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Test {
     pub file: String,
@@ -486,6 +512,7 @@ pub struct Test {
 }
 
 /// A `# Test contract` block that could not be read, and why.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestError {
     pub file: String,
@@ -493,6 +520,7 @@ pub struct TestError {
     pub reason: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decl {
     pub path: String,

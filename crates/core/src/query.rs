@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every answer serialises to the shape its requirement in the grimoire gives for that tool, identically over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the open and active gaps and questions no open or active change relies on; closed lists the requested number of most recently decided closed tickets."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
+//! {"purpose":"Answer the read tools over the graph: find, get, outline, rests_on, rests_on_me, coverage, board, related_tickets and module_source.","criteria":[{"id":"documented-shapes","statement":"Every read tool answers with the answer type declared for it in the answer module, so the shape is written once and is the same over every transport."},{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."},{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links."},{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."},{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."},{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the open and active gaps and questions no open or active change relies on; closed lists the requested number of most recently decided closed tickets."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."},{"id":"module-source","statement":"module_source returns the file and line of a module, criterion, file, declaration or test, with the contract heading's line for criteria and the test block's heading for a test."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -14,6 +14,7 @@ use crate::lint::{lint, Rule};
 use crate::model::*;
 
 /// A node as every tool returns it: its fields, plus `ref`, `in` and `out`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct NodeView {
     pub r#ref: Reference,
@@ -26,6 +27,7 @@ pub struct NodeView {
 /// One edge as a node view lists it: the other end, the relation, and the
 /// other end's title when it exists, so a generated ticket id is never read
 /// alone. `None` when the target is dangling.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct EdgeView {
     pub r#ref: Reference,
@@ -45,15 +47,19 @@ pub fn view(g: &Graph, r: &Reference) -> Option<NodeView> {
 }
 
 /// The short form used in lists.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Summary {
     pub r#ref: Reference,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub kind: Option<TicketKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub priority: Option<Priority>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub status: Option<Status>,
 }
 
@@ -117,10 +123,14 @@ pub fn find(g: &Graph, query: &str, kinds: Option<&[Kind]>, limit: usize) -> Vec
 // outline
 // ---------------------------------------------------------------------------
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct Tree {
     pub r#ref: Reference,
     pub title: String,
+    /// For a page, the fraction of criteria under it some requirement names;
+    /// for a requirement, its criterion count; null for anything else.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub coverage: Value,
     pub findings: usize,
     /// How many of `findings` are in the baseline: inherited, not new.
@@ -139,6 +149,7 @@ pub struct Tree {
 /// node counted once: the modules that are part of the grimoire and how many
 /// carry a contract, those modules' criteria and how many a test checks, and
 /// the requirements and how many name a criterion or are held by a test.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Rollup {
     pub modules: usize,
@@ -151,6 +162,7 @@ pub struct Rollup {
 
 /// The outline's answer: the trees from the roots, and the modules of the
 /// grimoire that no page links, which no tree reaches.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct Outline {
     pub roots: Vec<Tree>,
@@ -314,6 +326,7 @@ fn page_coverage(g: &Graph, r: &Reference, seen: &mut HashSet<Reference>) -> (us
 // rests_on
 // ---------------------------------------------------------------------------
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct RestsOn {
     pub r#ref: Reference,
@@ -392,6 +405,7 @@ pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<Rests
 // rests_on_me
 // ---------------------------------------------------------------------------
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct Affected {
     pub r#ref: Reference,
@@ -399,6 +413,7 @@ pub struct Affected {
     pub relation: Relation,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct RestsOnMe {
     pub nodes: Vec<Affected>,
@@ -440,6 +455,7 @@ pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
 // coverage
 // ---------------------------------------------------------------------------
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct CriterionCoverage {
     pub r#ref: Reference,
@@ -473,6 +489,7 @@ pub fn module_coverage(g: &Graph, module: &Module) -> Vec<CriterionCoverage> {
 
 /// A criterion as a requirement's coverage lists it: what it says and the
 /// module it lives in. `statement` is `None` when the criterion is dangling.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CoveringCriterion {
     pub r#ref: Reference,
@@ -482,6 +499,7 @@ pub struct CoveringCriterion {
 
 /// A module beside a criterion: its reference and purpose, `None` when the
 /// module does not exist or has no contract.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModuleSummary {
     pub r#ref: Reference,
@@ -525,6 +543,7 @@ pub struct BoardFilter<'a> {
 /// The board's answer: the tickets asked for, each change with what it waits
 /// on; the open gaps and questions no open change relies on; and the most
 /// recently closed tickets, when asked for.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct Board {
     pub tickets: Vec<BoardTicket>,
@@ -535,11 +554,13 @@ pub struct Board {
 /// A ticket on the board. A change carries `waits_on`: the gaps and
 /// questions it relies on with their status, from which its readiness
 /// follows; it is ready when none of them is still open or active.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct BoardTicket {
     #[serde(flatten)]
     pub summary: Summary,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub waits_on: Option<Vec<Summary>>,
 }
 

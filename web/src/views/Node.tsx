@@ -32,6 +32,8 @@ import {
   idOf,
   kindOf,
   type AnyNode,
+  type CoverageAnswer,
+  type CriterionCoverage,
   type CriterionNode,
   type DeclNode,
   type TestNode,
@@ -39,6 +41,7 @@ import {
   type ModuleNode,
   type Ref,
   type ReqNode,
+  type Summary,
   type TicketNode,
 } from "../types";
 
@@ -195,7 +198,7 @@ function Module({ n }: { n: ModuleNode }) {
       <h2>Criteria</h2>
       {n.criteria.length === 0 && <p className={empty}>None.</p>}
       <ul className={list}>
-        {cov.data?.criteria?.map((c) => (
+        {moduleCriteria(cov.data).map((c) => (
           <li key={c.ref} className="flex flex-col items-stretch gap-0.5">
             <RefLink ref={c.ref} title={c.statement} />
             <span className="text-fg-faint pl-2">
@@ -220,6 +223,17 @@ function Module({ n }: { n: ModuleNode }) {
   );
 }
 
+/** A module's criteria from its coverage answer, each with what names and checks it. */
+function moduleCriteria(a: CoverageAnswer | undefined): CriterionCoverage[] {
+  if (!a || !("criteria" in a)) return [];
+  return a.criteria.filter((c): c is CriterionCoverage => "requirements" in c);
+}
+
+/** The requirements naming a criterion, from its coverage answer. */
+function coveredBy(a: CoverageAnswer | undefined): Summary[] | undefined {
+  return a && "requirements" in a ? a.requirements : undefined;
+}
+
 function Criterion({ n }: { n: CriterionNode }) {
   const ref = `criterion:${n.module}#${n.id}`;
   const cov = useQuery(() => api.coverage(ref), [ref]);
@@ -237,9 +251,9 @@ function Criterion({ n }: { n: CriterionNode }) {
         )}
       </p>
       <h2>Covered by</h2>
-      {cov.data?.requirements?.length === 0 && <p className={empty}>No requirement names this criterion.</p>}
+      {coveredBy(cov.data)?.length === 0 && <p className={empty}>No requirement names this criterion.</p>}
       <ul className={list}>
-        {cov.data?.requirements?.map((r) => (
+        {coveredBy(cov.data)?.map((r) => (
           <li key={r.ref} className={item}>
             <RefLink ref={r.ref} title={r.title} />
           </li>

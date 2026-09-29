@@ -7,6 +7,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::answer::*;
 use crate::extraction::Extraction;
 use crate::graph::Graph;
 use crate::lint::{self, Rule};
@@ -104,8 +105,11 @@ pub struct Outcome {
     pub changed: Option<Changed>,
 }
 
-fn ok(v: Value) -> Result<Outcome, ToolError> {
-    Ok(Outcome { output: v, changed: None })
+/// Answer tool `name` with `a`, which must be the answer type declared for
+/// it; a debug build refuses any other, so every answer has its declared shape.
+fn answer<A: Answer>(name: &str, a: A, changed: Option<Changed>) -> Result<Outcome, ToolError> {
+    debug_assert!(A::TOOLS.contains(&name), "`{name}` answered with the type declared for {:?}", A::TOOLS);
+    Ok(Outcome { output: to_value(&a), changed })
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(input: Value) -> Result<T, ToolError> {
@@ -159,13 +163,13 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             }
             let i: In = parse(input)?;
             let g = state.graph();
-            ok(json!({ "nodes": query::find(g, &i.query, i.kinds.as_deref(), i.limit.unwrap_or(20)) }))
+            answer(name, NodesAnswer { nodes: query::find(g, &i.query, i.kinds.as_deref(), i.limit.unwrap_or(20)) }, None)
         }
         "get" => {
             let i: RefIn = parse(input)?;
             let g = state.graph();
-            let v = query::view(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
-            ok(json!({ "node": v }))
+            let node = query::view(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
+            answer(name, NodeAnswer { node }, None)
         }
         "outline" => {
             #[derive(Deserialize)]
@@ -180,7 +184,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 }
             }
             let g = state.graph();
-            ok(json!(query::outline(g, i.depth.unwrap_or(2), i.root.as_ref())))
+            answer(name, query::outline(g, i.depth.unwrap_or(2), i.root.as_ref()), None)
         }
         "rests_on" => {
             #[derive(Deserialize)]
@@ -193,7 +197,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
             }
-            ok(json!({ "nodes": query::rests_on(g, &i.r#ref, i.depth) }))
+            answer(name, RestsOnAnswer { nodes: query::rests_on(g, &i.r#ref, i.depth) }, None)
         }
         "rests_on_me" => {
             let i: RefIn = parse(input)?;
@@ -201,15 +205,15 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
             }
-            ok(to_value(&query::rests_on_me(g, &i.r#ref)))
+            answer(name, query::rests_on_me(g, &i.r#ref), None)
         }
         "coverage" => {
             let i: RefIn = parse(input)?;
             let g = state.graph();
             match (i.r#ref.kind, g.get(&i.r#ref)) {
-                (Kind::Criterion, Some(_)) => ok(json!({ "requirements": query::requirements_covering(g, &i.r#ref), "tests": query::tests_checking(g, &i.r#ref) })),
-                (Kind::Module, Some(crate::graph::Node::Module(m))) => ok(json!({ "criteria": query::module_coverage(g, m) })),
-                (Kind::Req, Some(crate::graph::Node::Req(q))) => ok(json!({ "criteria": query::requirement_coverage(g, q) })),
+                (Kind::Criterion, Some(_)) => answer(name, CoverageAnswer::OfCriterion { requirements: query::requirements_covering(g, &i.r#ref), tests: query::tests_checking(g, &i.r#ref) }, None),
+                (Kind::Module, Some(crate::graph::Node::Module(m))) => answer(name, CoverageAnswer::OfModule { criteria: query::module_coverage(g, m) }, None),
+                (Kind::Req, Some(crate::graph::Node::Req(q))) => answer(name, CoverageAnswer::OfRequirement { criteria: query::requirement_coverage(g, q) }, None),
                 (Kind::Criterion | Kind::Module | Kind::Req, None) => Err(ToolError::not_found(&i.r#ref)),
                 _ => Err(ToolError::invalid(format!("{} is not a criterion, module or requirement", i.r#ref), vec![])),
             }
@@ -227,13 +231,13 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             let g = state.graph();
             let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref(), closed: i.closed };
-            ok(json!(query::board(g, &f)))
+            answer(name, query::board(g, &f), None)
         }
         "related_tickets" => {
             let i: RefIn = parse(input)?;
             let g = state.graph();
             match g.get(&i.r#ref) {
-                Some(crate::graph::Node::Ticket(t)) => ok(json!({ "tickets": query::related_tickets(g, t) })),
+                Some(crate::graph::Node::Ticket(t)) => answer(name, TicketsAnswer { tickets: query::related_tickets(g, t) }, None),
                 Some(_) => Err(ToolError::invalid(format!("{} is not a ticket", i.r#ref), vec![])),
                 None => Err(ToolError::not_found(&i.r#ref)),
             }
@@ -247,7 +251,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let g = state.graph();
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
             let findings = lint::lint(g, &rules);
-            ok(json!({ "findings": findings, "counts": query::counts(&findings), "new": lint::new_count(&findings) }))
+            let (counts, new) = (query::counts(&findings), lint::new_count(&findings));
+            answer(name, LintAnswer { findings, counts, new }, None)
         }
         "module_source" => {
             let i: RefIn = parse(input)?;
@@ -256,29 +261,27 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
             }
             let loc = query::module_source(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
-            ok(to_value(&loc))
+            answer(name, loc, None)
         }
         "status" => {
             let config = state.store.config.clone();
             let build = state.build.clone();
             let g = state.graph();
-            let mut kinds = serde_json::Map::new();
-            for k in Kind::ALL {
-                kinds.insert(k.to_string(), Value::from(g.nodes.keys().filter(|r| r.kind == k).count()));
-            }
-            ok(json!({
-                "repository": config.repository,
-                "roots": config.roots,
-                "languages": config.languages,
-                "version": build.version,
-                "supported_languages": build.supported_languages,
-                "nodes": kinds,
-                "edges": g.edges.len(),
-                "unresolved_imports": g.unresolved_imports,
-                "malformed": g.malformed.len(),
-                "scope": config.scope,
-                "baseline": baseline_summary(state.store.baseline.as_ref()),
-            }))
+            let nodes = Kind::ALL.iter().map(|k| (k.to_string(), g.nodes.keys().filter(|r| r.kind == *k).count())).collect();
+            let status = StatusAnswer {
+                repository: config.repository,
+                roots: config.roots,
+                languages: config.languages,
+                version: build.version,
+                supported_languages: build.supported_languages,
+                nodes,
+                edges: g.edges.len(),
+                unresolved_imports: g.unresolved_imports,
+                malformed: g.malformed.len(),
+                scope: config.scope,
+                baseline: state.store.baseline.as_ref().map(baseline_summary),
+            };
+            answer(name, status, None)
         }
 
         // -- writes ---------------------------------------------------------
@@ -286,7 +289,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let page: Page = parse(input)?;
             let (node, changed) = ops::put_page(state.store_mut(), page)?;
             let r = Reference::page(&node.slug);
-            written(state, &r, changed)
+            written(name, state, &r, changed)
         }
         "patch_page" => {
             #[derive(Deserialize)]
@@ -301,7 +304,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             let patch = ops::PagePatch { title: i.title, body: i.body, add_links: i.add_links.unwrap_or_default(), remove_links: i.remove_links.unwrap_or_default() };
             let (_, changed) = ops::patch_page(state.store_mut(), &i.r#ref, patch)?;
-            written(state, &i.r#ref, changed)
+            written(name, state, &i.r#ref, changed)
         }
         "put_requirement" => {
             #[derive(Deserialize)]
@@ -319,7 +322,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let req = Requirement { slug: i.slug, title: i.title, statement: i.statement, scenarios: i.scenarios, covered_by: i.covered_by, decisions: vec![] };
             let (node, changed) = ops::put_requirement(state.store_mut(), req)?;
             let r = Reference::req(&node.slug);
-            written(state, &r, changed)
+            written(name, state, &r, changed)
         }
         "record_decision" => {
             #[derive(Deserialize)]
@@ -331,8 +334,8 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             let (node, changed) = ops::record_decision(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()))?;
             let r = Reference::req(&node.slug);
-            let view = query::view(state.graph(), &r).expect("just written");
-            Ok(Outcome { output: json!({ "node": view }), changed: Some(changed) })
+            let node = query::view(state.graph(), &r).expect("just written");
+            answer(name, NodeAnswer { node }, Some(changed))
         }
         "file_ticket" => {
             #[derive(Deserialize)]
@@ -352,7 +355,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let t = ops::NewTicket { title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
             let (node, changed) = ops::file_ticket(state.store_mut(), t)?;
             let r = Reference::ticket(&node.slug);
-            written(state, &r, changed)
+            written(name, state, &r, changed)
         }
         "update_ticket" => {
             #[derive(Deserialize)]
@@ -368,7 +371,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             let patch = ops::TicketPatch { title: i.title, priority: i.priority, touches: i.touches, relies_on: i.relies_on, body: i.body };
             let (_, changed) = ops::update_ticket(state.store_mut(), &i.r#ref, patch)?;
-            written(state, &i.r#ref, changed)
+            written(name, state, &i.r#ref, changed)
         }
         "start_ticket" => {
             let i: RefIn = parse(input)?;
@@ -379,13 +382,13 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             state.store_mut().starts.insert(i.r#ref.id.clone(), Start { ticket: i.r#ref.id.clone(), fingerprints });
             let changed = Changed::Started(i.r#ref.id.clone());
             let g = state.graph();
-            let view = query::view(g, &i.r#ref).expect("just written");
-            let rests = query::rests_on(g, &i.r#ref, None);
+            let node = query::view(g, &i.r#ref).expect("just written");
+            let rests_on = query::rests_on(g, &i.r#ref, None);
             let related = match g.get(&i.r#ref) {
                 Some(crate::graph::Node::Ticket(t)) => query::related_tickets(g, t),
                 _ => vec![],
             };
-            Ok(Outcome { output: json!({ "node": view, "rests_on": rests, "related": related }), changed: Some(changed) })
+            answer(name, Started { node, rests_on, related }, Some(changed))
         }
         "close_ticket" => {
             #[derive(Deserialize)]
@@ -410,9 +413,9 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             state.store_mut().starts.remove(&i.r#ref.id);
             let changed = Changed::Closed(i.r#ref.id.clone());
             let g = state.graph();
-            let view = query::view(g, &i.r#ref).expect("just written");
+            let node = query::view(g, &i.r#ref).expect("just written");
             let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
-            Ok(Outcome { output: json!({ "node": view, "findings": findings, "baselined": baselined, "untouched": untouched }), changed: Some(changed) })
+            answer(name, Closed { node, findings, baselined, untouched }, Some(changed))
         }
         "rename_node" => {
             #[derive(Deserialize)]
@@ -424,16 +427,16 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             // What the code names is read before the rename; the tool never edits it.
             let g = state.graph();
-            let still_named_in: Vec<Value> = g
+            let still_named_in: Vec<StillNamed> = g
                 .inbound_with(&i.r#ref, crate::model::Relation::Checks)
                 .filter_map(|e| match g.get(&e.from) {
-                    Some(crate::graph::Node::Test(t)) => Some(json!({ "test": e.from, "file": t.file, "line": t.line })),
+                    Some(crate::graph::Node::Test(t)) => Some(StillNamed { test: e.from.clone(), file: t.file.clone(), line: t.line }),
                     _ => None,
                 })
                 .collect();
             let (new, changed) = ops::rename_node(state.store_mut(), &i.r#ref, &i.to)?;
-            let view = query::view(state.graph(), &new).expect("just renamed");
-            Ok(Outcome { output: json!({ "node": view, "still_named_in": still_named_in }), changed: Some(changed) })
+            let node = query::view(state.graph(), &new).expect("just renamed");
+            answer(name, Renamed { node, still_named_in }, Some(changed))
         }
         "reorder" => {
             #[derive(Deserialize)]
@@ -444,15 +447,15 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             }
             let i: In = parse(input)?;
             let (slugs, changed) = ops::reorder(state.store_mut(), i.priority, &i.order)?;
-            let order: Vec<String> = slugs.iter().map(|s| format!("ticket:{s}")).collect();
-            Ok(Outcome { output: json!({ "priority": i.priority, "order": order }), changed: Some(changed) })
+            let order = slugs.iter().map(|s| Reference::ticket(s)).collect();
+            answer(name, Reordered { priority: i.priority, order }, Some(changed))
         }
         "configure" => {
             let change: ops::ConfigChange = parse(input)?;
             let supported = state.build.supported_languages.clone();
             let (config, changed) = ops::configure(state.store_mut(), change, &supported)?;
             let new = lint::new_count(&lint::lint(state.graph(), &Rule::ALL));
-            Ok(Outcome { output: json!({ "config": config, "new": new }), changed: Some(changed) })
+            answer(name, Configured { config, new }, Some(changed))
         }
         "adopt" => {
             #[derive(Deserialize)]
@@ -464,7 +467,7 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             let i: In = parse(input)?;
             let keys = lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect();
             let (baseline, replaced, changed) = ops::adopt(state.store_mut(), keys, i.reason, today.to_string())?;
-            Ok(Outcome { output: json!({ "baseline": baseline_summary(Some(&baseline)), "replaced": replaced }), changed: Some(changed) })
+            answer(name, Adopted { baseline: baseline_summary(&baseline), replaced }, Some(changed))
         }
         "delete_node" => {
             let i: RefIn = parse(input)?;
@@ -477,16 +480,15 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
                 warnings.extend(lint::dangling_from(g, &from).into_iter().filter(|f| f.edge.as_ref().is_some_and(|e| e.to == i.r#ref)));
             }
             let (warnings, baselined) = split_new(warnings);
-            Ok(Outcome { output: json!({ "deleted": i.r#ref, "warnings": warnings, "baselined": baselined }), changed: Some(changed) })
+            answer(name, Deleted { deleted: i.r#ref, warnings, baselined }, Some(changed))
         }
         other => Err(ToolError::invalid(format!("unknown tool `{other}`"), vec![])),
     }
 }
 
-/// `{date, reason, count}` of a baseline, or null. What `status` and
-/// `adopt` show; the entries themselves stay in the store.
-fn baseline_summary(b: Option<&Baseline>) -> Value {
-    b.map_or(Value::Null, |b| json!({ "date": b.date, "reason": b.reason, "count": b.findings.len() }))
+/// What `status` and `adopt` show of a baseline; the entries stay in the store.
+fn baseline_summary(b: &Baseline) -> BaselineSummary {
+    BaselineSummary { date: b.date.clone(), reason: b.reason.clone(), count: b.findings.len() }
 }
 
 #[derive(Deserialize)]
@@ -494,11 +496,11 @@ struct RefIn {
     r#ref: Reference,
 }
 
-fn written(state: &mut State, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
+fn written(name: &str, state: &mut State, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
     let g = state.graph();
-    let view = query::view(g, r).expect("just written");
+    let node = query::view(g, r).expect("just written");
     let (warnings, baselined) = split_new(lint::written(g, r));
-    Ok(Outcome { output: json!({ "node": view, "warnings": warnings, "baselined": baselined }), changed: Some(changed) })
+    answer(name, Written { node, warnings, baselined }, Some(changed))
 }
 
 /// The new findings, which are the caller's to act on, and how many

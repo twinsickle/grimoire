@@ -14,7 +14,17 @@ workspace = true
 name = "grimoire_core"
 path = "src/lib.rs"
 
+[features]
+# The TypeScript derives for the UI's generated types. Tests turn it on
+# (the dev-dependency below); a release build leaves it off.
+ts = ["dep:ts-rs"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+ts-rs = { version = "12", optional = true, features = ["serde-compat", "no-serde-warnings"] }
+
+[dev-dependencies]
+grimoire-core = { path = ".", features = ["ts"] }
+ts-rs = { version = "12", features = ["serde-compat", "no-serde-warnings"] }

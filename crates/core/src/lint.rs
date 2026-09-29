@@ -19,6 +19,7 @@ pub use crate::model::{FindingEdge, Rule};
 /// held by tests that name them, not by a module's criteria.
 pub const CONSTRAINTS_PAGE: &str = "constraints";
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Finding {
     pub rule: Rule,
@@ -29,6 +30,7 @@ pub struct Finding {
     /// reference of the kind the file would have held, with the file's slug.
     pub r#ref: Reference,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub edge: Option<FindingEdge>,
     pub reason: String,
     /// Whether the store's baseline holds this finding: inherited, not new.

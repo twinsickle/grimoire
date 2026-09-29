@@ -10,6 +10,7 @@ use crate::model::*;
 use crate::store::{validate_baseline, validate_config, validate_page, validate_requirement, validate_ticket, FieldError, Store};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum ToolError {
     #[error("{message}")]

@@ -27,6 +27,11 @@ repository only.
 - Dev loop: `bacon serve --headless` runs the daemon on 4242; `npm run dev`
   in `web/` serves the UI on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
+- Changed a tool's answer? `web/src/generated/tools.ts` is generated from the
+  Rust answer types in `crates/core/src/answer.rs`; a test fails until
+  `cargo test -p grimoire-core --test typescript -- --ignored`
+  rewrites it.
+  Commit the file with the change.
 - Touched `web/`? In `web/`: `npm run shots` and look at them;
   `npm run visual` compares with the baselines; `npm run visual:update`
   accepts a change you have seen.

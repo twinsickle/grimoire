@@ -2,261 +2,41 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The TypeScript shapes of every node, summary and tool answer, plus the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Each type matches the shape the corresponding tool returns; hand-written until generated from the Rust model."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing."}]}
+ * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing."}]}
  * ```
  */
 
+import type * as G from "./generated/tools";
+
+// Every shape a tool answers with, generated from the Rust answer types.
+export type * from "./generated/tools";
+
+/** The kinds of node a reference names: the part before its first colon. */
 export type Kind = "page" | "req" | "ticket" | "module" | "criterion" | "file" | "decl" | "test";
-export type Ref = string; // `${Kind}:${id}`
 
-export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks";
+/** What every node view carries beside its own fields. */
+type NodeBase = Pick<G.NodeView, "ref" | "in" | "out">;
 
-export interface EdgeView {
-  ref: Ref;
-  relation: Relation;
-  /** The other end's one-line name, or null when it is dangling. */
-  title: string | null;
-}
+/** A node view narrowed to one kind, for the views that know which they hold. */
+export type AnyNode = G.NodeView;
+export type PageNode = NodeBase & G.Page;
+export type ReqNode = NodeBase & G.Requirement;
+export type TicketNode = NodeBase & G.Ticket;
+export type ModuleNode = NodeBase & G.Module;
+export type CriterionNode = NodeBase & G.Criterion;
+export type FileNode = NodeBase & G.File;
+export type DeclNode = NodeBase & G.Decl;
+export type TestNode = NodeBase & G.Test;
 
-export interface Decision {
-  date: string;
-  text: string;
-}
-
-export interface Scenario {
-  title: string;
-  given: string;
-  when: string;
-  then: string;
-}
-
-export type TicketKind = "change" | "gap" | "question";
-export type Priority = "next" | "high" | "later";
-export type Status = "open" | "active" | "closed";
-
-interface NodeBase {
-  ref: Ref;
-  in: EdgeView[];
-  out: EdgeView[];
-}
-
-export interface PageNode extends NodeBase {
-  slug: string;
-  title: string;
-  body: string;
-  links: Ref[];
-}
-
-export interface ReqNode extends NodeBase {
-  slug: string;
-  title: string;
-  statement: string;
-  scenarios: Scenario[];
-  covered_by: Ref[];
-  decisions: Decision[];
-}
-
-export interface TicketNode extends NodeBase {
-  slug: string;
-  title: string;
-  kind: TicketKind;
-  priority: Priority;
-  status: Status;
-  touches: Ref[];
-  relies_on: Ref[];
-  body: string;
-  decision: Decision | null;
-}
-
-export interface Criterion {
-  module: string;
-  id: string;
-  statement: string;
-}
-
-export interface ModuleNode extends NodeBase {
-  id: string;
-  files: string[];
-  purpose: string | null;
-  criteria: Criterion[];
-  imports: string[];
-  expects_contract: boolean;
-  contract_error: string | null;
-  contract_at: [string, number] | null;
-}
-
-export interface CriterionNode extends NodeBase, Criterion {}
-
-export interface Decl {
-  path: string;
-  kind: string;
-  line: number;
-}
-
-/** A test, from a `# Test contract` block. `checks` are `module id#criterion id` or `req:<slug>`. */
-export interface Test {
-  file: string;
-  name: string;
-  line: number;
-  checks: string[];
-}
-
-export interface FileNode extends NodeBase {
-  path: string;
-  module: string;
-  language: string;
-  decls: Decl[];
-}
-
-export interface DeclNode extends NodeBase, Decl {}
-export interface TestNode extends NodeBase, Test {}
-
-export type AnyNode = PageNode | ReqNode | TicketNode | ModuleNode | CriterionNode | FileNode | DeclNode | TestNode;
-
-export interface Summary {
-  ref: Ref;
-  title: string;
-  kind?: TicketKind;
-  priority?: Priority;
-  status?: Status;
-}
-
-export interface Tree {
-  ref: Ref;
-  title: string;
-  coverage: number | null;
-  findings: number;
-  /** How many of `findings` are in the baseline: inherited, not new. */
-  baselined: number;
-  /** The checks of the findings on this node itself, e.g. `untested`. */
-  checks: string[];
-  /** How many tests check this node. */
-  tests: number;
-  rollup: Rollup;
-  children: Tree[];
-}
-
-/** How far adoption has come under a node, each node below counted once. */
-export interface Rollup {
-  /** Modules that are part of the grimoire, and how many carry a contract. */
-  modules: number;
-  contracted: number;
-  /** Those modules' criteria, and how many a test checks. */
-  criteria: number;
-  tested: number;
-  /** Requirements, and how many name a criterion or are held by a test. */
-  requirements: number;
-  held: number;
-}
-
-/** The outline's answer: the trees from the roots, and the modules no page links. */
-export interface Outline {
-  roots: Tree[];
-  unplaced: Tree[];
-}
-
-/** A ticket on the board. A change carries the gaps and questions it relies on, with their status. */
-export interface BoardTicket extends Summary {
-  waits_on?: Summary[];
-}
-
-/** The board's answer: the tickets asked for, the gaps and questions no change relies on, and the recently closed. */
-export interface Board {
-  tickets: BoardTicket[];
-  unattached: Summary[];
-  closed: Summary[];
-}
-
-export interface RestsOn {
-  ref: Ref;
-  title: string;
-  via: Ref[];
-  decisions: Decision[];
-}
-
-export interface Affected {
-  ref: Ref;
-  title: string;
-  relation: Relation;
-}
-
-export interface RestsOnMe {
-  nodes: Affected[];
-  tickets: Summary[];
-}
-
-export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
-
-export interface Finding {
-  rule: Rule;
-  /** Which test within the rule produced it, e.g. `unlinked-module` or `no-contract`. */
-  check: string;
-  ref: Ref;
-  edge?: { from: Ref; to: Ref; relation: Relation };
-  reason: string;
-  /** In the store's baseline: inherited at adoption, not new work. */
-  baselined: boolean;
-}
-
-export interface LintResult {
-  findings: Finding[];
-  counts: Record<Rule, number>;
-  /** How many findings are not baselined: what the check fails on. */
-  new: number;
-}
-
-/** When the baseline was recorded, why, and how many findings it holds now. */
-export interface BaselineSummary {
-  date: string;
-  reason: string;
-  count: number;
-}
-
-export interface SourceLocation {
-  file: string;
-  line: number;
-  contract_line?: number;
-}
-
-export interface CriterionCoverage {
-  ref: Ref;
-  statement: string;
-  requirements: Summary[];
-  tests: Summary[];
-}
-
-export interface StatusResult {
-  repository: string;
-  roots: string[];
-  languages: string[];
-  /** The running build's crate version. */
-  version: string;
-  /** The languages the running build can extract; compare with `languages`. */
-  supported_languages: string[];
-  nodes: Record<Kind, number>;
-  edges: number;
-  unresolved_imports: number;
-  malformed: number;
-  /** Repository-relative prefixes expected to carry contracts; an empty include means everything. */
-  scope: { include: string[]; exclude: string[] };
-  baseline: BaselineSummary | null;
-}
-
-export interface ToolError {
-  error: "not_found" | "invalid" | "conflict" | "store_unavailable";
-  message: string;
-  details?: unknown;
-}
-
-export function kindOf(ref: Ref): Kind {
+export function kindOf(ref: G.Ref): Kind {
   return ref.slice(0, ref.indexOf(":")) as Kind;
 }
 
-export function idOf(ref: Ref): string {
+export function idOf(ref: G.Ref): string {
   return ref.slice(ref.indexOf(":") + 1);
 }
 
 /** The UI route for a node's page. */
-export function nodePath(ref: Ref): string {
+export function nodePath(ref: G.Ref): string {
   return `/n/${encodeURIComponent(ref)}`;
 }

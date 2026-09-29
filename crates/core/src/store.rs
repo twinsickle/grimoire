@@ -47,6 +47,7 @@ pub struct Malformed {
 
 /// One violated field rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct FieldError {
     pub field: String,
     pub reason: String,

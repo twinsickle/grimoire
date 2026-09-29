@@ -12,6 +12,7 @@ use crate::extraction::Extraction;
 use crate::model::*;
 use crate::store::{Malformed, Store};
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Node {
@@ -74,6 +75,7 @@ impl Node {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Edge {
     pub from: Reference,
@@ -254,11 +256,13 @@ impl Graph {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SourceLocation {
     pub file: String,
     pub line: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub contract_line: Option<u32>,
 }
 

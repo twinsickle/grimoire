@@ -1,0 +1,277 @@
+//! # Module contract
+//!
+//! ```json
+//! {"purpose":"Declare the answer every tool returns as a typed value, so each answer's shape is written once, is the same over every transport, and is exported to the UI as TypeScript.","criteria":[{"id":"typed-answers","statement":"Every tool answers with a declared answer type that names it; each tool is named by exactly one answer type, and the dispatcher refuses, in debug builds and tests, to answer a tool with any other."},{"id":"generated-current","statement":"The TypeScript the answer types and the tool error produce, every type they reach plus a ToolAnswers map from each tool's name to its answer, is exactly the committed web/src/generated/tools.ts; `cargo test -p grimoire-core --test typescript -- --ignored` rewrites it."}]}
+//! ```
+
+use std::collections::BTreeMap;
+
+use serde::Serialize;
+
+use crate::graph::SourceLocation;
+use crate::lint::Finding;
+use crate::model::{Priority, Reference, StoreConfig};
+use crate::query::{Board, CoveringCriterion, CriterionCoverage, NodeView, Outline, RestsOn, RestsOnMe, Summary};
+
+/// A tool's answer: a value of a declared type, listing the tools that answer with it.
+pub trait Answer: Serialize {
+    const TOOLS: &'static [&'static str];
+}
+
+/// `find`: the matching nodes, best first.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct NodesAnswer {
+    pub nodes: Vec<Summary>,
+}
+
+/// `get` and `record_decision`: one node in full.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct NodeAnswer {
+    pub node: NodeView,
+}
+
+/// `rests_on`: what a node rests on, nearest first.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct RestsOnAnswer {
+    pub nodes: Vec<RestsOn>,
+}
+
+/// `coverage`: for a criterion, what names and checks it; for a module, each
+/// criterion's coverage; for a requirement, the criteria it names.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(untagged)]
+pub enum CoverageAnswer {
+    OfCriterion { requirements: Vec<Summary>, tests: Vec<Summary> },
+    OfModule { criteria: Vec<CriterionCoverage> },
+    OfRequirement { criteria: Vec<CoveringCriterion> },
+}
+
+/// `related_tickets`: the open gaps and questions sharing a node with the ticket.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TicketsAnswer {
+    pub tickets: Vec<Summary>,
+}
+
+/// `lint`: the findings, their counts per rule, and how many are new.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct LintAnswer {
+    pub findings: Vec<Finding>,
+    pub counts: BTreeMap<String, usize>,
+    pub new: usize,
+}
+
+/// A baseline as `status` and `adopt` show it; the entries stay in the store.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct BaselineSummary {
+    pub date: String,
+    pub reason: String,
+    pub count: usize,
+}
+
+/// `status`: the store, the build and the graph at a glance.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct StatusAnswer {
+    pub repository: String,
+    pub roots: Vec<String>,
+    pub languages: Vec<String>,
+    pub version: String,
+    pub supported_languages: Vec<String>,
+    /// How many nodes of each kind.
+    pub nodes: BTreeMap<String, usize>,
+    pub edges: usize,
+    pub unresolved_imports: usize,
+    pub malformed: usize,
+    pub scope: crate::model::Scope,
+    pub baseline: Option<BaselineSummary>,
+}
+
+/// Every write of a page, requirement or ticket: the node as it now is, the
+/// new findings it created, and how many inherited ones sit on it.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Written {
+    pub node: NodeView,
+    pub warnings: Vec<Finding>,
+    pub baselined: usize,
+}
+
+/// `start_ticket`: the ticket, what it rests on, and the gaps and questions near it.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Started {
+    pub node: NodeView,
+    pub rests_on: Vec<RestsOn>,
+    pub related: Vec<Summary>,
+}
+
+/// `close_ticket`: the closed ticket, new findings on what it touched, and the
+/// touched nodes that never changed (null when it was never started).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Closed {
+    pub node: NodeView,
+    pub findings: Vec<Finding>,
+    pub baselined: usize,
+    pub untouched: Option<Vec<Reference>>,
+}
+
+/// A test block in the code that still names a renamed node.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct StillNamed {
+    pub test: Reference,
+    pub file: String,
+    pub line: u32,
+}
+
+/// `rename_node`: the node under its new name, and the code still naming the old one.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Renamed {
+    pub node: NodeView,
+    pub still_named_in: Vec<StillNamed>,
+}
+
+/// `reorder`: the band and its order as set.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Reordered {
+    pub priority: Priority,
+    pub order: Vec<Reference>,
+}
+
+/// `configure`: the config as it now is, and how many findings are new.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Configured {
+    pub config: StoreConfig,
+    pub new: usize,
+}
+
+/// `adopt`: the baseline as recorded, and how many entries it replaced (null when there was none).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Adopted {
+    pub baseline: BaselineSummary,
+    pub replaced: Option<usize>,
+}
+
+/// `delete_node`: what was deleted, and the edges it left dangling.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Deleted {
+    pub deleted: Reference,
+    pub warnings: Vec<Finding>,
+    pub baselined: usize,
+}
+
+/// Each answer type with the tools that answer with it. The generated
+/// `ToolAnswers` map and the check that every tool has one are built from this.
+macro_rules! answers {
+    ($($ty:ty => [$($tool:literal),+]),+ $(,)?) => {
+        $(impl Answer for $ty {
+            const TOOLS: &'static [&'static str] = &[$($tool),+];
+        })+
+
+        /// Every tool with the TypeScript name of its answer, in declaration order.
+        #[cfg(feature = "ts")]
+        pub fn tool_answers(cfg: &ts_rs::Config) -> Vec<(&'static str, String)> {
+            let mut out = Vec::new();
+            $(for tool in <$ty as Answer>::TOOLS {
+                out.push((*tool, <$ty as ts_rs::TS>::name(cfg)));
+            })+
+            out
+        }
+
+        /// Visit every answer type, to reach every type they contain.
+        #[cfg(feature = "ts")]
+        fn visit_answers(v: &mut impl ts_rs::TypeVisitor) {
+            $(v.visit::<$ty>();)+
+        }
+    };
+}
+
+answers! {
+    NodesAnswer => ["find"],
+    NodeAnswer => ["get", "record_decision"],
+    Outline => ["outline"],
+    RestsOnAnswer => ["rests_on"],
+    RestsOnMe => ["rests_on_me"],
+    CoverageAnswer => ["coverage"],
+    Board => ["board"],
+    TicketsAnswer => ["related_tickets"],
+    LintAnswer => ["lint"],
+    SourceLocation => ["module_source"],
+    StatusAnswer => ["status"],
+    Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket"],
+    Started => ["start_ticket"],
+    Closed => ["close_ticket"],
+    Renamed => ["rename_node"],
+    Reordered => ["reorder"],
+    Configured => ["configure"],
+    Adopted => ["adopt"],
+    Deleted => ["delete_node"],
+}
+
+/// The UI's generated TypeScript: every type the answers and the tool error
+/// reach, each declared once and sorted by name, then the `ToolAnswers` map
+/// from each tool's name to its answer. Only builds the text; writing and
+/// comparing the file is a test's, since the core does no I/O.
+#[cfg(feature = "ts")]
+pub fn typescript() -> String {
+    use std::any::TypeId;
+    use std::collections::{BTreeSet, HashSet};
+    use ts_rs::{Config, TypeVisitor, TS};
+
+    struct Collect<'a> {
+        cfg: &'a Config,
+        ids: HashSet<TypeId>,
+        names: BTreeSet<String>,
+        decls: BTreeMap<String, String>,
+    }
+    impl TypeVisitor for Collect<'_> {
+        fn visit<T: TS + 'static + ?Sized>(&mut self) {
+            if !self.ids.insert(TypeId::of::<T>()) {
+                return;
+            }
+            // A type with an output path is one of ours, derived and declarable;
+            // strings, numbers, vectors and maps are inlined by name.
+            if T::output_path().is_some() {
+                let name = T::ident(self.cfg);
+                if self.names.insert(name.clone()) {
+                    self.decls.insert(name, T::decl(self.cfg));
+                }
+            }
+            T::visit_dependencies(self);
+            T::visit_generics(self);
+        }
+    }
+
+    let cfg = Config::new().with_large_int("number");
+    let mut c = Collect { cfg: &cfg, ids: HashSet::new(), names: BTreeSet::new(), decls: BTreeMap::new() };
+    visit_answers(&mut c);
+    // What a tool answers when it refuses: the other half of every answer.
+    c.visit::<crate::ops::ToolError>();
+    let mut out = String::from(
+        "// Generated from the Rust answer types by crates/core/src/answer.rs.\n// Do not edit: `cargo test -p grimoire-core --test typescript -- --ignored` rewrites it.\n\n",
+    );
+    for decl in c.decls.values() {
+        out.push_str("export ");
+        out.push_str(decl.trim_end());
+        out.push_str("\n\n");
+    }
+    out.push_str("/** Each tool's answer, by tool name. */\nexport type ToolAnswers = {\n");
+    for (tool, ty) in tool_answers(&cfg) {
+        out.push_str(&format!("  {tool}: {ty};\n"));
+    }
+    out.push_str("};\n");
+    out
+}

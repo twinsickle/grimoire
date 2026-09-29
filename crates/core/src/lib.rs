@@ -10,6 +10,7 @@
 //! the graph; [`ops`] write the store; [`scaffold`] builds a store from
 //! contracts; [`tools`] dispatches all of it by name over JSON.
 
+pub mod answer;
 pub mod extraction;
 pub mod fingerprint;
 pub mod graph;

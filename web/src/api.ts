@@ -7,22 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type {
-  AnyNode,
-  Board,
-  CriterionCoverage,
-  Finding,
-  LintResult,
-  Priority,
-  Ref,
-  RestsOn,
-  RestsOnMe,
-  SourceLocation,
-  StatusResult,
-  Summary,
-  ToolError,
-  Outline,
-} from "./types";
+import type { Priority, Ref, ToolAnswers, ToolError } from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly body: ToolError, public readonly status: number) {
@@ -30,7 +15,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function call<T>(tool: string, input: unknown = {}): Promise<T> {
+/** Call a tool by name; its answer's type follows from the name, generated from the Rust answer types. */
+export async function call<K extends keyof ToolAnswers>(tool: K, input: unknown = {}): Promise<ToolAnswers[K]> {
   const res = await fetch(`/api/${tool}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -38,25 +24,25 @@ export async function call<T>(tool: string, input: unknown = {}): Promise<T> {
   });
   const body = await res.json();
   if (!res.ok) throw new ApiError(body as ToolError, res.status);
-  return body as T;
+  return body as ToolAnswers[K];
 }
 
 export const api = {
-  status: () => call<StatusResult>("status"),
-  find: (query: string, kinds?: string[], limit = 20) => call<{ nodes: Summary[] }>("find", { query, kinds, limit }),
-  get: (ref: Ref) => call<{ node: AnyNode }>("get", { ref }),
-  outline: (depth: number, root?: Ref) => call<Outline>("outline", { depth, root }),
-  restsOn: (ref: Ref, depth?: number) => call<{ nodes: RestsOn[] }>("rests_on", { ref, depth }),
-  restsOnMe: (ref: Ref) => call<RestsOnMe>("rests_on_me", { ref }),
-  coverage: (ref: Ref) => call<{ criteria?: CriterionCoverage[]; requirements?: Summary[] }>("coverage", { ref }),
-  board: (input: { status?: string[]; kinds?: string[]; priority?: string[]; touching?: Ref; closed?: number }) => call<Board>("board", input),
-  updateTicket: (ref: Ref, fields: { priority?: Priority }) => call<{ node: AnyNode }>("update_ticket", { ref, ...fields }),
-  reorder: (priority: Priority, order: Ref[]) => call<{ priority: Priority; order: Ref[] }>("reorder", { priority, order }),
-  relatedTickets: (ref: Ref) => call<{ tickets: Summary[] }>("related_tickets", { ref }),
-  lint: () => call<LintResult>("lint"),
-  moduleSource: (ref: Ref) => call<SourceLocation>("module_source", { ref }),
-  startTicket: (ref: Ref) => call<{ node: AnyNode; rests_on: RestsOn[]; related: Summary[] }>("start_ticket", { ref }),
-  closeTicket: (ref: Ref, text: string) => call<{ node: AnyNode; findings: Finding[]; baselined: number; untouched: Ref[] | null }>("close_ticket", { ref, decision: { text } }),
+  status: () => call("status"),
+  find: (query: string, kinds?: string[], limit = 20) => call("find", { query, kinds, limit }),
+  get: (ref: Ref) => call("get", { ref }),
+  outline: (depth: number, root?: Ref) => call("outline", { depth, root }),
+  restsOn: (ref: Ref, depth?: number) => call("rests_on", { ref, depth }),
+  restsOnMe: (ref: Ref) => call("rests_on_me", { ref }),
+  coverage: (ref: Ref) => call("coverage", { ref }),
+  board: (input: { status?: string[]; kinds?: string[]; priority?: string[]; touching?: Ref; closed?: number }) => call("board", input),
+  updateTicket: (ref: Ref, fields: { priority?: Priority }) => call("update_ticket", { ref, ...fields }),
+  reorder: (priority: Priority, order: Ref[]) => call("reorder", { priority, order }),
+  relatedTickets: (ref: Ref) => call("related_tickets", { ref }),
+  lint: () => call("lint"),
+  moduleSource: (ref: Ref) => call("module_source", { ref }),
+  startTicket: (ref: Ref) => call("start_ticket", { ref }),
+  closeTicket: (ref: Ref, text: string) => call("close_ticket", { ref, decision: { text } }),
 };
 
 // One event stream for the whole page. Browsers allow about six connections
