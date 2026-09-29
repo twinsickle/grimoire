@@ -11,9 +11,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "check": "tsc --noEmit && eslint .",
-    "shots": "node visual/shots.mjs",
-    "visual": "playwright test",
-    "visual:update": "playwright test --update-snapshots",
+    "shots": "vite build && playwright test -c visual/shots.config.ts",
+    "visual": "vite build && playwright test",
+    "visual:update": "vite build && playwright test --update-snapshots",
     "test": "vitest run",
     "behaviour": "vite build && playwright test -c behaviour/playwright.config.ts"
   },

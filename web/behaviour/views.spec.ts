@@ -8,6 +8,7 @@
  * back from its links and compared with the tool answer it was drawn from.
  */
 import { expect, test, type Page } from "@playwright/test";
+import { ROUTES } from "./routes";
 
 type Rollup = { modules: number; contracted: number; criteria: number; tested: number; requirements: number; held: number };
 type Tree = { ref: string; title: string; children: Tree[]; checks: string[]; findings: number; baselined: number; rollup: Rollup };
@@ -147,7 +148,7 @@ test("every request the UI makes is a tool call or the event stream", async ({ p
     const path = new URL(r.url()).pathname;
     if (path.startsWith("/api/")) api.push(`${r.method()} ${path}`);
   });
-  for (const path of ["/", "/n/page%3Areadiness", "/unplaced", "/board", "/n/module%3Asrc%2Fready", "/n/ticket%3A0001"]) {
+  for (const { path } of ROUTES) {
     await page.goto(path);
     await page.waitForLoadState("domcontentloaded");
     await page.waitForTimeout(400);
@@ -447,20 +448,13 @@ test("pages mark new findings apart from inherited ones, and criteria and requir
  * ```
  */
 test("every node kind has a page", async ({ page }) => {
-  const refs = [
-    "page:readiness",
-    "req:ready-needs-commit",
-    "ticket:0001",
-    "module:src/ready",
-    "criterion:src/ready#needs-commit",
-    "file:src/ready.rs",
-    "decl:src/ready.rs#ready",
-    "test:src/ready.rs#ready-needs-a-commit",
-  ];
-  for (const ref of refs) {
-    await page.goto(`/n/${encodeURIComponent(ref)}`);
-    await expect(page.locator("h1"), ref).toBeVisible();
-    await expect(page.locator("main"), ref).not.toContainText("does not exist");
+  const nodes = ROUTES.filter((r) => r.path.startsWith("/n/"));
+  const kinds = nodes.map((r) => decodeURIComponent(r.path.slice("/n/".length)).split(":")[0]).sort();
+  expect(kinds, "one node page of every kind").toEqual(["criterion", "decl", "file", "module", "page", "req", "test", "ticket"]);
+  for (const { path } of nodes) {
+    await page.goto(path);
+    await expect(page.locator("h1"), path).toBeVisible();
+    await expect(page.locator("main"), path).not.toContainText("does not exist");
   }
   await expect(page.locator("main")).toContainText("Checks");
 });

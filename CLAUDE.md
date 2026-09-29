@@ -40,7 +40,11 @@ repository only.
   Commit the file with the change.
 - Touched `web/`? In `web/`: `npm run shots` and look at them;
   `npm run visual` compares with the baselines; `npm run visual:update`
-  accepts a change you have seen.
+  accepts a change you have seen. All three build the UI and serve the
+  behaviour fixture themselves with the installed `grimoire`, so no dev
+  loop is needed and a baseline changes only when rendering does. The
+  routes they cover are `web/behaviour/routes.ts`, shared with the
+  behaviour specs.
 - `npm test` in `web/` runs the Vitest unit tests (logic and source rules);
   `npm run behaviour` builds the UI and runs the Playwright behaviour specs
   against a fixture store it serves itself with the installed `grimoire`

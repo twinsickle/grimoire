@@ -15,7 +15,25 @@ const here = dirname(fileURLToPath(import.meta.url));
 const bin = process.env.GRIMOIRE_BIN ?? (process.platform === "win32" ? "grimoire.exe" : "grimoire");
 const port = process.env.BEHAVIOUR_PORT ?? "4343";
 
-const dir = mkdtempSync(join(tmpdir(), "grimoire-behaviour-"));
+// A fixture server stopped by force (Playwright and shots end the process
+// tree on Windows, where there are no signals) never reaches its cleanup, so
+// each run first removes the directories of runs whose server is gone. The
+// directory names the process that made it.
+const PREFIX = "grimoire-behaviour-";
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+for (const name of readdirSync(tmpdir())) {
+  const pid = Number(name.startsWith(PREFIX) ? name.slice(PREFIX.length).split("-")[0] : NaN);
+  if (Number.isInteger(pid) && pid > 0 && !alive(pid)) rmSync(join(tmpdir(), name), { recursive: true, force: true });
+}
+
+const dir = mkdtempSync(join(tmpdir(), `${PREFIX}${process.pid}-`));
 const repo = join(dir, "repo");
 const store = join(dir, "store");
 cpSync(join(here, "fixture", "repo"), repo, { recursive: true });
@@ -37,7 +55,8 @@ for (const { close, ...ticket } of records.tickets) {
   const ref = JSON.parse(grimoire("tool", "file_ticket", JSON.stringify(ticket))).node.ref;
   if (close) {
     grimoire("tool", "start_ticket", JSON.stringify({ ref }));
-    grimoire("tool", "close_ticket", JSON.stringify({ ref, decision: { text: close } }));
+    // A fixed date, so a view showing a decision renders the same on any day.
+    grimoire("tool", "close_ticket", JSON.stringify({ ref, decision: { text: close, date: "2026-01-15" } }));
   }
 }
 

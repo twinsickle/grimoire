@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that .gitignore ignores, and anything under .git, never reach the daemon."},{"id":"debounced","statement":"File events are debounced over a fixed window of 300 milliseconds, so a burst of events for one file becomes one re-extraction."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that .gitignore ignores, and anything under .git, never reach the daemon."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group re-extracts every repository path it names that the extractor handles and the repository does not ignore, once, however many events name it."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -51,19 +51,10 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
     let ignorer = Ignorer::new(&root);
     let mut debouncer = new_debouncer(DEBOUNCE, None, move |result: DebounceEventResult| match result {
         Ok(events) => {
-            let mut rels: Vec<String> = Vec::new();
-            for ev in events {
-                for p in &ev.paths {
-                    if ignorer.ignores(p) {
-                        continue;
-                    }
-                    if let Some(rel) = daemon.relative(p) {
-                        if daemon.extractor.read().expect("extractor lock").handles(&rel) && !rels.contains(&rel) {
-                            rels.push(rel);
-                        }
-                    }
-                }
-            }
+            let rels = {
+                let extractor = daemon.extractor.read().expect("extractor lock");
+                to_reextract(events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)), |p| ignorer.ignores(p), |p| daemon.relative(p), |r| extractor.handles(r))
+            };
             if !rels.is_empty() {
                 daemon.reextract(&rels);
             }
@@ -78,6 +69,25 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
     Ok(debouncer)
 }
 
+/// The paths one debounced batch re-extracts: each repository-relative path
+/// the extractor handles and the repository does not ignore, once, in the
+/// order first named. The debouncer groups a burst into one batch; this makes
+/// the batch one re-extraction per file however many events name it.
+fn to_reextract<'a>(paths: impl IntoIterator<Item = &'a Path>, ignored: impl Fn(&Path) -> bool, relative: impl Fn(&Path) -> Option<String>, handles: impl Fn(&str) -> bool) -> Vec<String> {
+    let mut rels: Vec<String> = Vec::new();
+    for p in paths {
+        if ignored(p) {
+            continue;
+        }
+        if let Some(rel) = relative(p) {
+            if handles(&rel) && !rels.contains(&rel) {
+                rels.push(rel);
+            }
+        }
+    }
+    rels
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,18 +95,29 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#ignored-skipped"]}
+    /// {"test": "a-burst-is-one-reextraction", "checks": ["crates/server/src/watch#debounced"]}
     /// ```
+    #[test]
+    fn a_burst_for_one_file_is_one_reextraction() {
+        assert_eq!(DEBOUNCE, Duration::from_millis(300), "the window the debouncer groups a burst over");
+        let root = Path::new("/repo");
+        // A save-and-rewrite and a formatter's pass: one file named many times, among an ignored path, a file no adapter handles and one outside the repository.
+        let mut batch: Vec<PathBuf> = std::iter::repeat_n(root.join("src/lib.rs"), 10).collect();
+        batch.extend([root.join("target/x.rs"), root.join("README.md"), root.join("src/main.rs"), PathBuf::from("/elsewhere/a.rs"), root.join("src/lib.rs")]);
+        let rels = to_reextract(
+            batch.iter().map(PathBuf::as_path),
+            |p| p.starts_with(root.join("target")),
+            |p| p.strip_prefix(root).ok().map(|r| r.to_string_lossy().replace('\\', "/")),
+            |r| r.ends_with(".rs"),
+        );
+        assert_eq!(rels, vec!["src/lib.rs".to_string(), "src/main.rs".to_string()]);
+    }
+
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-debounce-window", "checks": ["crates/server/src/watch#debounced"]}
+    /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#ignored-skipped"]}
     /// ```
-    #[test]
-    fn events_are_debounced_over_300_milliseconds() {
-        assert_eq!(DEBOUNCE, Duration::from_millis(300));
-    }
-
     #[test]
     fn ignored_paths_never_reach_the_daemon() {
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
