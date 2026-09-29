@@ -93,6 +93,15 @@ const BADGE_TONE = {
   bad: "text-bad border-bad",
 } as const;
 
+/** A file and line, linking to the file's annotated source scrolled to that line. */
+export function SourceLink({ file, line }: { file: string; line: number }) {
+  return (
+    <Link to={`${nodePath(`file:${file}`)}#L${line}`} className={mono}>
+      {file}:{line}
+    </Link>
+  );
+}
+
 /** A small pill: a count, a percentage, or a mark such as "uncovered". */
 export function Badge({ tone = "plain", children }: { tone?: keyof typeof BADGE_TONE; children: ReactNode }) {
   return <span className={`inline-block text-[11px] px-1.5 py-px rounded-[10px] bg-bg-3 text-fg-dim border border-line ${BADGE_TONE[tone]}`}>{children}</span>;

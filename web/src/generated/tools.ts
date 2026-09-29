@@ -5,6 +5,14 @@ export type Adopted = { baseline: BaselineSummary, replaced: number | null, };
 
 export type Affected = { ref: Ref, title: string, relation: Relation, };
 
+export type Annotation = { line: number, ref: Ref, kind: AnnotationKind, title: string, 
+/**
+ * For a contract, its criteria; for a test block, what it checks.
+ */
+links: Array<Linked>, };
+
+export type AnnotationKind = "contract" | "test" | "decl";
+
 export type BaselineSummary = { date: string, reason: string, count: number, };
 
 export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, closed: Array<Summary>, };
@@ -56,6 +64,8 @@ ref: Ref, edge?: FindingEdge, reason: string,
 baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
+
+export type Linked = { ref: Ref, title: string | null, };
 
 export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, };
 
@@ -113,6 +123,8 @@ export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
 export type Scenario = { title: string, given: string, when: string, then: string, };
 
 export type Scope = { include: Array<string>, exclude: Array<string>, };
+
+export type SourceAnswer = { file: Ref, language: string, text: string, focus: number, annotations: Array<Annotation>, };
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
@@ -178,6 +190,7 @@ export type ToolAnswers = {
   related_tickets: TicketsAnswer;
   lint: LintAnswer;
   module_source: SourceLocation;
+  source: SourceAnswer;
   status: StatusAnswer;
   put_page: Written;
   patch_page: Written;

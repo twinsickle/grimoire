@@ -567,3 +567,53 @@ test("a change dragged with the mouse into an empty band lands there and shows a
     }
   }
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "drill-down-ends-at-the-annotated-source", "checks": ["web/src/views/Node#annotated-source"]}
+ * ```
+ */
+test("drilling down from a declaration ends at its line in the annotated source", async ({ page }) => {
+  // From the declaration's page to its line in the file.
+  await page.goto("/n/decl%3Asrc%2Fready.rs%23ready");
+  await page.getByRole("link", { name: "src/ready.rs:7" }).click();
+  await expect(page).toHaveURL(/\/n\/file%3Asrc%2Fready\.rs#L7$/);
+  const focused = page.locator("tr[aria-current='location']");
+  await expect(focused).toHaveAttribute("id", "L7");
+  await expect(focused).toContainText("pub fn ready() -> bool");
+  // The file's lines, each annotated line marked and linked back into the grimoire.
+  const source = page.getByRole("region", { name: "Source of src/ready.rs" });
+  const contract = source.locator("[data-annotation='contract']");
+  await expect(contract.locator("a[href='/n/module%3Asrc%2Fready']")).toBeVisible();
+  await expect(contract.locator("a[href='/n/criterion%3Asrc%2Fready%23needs-commit']")).toBeVisible();
+  await expect(contract.locator("a[href='/n/criterion%3Asrc%2Fready%23reads-only']")).toBeVisible();
+  const tests = source.locator("[data-annotation='test']");
+  await expect(tests).toHaveCount(2);
+  await expect(tests.locator("a[href='/n/criterion%3Asrc%2Fready%23needs-commit']")).toBeVisible();
+  await expect(tests.locator("a[href='/n/req%3Aready-writes-nothing']")).toBeVisible();
+  await expect(source.locator("[data-annotation='decl']").first()).toContainText("ready");
+  // Nothing on it edits: no form, no text box, no editor link.
+  await expect(source.locator("textarea, input, [contenteditable='true'], a[href^='vscode:']")).toHaveCount(0);
+  // Clicking a line number marks that line, and Back and Forward follow.
+  const marked = () => page.locator("tr[aria-current='location']");
+  await page.getByRole("link", { name: "Line 12", exact: true }).click();
+  await expect(page).toHaveURL(/#L12$/);
+  await expect(marked()).toHaveCount(1);
+  await expect(marked()).toHaveAttribute("id", "L12");
+  await page.goBack();
+  await expect(page).toHaveURL(/#L7$/);
+  await expect(marked()).toHaveAttribute("id", "L7");
+  await page.goForward();
+  await expect(marked()).toHaveAttribute("id", "L12");
+  // An annotated line is described by its marks.
+  await expect(source.locator("tr#L1")).toHaveAttribute("aria-describedby", "marks-L1");
+  // The criterion, module and test pages each link to their line.
+  await page.goto("/n/criterion%3Asrc%2Fready%23needs-commit");
+  await expect(page.locator("a[href='/n/file%3Asrc%2Fready.rs#L1']")).toBeVisible();
+  await page.goto("/n/module%3Asrc%2Fready");
+  await expect(page.locator("a[href='/n/file%3Asrc%2Fready.rs#L1']")).toBeVisible();
+  await page.goto("/n/test%3Asrc%2Fready.rs%23ready-needs-a-commit");
+  await expect(page.locator("a[href='/n/file%3Asrc%2Fready.rs#L13']")).toBeVisible();
+});

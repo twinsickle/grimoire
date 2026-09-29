@@ -2,11 +2,12 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file, declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."}]}
  * ```
  */
 
-import { useParams } from "react-router-dom";
+import { Fragment, useEffect } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import {
   Badge,
@@ -15,6 +16,7 @@ import {
   Markdown,
   PriorityTag,
   RefLink,
+  SourceLink,
   StatusTag,
   TicketActions,
   TicketTable,
@@ -25,13 +27,14 @@ import {
   errorBox,
   item,
   list,
-  mono,
   rel,
 } from "../components";
 import {
   idOf,
+  nodePath,
   kindOf,
   type AnyNode,
+  type Annotation,
   type CoverageAnswer,
   type CriterionCoverage,
   type CriterionNode,
@@ -55,7 +58,7 @@ export function NodeView() {
   const node = data.node;
   const kind = kindOf(ref);
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start max-w-[150ch] mx-auto">
+    <div className={`grid grid-cols-1 gap-6 items-start max-w-[150ch] mx-auto ${kind === "file" ? "" : "lg:grid-cols-[minmax(0,1fr)_360px]"}`}>
       <div>
         <div className="flex flex-col gap-1.5 mb-3">
           <div className="flex gap-2.5 items-center">
@@ -191,8 +194,8 @@ function Module({ n }: { n: ModuleNode }) {
     <>
       {n.contract_error && <p className={errorBox}>Contract: {n.contract_error}</p>}
       {n.contract_at && (
-        <p className={`text-fg-dim ${mono}`}>
-          {n.contract_at[0]}:{n.contract_at[1]}
+        <p className="text-fg-dim">
+          Contract at <SourceLink file={n.contract_at[0]} line={n.contract_at[1]} />
         </p>
       )}
       <h2>Criteria</h2>
@@ -244,10 +247,10 @@ function Criterion({ n }: { n: CriterionNode }) {
       <p className="text-fg-dim">
         In <RefLink ref={`module:${n.module}`} />
         {src.data && (
-          <span className={mono}>
+          <>
             {" "}
-            · {src.data.file}:{src.data.line}
-          </span>
+            · <SourceLink file={src.data.file} line={src.data.line} />
+          </>
         )}
       </p>
       <h2>Covered by</h2>
@@ -263,29 +266,88 @@ function Criterion({ n }: { n: CriterionNode }) {
   );
 }
 
+/** A file as its annotated source: every line numbered, the lines the graph attaches nodes to marked and linked. */
 function File({ n }: { n: FileNode }) {
-  const cell = `pr-2.5 py-0.5 ${mono}`;
+  const ref = `file:${n.path}`;
+  const src = useQuery(() => api.source(ref), [ref]);
+  const { hash } = useLocation();
+  const focus = /^#L\d+$/.test(hash) ? Number(hash.slice(2)) : null;
+  // Once the text is in, bring the line asked for into view.
+  useEffect(() => {
+    if (focus && src.data) document.getElementById(`L${focus}`)?.scrollIntoView({ block: "center" });
+  }, [focus, src.data]);
+  const byLine = new Map<number, Annotation[]>();
+  for (const a of src.data?.annotations ?? []) byLine.set(a.line, [...(byLine.get(a.line) ?? []), a]);
+  const lines = src.data ? src.data.text.split(/\r?\n/) : [];
   return (
     <>
       <p className="text-fg-dim">
         {n.language} · in <RefLink ref={`module:${n.module}`} />
       </p>
-      <h2>Declarations</h2>
-      {n.decls.length === 0 && <p className={empty}>None.</p>}
-      <table className="border-collapse">
-        <tbody>
-          {n.decls.map((d) => (
-            <tr key={d.path}>
-              <td className={`${cell} text-fg-faint`}>{d.line}</td>
-              <td className={`${cell} text-fg-dim`}>{d.kind}</td>
-              <td className={cell}>
-                <RefLink ref={`decl:${n.path}#${d.path}`} mono />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {src.error && <ErrorBox error={src.error} />}
+      {!src.data && !src.error && <p className="text-fg-dim">Loading…</p>}
+      {src.data && (
+        <div className="bg-bg-1 border border-line rounded-md overflow-x-auto" role="region" aria-label={`Source of ${n.path}`}>
+          <table className="border-collapse w-full font-mono text-[12.5px] leading-[1.55]">
+            <caption className="sr-only">Source of {n.path}, each line the grimoire attaches a node to described by its marks</caption>
+            <tbody>
+              {lines.map((text, i) => {
+                const line = i + 1;
+                const marks = byLine.get(line) ?? [];
+                const on = line === focus;
+                // An annotated line gets its marks on a row of their own just
+                // above it, so they show however long the line is.
+                return (
+                  <Fragment key={line}>
+                    {marks.length > 0 && (
+                      <tr className="bg-bg-2" id={`marks-L${line}`}>
+                        <td />
+                        <td className="pt-1.5 pb-0.5 font-sans text-xs whitespace-normal">
+                          {marks.map((a) => (
+                            <SourceMark key={a.ref} a={a} />
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      id={`L${line}`}
+                      aria-current={on ? "location" : undefined}
+                      aria-describedby={marks.length ? `marks-L${line}` : undefined}
+                      className={on ? "bg-accent-dim/40" : marks.length ? "bg-bg-2" : ""}
+                    >
+                      <td className="text-right pr-3 pl-2 text-fg-faint select-none align-top w-[1%] whitespace-nowrap">
+                        {/* A router link, so the marked line follows the hash, Back and Forward included. */}
+                        <Link to={{ hash: `L${line}` }} aria-label={`Line ${line}`} className="text-fg-faint hover:text-fg">
+                          {line}
+                        </Link>
+                      </td>
+                      <td className="pr-4 align-top whitespace-pre text-fg">{text}</td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
+  );
+}
+
+const MARK_TONE: Record<Annotation["kind"], string> = { contract: "text-module", test: "text-test", decl: "text-fg-dim" };
+
+/** What a line is: its node, linked, and for a contract its criteria or for a test block what it checks. */
+function SourceMark({ a }: { a: Annotation }) {
+  return (
+    <span className="inline-flex gap-1.5 items-baseline mr-4" data-annotation={a.kind}>
+      <span className={`uppercase tracking-[0.05em] text-[10.5px] ${MARK_TONE[a.kind]}`}>{a.kind}</span>
+      <Link to={nodePath(a.ref)}>{a.kind === "decl" ? a.title : idOf(a.ref)}</Link>
+      {a.links.map((l) => (
+        <Link key={l.ref} to={nodePath(l.ref)} title={l.title ?? undefined} className="text-fg-dim">
+          {l.ref.includes("#") ? `#${l.ref.split("#")[1]}` : idOf(l.ref)}
+        </Link>
+      ))}
+    </span>
   );
 }
 
@@ -293,7 +355,7 @@ function Decl({ n, ref }: { n: DeclNode; ref: Ref }) {
   const file = idOf(ref).split("#")[0];
   return (
     <p className="text-fg-dim">
-      {n.kind} at <RefLink ref={`file:${file}`} /> line {n.line}
+      {n.kind} at <SourceLink file={file} line={n.line} />
     </p>
   );
 }
@@ -302,7 +364,7 @@ function TestView({ n }: { n: TestNode }) {
   return (
     <>
       <p className="text-fg-dim">
-        Test block at <RefLink ref={`file:${n.file}`} /> line {n.line}
+        Test block at <SourceLink file={n.file} line={n.line} />
       </p>
       <h2>Checks</h2>
       <RefList refs={n.checks.map((c) => (c.startsWith("req:") ? c : `criterion:${c}`))} empty="Nothing." titles={titlesOf(n.out)} />

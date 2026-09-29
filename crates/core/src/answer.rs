@@ -11,7 +11,7 @@ use serde::Serialize;
 use crate::graph::SourceLocation;
 use crate::lint::Finding;
 use crate::model::{Priority, Reference, StoreConfig};
-use crate::query::{Board, CoveringCriterion, CriterionCoverage, NodeView, Outline, RestsOn, RestsOnMe, Summary};
+use crate::query::{Annotation, Board, CoveringCriterion, CriterionCoverage, NodeView, Outline, RestsOn, RestsOnMe, Summary};
 
 /// A tool's answer: a value of a declared type, listing the tools that answer with it.
 pub trait Answer: Serialize {
@@ -173,6 +173,17 @@ pub struct Deleted {
     pub baselined: usize,
 }
 
+/// `source`: a node's file, its text, the node's line, and what the graph attaches to the file.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SourceAnswer {
+    pub file: Reference,
+    pub language: String,
+    pub text: String,
+    pub focus: u32,
+    pub annotations: Vec<Annotation>,
+}
+
 /// Each answer type with the tools that answer with it. The generated
 /// `ToolAnswers` map and the check that every tool has one are built from this.
 macro_rules! answers {
@@ -210,6 +221,7 @@ answers! {
     TicketsAnswer => ["related_tickets"],
     LintAnswer => ["lint"],
     SourceLocation => ["module_source"],
+    SourceAnswer => ["source"],
     StatusAnswer => ["status"],
     Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket"],
     Started => ["start_ticket"],

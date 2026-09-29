@@ -1,12 +1,12 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"A configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."}]}
+//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"A configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"The daemon gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."}]}
 //! ```
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, RwLock};
+use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 
 use grimoire_core::{lint, tools};
 use grimoire_core::{Build, Extraction, FileExtraction, State, ToolError};
@@ -68,7 +68,45 @@ pub fn load(store_dir: &Path) -> Result<Loaded, OpenError> {
     let extraction = Extraction::from_files(files.values());
     let mut state = State::new(store, extraction, malformed);
     state.set_build(build());
+    state.set_source(Arc::new(RepoSource { root: repo.clone() }));
     Ok(Loaded { state, files, extractor, repo, extract_errors })
+}
+
+/// Reads the repository's files for the `source` tool, and nothing else: the
+/// core does no I/O, so it is handed this. A path that is absolute, climbs
+/// with `..`, or resolves outside the repository through a link is refused.
+#[derive(Debug)]
+pub struct RepoSource {
+    pub root: PathBuf,
+}
+
+impl tools::SourceReader for RepoSource {
+    fn read(&self, path: &str, limit: usize) -> Result<String, tools::SourceError> {
+        use std::io::Read;
+        use tools::SourceError::{TooLarge, Unreadable};
+        let rel = Path::new(path);
+        // Only plain names: no root, drive or UNC prefix, `.` or `..`.
+        if rel.is_absolute() || !rel.components().all(|c| matches!(c, Component::Normal(_))) {
+            return Err(Unreadable(format!("`{path}` is not a path inside the repository")));
+        }
+        let root = self.root.canonicalize().map_err(|e| Unreadable(e.to_string()))?;
+        let full = root.join(rel).canonicalize().map_err(|e| Unreadable(e.to_string()))?;
+        if !full.starts_with(&root) {
+            return Err(Unreadable(format!("`{path}` resolves outside the repository")));
+        }
+        // Size first, then never more than the limit even if it grows meanwhile.
+        let size = std::fs::metadata(&full).map_err(|e| Unreadable(e.to_string()))?.len();
+        if size > limit as u64 {
+            return Err(TooLarge(size));
+        }
+        let mut bytes = Vec::new();
+        std::fs::File::open(&full).and_then(|f| f.take(limit as u64 + 1).read_to_end(&mut bytes)).map_err(|e| Unreadable(e.to_string()))?;
+        if bytes.len() > limit {
+            return Err(TooLarge(bytes.len() as u64));
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        Ok(text.strip_prefix('\u{feff}').unwrap_or(&text).to_string())
+    }
 }
 
 /// What this binary is, for `status`: the workspace version and the
@@ -468,5 +506,43 @@ mod tests {
         d.mark_serving(4299).unwrap();
         assert_eq!(h.repo_files(), before, "no index, cache or marker in the repository");
     }
-}
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-source-reader-stays-inside-the-repository", "checks": ["crates/server/src/daemon#source-reader"]}
+    /// ```
+    #[test]
+    fn the_source_reader_stays_inside_the_repository() {
+        use grimoire_core::tools::SourceReader;
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("grimoire-source-{}-{nanos}", std::process::id()));
+        let repo = dir.join("repo");
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        std::fs::write(repo.join("src").join("lib.rs"), "\u{feff}pub fn a() {}\n").unwrap();
+        std::fs::write(dir.join("secret.txt"), "outside").unwrap();
+        let reader = RepoSource { root: repo.clone() };
+        let big = 1 << 20;
+        assert_eq!(reader.read("src/lib.rs", big).unwrap(), "pub fn a() {}\n", "the text, without its byte-order mark");
+        let outside = dir.join("secret.txt");
+        for escape in ["../secret.txt", "src/../../secret.txt", outside.to_str().unwrap(), "./src/lib.rs", "C:/Windows/win.ini", "C:secret.txt", r"\\server\share\secret.txt", "/etc/passwd"] {
+            assert!(reader.read(escape, big).is_err(), "{escape} is refused");
+        }
+        assert!(reader.read("src/missing.rs", big).is_err());
+        // A link inside the repository to a file outside it is refused, where links can be made.
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&outside, repo.join("src").join("link.rs")).is_ok();
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_file(&outside, repo.join("src").join("link.rs")).is_ok();
+        if linked {
+            assert!(reader.read("src/link.rs", big).is_err(), "a link out of the repository is refused");
+            let _ = std::fs::remove_file(repo.join("src").join("link.rs"));
+        }
+        // Past the limit: too large, and not read.
+        assert_eq!(reader.read("src/lib.rs", 4), Err(grimoire_core::tools::SourceError::TooLarge(17)));
+        let before = std::fs::read_dir(repo.join("src")).unwrap().count();
+        let _ = reader.read("src/lib.rs", big);
+        assert_eq!(std::fs::read_dir(repo.join("src")).unwrap().count(), before, "reading writes nothing");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -171,7 +171,10 @@ impl Adapter for TypeScriptAdapter {
                     closed = true;
                 }
                 let s = s.strip_prefix('*').map(|r| r.strip_prefix(' ').unwrap_or(r)).unwrap_or(s);
-                let skip = s.is_empty() && (text.is_empty() || closed);
+                // One line out per line in, the opening `/**` included, so a
+                // heading's line counts from the block's first line; only the
+                // empty closing line is dropped.
+                let skip = s.is_empty() && closed;
                 if !skip {
                     text.push_str(s);
                     text.push('\n');
@@ -361,7 +364,10 @@ mod tests {
         let src = "/**\n * # Module contract\n *\n * ```json\n * {}\n * ```\n */\nimport x from 'y';\n";
         let (text, line) = a.leading_doc(src).unwrap();
         assert_eq!(line, 1);
-        assert_eq!(text, "# Module contract\n\n```json\n{}\n```\n");
+        assert_eq!(text, "\n# Module contract\n\n```json\n{}\n```\n", "one line per source line, the opening `/**` included");
+        // The heading is on line 2, and that is the line the contract reports.
+        let contract = "/**\n * # Module contract\n *\n * ```json\n * {\"purpose\":\"P\",\"criteria\":[]}\n * ```\n */\nexport const a = 1;\n";
+        assert_eq!(crate::extract_source(&a, "web/src/a.ts", contract).contract_line, Some(2));
         let src = "\n// # Module contract\n// text\nconst a = 1;\n";
         let (text, line) = a.leading_doc(src).unwrap();
         assert_eq!(line, 2);

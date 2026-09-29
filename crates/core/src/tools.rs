@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."}]}
 //! ```
 
 use serde::Deserialize;
@@ -41,11 +41,34 @@ pub struct State {
     malformed: Vec<Malformed>,
     build: Build,
     graph: Option<Graph>,
+    source: Option<std::sync::Arc<dyn SourceReader>>,
 }
+
+/// Reads a repository file's text for the `source` tool. The core does no
+/// I/O, so its caller supplies this: the daemon and the CLI read the
+/// repository, tests read memory. `path` is a file the graph knows; the
+/// reader reads no more than `limit` bytes, saying so when the file is larger.
+pub trait SourceReader: Send + Sync + std::fmt::Debug {
+    fn read(&self, path: &str, limit: usize) -> Result<String, SourceError>;
+}
+
+/// Why a reader gave no text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceError {
+    /// The file is larger than the limit, in bytes; it was not read.
+    TooLarge(u64),
+    /// It could not be read, and why.
+    Unreadable(String),
+}
+
+/// The largest file `source` returns, in bytes and in lines: past these the
+/// view would not be read anyway, and a page of that many rows would stall.
+pub const SOURCE_LIMIT: usize = 2 * 1024 * 1024;
+pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None, source: None }
     }
     pub fn store(&self) -> &Store {
         &self.store
@@ -55,6 +78,10 @@ impl State {
     }
     pub fn build(&self) -> &Build {
         &self.build
+    }
+    /// Give the state a way to read the repository's files, for `source`.
+    pub fn set_source(&mut self, reader: std::sync::Arc<dyn SourceReader>) {
+        self.source = Some(reader);
     }
     /// Tell the state what build is running. The graph does not depend on it.
     pub fn set_build(&mut self, build: Build) {
@@ -120,7 +147,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 24] = [
+pub const TOOL_NAMES: [&str; 25] = [
     "find",
     "get",
     "outline",
@@ -131,6 +158,7 @@ pub const TOOL_NAMES: [&str; 24] = [
     "related_tickets",
     "lint",
     "module_source",
+    "source",
     "put_page",
     "patch_page",
     "put_requirement",
@@ -262,6 +290,33 @@ pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<
             }
             let loc = query::module_source(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
             answer(name, loc, None)
+        }
+        "source" => {
+            let i: RefIn = parse(input)?;
+            if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test) {
+                return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
+            }
+            let reader = state.source.clone();
+            let g = state.graph();
+            let loc = query::module_source(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
+            let file = Reference::file(&loc.file);
+            let language = match g.get(&file) {
+                Some(crate::graph::Node::File(f)) => f.language.clone(),
+                _ => return Err(ToolError::not_found(&file)),
+            };
+            let reader = reader.ok_or_else(|| ToolError::unavailable("this caller cannot read the repository's files"))?;
+            let text = match reader.read(&loc.file, SOURCE_LIMIT) {
+                Ok(text) => text,
+                Err(SourceError::TooLarge(bytes)) => return Err(ToolError::invalid(format!("{} is {bytes} bytes, over the {SOURCE_LIMIT} a source view shows", loc.file), vec![])),
+                Err(SourceError::Unreadable(why)) => return Err(ToolError::unavailable(format!("{} could not be read: {why}", loc.file))),
+            };
+            let lines = text.lines().count();
+            if lines > SOURCE_LINES {
+                return Err(ToolError::invalid(format!("{} has {lines} lines, over the {SOURCE_LINES} a source view shows", loc.file), vec![]));
+            }
+            let focus = if i.r#ref.kind == Kind::File { 1 } else { loc.line };
+            let annotations = query::source_annotations(g, &loc.file);
+            answer(name, SourceAnswer { file, language, text, focus, annotations }, None)
         }
         "status" => {
             let config = state.store.config.clone();
@@ -552,6 +607,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
         ToolDef { name: "rename_node", description: "Rename a page or requirement, keeping its decisions and rewriting the references the store holds to it. Closed tickets keep the old reference. Answers with the node and the test blocks in the code that still name the old reference, which the agent edits.", input_schema: obj(&["ref","to"], json!({ "ref": reference, "to": {"type":"string","description":"The new slug"} })) },
         ToolDef { name: "reorder", description: "Set the order of one priority band on the board: the tickets listed come first, in that order; the rest follow by dependency, then title.", input_schema: obj(&["priority","order"], json!({ "priority": {"type":"string","enum":["next","high","later"]}, "order": {"type":"array","items": reference} })) },
+        ToolDef { name: "source", description: "A node's file as an annotated view: the text of the file holding a module, criterion, file, declaration or test, the node's line, and the lines the graph attaches nodes to (the contract, test blocks, declarations). Reads only files the graph knows.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
     ]
 }
@@ -1000,5 +1056,60 @@ mod tests {
         let v = serde_json::to_value(&e).unwrap();
         assert_eq!(v["error"], "invalid");
         assert_eq!(v["details"].as_array().unwrap().len(), 2);
+    }
+
+    /// A reader over a fixed set of files, as the daemon's reads the repository.
+    #[derive(Debug)]
+    struct Memory(Vec<(&'static str, String)>);
+
+    impl SourceReader for Memory {
+        fn read(&self, path: &str, limit: usize) -> Result<String, SourceError> {
+            let text = self.0.iter().find(|(p, _)| *p == path).map(|(_, t)| t.clone()).ok_or_else(|| SourceError::Unreadable(format!("no file {path}")))?;
+            if text.len() > limit {
+                return Err(SourceError::TooLarge(text.len() as u64));
+            }
+            Ok(text)
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "source-answers-a-nodes-file-with-its-annotations", "checks": ["crates/core/src/tools#source", "crates/core/src/query#source-annotations"]}
+    /// ```
+    #[test]
+    fn source_answers_a_nodes_file_with_its_annotations() {
+        let mut s = state();
+        // No reader: the caller cannot read files.
+        let e = call(&mut s, "source", json!({ "ref": "criterion:src/a/ready#guarantee" }), "2026-09-29").unwrap_err();
+        assert!(matches!(e, ToolError::StoreUnavailable { .. }), "{e:?}");
+        let text = (1..=25).map(|n| format!("line {n}")).collect::<Vec<_>>().join("
+");
+        s.set_source(std::sync::Arc::new(Memory(vec![("src/a/ready.rs", text.clone())])));
+        let out = call(&mut s, "source", json!({ "ref": "criterion:src/a/ready#guarantee" }), "2026-09-29").unwrap().output;
+        assert_eq!(out["file"], "file:src/a/ready.rs");
+        assert_eq!(out["language"], "rust");
+        assert_eq!(out["text"], text);
+        assert_eq!(out["focus"], 1, "a criterion's line is its contract heading");
+        // The contract with its criteria, the declaration, and the test block with what it checks, by line.
+        let lines: Vec<(u64, String)> = out["annotations"].as_array().unwrap().iter().map(|a| (a["line"].as_u64().unwrap(), a["kind"].as_str().unwrap().to_string())).collect();
+        assert_eq!(lines, vec![(1, "contract".into()), (10, "decl".into()), (20, "test".into())]);
+        let contract = &out["annotations"][0];
+        assert_eq!(contract["ref"], "module:src/a/ready");
+        let criteria: Vec<&str> = contract["links"].as_array().unwrap().iter().map(|l| l["ref"].as_str().unwrap()).collect();
+        assert_eq!(criteria, vec!["criterion:src/a/ready#guarantee", "criterion:src/a/ready#reads-only"]);
+        assert_eq!(out["annotations"][2]["links"][0]["ref"], "criterion:src/a/ready#guarantee", "a test block links what it checks");
+        // A declaration focuses its own line; a file its first.
+        assert_eq!(call(&mut s, "source", json!({ "ref": "decl:src/a/ready.rs#run" }), "2026-09-29").unwrap().output["focus"], 10);
+        assert_eq!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap().output["focus"], 1);
+        // Not a node with a file; a node that does not exist; a reader that fails.
+        assert!(matches!(call(&mut s, "source", json!({ "ref": "page:overview" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
+        assert!(matches!(call(&mut s, "source", json!({ "ref": "decl:src/nope.rs#x" }), "2026-09-29").unwrap_err(), ToolError::NotFound { .. }));
+        assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/layout.rs" }), "2026-09-29").unwrap_err(), ToolError::StoreUnavailable { .. }));
+        // Too large to show, in bytes or in lines.
+        s.set_source(std::sync::Arc::new(Memory(vec![("src/a/ready.rs", "x".repeat(SOURCE_LIMIT + 1))])));
+        assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
+        s.set_source(std::sync::Arc::new(Memory(vec![("src/a/ready.rs", "\n".repeat(SOURCE_LINES + 1))])));
+        assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
     }
 }
