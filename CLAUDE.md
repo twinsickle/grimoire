@@ -24,8 +24,10 @@ Sequences: `.claude/skills/grimoire/SKILL.md`.
 Above the marker is what `init` writes into any project. This part is this
 repository only.
 
-- Dev loop: `bacon serve --headless` runs the daemon on 4242; `npm run dev`
-  in `web/` serves the UI on 5173. The pre-commit hook runs the installed
+- Dev loop: `node scripts/dev.mjs` (or `npm run dev:all` in `web/`) runs
+  both in one console, output prefixed, stopped together by Ctrl+C:
+  `bacon serve --headless`, the daemon on 4242, and `npm run dev`, the UI
+  on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
 - A release binary carries the built UI: `sh scripts/release` builds `web/`,
   then `cargo build --release`, and checks the binary serves its UI. A debug
