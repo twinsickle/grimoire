@@ -2,13 +2,14 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."}]}
  * ```
  */
 
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useMemo } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
+import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
 import {
   Badge,
   ErrorBox,
@@ -278,7 +279,8 @@ function File({ n }: { n: FileNode }) {
   }, [focus, src.data]);
   const byLine = new Map<number, Annotation[]>();
   for (const a of src.data?.annotations ?? []) byLine.set(a.line, [...(byLine.get(a.line) ?? []), a]);
-  const lines = src.data ? src.data.text.split(/\r?\n/) : [];
+  const text = src.data?.text;
+  const lines = useMemo(() => (text === undefined ? [] : highlight(text, n.language)), [text, n.language]);
   return (
     <>
       <p className="text-fg-dim">
@@ -288,10 +290,10 @@ function File({ n }: { n: FileNode }) {
       {!src.data && !src.error && <p className="text-fg-dim">Loading…</p>}
       {src.data && (
         <div className="bg-bg-1 border border-line rounded-md overflow-x-auto" role="region" aria-label={`Source of ${n.path}`}>
-          <table className="border-collapse w-full font-mono text-[12.5px] leading-[1.55]">
+          <table className="border-collapse w-full font-mono text-[12.5px] leading-[1.55]" style={{ tabSize: TAB }}>
             <caption className="sr-only">Source of {n.path}, each line the grimoire attaches a node to described by its marks</caption>
             <tbody>
-              {lines.map((text, i) => {
+              {lines.map((tokens, i) => {
                 const line = i + 1;
                 const marks = byLine.get(line) ?? [];
                 const on = line === focus;
@@ -321,7 +323,25 @@ function File({ n }: { n: FileNode }) {
                           {line}
                         </Link>
                       </td>
-                      <td className="pr-4 align-top whitespace-pre text-fg">{text}</td>
+                      <td className="pr-4 align-top text-fg">
+                        {rowsOf(tokens).map((row, r) => {
+                          // Wrapped, the rest of a row hangs under its own indent, one step in.
+                          const hang = `${leading(row) + 4}ch`;
+                          return (
+                            <div key={r} className="whitespace-pre-wrap wrap-anywhere" style={{ paddingLeft: hang, textIndent: `-${hang}` }}>
+                              {row.map((t, j) =>
+                                t.tone ? (
+                                  <span key={j} className={TONE[t.tone]} data-tone={t.tone}>
+                                    {t.text}
+                                  </span>
+                                ) : (
+                                  <Fragment key={j}>{t.text}</Fragment>
+                                ),
+                              )}
+                            </div>
+                          );
+                        })}
+                      </td>
                     </tr>
                   </Fragment>
                 );
@@ -333,6 +353,33 @@ function File({ n }: { n: FileNode }) {
     </>
   );
 }
+
+/** A line's tokens as the rows it shows on: one, or several where a contract's JSON is laid out. */
+function rowsOf(tokens: Token[]): Token[][] {
+  const rows: Token[][] = [[]];
+  for (const t of tokens) {
+    const [first, ...rest] = t.text.split("\n");
+    if (first) rows[rows.length - 1].push({ ...t, text: first });
+    for (const piece of rest) rows.push(piece ? [{ ...t, text: piece }] : []);
+  }
+  return rows;
+}
+
+/** The width of a row's leading whitespace, in columns. */
+function leading(row: Token[]): number {
+  return indentWidth(row.map((t) => t.text).join(""));
+}
+
+// Written out whole so the stylesheet generator sees each class.
+const TONE: Record<Tone, string> = {
+  keyword: "text-syn-keyword",
+  string: "text-syn-string",
+  comment: "text-syn-comment italic",
+  number: "text-syn-number",
+  type: "text-syn-type",
+  function: "text-syn-function",
+  meta: "text-syn-meta",
+};
 
 const MARK_TONE: Record<Annotation["kind"], string> = { contract: "text-module", test: "text-test", decl: "text-fg-dim" };
 

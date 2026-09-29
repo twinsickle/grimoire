@@ -64,6 +64,11 @@ test("colours are named by token, never written as literals", () => {
   for (const kind of ["page", "req", "module", "criterion", "ticket", "file", "decl", "test"]) {
     expect(css).toContain(`--color-${kind}:`);
   }
+  // And one per syntax tone, which the source view names as a utility of the same name.
+  for (const tone of ["keyword", "string", "comment", "number", "type", "function", "meta"]) {
+    expect(css).toContain(`--color-syn-${tone}:`);
+    expect(sources["./views/Node.tsx"]).toContain(`${tone}: "text-syn-${tone}`);
+  }
   const literal = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/;
   expect(Object.keys(sources)).toContain("./App.tsx");
   const offenders = Object.entries(sources).filter(([, text]) => literal.test(text)).map(([path]) => path);

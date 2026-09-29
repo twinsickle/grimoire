@@ -583,8 +583,20 @@ test("drilling down from a declaration ends at its line in the annotated source"
   const focused = page.locator("tr[aria-current='location']");
   await expect(focused).toHaveAttribute("id", "L7");
   await expect(focused).toContainText("pub fn ready() -> bool");
+  // Highlighted as text: keywords and the function name toned, the contract a comment on every line.
+  await expect(focused.locator("[data-tone='keyword']").first()).toHaveText("pub");
+  await expect(focused.locator("[data-tone='function']")).toHaveText("ready");
+  for (const line of [1, 3, 4, 5]) await expect(page.locator(`tr#L${line} [data-tone='comment']`)).not.toHaveCount(0);
+  await expect(page.locator("tr#L11 [data-tone='meta']")).toContainText("cfg");
+  // The contract's JSON is highlighted as JSON inside its comment.
+  await expect(page.locator("tr#L4 [data-tone='meta']").first()).toHaveText('"purpose"');
+  await expect(page.locator("tr#L4 [data-tone='comment']").first()).toHaveText("//! ");
   // The file's lines, each annotated line marked and linked back into the grimoire.
   const source = page.getByRole("region", { name: "Source of src/ready.rs" });
+  // The contract's JSON laid out over several rows under its one line number, and nothing scrolls sideways: long lines wrap.
+  expect(await page.locator("tr#L4 td:last-child > div").count()).toBeGreaterThan(3);
+  await expect(page.locator("tr#L5 td:first-child")).toHaveText("5");
+  expect(await source.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   const contract = source.locator("[data-annotation='contract']");
   await expect(contract.locator("a[href='/n/module%3Asrc%2Fready']")).toBeVisible();
   await expect(contract.locator("a[href='/n/criterion%3Asrc%2Fready%23needs-commit']")).toBeVisible();

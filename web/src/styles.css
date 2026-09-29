@@ -25,6 +25,14 @@
   --color-file: #8b93a3;
   --color-decl: #6c7482;
   --color-test: #56b6c2;
+  /* Syntax tones for the annotated source. */
+  --color-syn-keyword: #bb9af7;
+  --color-syn-string: #9ece6a;
+  --color-syn-comment: #6f7888;
+  --color-syn-number: #ff9e64;
+  --color-syn-type: #7dcfff;
+  --color-syn-function: #7aa2f7;
+  --color-syn-meta: #e0af68;
   --radius-md: 6px;
   --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
