@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open and active changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, the start and close actions, and a link to its own page."}]}
+ * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open and active changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, the start and close actions, and a link to its own page."}]}
  * ```
  */
 
@@ -350,6 +350,12 @@ function Row({ t, open, onToggle, change }: { t: BoardTicket; open: boolean; onT
         <span className="flex items-center gap-2 justify-end text-xs whitespace-nowrap">
           {isChange && t.status !== "closed" && (
             <span className={`border rounded-[10px] px-2 ${waiting ? "text-warn border-warn/40" : "text-ok border-ok/40"}`}>{waiting ? `waits on ${waiting}` : "ready"}</span>
+          )}
+          {t.followed_by?.length === 0 && (
+            <span title="No change relies on this answer: it needed no work, or its work was never filed." className="border rounded-[10px] px-2 text-warn border-warn/40">
+              nothing built on it
+              <span className="sr-only">: no change relies on this answer; it needed no work, or its work was never filed.</span>
+            </span>
           )}
           {isChange ? <span className="text-fg-dim">{waitCount(t)}</span> : <span className={BAND_COLOR[t.priority ?? "later"]}>{t.priority}</span>}
         </span>

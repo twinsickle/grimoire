@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the open and active gaps and questions no open or active change relies on; closed lists the requested number of most recently decided closed tickets."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the open and active gaps and questions no open or active change relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -23,18 +23,22 @@ pub struct BoardFilter<'a> {
 
 /// The board's answer: the tickets asked for, each change with what it waits
 /// on; the open gaps and questions no open change relies on; and the most
-/// recently closed tickets, when asked for.
+/// recently closed tickets, when asked for, each answered gap or question
+/// with the changes that followed it.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct Board {
     pub tickets: Vec<BoardTicket>,
     pub unattached: Vec<Summary>,
-    pub closed: Vec<Summary>,
+    pub closed: Vec<BoardTicket>,
 }
 
 /// A ticket on the board. A change carries `waits_on`: the gaps and
 /// questions it relies on with their status, from which its readiness
-/// follows; it is ready when none of them is still open or active.
+/// follows; it is ready when none of them is still open or active. A
+/// closed gap or question carries `followed_by`: the changes that rely on
+/// it, of any status. Empty, the answer has nothing built on it, which is
+/// either an answer that needed no work or one whose work was never filed.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct BoardTicket {
@@ -43,6 +47,9 @@ pub struct BoardTicket {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub waits_on: Option<Vec<Summary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub followed_by: Option<Vec<Summary>>,
 }
 
 pub fn board(g: &Graph, f: &BoardFilter) -> Board {
@@ -54,7 +61,7 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Board {
     let tickets: Vec<&Ticket> = g.tickets().filter(|t| status.contains(&t.status) && kinds.contains(&t.kind)).filter(narrowed).collect();
     let tickets = ordered(g, tickets)
         .into_iter()
-        .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)) })
+        .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)), followed_by: None })
         .collect();
     // Gaps and questions an open or active change relies on are attached to it.
     let attached: HashSet<&Reference> = g.tickets().filter(|t| t.kind == TicketKind::Change && t.status != Status::Closed).flat_map(|t| t.relies_on.iter()).collect();
@@ -67,7 +74,7 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Board {
     let unattached = ordered(g, unattached).into_iter().map(ticket_summary).collect();
     let mut closed: Vec<&Ticket> = g.tickets().filter(|t| t.status == Status::Closed).filter(narrowed).collect();
     closed.sort_by_key(|t| std::cmp::Reverse(newest_decision(t)));
-    let closed = closed.into_iter().take(f.closed).map(ticket_summary).collect();
+    let closed = closed.into_iter().take(f.closed).map(|t| BoardTicket { summary: ticket_summary(t), waits_on: None, followed_by: (t.kind != TicketKind::Change).then(|| followed_by(g, t)) }).collect();
     Board { tickets, unattached, closed }
 }
 
@@ -94,6 +101,14 @@ fn waits_on(g: &Graph, t: &Ticket) -> Vec<Summary> {
             _ => None,
         })
         .collect()
+}
+
+/// The changes, of any status, that rely on a gap or question, in id order.
+fn followed_by(g: &Graph, t: &Ticket) -> Vec<Summary> {
+    let r = Reference::ticket(&t.slug);
+    let mut v: Vec<&Ticket> = g.tickets().filter(|c| c.kind == TicketKind::Change && c.relies_on.contains(&r)).collect();
+    v.sort_by(|a, b| a.slug.cmp(&b.slug));
+    v.into_iter().map(ticket_summary).collect()
 }
 
 /// Recency of a closed ticket: its decision's date, then its id, a generated
@@ -240,8 +255,43 @@ mod tests {
         }
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 3 });
-        let closed: Vec<&str> = b.closed.iter().map(|t| t.r#ref.id.as_str()).collect();
+        let closed: Vec<&str> = b.closed.iter().map(|t| t.summary.r#ref.id.as_str()).collect();
         assert_eq!(closed, vec!["0010", "0002", "named"], "newest date, then the newest generated id, then a named slug");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-answer-carries-the-changes-that-followed-it", "checks": ["crates/core/src/query/board#board"]}
+    /// ```
+    #[test]
+    fn an_answer_carries_the_changes_that_followed_it() {
+        use crate::graph::fixtures::ticket;
+        let mut s = crate::graph::fixtures::store();
+        s.tickets.clear();
+        let closed = |slug: &str, kind: TicketKind, relies: &[&str]| {
+            let mut t = ticket(slug, kind, Priority::Later, Status::Closed, &[], relies);
+            t.decision = Some(Decision { date: "2026-09-29".into(), text: "Answered.".into() });
+            t
+        };
+        for t in [
+            closed("q-built", TicketKind::Question, &[]),
+            closed("q-alone", TicketKind::Question, &[]),
+            closed("g-open", TicketKind::Gap, &[]),
+            closed("done", TicketKind::Change, &["ticket:q-built"]),
+            ticket("b-work", TicketKind::Change, Priority::High, Status::Open, &[], &["ticket:q-built", "ticket:g-open"]),
+            ticket("a-work", TicketKind::Change, Priority::High, Status::Active, &[], &["ticket:q-built"]),
+        ] {
+            s.tickets.insert(t.slug.clone(), t);
+        }
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 10 });
+        let followed = |slug: &str| b.closed.iter().find(|t| t.summary.r#ref.id == slug).expect("closed").followed_by.as_ref().map(|v| v.iter().map(|s| s.r#ref.id.clone()).collect::<Vec<_>>());
+        assert_eq!(followed("q-built"), Some(vec!["a-work".into(), "b-work".into(), "done".into()]), "changes of any status, in id order");
+        assert_eq!(followed("g-open"), Some(vec!["b-work".into()]));
+        assert_eq!(followed("q-alone"), Some(vec![]), "an answer with nothing built on it");
+        assert_eq!(followed("done"), None, "only a gap or question is followed");
+        assert!(b.tickets.iter().all(|t| t.followed_by.is_none()), "only the closed list carries it");
     }
 
     /// # Test contract

@@ -157,6 +157,30 @@
         "module:src/ready"
       ],
       "body": "Ready: it relies on nothing open."
+    },
+    {
+      "title": "Should readiness follow symlinks?",
+      "kind": "question",
+      "priority": "later",
+      "body": "Answered, and nothing built on it.",
+      "close": "No: a symlink is read as the file it names."
+    },
+    {
+      "title": "Readiness misses detached heads",
+      "kind": "gap",
+      "priority": "later",
+      "body": "Answered, with a change built on it.",
+      "close": "A detached head counts as a commit; filed as a change."
+    },
+    {
+      "title": "Count a detached head as a commit",
+      "kind": "change",
+      "priority": "later",
+      "relies_on": [
+        "ticket:0009"
+      ],
+      "body": "Built on the detached-heads gap.",
+      "close": "Counted."
     }
   ],
   "after_adoption": {

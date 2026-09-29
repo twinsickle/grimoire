@@ -245,6 +245,12 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
   await page.getByRole("button", { name: /^Ready/ }).click();
   await page.getByRole("button", { name: /^Closed/ }).click();
   await expect(page.locator("#closed").getByRole("link", { name: "Name the readiness module" })).toBeVisible();
+  // An answered question no change relies on is marked; a gap a change was built on, and a change, are not.
+  await expect(page.locator("#closed li[data-ticket='ticket:0008']")).toContainText("nothing built on it");
+  // What the mark means is read out, not only shown on hover.
+  await expect(page.locator("#closed li[data-ticket='ticket:0008']")).toContainText("it needed no work, or its work was never filed");
+  await expect(page.locator("#closed li[data-ticket='ticket:0009']")).not.toContainText("nothing built on it");
+  await expect(page.locator("#closed li[data-ticket='ticket:0010']")).not.toContainText("nothing built on it");
 });
 
 /**

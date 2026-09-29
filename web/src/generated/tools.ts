@@ -15,9 +15,9 @@ export type AnnotationKind = "contract" | "test" | "decl";
 
 export type BaselineSummary = { date: string, reason: string, count: number, };
 
-export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, closed: Array<Summary>, };
+export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, closed: Array<BoardTicket>, };
 
-export type BoardTicket = { waits_on?: Array<Summary>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
+export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 
 export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, };
 
