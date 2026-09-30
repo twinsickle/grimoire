@@ -251,6 +251,27 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-refused-codex-config-stops-init-before-anything-is-written", "checks": ["crates/cli/src/init#merge-not-clobber"]}
+/// ```
+#[test]
+fn a_refused_codex_config_stops_init_before_anything_is_written() {
+    let p = bare_repo();
+    std::fs::create_dir_all(p.repo.join(".codex")).unwrap();
+    std::fs::write(p.repo.join(".codex").join("config.toml"), "mcp_servers = { docs = { url = \"x\" } }\n").unwrap();
+    let before = files(&p.repo);
+    let bytes = |f: &str| std::fs::read(p.repo.join(f)).unwrap();
+    let (claude, codex) = (bytes("CLAUDE.md"), bytes(".codex/config.toml"));
+    let out = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("config.toml"), "the refusal names the file: {}", text(&out));
+    assert_eq!(files(&p.repo), before, "not even .grimoire.toml is written");
+    assert_eq!((bytes("CLAUDE.md"), bytes(".codex/config.toml")), (claude, codex));
+    assert!(!p.store.exists(), "nor is the store created");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src#uninstall-store"]}
 /// ```
 #[test]

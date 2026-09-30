@@ -17,8 +17,9 @@ the tools.
 
 In order of preference:
 
-1. **MCP tools** named `mcp__grimoire__<tool>` when the daemon is running and
-   the project's `.mcp.json` names it. Use them as tools.
+1. **MCP tools** from the `grimoire` server when the daemon is running and
+   the project's MCP configuration names it (`.mcp.json`, or
+   `.codex/config.toml` for Codex). Use them as tools.
 2. **HTTP**: `POST http://127.0.0.1:4242/api/<tool>` with the JSON input as
    the body (port from `.mcp.json` if it differs). `GET /api/tools` lists them.
 3. **CLI, no daemon**: `grimoire tool <name> '<json>'` in the repository.
@@ -89,8 +90,6 @@ edges.
 
 ## Sequence: start a ticket
 
-`/grimoire start <slug>`
-
 1. `start_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
    `active` and returns the ticket, `rests_on` (everything below it, nearest
    first, with the decisions behind each requirement) and `related` (open gaps
@@ -114,8 +113,6 @@ edges.
    requirements change, which decisions get recorded, which contracts change.
 
 ## Sequence: write the spec
-
-`/grimoire spec <slug>`
 
 The spec is not a document; it is the grimoire after the change, written before
 the code.
@@ -142,8 +139,6 @@ the code.
 
 ## Sequence: finish a ticket
 
-`/grimoire finish <slug>`
-
 1. `get ticket:<slug>`. Copy from its body anything the grimoire still needs;
    the body is discarded on close.
 2. `lint`. Resolve what this work created: a criterion added to a contract
@@ -165,8 +160,9 @@ the code.
    ticket, since this one is closed) or the node did not need changing
    (say so in the decision, and next time remove it from `touches` before
    closing). `null` means the ticket was started before snapshots existed.
-5. If the project documents a review step (in its `CLAUDE.md`, a skill, or
-   a hook), run it now. Grimoire has no opinion on what the review is.
+5. If the project documents a review step (in its `CLAUDE.md` or
+   `AGENTS.md`, a skill, or a hook), run it now. Grimoire has no opinion on
+   what the review is.
    If the project has a visual check for a user interface, run it and look
    at the output; a type check proves nothing about how a view renders.
 6. Commit the code and the grimoire changes together only when the user has
@@ -174,8 +170,6 @@ the code.
    code and its contracts.
 
 ## Sequence: file a ticket
-
-`/grimoire file <title>`
 
 1. `find` the nodes it touches and relies on; resolve every reference.
 2. `file_ticket` with a title, kind, priority, `touches`, `relies_on`, and
@@ -188,8 +182,6 @@ the code.
    with `update_ticket` now.
 
 ## Sequence: resolve a gap or question
-
-`/grimoire resolve <slug>`
 
 A gap or question closes on the person's decision, never on yours.
 
@@ -212,8 +204,6 @@ A change that turns out to be a question is closed with a decision saying
 so and the question filed, or deleted if nothing was decided.
 
 ## Sequence: adopt existing code
-
-`/grimoire adopt [area]`
 
 For code that predates its contracts or its tests. `init` recorded what it
 found as the baseline, so the check passes while this runs; each batch

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references, a marked section in CLAUDE.md and AGENTS.md, the MCP entry and a pre-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it removes .grimoire.toml last and keeps the store, printing where it is. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting with the reason adopted at init, so the hook it installs passes on the next commit, and prints how many findings it baselined."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store (a path or a name), else from the nearest .grimoire.toml above the working directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, and a pre-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it removes .grimoire.toml last and keeps the store, printing where it is. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion."}]}
 //! ```
 
 mod init;
@@ -355,6 +355,8 @@ fn main() -> anyhow::Result<()> {
         Command::Init { repo, store, languages, port } => {
             let repo = repo.unwrap_or(cwd()?);
             let repo_str = canonical(&repo)?;
+            // Everything init will write, worked out first: a file it cannot merge into stops it before the store or .grimoire.toml.
+            let integration = init::plan_install(&repo, port)?;
             let store_dir = store_io::resolve_store(&store)?;
             if !store_dir.join(store_io::CONFIG_FILE).exists() {
                 let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
@@ -375,14 +377,15 @@ fn main() -> anyhow::Result<()> {
             }
             let f = store_io::write_project_file(&repo, &store)?;
             println!("wrote   {}", f.display());
-            for w in init::install(&repo, port)? {
+            for w in integration.apply()? {
                 match w {
                     init::Wrote::Written(p) => println!("wrote   {}", p.display()),
+                    init::Wrote::Noted { path, note } => println!("wrote   {}: {note}", path.display()),
                     init::Wrote::Skipped { path, note } => println!("skipped {}: {note}", path.display()),
                 }
             }
             adopt(&store_dir, "adopted at init")?;
-            println!("done. Start the daemon with `grimoire serve --port {port}`; agents get the tools from .mcp.json and the sequences from the skill.");
+            println!("done. Start the daemon with `grimoire serve --port {port}`; agents get the tools from .mcp.json (Claude Code) or .codex/config.toml (Codex), and the sequences from the skill.");
             Ok(())
         }
         Command::Uninstall { repo, delete_store } => uninstall(repo, delete_store),

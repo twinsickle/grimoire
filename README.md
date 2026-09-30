@@ -81,12 +81,14 @@ reaches a connected agent on its next call, since the transport is stateless.
 A change to the tool *set* or to the instructions string needs `/mcp` and a
 reconnect in every client, including the agent that made the change.
 
-`.mcp.json` points agents working in this repository at the dev daemon, so
-the tools are available as tools once the daemon is up (a fresh session or an
-MCP reconnect is needed after adding it). The Claude Code skill in
-`.claude/skills/grimoire/` wraps the tools into the start, spec, finish and
-file sequences (`/grimoire start <slug>` and so on); it is the source that
-`grimoire init` will install into other projects. Without MCP, the same operations
+`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex, once the project
+is trusted in your own Codex configuration) point agents working in this
+repository at the dev daemon, so the tools are available as tools once the
+daemon is up (a fresh session or an MCP reconnect is needed after adding it).
+The skill in `.claude/skills/grimoire/` wraps the tools into the start, spec,
+finish, file, resolve and adopt sequences; it is the source that
+`grimoire init` installs into other projects, at `.claude/skills/grimoire/`
+and `.agents/skills/grimoire/` for Codex. Without MCP, the same operations
 are `POST http://127.0.0.1:4242/api/<tool>` with the tool's JSON input, or
 `GET /api/<tool>?ref=...` for reads; `GET /api/tools` lists them.
 

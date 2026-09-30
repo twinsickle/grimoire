@@ -10,11 +10,11 @@ same piece of work; the pre-commit hook checks they agree.
 - Every module in the contract scope carries a `# Module contract`. New
   module, new contract; changed guarantee, changed criterion; new criterion, a
   requirement covering it.
-- Work is a ticket: `/grimoire start`, `spec`, `finish`. `/grimoire file`
-  for anything you find; `/grimoire adopt` for code without contracts.
+- Work is a ticket: the skill's start, spec and finish sequences. File a
+  ticket for anything you find; adopt code without contracts.
 - Never write the store's files. The tools are the only interface.
 - Propose, don't decide. A gap or question closes on the person's answer to
-  options you lay out (`/grimoire resolve`).
+  options you lay out (the skill's resolve sequence).
 
 Sequences: `.claude/skills/grimoire/SKILL.md`.
 <!-- /grimoire -->
