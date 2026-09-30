@@ -165,7 +165,7 @@ impl Graph {
                 let to = match c.strip_prefix("req:") {
                     Some(slug) => Reference::req(slug),
                     None => {
-                        let (module, id) = c.split_once('#').unwrap_or((c.as_str(), ""));
+                        let (module, id) = c.rsplit_once('#').unwrap_or((c.as_str(), ""));
                         Reference::criterion(module, id)
                     }
                 };
@@ -179,7 +179,7 @@ impl Graph {
             for d in &f.decls {
                 let dref = Reference::decl(&f.path, &d.path);
                 g.edge(&from, &dref, Relation::Contains);
-                g.nodes.insert(dref, Node::Decl(d.clone()));
+                g.nodes.insert(dref, Node::Decl(Decl { file: f.path.clone(), ..d.clone() }));
             }
             g.nodes.insert(from, Node::File(f.clone()));
         }
@@ -246,10 +246,7 @@ impl Graph {
                 Some(SourceLocation { file, line, contract_line: Some(line) })
             }
             (Kind::File, Node::File(f)) => Some(SourceLocation { file: f.path.clone(), line: 1, contract_line: None }),
-            (Kind::Decl, Node::Decl(d)) => {
-                let (file, _) = r.split_hash()?;
-                Some(SourceLocation { file: file.to_string(), line: d.line, contract_line: None })
-            }
+            (Kind::Decl, Node::Decl(d)) => Some(SourceLocation { file: d.file.clone(), line: d.line, contract_line: None }),
             (Kind::Test, Node::Test(t)) => Some(SourceLocation { file: t.file.clone(), line: t.line, contract_line: None }),
             _ => None,
         }
@@ -406,5 +403,33 @@ mod tests {
         assert_eq!(loc.contract_line, Some(1));
         let d = g.source_of(&Reference::decl("src/a/ready.rs", "run")).unwrap();
         assert_eq!(d.line, 10);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-hash-in-a-file-name-misplaces-nothing", "checks": ["crates/core/src/model#kinds", "crates/core/src/query/source#module-source"]}
+    /// ```
+    #[test]
+    fn a_hash_in_a_file_name_misplaces_nothing() {
+        use crate::extraction::fixtures::{contract, file};
+        // A module whose file name holds #, with a criterion, a test block and
+        // a declaration whose own path holds # (a TypeScript private field).
+        let mut f = file("src/a#b.ts", "src/a#b", &[], contract("Hold a hash.", &[("kept", "It holds.")]));
+        f.language = "typescript".into();
+        f.decls = vec![Decl { path: "Box::#secret".into(), kind: "method".into(), line: 7, file: "src/a#b.ts".into() }];
+        f.tests = vec![Test { file: "src/a#b.ts".into(), name: "holds".into(), line: 20, checks: vec!["src/a#b#kept".into()] }];
+        let g = Graph::build(&crate::graph::fixtures::store(), &Extraction::from_files(&[f]), &[]);
+        let criterion = Reference::criterion("src/a#b", "kept");
+        assert!(g.contains(&criterion));
+        assert_eq!(criterion.split_hash(), Some(("src/a#b", "kept")));
+        let test = Reference::test("src/a#b.ts", "holds");
+        assert_eq!(test.split_hash(), Some(("src/a#b.ts", "holds")));
+        assert!(g.out(&test).any(|e| e.relation == Relation::Checks && e.to == criterion), "the check names the criterion, not src/a");
+        let decl = Reference::decl("src/a#b.ts", "Box::#secret");
+        assert_eq!(decl.split_hash(), None, "a declaration's file is on its node");
+        let loc = g.source_of(&decl).expect("the declaration is found");
+        assert_eq!((loc.file.as_str(), loc.line), ("src/a#b.ts", 7));
+        assert_eq!(g.source_of(&criterion).map(|l| l.file), Some("src/a#b.ts".to_string()));
     }
 }

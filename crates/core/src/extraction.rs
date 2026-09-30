@@ -150,7 +150,7 @@ pub(crate) mod fixtures {
             path: path.into(),
             language: "rust".into(),
             module: module.into(),
-            decls: vec![Decl { path: "run".into(), kind: "function".into(), line: 10 }],
+            decls: vec![Decl { path: "run".into(), kind: "function".into(), line: 10, file: path.into() }],
             imports: imports.iter().map(|c| c.iter().map(|s| s.to_string()).collect()).collect(),
             expects_contract: true,
             digest: crate::fingerprint::of_text(path),

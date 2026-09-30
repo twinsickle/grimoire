@@ -85,8 +85,10 @@ pub fn find_tests(text: &str, first_line: u32) -> Vec<FoundTest> {
             if checks.is_empty() {
                 return Err(format!("test `{name}` checks nothing"));
             }
-            let criterion = |c: &str| c.split_once('#').is_some_and(|(m, id)| !m.is_empty() && !id.is_empty());
+            // A requirement is req:<slug>, whatever else it holds; anything else is a criterion,
+            // split at its last #, since a module id may hold one and a criterion id never does.
             let requirement = |c: &str| c.strip_prefix("req:").is_some_and(grimoire_core::store::is_slug);
+            let criterion = |c: &str| !c.starts_with("req:") && c.rsplit_once('#').is_some_and(|(m, id)| !m.is_empty() && grimoire_core::store::is_slug(id));
             if let Some(bad) = checks.iter().find(|c| !criterion(c) && !requirement(c)) {
                 return Err(format!("`{bad}` is neither a criterion as module id#criterion id nor a requirement as req:<slug>"));
             }
@@ -191,6 +193,12 @@ mod tests {
         assert!(one(r#"{"test":"t","checks":[]}"#).contains("checks nothing"));
         assert!(one(r#"{"test":"t","checks":["no-hash"]}"#).contains("module id#criterion id"));
         assert!(one(r#"{"test":"t","checks":["req:Not A Slug"]}"#).contains("req:<slug>"));
+        assert!(one(r#"{"test":"t","checks":["req:foo#bar"]}"#).contains("req:<slug>"), "a requirement is never read as a criterion");
+        assert!(one(r#"{"test":"t","checks":["m#Not A Slug"]}"#).contains("module id#criterion id"));
+        assert!(find_tests("# Test contract
+```json
+{\"test\":\"t\",\"checks\":[\"src/a#b#kept\"]}
+```", 1)[0].test.is_ok(), "a module id may hold #");
         assert!(find_tests("# Test contract
 ```json
 {\"test\":\"t\",\"checks\":[\"req:src-boundary\"]}

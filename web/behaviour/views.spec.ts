@@ -702,3 +702,23 @@ test("a ticket that rests on nothing draws no graph", async ({ page }) => {
   await expect(page.getByText("Nothing below this node.")).toBeVisible();
   await expect(page.getByRole("region", { name: "What this ticket rests on" })).toHaveCount(0);
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-declaration-links-to-its-own-file", "checks": ["web/src/types#reference-helpers"]}
+ * ```
+ */
+test("a declaration's page links to its own file, though the file's name and the declaration's hold #", async ({ page }) => {
+  // The fixture has no such file, so the declaration is answered for it.
+  const ref = "decl:src/a#b.ts#Box::#secret";
+  await page.route("**/api/get", async (route) => {
+    if (route.request().postDataJSON().ref !== ref) return route.continue();
+    await route.fulfill({ json: { node: { ref, path: "Box::#secret", kind: "method", line: 9, file: "src/a#b.ts", in: [], out: [] } } });
+  });
+  await page.goto(`/n/${encodeURIComponent(ref)}`);
+  const link = page.getByRole("link", { name: "src/a#b.ts:9" });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", `/n/${encodeURIComponent("file:src/a#b.ts")}#L9`);
+});

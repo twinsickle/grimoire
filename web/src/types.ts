@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing."}]}
+ * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing, and localId gives what follows the last # of a criterion or test reference, which never holds one; nothing recovers a declaration's file from its reference."}]}
  * ```
  */
 
@@ -34,6 +34,12 @@ export function kindOf(ref: G.Ref): Kind {
 
 export function idOf(ref: G.Ref): string {
   return ref.slice(ref.indexOf(":") + 1);
+}
+
+/** A criterion's id or a test's name: what follows the last `#`, since a module or file name may hold one and they never do. */
+export function localId(ref: G.Ref): string {
+  const id = idOf(ref);
+  return id.slice(id.lastIndexOf("#") + 1);
 }
 
 /** The UI route for a node's page. */

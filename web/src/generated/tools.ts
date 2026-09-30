@@ -33,7 +33,12 @@ export type CriterionCoverage = { ref: Ref, statement: string, requirements: Arr
 
 export type Decision = { date: string, text: string, };
 
-export type Decl = { path: string, kind: string, line: number, };
+export type Decl = { path: string, kind: string, line: number, 
+/**
+ * The file it is declared in, set where the file is known, so no one
+ * recovers it from the reference.
+ */
+file: string, };
 
 export type Deleted = { deleted: Ref, warnings: Array<Finding>, baselined: number, };
 

@@ -9,7 +9,7 @@
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
-import { idOf, kindOf, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
+import { idOf, kindOf, localId, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
 /** Deep enough to reach every page, so the rail is the whole outline. */
 const ALL = 64;
@@ -286,7 +286,7 @@ function CriterionChip({ tree }: { tree: Tree }) {
       title={tree.title}
       className={`${mono} text-[11.5px] px-1.5 rounded border hover:no-underline ${warn ? "text-warn border-warn/50" : "text-criterion border-line"}`}
     >
-      #{idOf(tree.ref).split("#")[1]}
+      #{localId(tree.ref)}
       {warn && ` · ${marks.join(", ")}${inherited ? ", inherited" : ""}`}
     </Link>
   );

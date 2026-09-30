@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, call } from "./api";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
-import { idOf, kindOf } from "./types";
+import { idOf, kindOf, localId } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -23,6 +23,9 @@ test("a reference splits at the first colon and nowhere else", () => {
   expect(kindOf("criterion:crates/core/src/lint#stable-order")).toBe("criterion");
   expect(idOf("criterion:crates/core/src/lint#stable-order")).toBe("crates/core/src/lint#stable-order");
   expect(idOf("decl:src/a.rs#Repo::open")).toBe("src/a.rs#Repo::open");
+  // A criterion or test id after the last #, though the module or file name holds one.
+  expect(localId("criterion:src/a#b#kept")).toBe("kept");
+  expect(localId("test:src/a#b.ts#holds")).toBe("holds");
 });
 
 /**

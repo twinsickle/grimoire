@@ -125,7 +125,7 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         path: rel_path.to_string(),
         language: adapter.language().to_string(),
         module,
-        decls: parsed.decls,
+        decls: parsed.decls.into_iter().map(|d| Decl { file: rel_path.to_string(), ..d }).collect(),
         imports: parsed.imports,
         expects_contract: adapter.expects_contract(rel_path),
         digest: grimoire_core::fingerprint::of_text(source),
@@ -261,6 +261,40 @@ impl Extractor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-private-declaration-in-a-hash-file-keeps-its-file", "checks": ["crates/core/src/model#kinds", "crates/core/src/query/source#module-source"]}
+    /// ```
+    #[test]
+    fn a_private_declaration_in_a_hash_file_keeps_its_file() {
+        use grimoire_core::graph::Node;
+        use grimoire_core::{Extraction, Graph, Reference, Store};
+        let a = typescript::TypeScriptAdapter::new(Path::new("."));
+        let src = "/**
+ * # Module contract
+ *
+ * ```json
+ * {\"purpose\":\"Hold a hash.\",\"criteria\":[{\"id\":\"kept\",\"statement\":\"It holds.\"}]}
+ * ```
+ */
+export class Box {
+  #secret(): number {
+    return 1;
+  }
+}
+";
+        let x = extract_source(&a, "src/a#b.ts", src);
+        let secret = x.decls.iter().find(|d| d.path.contains("#secret")).unwrap_or_else(|| panic!("the private method is a declaration: {:?}", x.decls));
+        assert_eq!(secret.file, "src/a#b.ts", "extraction sets the file");
+        let g = Graph::build(&Store::default(), &Extraction::from_files(std::slice::from_ref(&x)), &[]);
+        let decl = Reference::decl("src/a#b.ts", &secret.path);
+        assert!(matches!(g.get(&decl), Some(Node::Decl(d)) if d.file == "src/a#b.ts"), "the graph's node carries it");
+        let loc = g.source_of(&decl).expect("found");
+        assert_eq!((loc.file.as_str(), loc.line), ("src/a#b.ts", secret.line));
+        assert!(g.contains(&Reference::criterion(&x.module, "kept")), "the module {} keeps its criterion", x.module);
+    }
 
     #[test]
     fn supported_languages_is_exactly_what_for_languages_accepts() {

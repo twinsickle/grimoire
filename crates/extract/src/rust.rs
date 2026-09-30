@@ -239,7 +239,7 @@ impl<'a> Walker<'a> {
 
     fn decl(&mut self, prefix: &[String], name: &str, kind: &str, n: Node) {
         let path = if prefix.is_empty() { name.to_string() } else { format!("{}::{name}", prefix.join("::")) };
-        self.out.decls.push(Decl { path, kind: kind.to_string(), line: n.start_position().row as u32 + 1 });
+        self.out.decls.push(Decl { path, kind: kind.to_string(), line: n.start_position().row as u32 + 1, file: String::new() });
     }
 
     fn visit(&mut self, n: Node, prefix: &mut Vec<String>) {

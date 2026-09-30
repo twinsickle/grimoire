@@ -33,6 +33,7 @@ import {
 } from "../components";
 import {
   idOf,
+  localId,
   nodePath,
   kindOf,
   type AnyNode,
@@ -74,7 +75,7 @@ export function NodeView() {
         {kind === "module" && <Module n={node as ModuleNode} />}
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
         {kind === "file" && <File n={node as FileNode} />}
-        {kind === "decl" && <Decl n={node as DeclNode} ref={ref} />}
+        {kind === "decl" && <Decl n={node as DeclNode} />}
         {kind === "test" && <TestView n={node as TestNode} />}
         <Findings ref={ref} />
       </div>
@@ -393,18 +394,17 @@ function SourceMark({ a }: { a: Annotation }) {
       <Link to={nodePath(a.ref)}>{a.kind === "decl" ? a.title : idOf(a.ref)}</Link>
       {a.links.map((l) => (
         <Link key={l.ref} to={nodePath(l.ref)} title={l.title ?? undefined} className="text-fg-dim">
-          {l.ref.includes("#") ? `#${l.ref.split("#")[1]}` : idOf(l.ref)}
+          {l.ref.includes("#") ? `#${localId(l.ref)}` : idOf(l.ref)}
         </Link>
       ))}
     </span>
   );
 }
 
-function Decl({ n, ref }: { n: DeclNode; ref: Ref }) {
-  const file = idOf(ref).split("#")[0];
+function Decl({ n }: { n: DeclNode }) {
   return (
     <p className="text-fg-dim">
-      {n.kind} at <SourceLink file={file} line={n.line} />
+      {n.kind} at <SourceLink file={n.file} line={n.line} />
     </p>
   );
 }
