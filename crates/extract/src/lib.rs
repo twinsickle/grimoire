@@ -336,7 +336,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-call-is-not-an-edge", "checks": ["req:src-no-guessed-calls"]}
+    /// {"test": "a-call-is-not-an-edge", "checks": ["req:extract-no-guessed-calls"]}
     /// ```
     #[test]
     fn a_call_between_functions_makes_no_edge() {

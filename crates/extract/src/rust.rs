@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names; std and unknown crates yield none."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."}]}
 //! ```
 
 use std::path::Path;
@@ -75,7 +75,10 @@ impl RustAdapter {
     }
 
     /// Candidate module ids for one `use` path, from the importing module.
-    fn candidates(&self, segs: &[String], from_module: &str) -> Vec<String> {
+    /// `declared` is the modules the file declares at its top level: a bare
+    /// first name is local only when it is one of them (Rust 2018 paths), and
+    /// is otherwise an external crate, which yields nothing.
+    fn candidates(&self, segs: &[String], from_module: &str, declared: &[String]) -> Vec<String> {
         let Some(first) = segs.first() else { return Vec::new() };
         let crate_src = self.crate_of(from_module).map(|c| c.src());
         let mut out = Vec::new();
@@ -102,11 +105,7 @@ impl RustAdapter {
             name => {
                 if let Some(c) = self.crate_by_name(name) {
                     push_candidates(&mut out, &c.src(), &segs[1..]);
-                } else {
-                    // Uniform paths: a module of this crate, or relative to here.
-                    if let Some(base) = &crate_src {
-                        push_candidates(&mut out, base, segs);
-                    }
+                } else if declared.iter().any(|d| d == name) {
                     push_candidates(&mut out, from_module, segs);
                 }
             }
@@ -199,7 +198,9 @@ impl Adapter for RustAdapter {
         let mut parser = Parser::new();
         parser.set_language(&tree_sitter_rust::LANGUAGE.into()).expect("rust grammar loads");
         let Some(tree) = parser.parse(source, None) else { return Parsed::default() };
-        let mut w = Walker { src: source.as_bytes(), adapter: self, module_id, out: Parsed::default() };
+        let src = source.as_bytes();
+        let scopes = vec![(module_id.to_string(), declared_in(tree.root_node(), src))];
+        let mut w = Walker { src, adapter: self, scopes, out: Parsed::default() };
         w.visit(tree.root_node(), &mut Vec::new());
         // Over the whole tree: the walker skips test bodies, and tests are
         // where test blocks live.
@@ -208,10 +209,22 @@ impl Adapter for RustAdapter {
     }
 }
 
+/// The modules a scope (the file, or an inline module's body) declares,
+/// found before any use in it: `mod graph;` may follow `use graph::Graph;`.
+fn declared_in(scope: Node, src: &[u8]) -> Vec<String> {
+    let mut cursor = scope.walk();
+    scope
+        .children(&mut cursor)
+        .filter(|c| c.kind() == "mod_item")
+        .filter_map(|c| c.child_by_field_name("name").and_then(|n| n.utf8_text(src).ok()).map(str::to_string))
+        .collect()
+}
+
 struct Walker<'a> {
     src: &'a [u8],
     adapter: &'a RustAdapter,
-    module_id: &'a str,
+    /// Innermost last: each scope's module id and the modules it declares.
+    scopes: Vec<(String, Vec<String>)>,
     out: Parsed,
 }
 
@@ -283,15 +296,19 @@ impl<'a> Walker<'a> {
                         continue;
                     }
                     if let Some(body) = c.child_by_field_name("body") {
+                        let module = format!("{}/{name}", self.scopes.last().map_or("", |s| s.0.as_str()));
+                        self.scopes.push((module, declared_in(body, self.src)));
                         prefix.push(name);
                         self.visit(body, prefix);
                         prefix.pop();
+                        self.scopes.pop();
                     }
                 }
                 "use_declaration" => {
                     if let Some(arg) = c.child_by_field_name("argument") {
                         for path in self.flatten(arg) {
-                            let cands = self.adapter.candidates(&path, self.module_id);
+                            let (module, declared) = self.scopes.last().expect("the file's scope");
+                            let cands = self.adapter.candidates(&path, module, declared);
                             if !cands.is_empty() {
                                 self.out.imports.push(cands);
                             }
@@ -433,7 +450,10 @@ use super::{ready, self};
 use grimoire_core::model::Page;
 use std::fs;
 use serde::Serialize;
+use log::info;
+use loader::Load;
 
+mod loader;
 pub struct Repository;
 impl Repository {
     pub fn from_top(p: &str) -> Self { Repository }
@@ -444,7 +464,7 @@ pub enum State { A }
 pub type Alias = u8;
 pub const N: u8 = 1;
 fn helper() {}
-mod inner { pub fn deep() {} }
+mod inner { pub fn deep() {} mod b; use b::X; use self::b::Y; }
 #[cfg(test)]
 mod tests { use crate::nope; fn t() {} }
 "#;
@@ -462,15 +482,22 @@ mod tests { use crate::nope; fn t() {} }
         assert!(decls.contains(&("inner::deep".into(), "function".into())));
         assert!(!decls.iter().any(|(p, _)| p.contains("t") && p.len() == 1));
         let line = p.decls.iter().find(|d| d.path == "Repository").unwrap().line;
-        assert_eq!(line, 8);
+        assert_eq!(line, 11);
 
         // imports
         assert!(p.imports.contains(&vec!["crates/core/src/git/layout".to_string(), "crates/core/src/git".to_string(), "crates/core/src".to_string()]));
         assert!(p.imports.contains(&vec!["crates/core/src/git/ready".to_string(), "crates/core/src/git".to_string()]));
         assert!(p.imports.contains(&vec!["crates/core/src/git".to_string()]));
         assert!(p.imports.iter().any(|c| c[0] == "crates/core/src/model/Page" && c[1] == "crates/core/src/model"));
-        // std and serde produce no candidates... serde does, as a uniform path guess; std does not.
-        assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("std"))));
+        // A module the file declares is local, even when the use comes first.
+        assert!(p.imports.contains(&vec!["crates/core/src/git/ready/loader/Load".to_string(), "crates/core/src/git/ready/loader".to_string(), "crates/core/src/git/ready".to_string()]));
+        // Inside an inline module, its own declarations and module path.
+        assert!(p.imports.contains(&vec!["crates/core/src/git/ready/inner/b/X".to_string(), "crates/core/src/git/ready/inner/b".to_string(), "crates/core/src/git/ready/inner".to_string()]), "{:?}", p.imports);
+        assert!(p.imports.iter().any(|c| c[0] == "crates/core/src/git/ready/inner/b/Y"), "self is the inline module");
+        assert!(!p.imports.iter().any(|c| c[0] == "crates/core/src/git/ready/b/X"), "not the file's scope");
+        // std, and names the file does not declare, are external crates: nothing,
+        // even where a local module of the same name exists.
+        assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("std") || s.contains("serde") || s.contains("log"))), "{:?}", p.imports);
         assert!(!p.imports.iter().any(|c| c.iter().any(|s| s.contains("nope"))));
     }
 

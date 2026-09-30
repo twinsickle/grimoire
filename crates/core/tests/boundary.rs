@@ -20,7 +20,7 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "core-does-no-io", "checks": ["req:src-boundary"]}
+/// {"test": "core-does-no-io", "checks": ["req:core-boundary"]}
 /// ```
 #[test]
 fn the_core_names_no_io() {

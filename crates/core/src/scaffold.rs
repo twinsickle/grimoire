@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -87,7 +87,8 @@ impl Slugs {
             return base;
         }
         for n in 2.. {
-            let candidate: String = format!("{}-{n}", base.chars().take(SLUG_MAX - 4).collect::<String>().trim_end_matches('-'));
+            let suffix = format!("-{n}");
+            let candidate: String = format!("{}{suffix}", base.chars().take(SLUG_MAX - suffix.len()).collect::<String>().trim_end_matches('-'));
             if self.0.insert(candidate.clone()) {
                 return candidate;
             }
@@ -173,7 +174,8 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
 
     // Modules and their requirements.
     for m in x.modules.values().filter(|m| m.purpose.is_some()) {
-        let tail = m.id.rsplit('/').next().unwrap_or(&m.id);
+        // A crate root's id ends in src, which says nothing: name it by its crate.
+        let tail = m.id.rsplit('/').find(|s| *s != "src").unwrap_or(&m.id);
         let page = pages.get_mut(&group_of(&m.id)).expect("group exists");
         for c in &m.criteria {
             let slug = req_slugs.unique(&format!("{tail}-{}", c.id));
@@ -235,6 +237,32 @@ mod tests {
             assert!(r.scenarios.is_empty() && r.decisions.is_empty());
         }
         assert_eq!(scaffold(&x, "C:/repo", &["rust".into()]), s, "a function of the extraction and nothing else");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-crate-root-is-named-by-its-crate", "checks": ["crates/core/src/scaffold#requirement-slugs"]}
+    /// ```
+    #[test]
+    fn a_crate_root_is_named_by_its_crate() {
+        use crate::extraction::fixtures::{contract, file};
+        let one = || contract("A crate.", &[("boundary", "It holds.")]);
+        let files = vec![
+            file("crates/cli/src/main.rs", "crates/cli/src", &[], one()),
+            file("crates/server/src/lib.rs", "crates/server/src", &[], one()),
+            file("crates/server/src/cli.rs", "crates/server/src/cli", &[], one()),
+            file("src/lib.rs", "src", &[], one()),
+        ];
+        let s = scaffold(&Extraction::from_files(&files), "C:/repo", &["rust".into()]);
+        let named = |module: &str| s.requirements.values().find(|r| r.covered_by[0] == Reference::criterion(module, "boundary")).map(|r| r.slug.clone());
+        assert_eq!(named("crates/cli/src").as_deref(), Some("cli-boundary"));
+        assert_eq!(named("crates/server/src").as_deref(), Some("server-boundary"));
+        assert_eq!(named("src").as_deref(), Some("src-boundary"), "a lone src has nothing better");
+        // Two modules ending in the same name: the second takes a suffix.
+        let mut clash = [named("crates/server/src/cli"), named("crates/cli/src")].map(|s| s.unwrap_or_default());
+        clash.sort();
+        assert_eq!(clash, ["cli-boundary".to_string(), "cli-boundary-2".to_string()]);
     }
 
     /// # Test contract

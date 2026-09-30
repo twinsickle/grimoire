@@ -473,7 +473,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "nothing-derived-on-disk", "checks": ["req:src-one-graph"]}
+    /// {"test": "nothing-derived-on-disk", "checks": ["req:core-one-graph"]}
     /// ```
     #[test]
     fn nothing_derived_is_kept_on_disk() {

@@ -20,7 +20,7 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "only-the-owners-write-the-store", "checks": ["req:src-single-writer"]}
+/// {"test": "only-the-owners-write-the-store", "checks": ["req:server-single-writer"]}
 /// ```
 #[test]
 fn only_the_daemon_and_the_cli_write_the_store() {

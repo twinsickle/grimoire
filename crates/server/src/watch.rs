@@ -1,11 +1,12 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that .gitignore ignores, and anything under .git, never reach the daemon."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group re-extracts every repository path it names that the extractor handles and the repository does not ignore, once, however many events name it."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group re-extracts every repository path it names that the extractor handles and the repository does not ignore, once, however many events name it."}]}
 //! ```
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
@@ -14,20 +15,23 @@ use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, Recom
 
 use crate::daemon::Daemon;
 
-/// Whether the repository ignores a path: `.git`, then `.gitignore` and
-/// `.git/info/exclude` at the root.
+/// Whether the repository ignores a path, as git would: anything under
+/// `.git`; then each directory's `.gitignore` from the path's up to the root,
+/// the nearest that matches deciding, a `!` pattern re-including; then
+/// `.git/info/exclude`. Each directory's matcher is read once and kept until
+/// `forget` is told its `.gitignore` changed.
 pub struct Ignorer {
     root: PathBuf,
-    gitignore: Gitignore,
+    exclude: Gitignore,
+    dirs: Mutex<HashMap<PathBuf, Arc<Gitignore>>>,
 }
 
 impl Ignorer {
     pub fn new(root: &Path) -> Ignorer {
         let mut b = GitignoreBuilder::new(root);
-        b.add(root.join(".gitignore"));
         b.add(root.join(".git").join("info").join("exclude"));
-        let gitignore = b.build().unwrap_or_else(|_| Gitignore::empty());
-        Ignorer { root: root.to_path_buf(), gitignore }
+        let exclude = b.build().unwrap_or_else(|_| Gitignore::empty());
+        Ignorer { root: root.to_path_buf(), exclude, dirs: Mutex::new(HashMap::new()) }
     }
 
     pub fn ignores(&self, path: &Path) -> bool {
@@ -35,10 +39,64 @@ impl Ignorer {
         if rel.components().next().is_some_and(|c| c.as_os_str() == ".git") {
             return true;
         }
-        let is_dir = path.is_dir();
-        self.gitignore.matched_path_or_any_parents(path, is_dir).is_ignore()
+        // As git: a path under an ignored directory is ignored, whatever a
+        // pattern nearer to it says, so the directories are decided first,
+        // from the root down.
+        let mut above: Vec<&Path> = path.ancestors().skip(1).take_while(|d| d.starts_with(&self.root) && *d != self.root).collect();
+        above.reverse();
+        if above.iter().any(|d| self.decide(d, true) == Some(true)) {
+            return true;
+        }
+        self.decide(path, path.is_dir()) == Some(true)
+    }
+
+    /// Whether `path` itself is ignored (`Some(true)`), re-included
+    /// (`Some(false)`) or matched by nothing: each `.gitignore` from the
+    /// path's directory up to the root, the nearest that matches deciding,
+    /// then `.git/info/exclude`.
+    fn decide(&self, path: &Path, is_dir: bool) -> Option<bool> {
+        let mut dir = path.parent();
+        while let Some(d) = dir.filter(|d| d.starts_with(&self.root)) {
+            let matcher = self.matcher(d);
+            let m = matcher.matched(path, is_dir);
+            if !m.is_none() {
+                return Some(m.is_ignore());
+            }
+            dir = d.parent();
+        }
+        let m = self.exclude.matched(path, is_dir);
+        (!m.is_none()).then(|| m.is_ignore())
+    }
+
+    /// Drop what was read of the `.gitignore` at `path`, when it changed.
+    pub fn forget(&self, path: &Path) {
+        if path.file_name().is_some_and(|n| n == ".gitignore") {
+            if let Some(dir) = path.parent() {
+                self.dirs.lock().expect("ignore cache").remove(dir);
+            }
+        }
+    }
+
+    /// The matcher of `dir`'s own `.gitignore`, empty when it has none.
+    fn matcher(&self, dir: &Path) -> Arc<Gitignore> {
+        let mut dirs = self.dirs.lock().expect("ignore cache");
+        // Directories come and go (build output, temporary files); past a
+        // bound the cache starts again rather than growing for good.
+        if dirs.len() >= MATCHERS_KEPT && !dirs.contains_key(dir) {
+            dirs.clear();
+        }
+        dirs.entry(dir.to_path_buf())
+            .or_insert_with(|| {
+                let mut b = GitignoreBuilder::new(dir);
+                b.add(dir.join(".gitignore"));
+                Arc::new(b.build().unwrap_or_else(|_| Gitignore::empty()))
+            })
+            .clone()
     }
 }
+
+/// How many directories' ignore matchers the watcher keeps before starting afresh.
+const MATCHERS_KEPT: usize = 4096;
 
 /// How long the watcher waits for a burst of events on one file to settle
 /// before handing it on: an editor's save-and-rewrite or a formatter's pass
@@ -51,6 +109,9 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
     let ignorer = Ignorer::new(&root);
     let mut debouncer = new_debouncer(DEBOUNCE, None, move |result: DebounceEventResult| match result {
         Ok(events) => {
+            for p in events.iter().flat_map(|e| e.paths.iter()) {
+                ignorer.forget(p);
+            }
             let rels = {
                 let extractor = daemon.extractor.read().expect("extractor lock");
                 to_reextract(events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)), |p| ignorer.ignores(p), |p| daemon.relative(p), |r| extractor.handles(r))
@@ -123,11 +184,30 @@ mod tests {
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
         let dir = std::env::temp_dir().join(format!("grimoire-watch-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(dir.join("src")).unwrap();
-        std::fs::write(dir.join(".gitignore"), "target/\n").unwrap();
+        std::fs::create_dir_all(dir.join("web")).unwrap();
+        std::fs::create_dir_all(dir.join(".git").join("info")).unwrap();
+        std::fs::write(dir.join(".gitignore"), "target/\n*.gen.rs\n").unwrap();
+        std::fs::write(dir.join("web").join(".gitignore"), "dist/\n").unwrap();
+        std::fs::write(dir.join("src").join(".gitignore"), "!keep.gen.rs\n").unwrap();
+        std::fs::write(dir.join(".git").join("info").join("exclude"), "scratch.rs\n").unwrap();
         let i = Ignorer::new(&dir);
         assert!(i.ignores(&dir.join(".git").join("index")), "anything under .git");
-        assert!(i.ignores(&dir.join("target").join("debug").join("x.rs")), "what .gitignore ignores");
+        assert!(i.ignores(&dir.join("target").join("debug").join("x.rs")), "what the root .gitignore ignores");
         assert!(!i.ignores(&dir.join("src").join("lib.rs")));
+        assert!(i.ignores(&dir.join("web").join("dist").join("x.js")), "a nested .gitignore applies below it");
+        assert!(!i.ignores(&dir.join("web").join("src").join("a.ts")));
+        assert!(!i.ignores(&dir.join("src").join("keep.gen.rs")), "the nearest file re-includes");
+        assert!(i.ignores(&dir.join("src").join("other.gen.rs")), "the root's pattern still holds for the rest");
+        assert!(i.ignores(&dir.join("scratch.rs")), ".git/info/exclude");
+        // Nothing re-includes a file under an ignored directory, as in git.
+        std::fs::create_dir_all(dir.join("target")).unwrap();
+        std::fs::write(dir.join("target").join(".gitignore"), "!keep.rs\n").unwrap();
+        assert!(i.ignores(&dir.join("target").join("keep.rs")), "the directory above is ignored");
+        // A changed .gitignore applies once the watcher is told of it.
+        std::fs::write(dir.join("web").join(".gitignore"), "").unwrap();
+        assert!(i.ignores(&dir.join("web").join("dist").join("x.js")), "read once and kept");
+        i.forget(&dir.join("web").join(".gitignore"));
+        assert!(!i.ignores(&dir.join("web").join("dist").join("x.js")), "read again after the change");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
