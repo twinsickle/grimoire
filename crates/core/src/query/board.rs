@@ -250,7 +250,7 @@ mod tests {
         s.tickets.clear();
         for (slug, date) in [("named", "2026-09-28"), ("0009", "2026-09-27"), ("0010", "2026-09-28"), ("0002", "2026-09-28")] {
             let mut t = ticket(slug, TicketKind::Change, Priority::High, Status::Closed, &[], &[]);
-            t.decision = Some(Decision { date: date.into(), text: "Done.".into() });
+            t.decision = Some(Decision::new(date, "Done."));
             s.tickets.insert(slug.into(), t);
         }
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
@@ -271,7 +271,7 @@ mod tests {
         s.tickets.clear();
         let closed = |slug: &str, kind: TicketKind, relies: &[&str]| {
             let mut t = ticket(slug, kind, Priority::Later, Status::Closed, &[], relies);
-            t.decision = Some(Decision { date: "2026-09-29".into(), text: "Answered.".into() });
+            t.decision = Some(Decision::new("2026-09-29", "Answered."));
             t
         };
         for t in [

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -125,7 +125,8 @@ impl Graph {
         }
         for r in store.requirements.values() {
             let from = Reference::req(&r.slug);
-            for c in &r.covered_by {
+            // A retired requirement no longer holds, so it covers nothing.
+            for c in r.covered_by.iter().filter(|_| !r.retired) {
                 g.edge(&from, c, Relation::CoveredBy);
             }
             g.nodes.insert(from, Node::Req(r.clone()));
@@ -287,7 +288,8 @@ pub(crate) mod fixtures {
             statement: format!("The system SHALL {slug}."),
             scenarios,
             covered_by: covered_by.iter().map(|l| l.parse().unwrap()).collect(),
-            decisions: decisions.iter().map(|(d, t)| Decision { date: d.to_string(), text: t.to_string() }).collect(),
+            decisions: decisions.iter().map(|(d, t)| Decision::new(d.to_string(), t.to_string())).collect(),
+            retired: false,
         }
     }
 
@@ -301,7 +303,7 @@ pub(crate) mod fixtures {
             touches: touches.iter().map(|l| l.parse().unwrap()).collect(),
             relies_on: relies_on.iter().map(|l| l.parse().unwrap()).collect(),
             body: if status == Status::Closed { String::new() } else { "Do it.".into() },
-            decision: if status == Status::Closed { Some(Decision { date: "2026-01-01".into(), text: "Done.".into() }) } else { None },
+            decision: if status == Status::Closed { Some(Decision::new("2026-01-01", "Done.")) } else { None },
         }
     }
 

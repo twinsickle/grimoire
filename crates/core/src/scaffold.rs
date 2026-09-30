@@ -186,6 +186,7 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
                 scenarios: Vec::new(),
                 covered_by: vec![Reference::criterion(&c.module, &c.id)],
                 decisions: Vec::new(),
+                retired: false,
             };
             page.links.push(Reference::req(&slug));
             store.requirements.insert(slug, req);

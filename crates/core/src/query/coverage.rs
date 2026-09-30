@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer coverage: the requirements and tests behind a criterion, a module's criteria, or the criteria a requirement names.","criteria":[{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist."}]}
+//! {"purpose":"Answer coverage: the requirements and tests behind a criterion, a module's criteria, or the criteria a requirement names.","criteria":[{"id":"coverage","statement":"coverage returns, for a criterion, the requirements naming it and the tests checking it; for a module, each criterion with its requirements and tests, empty where there are none; and for a requirement, each criterion it names in covered_by order with its statement and its module's ref and purpose, null where the criterion or module does not exist, and nothing for a retired requirement, which covers no criterion."}]}
 //! ```
 
 use serde::Serialize;
@@ -64,8 +64,10 @@ pub struct ModuleSummary {
 /// The criteria a requirement names, in `covered_by` order, each with its
 /// module. Dangling entries are kept so a dangling requirement never looks covered.
 pub fn requirement_coverage(g: &Graph, req: &Requirement) -> Vec<CoveringCriterion> {
+    // A retired requirement covers nothing; its covered_by is history.
     req.covered_by
         .iter()
+        .filter(|_| !req.retired)
         .map(|r| {
             let statement = match g.get(r) {
                 Some(Node::Criterion(c)) => Some(c.statement.clone()),
@@ -116,5 +118,7 @@ mod tests {
         assert_eq!(cov[3].statement, None);
         assert_eq!(cov[3].module, ModuleSummary { r#ref: Reference::module("src/z/missing"), purpose: None });
         assert!(requirement_coverage(&g, &empty).is_empty());
+        // A retired requirement covers nothing; what it named is history.
+        assert!(requirement_coverage(&g, &Requirement { retired: true, ..r.clone() }).is_empty());
     }
 }

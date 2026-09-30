@@ -3,6 +3,7 @@
 
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, call } from "./api";
+import { decisionsInForce } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { idOf, kindOf, localId } from "./types";
@@ -76,4 +77,25 @@ test("colours are named by token, never written as literals", () => {
   expect(Object.keys(sources)).toContain("./App.tsx");
   const offenders = Object.entries(sources).filter(([, text]) => literal.test(text)).map(([path]) => path);
   expect(offenders).toEqual([]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "decisions-sort-into-in-force-and-superseded", "checks": ["web/src/decisions#in-force"]}
+ * ```
+ */
+test("decisions sort into those in force, newest first, and those superseded, with what superseded them", () => {
+  const d = (text: string, supersedes?: number[]) => ({ date: "2026-09-29", text, supersedes });
+  const { inForce, superseded } = decisionsInForce([d("one"), d("two"), d("three", [1]), d("four", [1, 3])]);
+  expect(inForce.map((x) => [x.n, x.d.text])).toEqual([
+    [4, "four"],
+    [2, "two"],
+  ]);
+  expect(superseded.map((x) => [x.n, x.by])).toEqual([
+    [3, 4],
+    [1, 4],
+  ]);
+  expect(decisionsInForce([]).inForce).toEqual([]);
 });

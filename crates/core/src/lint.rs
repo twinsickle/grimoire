@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."},{"id":"ticket-cycle","statement":"An open or active ticket whose relies_on leads back to itself through other open or active tickets is malformed with the check ticket-cycle, naming the loop."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."},{"id":"ticket-cycle","statement":"An open or active ticket whose relies_on leads back to itself through other open or active tickets is malformed with the check ticket-cycle, naming the loop."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -195,7 +195,7 @@ pub fn written(g: &Graph, r: &Reference) -> Vec<Finding> {
 
 fn unspecified(r: &Reference, node: &Node) -> Option<Finding> {
     match node {
-        Node::Req(q) if q.scenarios.is_empty() => Some(Finding::node(Rule::Unspecified, "no-scenario", r, "no scenario checks this requirement's criteria")),
+        Node::Req(q) if q.scenarios.is_empty() && !q.retired => Some(Finding::node(Rule::Unspecified, "no-scenario", r, "no scenario checks this requirement's criteria")),
         _ => None,
     }
 }
@@ -213,6 +213,13 @@ pub fn dangling_from(g: &Graph, r: &Reference) -> Vec<Finding> {
 }
 
 fn dangling(g: &Graph, out: &mut Vec<Finding>) {
+    for e in g.edges.iter().filter(|e| e.relation == Relation::Checks) {
+        if let Some(Node::Req(q)) = g.get(&e.to) {
+            if q.retired {
+                out.push(Finding { check: "checks-retired".to_string(), reason: format!("{} checks {}, which is retired: it no longer holds", e.from, e.to), ..Finding::dangling(e) });
+            }
+        }
+    }
     for e in &g.edges {
         if g.contains(&e.to) {
             continue;
@@ -255,6 +262,8 @@ fn uncovered(g: &Graph, out: &mut Vec<Finding>) {
                     out.push(Finding::node(Rule::Uncovered, "unlinked-page", r, "no page links to this page and it is not a root"));
                 }
             }
+            // A retired requirement no longer holds; nothing about it is work.
+            Node::Req(q) if q.retired => {}
             Node::Req(q) => {
                 if g.inbound_with(r, Relation::Links).next().is_none() {
                     out.push(Finding::node(Rule::Uncovered, "unlinked-requirement", r, "no page links to this requirement"));
@@ -589,5 +598,36 @@ mod tests {
     fn malformed_refs() {
         assert_eq!(malformed_ref("pages/x.json"), Reference::page("x"));
         assert_eq!(malformed_ref("grimoire.json"), Reference::file("grimoire.json"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-retired-requirement-covers-nothing-and-is-not-reported", "checks": ["crates/core/src/lint#retired-exempt", "crates/core/src/graph#retired-covers-nothing", "crates/core/src/query/outline#outline"]}
+    /// ```
+    #[test]
+    fn a_retired_requirement_covers_nothing_and_is_not_reported() {
+        let mut s = crate::graph::fixtures::store();
+        // ready-only-with-commit names src/a/ready#guarantee; stale is unspecified and dangling.
+        for slug in ["ready-only-with-commit", "stale"] {
+            let q = s.requirements.get_mut(slug).expect("fixture");
+            q.retired = true;
+        }
+        s.pages.get_mut("git-readiness").expect("fixture").links.retain(|l| l != &Reference::req("ready-only-with-commit"));
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let guarantee = Reference::criterion("src/a/ready", "guarantee");
+        assert!(g.inbound_with(&guarantee, Relation::CoveredBy).next().is_none(), "no covered_by edge from a retired requirement");
+        let f = lint(&g, &Rule::ALL);
+        assert!(f.iter().any(|x| x.r#ref == guarantee && x.check == "uncovered-criterion"), "its criterion is reported uncovered");
+        for slug in ["ready-only-with-commit", "stale"] {
+            let r = Reference::req(slug);
+            assert!(!f.iter().any(|x| x.r#ref == r || x.edge.as_ref().is_some_and(|e| e.from == r)), "{slug} is never reported: {f:?}");
+        }
+        // Were a page to link one anyway, the outline counts it toward nothing.
+        s.pages.get_mut("git-readiness").expect("fixture").links.push(Reference::req("ready-only-with-commit"));
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let o = crate::query::outline(&g, 4, Some(&Reference::page("git-readiness")));
+        let node = o.roots[0].children.iter().find(|c| c.r#ref == Reference::req("ready-only-with-commit")).expect("linked");
+        assert!(node.children.is_empty() && node.rollup.requirements == 0, "no children and no count: {:?}", node.rollup);
     }
 }

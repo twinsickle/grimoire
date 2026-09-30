@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, and a page reached on the way contributes its requirements and modules but not its child pages."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -31,6 +31,8 @@ fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
         Some(Node::Ticket(t)) if is_start => t.relies_on.iter().chain(t.touches.iter()).cloned().collect(),
         Some(Node::Ticket(_)) => Vec::new(),
         Some(Node::Page(p)) => p.links.iter().filter(|l| l.kind != Kind::Page).cloned().collect(),
+        // A retired requirement no longer holds: nothing rests on it through its old criteria.
+        Some(Node::Req(q)) if q.retired => Vec::new(),
         Some(Node::Req(q)) => q.covered_by.clone(),
         Some(Node::Criterion(c)) => vec![Reference::module(&c.module)],
         Some(Node::Module(m)) => m.imports.iter().map(|i| Reference::module(i)).collect(),
@@ -42,8 +44,10 @@ fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
 /// or a closed ticket's.
 fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
     match g.get(r) {
+        // Only what is in force: a superseded decision no longer says why.
         Some(Node::Req(q)) => {
-            let mut d = q.decisions.clone();
+            // Newest first; decisions of one day by position, the later first.
+            let mut d: Vec<Decision> = q.in_force().into_iter().rev().map(|(_, d)| d.clone()).collect();
             d.sort_by(|a, b| b.date.cmp(&a.date));
             d
         }
@@ -212,5 +216,37 @@ mod tests {
         assert!(refs.contains(&"page:overview".to_string()));
         let tickets: Vec<String> = r.tickets.iter().map(|t| t.r#ref.id.clone()).collect();
         assert_eq!(tickets, vec!["gap-1", "phase-62"]);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "rests-on-carries-only-decisions-in-force", "checks": ["crates/core/src/query/walks#nearest-first"]}
+    /// ```
+    #[test]
+    fn rests_on_carries_only_decisions_in_force() {
+        let mut s = crate::graph::fixtures::store();
+        let q = s.requirements.get_mut("ready-only-with-commit").expect("fixture");
+        q.decisions.push(Decision { supersedes: vec![1], ..Decision::new("2026-09-29", "Instead.") });
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let r = rests_on(&g, &Reference::ticket("phase-62"), None);
+        let req = r.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).expect("reached");
+        let texts: Vec<&str> = req.decisions.iter().map(|d| d.text.as_str()).collect();
+        assert_eq!(texts, vec!["Instead."], "the superseded decision is left out");
+        // Two decisions in force from one day: the later position first.
+        let mut same = crate::graph::fixtures::store();
+        let q = same.requirements.get_mut("ready-only-with-commit").expect("fixture");
+        q.decisions = vec![Decision::new("2026-09-29", "Earlier."), Decision::new("2026-09-29", "Later.")];
+        let g2 = Graph::build(&same, &crate::extraction::fixtures::extraction(), &[]);
+        let r2 = rests_on(&g2, &Reference::ticket("phase-62"), None);
+        let req2 = r2.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).expect("reached");
+        assert_eq!(req2.decisions.iter().map(|d| d.text.as_str()).collect::<Vec<_>>(), vec!["Later.", "Earlier."]);
+        // Retired, it contributes its decisions and nothing below it.
+        s.requirements.get_mut("ready-only-with-commit").expect("fixture").retired = true;
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let r = rests_on(&g, &Reference::req("ready-only-with-commit"), None);
+        assert!(r.is_empty(), "a retired requirement has nothing below it: {:?}", r.iter().map(|x| &x.r#ref).collect::<Vec<_>>());
+        let from_ticket = rests_on(&g, &Reference::ticket("phase-62"), None);
+        assert!(from_ticket.iter().all(|x| x.via.last() != Some(&Reference::req("ready-only-with-commit"))), "nothing reached through it");
     }
 }

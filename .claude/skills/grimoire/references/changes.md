@@ -8,8 +8,8 @@ find it with `rests_on_me` on the module, or `find`.
 |---|---|
 | New module | Contract in the file. A requirement per criterion (`put_requirement`). Link each requirement and the module from its area page (`patch_page` with `add_links`). A test whose `# Test contract` checks each criterion. |
 | New behaviour in an existing module | New criterion in the contract. A requirement covering it. Link the requirement from the page. A test whose test contract checks it. |
-| Changed behaviour | Reword the criterion and the requirement's statement. `record_decision` on the requirement: what changed and why. |
-| Removed behaviour | Remove the criterion. The requirement naming it goes dangling: reword its `covered_by`, or delete the requirement (`delete_node`) and remove its link from the page. |
+| Changed behaviour | Reword the criterion and the requirement's statement. `record_decision` on the requirement: what changed and why, naming in `supersedes` any earlier decision it overturns. |
+| Removed behaviour | Remove the criterion. The requirement naming it goes dangling: reword its `covered_by`, or, if the requirement no longer holds, `retire_node` it with why (it unlinks itself and keeps its decisions; `delete_node` only for one that never had a decision). |
 | Renamed criterion id | Same as removed plus new: update `covered_by` on every requirement that named it and `checks` in every test contract that named it. `find` the old id first. |
 | Renamed page or requirement | `rename_node`, never delete and put: it keeps the requirement's decisions and rewrites links, open tickets, roots and the baseline. Then edit each test block it lists in `still_named_in`; the tool never writes code. |
 | A test now checks something else | Update its test contract's `checks`. A test deleted leaves its criteria untested unless another test checks them. |

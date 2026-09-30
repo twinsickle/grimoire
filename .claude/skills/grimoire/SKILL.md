@@ -41,7 +41,12 @@ it created in `warnings`. Every warning is work to do now.
 - A **requirement**: a normative `statement` (SHALL / MUST), at least one
   scenario (given, when, then; without one it is `unspecified`),
   `covered_by` criteria, dated append-only **decisions** of one paragraph
-  each: what was chosen and why.
+  each: what was chosen and why. A decision that overturns earlier ones
+  names them in `record_decision`'s `supersedes`, by position (1 for the
+  oldest); they stay, no longer in force, and `rests_on` shows only what
+  is. A requirement that no longer holds is retired with `retire_node`,
+  never deleted: `delete_node` refuses one with decisions, and a closed
+  ticket.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,

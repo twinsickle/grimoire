@@ -157,6 +157,10 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
     check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion]));
     for (i, d) in r.decisions.iter().enumerate() {
         check_decision(&mut e, &format!("decisions[{i}]"), d);
+        // A decision supersedes only earlier ones, by position from 1.
+        if d.supersedes.iter().any(|&p| p == 0 || p as usize > i) {
+            e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "may name only earlier decisions, by position from 1"));
+        }
     }
     for w in r.decisions.windows(2) {
         if w[0].date > w[1].date {
@@ -178,7 +182,13 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
     }
     match (t.status, &t.decision) {
         (Status::Closed, None) => e.push(FieldError::new("decision", "required when status is closed")),
-        (Status::Closed, Some(d)) => check_decision(&mut e, "decision", d),
+        (Status::Closed, Some(d)) => {
+            check_decision(&mut e, "decision", d);
+            // A ticket has one decision, so there is nothing earlier for it to supersede.
+            if !d.supersedes.is_empty() {
+                e.push(FieldError::new("decision.supersedes", "a ticket's one decision supersedes nothing"));
+            }
+        }
         (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is closed")),
         (_, None) => {
             check_required(&mut e, "body", &t.body);
@@ -272,13 +282,25 @@ mod tests {
             statement: "It SHALL hold.".into(),
             scenarios: vec![],
             covered_by,
-            decisions: dates.iter().map(|d| Decision { date: d.to_string(), text: "why".into() }).collect(),
+            decisions: dates.iter().map(|d| Decision::new(d.to_string(), "why")).collect(),
+            retired: false,
         };
         assert!(validate_requirement(&req(vec![Reference::criterion("m", "c")], &["2026-01-01", "2026-02-01"])).is_empty());
         let e = validate_requirement(&req(vec![Reference::module("m")], &[]));
         assert_eq!(e[0].field, "covered_by", "covered_by names only criteria");
         let e = validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"]));
         assert_eq!(e[0].field, "decisions", "decisions are oldest first");
+        // A decision supersedes only earlier ones, by position from 1.
+        let mut r = req(vec![], &["2026-01-01", "2026-02-01"]);
+        r.decisions[1].supersedes = vec![1];
+        assert!(validate_requirement(&r).is_empty());
+        for bad in [vec![2], vec![0], vec![3]] {
+            r.decisions[1].supersedes = bad.clone();
+            assert_eq!(validate_requirement(&r).first().map(|e| e.field.as_str()), Some("decisions[1].supersedes"), "{bad:?}");
+        }
+        // Empty and false are left out of the record.
+        let json = serde_json::to_value(req(vec![], &["2026-01-01"])).expect("serialisable");
+        assert!(json.get("retired").is_none() && json["decisions"][0].get("supersedes").is_none(), "{json}");
     }
 
     /// # Test contract
@@ -361,9 +383,13 @@ mod tests {
         assert!(validate_ticket(&t).is_empty());
         t.status = Status::Closed;
         assert_eq!(validate_ticket(&t).len(), 1);
-        t.decision = Some(Decision { date: "2026-01-01".into(), text: "done".into() });
+        t.decision = Some(Decision::new("2026-01-01", "done"));
         t.body.clear();
         assert!(validate_ticket(&t).is_empty());
+        // A ticket's one decision has nothing earlier to supersede.
+        t.decision = Some(Decision { supersedes: vec![1], ..Decision::new("2026-01-01", "done") });
+        assert_eq!(validate_ticket(&t)[0].field, "decision.supersedes");
+        t.decision = Some(Decision::new("2026-01-01", "done"));
         t.status = Status::Open;
         assert_eq!(validate_ticket(&t)[0].field, "decision");
     }

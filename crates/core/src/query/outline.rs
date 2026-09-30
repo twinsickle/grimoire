@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -148,6 +148,8 @@ fn rollup(g: &Graph, r: &Reference) -> Rollup {
                     out.tested += usize::from(g.inbound_with(&cref, Relation::Checks).next().is_some());
                 }
             }
+            // A retired requirement no longer holds and counts toward nothing.
+            Some(Node::Req(q)) if q.retired => {}
             Some(Node::Req(q)) => {
                 out.requirements += 1;
                 out.held += usize::from(!q.covered_by.is_empty() || g.inbound_with(&x, Relation::Checks).next().is_some());
@@ -162,6 +164,7 @@ fn rollup(g: &Graph, r: &Reference) -> Rollup {
 fn children_of(g: &Graph, r: &Reference) -> Vec<Reference> {
     match g.get(r) {
         Some(Node::Page(p)) => p.links.clone(),
+        Some(Node::Req(q)) if q.retired => Vec::new(),
         Some(Node::Req(q)) => q.covered_by.clone(),
         Some(Node::Module(m)) => m.criteria.iter().map(|c| Reference::criterion(&c.module, &c.id)).collect(),
         _ => Vec::new(),

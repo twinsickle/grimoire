@@ -722,3 +722,48 @@ test("a declaration's page links to its own file, though the file's name and the
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", `/n/${encodeURIComponent("file:src/a#b.ts")}#L9`);
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-requirement-shows-decisions-in-force", "checks": ["web/src/views/Node#decisions-in-force"]}
+ * ```
+ */
+test("a requirement's page shows its decisions in force and folds the superseded ones; a retired one says so", async ({ page }) => {
+  // The fixture has no superseded decision, so the requirements are answered for it.
+  const req = (slug: string, retired: boolean) => ({
+    ref: `req:${slug}`,
+    slug,
+    title: slug,
+    statement: "It SHALL hold.",
+    scenarios: [],
+    covered_by: [],
+    decisions: [
+      { date: "2026-01-01", text: "First, overturned." },
+      { date: "2026-01-02", text: "Second, still holds." },
+      { date: "2026-01-03", text: "Third, instead of the first.", supersedes: [1] },
+    ],
+    ...(retired ? { retired: true } : {}),
+    in: [],
+    out: [],
+  });
+  await page.route("**/api/get", async (route) => {
+    const ref = route.request().postDataJSON().ref;
+    if (ref === "req:revised") return route.fulfill({ json: { node: req("revised", false) } });
+    if (ref === "req:gone") return route.fulfill({ json: { node: req("gone", true) } });
+    return route.continue();
+  });
+  await page.goto("/n/req%3Arevised");
+  const main = page.locator("main");
+  await expect(main.getByText("Third, instead of the first.")).toBeVisible();
+  await expect(main.getByText("Second, still holds.")).toBeVisible();
+  // The overturned decision is folded, saying what superseded it.
+  await expect(main.getByText("First, overturned.")).toBeHidden();
+  await main.getByText("1 superseded").click();
+  await expect(main.getByText("First, overturned.")).toBeVisible();
+  await expect(main.getByText("#1 · superseded by #3")).toBeVisible();
+  await expect(main.getByText("retired", { exact: true })).toHaveCount(0);
+  await page.goto("/n/req%3Agone");
+  await expect(page.locator("main").getByText("retired", { exact: true })).toBeVisible();
+});

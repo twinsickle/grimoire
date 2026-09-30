@@ -31,7 +31,13 @@ export type Criterion = { module: string, id: string, statement: string, };
 
 export type CriterionCoverage = { ref: Ref, statement: string, requirements: Array<Summary>, tests: Array<Summary>, };
 
-export type Decision = { date: string, text: string, };
+export type Decision = { date: string, text: string, 
+/**
+ * The positions, 1 for the oldest, of earlier decisions of the same
+ * record this one replaces. A position never changes, since decisions
+ * are only appended, so it is the decision's id.
+ */
+supersedes?: Array<number>, };
 
 export type Decl = { path: string, kind: string, line: number, 
 /**
@@ -113,7 +119,12 @@ export type Renamed = { node: NodeView, still_named_in: Array<StillNamed>, };
 
 export type Reordered = { priority: Priority, order: Array<Ref>, };
 
-export type Requirement = { slug: string, title: string, statement: string, scenarios: Array<Scenario>, covered_by: Array<Ref>, decisions: Array<Decision>, };
+export type Requirement = { slug: string, title: string, statement: string, scenarios: Array<Scenario>, covered_by: Array<Ref>, decisions: Array<Decision>, 
+/**
+ * Retired: it no longer holds. It stays readable with its decisions, the
+ * last saying why, but no page links it and it covers no criterion.
+ */
+retired?: boolean, };
 
 export type RestsOn = { ref: Ref, title: string, via: Array<Ref>, decisions: Array<Decision>, };
 
@@ -187,6 +198,7 @@ export type ToolAnswers = {
   find: NodesAnswer;
   get: NodeAnswer;
   record_decision: NodeAnswer;
+  supersede: NodeAnswer;
   outline: Outline;
   rests_on: RestsOnAnswer;
   rests_on_me: RestsOnMe;
@@ -202,6 +214,7 @@ export type ToolAnswers = {
   put_requirement: Written;
   file_ticket: Written;
   update_ticket: Written;
+  retire_node: Written;
   start_ticket: Started;
   close_ticket: Closed;
   rename_node: Renamed;

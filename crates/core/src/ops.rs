@@ -1,10 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, record a decision, file, update, start and close a ticket, delete a node, adopt a baseline, configure the store.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries and start snapshots), leaving closed tickets as they were; it persists the new record first and removes the old one last."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"decisions-append-only","statement":"No write replaces or removes a decision; put_requirement preserves the existing decisions and record_decision appends."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, and every other field stays as it was."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions on input and preserving the existing ones."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, and is not_found otherwise."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, requirement or ticket; derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, file, update, start and close a ticket, rename, reorder and delete a node, adopt a baseline, configure the store; a requirement's decisions are kept by the decisions module beneath.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries and start snapshots), leaving closed tickets as they were; it persists the new record first and removes the old one last."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or an open or active ticket; a requirement with decisions (retire it instead) and a closed ticket are invalid, derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
+
+mod decisions;
+
+pub use decisions::{record_decision, retire_node, supersede};
 
 use crate::model::*;
 use crate::store::{validate_baseline, validate_config, validate_page, validate_requirement, validate_ticket, FieldError, Store};
@@ -233,8 +237,17 @@ pub fn adopt(store: &mut Store, findings: Vec<FindingKey>, reason: String, date:
     Ok((baseline, replaced, Changed::Baseline))
 }
 
+/// No page links a retired requirement: it no longer holds.
+fn refuse_retired_links(store: &Store, links: &[Reference]) -> Result<(), ToolError> {
+    match links.iter().find(|l| l.kind == Kind::Req && store.requirements.get(&l.id).is_some_and(|q| q.retired)) {
+        Some(l) => Err(ToolError::invalid(format!("{l} is retired: it no longer holds, and no page links it"), vec![])),
+        None => Ok(()),
+    }
+}
+
 pub fn put_page(store: &mut Store, page: Page) -> Result<(Page, Changed), ToolError> {
     invalid_if(validate_page(&page), "page")?;
+    refuse_retired_links(store, &page.links)?;
     store.pages.insert(page.slug.clone(), page.clone());
     Ok((page.clone(), Changed::Page(page.slug)))
 }
@@ -263,6 +276,7 @@ pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<
         page.body = b;
     }
     page.links.retain(|l| !patch.remove_links.contains(l));
+    refuse_retired_links(store, &patch.add_links)?;
     for l in patch.add_links {
         if !page.links.contains(&l) {
             page.links.push(l);
@@ -275,19 +289,11 @@ pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<
 
 /// `decisions` on the input is ignored; the existing ones are kept.
 pub fn put_requirement(store: &mut Store, mut req: Requirement) -> Result<(Requirement, Changed), ToolError> {
-    req.decisions = store.requirements.get(&req.slug).map(|r| r.decisions.clone()).unwrap_or_default();
-    invalid_if(validate_requirement(&req), "requirement")?;
-    store.requirements.insert(req.slug.clone(), req.clone());
-    Ok((req.clone(), Changed::Requirement(req.slug)))
-}
-
-pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: String) -> Result<(Requirement, Changed), ToolError> {
-    if r.kind != Kind::Req {
-        return Err(ToolError::invalid(format!("{r} is not a requirement"), vec![]));
+    if store.requirements.get(&req.slug).is_some_and(|r| r.retired) {
+        return Err(ToolError::invalid(format!("req:{} is retired: it no longer holds and is not rewritten", req.slug), vec![]));
     }
-    let existing = store.requirements.get(&r.id).ok_or_else(|| ToolError::not_found(r))?;
-    let mut req = existing.clone();
-    req.decisions.push(Decision { date, text });
+    req.decisions = store.requirements.get(&req.slug).map(|r| r.decisions.clone()).unwrap_or_default();
+    req.retired = false;
     invalid_if(validate_requirement(&req), "requirement")?;
     store.requirements.insert(req.slug.clone(), req.clone());
     Ok((req.clone(), Changed::Requirement(req.slug)))
@@ -394,6 +400,16 @@ pub fn close_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Res
 }
 
 pub fn delete_node(store: &mut Store, r: &Reference) -> Result<Changed, ToolError> {
+    // Decisions are history: a decided requirement is retired, and a closed ticket stays.
+    match r.kind {
+        Kind::Req if store.requirements.get(&r.id).is_some_and(|q| !q.decisions.is_empty()) => {
+            return Err(ToolError::invalid(format!("{r} has decisions, which are never removed; retire it with retire_node instead"), vec![]));
+        }
+        Kind::Ticket if store.tickets.get(&r.id).is_some_and(|t| t.status == Status::Closed) => {
+            return Err(ToolError::invalid(format!("{r} is closed: a closed ticket is history, already off the board and the lints, and is not deleted"), vec![]));
+        }
+        _ => {}
+    }
     let removed = match r.kind {
         Kind::Page => store.pages.remove(&r.id).is_some(),
         Kind::Req => store.requirements.remove(&r.id).is_some(),
@@ -455,7 +471,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "put-requirement-keeps-decisions", "checks": ["crates/core/src/ops#decisions-append-only", "crates/core/src/ops#put-requirement"]}
+    /// {"test": "put-requirement-keeps-decisions", "checks": ["crates/core/src/ops/decisions#decisions-append-only", "crates/core/src/ops#put-requirement"]}
     /// ```
     #[test]
     fn put_requirement_keeps_decisions() {
@@ -471,23 +487,6 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "record-decision-appends-and-validates", "checks": ["crates/core/src/ops#validate-first", "crates/core/src/ops#decisions-append-only", "crates/core/src/ops#record-decision"]}
-    /// ```
-    #[test]
-    fn record_decision_appends_and_validates() {
-        let mut s = store();
-        let r = Reference::req("ready-only-with-commit");
-        let (out, _) = record_decision(&mut s, &r, "Because.".into(), "2026-09-27".into()).unwrap();
-        assert_eq!(out.decisions.len(), 2);
-        let e = record_decision(&mut s, &r, "x".into(), "not-a-date".into()).unwrap_err();
-        assert_eq!(e.code(), "invalid");
-        assert_eq!(s.requirements["ready-only-with-commit"].decisions.len(), 2);
-        assert_eq!(record_decision(&mut s, &Reference::req("nope"), "x".into(), "2026-01-01".into()).unwrap_err().code(), "not_found");
-    }
-
-    /// # Test contract
-    ///
-    /// ```json
     /// {"test": "ticket-lifecycle", "checks": ["crates/core/src/ops#close-keeps-only-decision", "crates/core/src/ops#update-ticket", "crates/core/src/ops#start-ticket"]}
     /// ```
     #[test]
@@ -498,11 +497,11 @@ mod tests {
         assert_eq!(start_ticket(&mut s, &r).unwrap_err().code(), "conflict");
         let (t, _) = update_ticket(&mut s, &r, TicketPatch { priority: Some(Priority::Later), ..Default::default() }).unwrap();
         assert_eq!(t.priority, Priority::Later);
-        let (t, _) = close_ticket(&mut s, &r, Decision { date: "2026-09-27".into(), text: "Shipped.".into() }).unwrap();
+        let (t, _) = close_ticket(&mut s, &r, Decision::new("2026-09-27", "Shipped.")).unwrap();
         assert_eq!(t.status, Status::Closed);
         assert_eq!(t.body, "");
         assert_eq!(update_ticket(&mut s, &r, TicketPatch::default()).unwrap_err().code(), "conflict");
-        assert_eq!(close_ticket(&mut s, &r, Decision { date: "2026-09-27".into(), text: "again".into() }).unwrap_err().code(), "conflict");
+        assert_eq!(close_ticket(&mut s, &r, Decision::new("2026-09-27", "again")).unwrap_err().code(), "conflict");
     }
 
     /// # Test contract
@@ -540,5 +539,13 @@ mod tests {
         assert_eq!(delete_node(&mut s, &Reference::module("src/a/ready")).unwrap_err().code(), "invalid");
         assert!(delete_node(&mut s, &Reference::page("orphan")).is_ok());
         assert_eq!(delete_node(&mut s, &Reference::page("orphan")).unwrap_err().code(), "not_found");
+        // A requirement with decisions is retired instead, and a closed ticket stays.
+        let e = delete_node(&mut s, &Reference::req("ready-only-with-commit")).unwrap_err();
+        assert!(e.code() == "invalid" && e.to_string().contains("retire_node"), "{e}");
+        assert!(s.requirements.contains_key("ready-only-with-commit"));
+        assert_eq!(delete_node(&mut s, &Reference::ticket("old")).unwrap_err().code(), "invalid");
+        assert!(s.tickets.contains_key("old"));
+        assert!(delete_node(&mut s, &Reference::req("stale")).is_ok(), "a requirement with no decision can go");
+        assert!(delete_node(&mut s, &Reference::ticket("later-1")).is_ok(), "an active ticket can go");
     }
 }

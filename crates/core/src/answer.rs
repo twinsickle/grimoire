@@ -212,7 +212,7 @@ macro_rules! answers {
 
 answers! {
     NodesAnswer => ["find"],
-    NodeAnswer => ["get", "record_decision"],
+    NodeAnswer => ["get", "record_decision", "supersede"],
     Outline => ["outline"],
     RestsOnAnswer => ["rests_on"],
     RestsOnMe => ["rests_on_me"],
@@ -223,7 +223,7 @@ answers! {
     SourceLocation => ["module_source"],
     SourceAnswer => ["source"],
     StatusAnswer => ["status"],
-    Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket"],
+    Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket", "retire_node"],
     Started => ["start_ticket"],
     Closed => ["close_ticket"],
     Renamed => ["rename_node"],

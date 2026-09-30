@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."}]}
 //! ```
 
 use serde::Deserialize;
@@ -52,23 +52,57 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
                 decisions: Option<Vec<Decision>>,
             }
             let i: In = parse(input)?;
-            let req = Requirement { slug: i.slug, title: i.title, statement: i.statement, scenarios: i.scenarios, covered_by: i.covered_by, decisions: vec![] };
+            let req = Requirement { slug: i.slug, title: i.title, statement: i.statement, scenarios: i.scenarios, covered_by: i.covered_by, decisions: vec![], retired: false };
             let (node, changed) = ops::put_requirement(state.store_mut(), req)?;
             let r = Reference::req(&node.slug);
             written(name, state, &r, changed)
         }
         "record_decision" => {
             #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Reference,
+                text: String,
+                date: Option<String>,
+                #[serde(default)]
+                supersedes: Vec<u32>,
+            }
+            let i: In = parse(input)?;
+            let (node, changed) = ops::record_decision(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()), i.supersedes)?;
+            let r = Reference::req(&node.slug);
+            let node = query::view(state.graph(), &r).expect("just written");
+            answer(name, NodeAnswer { node }, Some(changed))
+        }
+        "supersede" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Reference,
+                decision: u32,
+                supersedes: Vec<u32>,
+            }
+            let i: In = parse(input)?;
+            let (_, changed) = ops::supersede(state.store_mut(), &i.r#ref, i.decision, &i.supersedes)?;
+            let node = query::view(state.graph(), &i.r#ref).expect("just written");
+            answer(name, NodeAnswer { node }, Some(changed))
+        }
+        "retire_node" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
             struct In {
                 r#ref: Reference,
                 text: String,
                 date: Option<String>,
             }
             let i: In = parse(input)?;
-            let (node, changed) = ops::record_decision(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()))?;
-            let r = Reference::req(&node.slug);
-            let node = query::view(state.graph(), &r).expect("just written");
-            answer(name, NodeAnswer { node }, Some(changed))
+            // What retiring leaves behind: the criteria it named, and the tests that hold it.
+            let mut named: Vec<Reference> = state.store().requirements.get(&i.r#ref.id).map(|q| q.covered_by.clone()).unwrap_or_default();
+            named.extend(state.graph().inbound_with(&i.r#ref, crate::model::Relation::Checks).map(|e| e.from.clone()));
+            let (_, changed) = ops::retire_node(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()))?;
+            let g = state.graph();
+            let node = query::view(g, &i.r#ref).expect("just written");
+            let (warnings, baselined) = split_new(lint::lint_touching(g, &named));
+            answer(name, Written { node, warnings, baselined }, Some(changed))
         }
         "file_ticket" => {
             #[derive(Deserialize)]
@@ -125,6 +159,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
         }
         "close_ticket" => {
             #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
             struct DecisionIn {
                 text: String,
                 date: Option<String>,
@@ -141,7 +176,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             };
             // Compared before the close, which changes the ticket's own record.
             let untouched = state.store.starts.get(&i.r#ref.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
-            let decision = Decision { date: i.decision.date.unwrap_or_else(|| today.to_string()), text: i.decision.text };
+            let decision = Decision::new(i.decision.date.unwrap_or_else(|| today.to_string()), i.decision.text);
             ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
             state.store_mut().starts.remove(&i.r#ref.id);
             let changed = Changed::Closed(i.r#ref.id.clone());
@@ -409,7 +444,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "record-decision-defaults-to-today", "checks": ["crates/core/src/ops#record-decision"]}
+    /// {"test": "record-decision-defaults-to-today", "checks": ["crates/core/src/ops/decisions#record-decision"]}
     /// ```
     #[test]
     fn record_decision_defaults_to_today() {
@@ -541,5 +576,38 @@ mod tests {
         let w = out.output["warnings"].as_array().unwrap();
         assert!(w.iter().any(|f| f["ref"] == "page:overview"));
         assert!(w.iter().any(|f| f["ref"] == "ticket:phase-62"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "retire-answers-with-what-it-leaves-uncovered", "checks": ["crates/core/src/tools/write#write-responses"]}
+    /// ```
+    #[test]
+    fn retire_answers_with_what_it_leaves_uncovered() {
+        let mut s = state();
+        // A constraint held by a test block: retiring it leaves that test holding nothing.
+        let mut files = crate::extraction::fixtures::extraction_files();
+        files[0].tests.push(Test { file: "src/a/ready.rs".into(), name: "holds".into(), line: 50, checks: vec!["req:stale".into()] });
+        s.set_extraction(Extraction::from_files(&files));
+        let out = call(&mut s, "retire_node", json!({ "ref": "req:stale", "text": "Gone." }), "2026-09-29").unwrap().output;
+        assert!(out["warnings"].as_array().expect("warnings").iter().any(|w| w["check"] == "checks-retired" && w["ref"] == "test:src/a/ready.rs#holds"), "{out}");
+        let e = call(&mut s, "delete_node", json!({ "ref": "req:ready-only-with-commit" }), "2026-09-29").unwrap_err();
+        assert!(e.to_string().contains("retire_node"), "{e}");
+        let out = call(&mut s, "retire_node", json!({ "ref": "req:ready-only-with-commit", "text": "No longer holds." }), "2026-09-29").unwrap().output;
+        assert_eq!(out["node"]["retired"], true);
+        assert_eq!(out["node"]["decisions"].as_array().map(Vec::len), Some(2));
+        assert_eq!(out["node"]["decisions"][1]["supersedes"], json!([1]));
+        assert!(out["warnings"].as_array().expect("warnings").iter().any(|w| w["ref"] == "criterion:src/a/ready#guarantee" && w["check"] == "uncovered-criterion"), "{out}");
+        // Still readable by reference.
+        assert_eq!(call(&mut s, "get", json!({ "ref": "req:ready-only-with-commit" }), "2026-09-29").unwrap().output["node"]["retired"], true);
+        let linked = call(&mut s, "supersede", json!({ "ref": "req:ready-only-with-commit", "decision": 2, "supersedes": [1] }), "2026-09-29").unwrap_err();
+        // A ticket's decision takes no supersedes, and says so rather than dropping it.
+        let closing = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done.", "supersedes": [1] } }), "2026-09-29").unwrap_err();
+        assert!(matches!(closing, ToolError::Invalid { .. }), "{closing}");
+        // A misspelt field is refused rather than silently dropping the supersession.
+        let typo = call(&mut s, "record_decision", json!({ "ref": "req:stale", "text": "x", "supercedes": [1] }), "2026-09-29").unwrap_err();
+        assert!(matches!(typo, ToolError::Invalid { .. }), "{typo}");
+        assert!(matches!(linked, ToolError::Invalid { .. }), "a retired requirement takes nothing more");
     }
 }
