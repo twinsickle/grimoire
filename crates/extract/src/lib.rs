@@ -335,11 +335,6 @@ export class Box {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "one-file-is-extracted-alone", "checks": ["crates/extract/src#per-file"]}
-    /// ```
-    /// # Test contract
-    ///
-    /// ```json
     /// {"test": "each-file-is-fingerprinted", "checks": ["crates/extract/src#digest"]}
     /// ```
     #[test]
@@ -353,6 +348,11 @@ export class Box {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "one-file-is-extracted-alone", "checks": ["crates/extract/src#per-file"]}
+    /// ```
     #[test]
     fn one_file_is_extracted_alone() {
         let dir = temp_repo(&[("src/a.rs", b"pub fn a() {}\n"), ("src/b.rs", &[0xff, 0xfe, 0x00])]);

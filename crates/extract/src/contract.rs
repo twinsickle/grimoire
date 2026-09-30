@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find and parse the contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment, and under a `# Test contract` heading in any comment.","criteria":[{"id":"test-blocks","statement":"A # Test contract heading followed by a fenced JSON block {test, checks} names one test and what it checks, each check a criterion as module id#criterion id or a requirement as req:<slug>; a block whose JSON is invalid, whose test is not a slug, or whose checks is empty or holds anything else, is reported with the reason."},{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
+//! {"purpose":"Find and parse the contract grammar every language shares: a JSON block under a `# Module contract` heading in a file's leading comment, and under a `# Test contract` heading in any comment.","criteria":[{"id":"test-blocks","statement":"A # Test contract heading followed by a fenced JSON block {test, checks} names one test and what it checks, each check a criterion as module id#criterion id or a requirement as req:<slug>; a block whose JSON is invalid, whose test is not a slug, or whose checks is empty or holds anything else, is reported with the reason."},{"id":"one-block-per-comment","statement":"A comment holding two or more # Test contract headings has each reported with a reason naming the others' lines, and none names a test, since a block names the test that follows its comment and which of them is misplaced cannot be known."},{"id":"language-neutral","statement":"The parser sees comment text with the markers already stripped and knows nothing of any language."},{"id":"malformed-is-reported","statement":"A heading with a missing or invalid JSON block is reported as malformed with the reason, never silently treated as absent."}]}
 //! ```
 
 use grimoire_core::Contract;
@@ -96,6 +96,19 @@ pub fn find_tests(text: &str, first_line: u32) -> Vec<FoundTest> {
         });
         out.push(FoundTest { line: first_line + h as u32, test });
     }
+    // A block names the test that follows its comment, so two in one comment
+    // mean one is misplaced; which cannot be known, so none is credited.
+    if out.len() > 1 {
+        let lines: Vec<u32> = out.iter().map(|f| f.line).collect();
+        for found in &mut out {
+            let others: Vec<String> = lines.iter().filter(|l| **l != found.line).map(u32::to_string).collect();
+            found.test = Err(format!(
+                "this comment holds {} test blocks (the others at line {}); a block names the test that follows its comment, so move each to its own test",
+                lines.len(),
+                others.join(", ")
+            ));
+        }
+    }
     out
 }
 
@@ -179,6 +192,31 @@ mod tests {
         let found = find_tests(text, 10);
         assert_eq!(found, vec![FoundTest { line: 12, test: Ok(("findings-are-stable".into(), vec!["crates/core/src/lint#stable-order".into()])) }]);
         assert!(find_tests("# Module contract\n```json\n{}\n```", 1).is_empty(), "a module contract is not a test");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "stacked-test-blocks-are-all-reported", "checks": ["crates/extract/src/contract#one-block-per-comment"]}
+    /// ```
+    #[test]
+    fn stacked_test_blocks_are_all_reported() {
+        let block = |name: &str| format!("# Test contract\n\n```json\n{{\"test\":\"{name}\",\"checks\":[\"m#c\"]}}\n```\n");
+        // The 0050 case: two blocks in one run of comment lines, above one test.
+        let found = find_tests(&format!("{}{}", block("a"), block("b")), 10);
+        assert_eq!(found.iter().map(|f| f.line).collect::<Vec<_>>(), vec![10, 15]);
+        let reasons: Vec<String> = found.into_iter().map(|f| f.test.unwrap_err()).collect();
+        assert!(reasons[0].contains("2 test blocks") && reasons[0].contains("line 15"), "{}", reasons[0]);
+        assert!(reasons[1].contains("line 10"), "{}", reasons[1]);
+        // Three: each names the other two, and none is credited.
+        let three = find_tests(&format!("{}{}{}", block("a"), block("b"), block("c")), 1);
+        assert!(three.iter().all(|f| f.test.as_ref().is_err_and(|e| e.contains("3 test blocks"))));
+        for (found, others) in three.iter().zip(["line 6, 11", "line 1, 11", "line 1, 6"]) {
+            assert!(found.test.as_ref().unwrap_err().contains(others), "{:?}", found.test);
+        }
+        // Even when one of them is broken on its own, all are reported, and one block alone is still read.
+        assert!(find_tests(&format!("{}# Test contract\nnot a fence\n", block("a")), 1).iter().all(|f| f.test.is_err()));
+        assert!(find_tests(&block("a"), 1)[0].test.is_ok());
     }
 
     /// # Test contract

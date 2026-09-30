@@ -468,11 +468,6 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "serving-writes-nothing-into-the-repository", "checks": ["crates/server/src#no-repository-writes"]}
-    /// ```
-    /// # Test contract
-    ///
-    /// ```json
     /// {"test": "nothing-derived-on-disk", "checks": ["req:core-one-graph"]}
     /// ```
     #[test]
@@ -494,6 +489,11 @@ mod tests {
         }
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "serving-writes-nothing-into-the-repository", "checks": ["crates/server/src#no-repository-writes"]}
+    /// ```
     #[test]
     fn serving_writes_nothing_into_the_repository() {
         let h = Harness::new();

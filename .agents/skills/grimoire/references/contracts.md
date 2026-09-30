@@ -93,6 +93,10 @@ itself.
 - `checks`: one or more criteria, each as module id, `#`, criterion id, the
   same module id a requirement's `covered_by` uses after `criterion:`; or a
   constraint as `req:<slug>`.
+- One block per comment. A block names the test that follows its comment,
+  so two blocks in one comment (one run of line comments counts as one) are
+  both reported malformed and neither is credited. A test that checks
+  several criteria lists them all in one block's `checks`.
 - A criterion says what one module does. A rule about how the parts are
   arranged (a layer does no I/O, one component is the only writer) is a
   constraint: a requirement on the Constraints page with no criterion, held
