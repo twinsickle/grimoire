@@ -543,6 +543,14 @@ mod tests {
         assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:nope", "to": "x" }), "2026-09-28")), "not_found");
         assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "overview" }), "2026-09-28")), "conflict");
         assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "Not A Slug" }), "2026-09-28")), "invalid");
+        // A copy of the record under the new slug, as a failed rename leaves, is no conflict; a copy that differs in anything is.
+        let orphan = s.store().pages["orphan"].clone();
+        let copy = |body: &str| json!({ "slug": "kept", "title": orphan.title, "body": body, "links": orphan.links });
+        call(&mut s, "put_page", copy("changed since"), "2026-09-28").unwrap();
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "kept" }), "2026-09-28")), "conflict");
+        call(&mut s, "put_page", copy(&orphan.body), "2026-09-28").unwrap();
+        call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "kept" }), "2026-09-28").unwrap();
+        assert!(!s.store().pages.contains_key("orphan") && s.store().pages["kept"].body == orphan.body);
         // A root page's rename moves the root.
         call(&mut s, "rename_node", json!({ "ref": "page:overview", "to": "home" }), "2026-09-28").unwrap();
         assert_eq!(s.store().config.roots, vec!["home".to_string()]);

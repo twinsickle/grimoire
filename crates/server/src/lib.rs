@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."}]}
 //! ```
 
 pub mod client;
@@ -26,6 +26,9 @@ pub struct ServeOptions {
 /// Open the store, start watching the repository and serve until the
 /// process is interrupted.
 pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
+    // The store's one writer from before it is opened, since opening prunes
+    // the baseline, until serving has stopped; released when this returns.
+    let _lock = store_io::lock(&opts.store_dir)?;
     let (daemon, extract_errors) = Daemon::open(&opts.store_dir)?;
     for e in &extract_errors {
         tracing::warn!("{e}");

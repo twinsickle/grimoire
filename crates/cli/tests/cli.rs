@@ -347,3 +347,217 @@ fn uninstall_finds_the_project_from_below_and_refuses_a_broken_project_file() {
     assert!(!out.status.success(), "{}", text(&out));
     assert_eq!(files(&p.repo), installed);
 }
+
+/// A daemon serving `p`'s store, once it has marked it.
+fn serve(p: &Project) -> (Serving, u16) {
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let daemon = Serving(Command::new(BIN).args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !p.store.join("serve.json").is_file() {
+        assert!(Instant::now() < deadline, "the daemon never marked the store");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    (daemon, port)
+}
+
+/// Every file under a directory with its bytes, to see nothing changed.
+fn contents(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    files(dir).into_iter().map(|f| { let bytes = std::fs::read(&f).unwrap_or_default(); (f, bytes) }).collect()
+}
+
+const A_TICKET: &str = r#"{"title":"T","kind":"change","priority":"later","body":"b"}"#;
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-second-daemon-is-refused", "checks": ["crates/server/src#holds-the-lock", "req:store-lock"]}
+/// ```
+#[test]
+fn a_second_daemon_is_refused() {
+    let (p, _) = project();
+    let (daemon, port) = serve(&p);
+    let other = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let before = contents(&p.store);
+    let second = run(&p.repo, &["serve", "--port", &other.to_string()]);
+    assert!(!second.status.success(), "{}", text(&second));
+    assert!(text(&second).contains(&format!("in use by the daemon serving it on port {port}")), "{}", text(&second));
+    assert_eq!(contents(&p.store), before, "the second daemon wrote nothing");
+    // Killed, not shut down: the lock goes with the process, and the next writer needs nothing cleared.
+    drop(daemon);
+    // The marker it leaves is only a likely name, said as such, when another process holds the lock.
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let refused = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    assert!(text(&refused).contains("if that daemon is gone, another grimoire process"), "{}", text(&refused));
+    drop(held);
+    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    assert!(filed.status.success(), "{}", text(&filed));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-cli-writer-beside-a-holder-is-refused", "checks": ["crates/cli/src#takes-the-lock", "req:store-lock"]}
+/// ```
+#[test]
+fn a_cli_writer_beside_a_holder_is_refused() {
+    let (p, _) = project();
+    // This test process holds the lock, as a daemon still starting or another command would.
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let before = contents(&p.store);
+    for args in [vec!["tool", "file_ticket", A_TICKET], vec!["adopt", "--reason", "again"]] {
+        let out = run(&p.repo, &args);
+        assert!(!out.status.success(), "{args:?}: {}", text(&out));
+        assert!(text(&out).contains("in use by another grimoire process"), "{}", text(&out));
+    }
+    let scaffold = run(&p.repo, &["scaffold", "--store", &p.store.to_string_lossy(), "--force"]);
+    assert!(!scaffold.status.success() && text(&scaffold).contains("in use"), "{}", text(&scaffold));
+    // Reads take no lock: a read tool answers, and check reports, without the
+    // baseline pruning it would write: a finding init adopted is fixed meanwhile.
+    std::fs::write(p.repo.join("src").join("a.rs"), CONTRACTED).unwrap();
+    let read = run(&p.repo, &["tool", "board", "{}"]);
+    assert!(read.status.success(), "{}", text(&read));
+    let check = run(&p.repo, &["check"]);
+    assert!(check.status.success(), "{}", text(&check));
+    assert_eq!(contents(&p.store), before, "nothing was written while another held the lock");
+    drop(held);
+    let adopted = baseline_count(&p.store);
+    assert!(run(&p.repo, &["check"]).status.success());
+    assert!(baseline_count(&p.store) < adopted, "with the lock free, check prunes what was fixed");
+    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    assert!(filed.status.success(), "{}", text(&filed));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-locked-store-is-not-deleted", "checks": ["crates/cli/src#uninstall-store", "crates/cli/src#takes-the-lock"]}
+/// ```
+#[test]
+fn a_locked_store_is_not_deleted() {
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let before = files(&p.repo);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("Nothing was removed") && text(&out).contains("in use"), "{}", text(&out));
+    assert_eq!(files(&p.repo), before, "a refusal changes nothing");
+    assert!(p.store.join("grimoire.json").is_file());
+    drop(held);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists(), "the store goes, lock file and all: {}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-store-inside-the-repository-is-refused", "checks": ["crates/server/src/store_io#outside-repository", "req:store-location"]}
+/// ```
+#[test]
+fn a_store_inside_the_repository_is_refused() {
+    // init: refused before anything is written, the store included.
+    let p = bare_repo();
+    let before = contents(&p.repo);
+    let out = run(&p.repo, &["init", "--store", "./local-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("inside the repository"), "{}", text(&out));
+    assert_eq!(contents(&p.repo), before, "nothing written: {}", text(&out));
+    // scaffold too.
+    let out = run(&p.repo, &["scaffold", "--store", "./local-store"]);
+    assert!(!out.status.success() && text(&out).contains("inside the repository"), "{}", text(&out));
+    assert_eq!(contents(&p.repo), before);
+    // A relative --store is the repository's, as the project file will read it, wherever init runs from.
+    let elsewhere = p.dir.join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let repo_arg = p.repo.to_string_lossy().to_string();
+    let out = run(&elsewhere, &["init", "--repo", &repo_arg, "--store", "./local-store"]);
+    assert!(!out.status.success() && text(&out).contains("inside the repository"), "{}", text(&out));
+    assert!(!elsewhere.join("local-store").exists() && contents(&p.repo) == before, "nothing written anywhere");
+    let out = run(&elsewhere, &["init", "--repo", &repo_arg, "--store", "../beside"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(p.dir.join("beside").join("grimoire.json").is_file(), "beside the repository, not beside the working directory");
+    let check = run(&p.repo.join("src"), &["check"]);
+    assert!(check.status.success(), "the project file finds the same store: {}", text(&check));
+    // A store that is inside by a hand edit: every command that loads it refuses.
+    let (q, _) = project();
+    let inside = q.repo.join("local-store");
+    std::fs::create_dir_all(&inside).unwrap();
+    for e in std::fs::read_dir(&q.store).unwrap().flatten() {
+        if e.file_name() == grimoire_server::store_io::LOCK_FILE {
+            continue;
+        }
+        if e.path().is_file() {
+            std::fs::copy(e.path(), inside.join(e.file_name())).unwrap();
+        } else {
+            std::fs::create_dir_all(inside.join(e.file_name())).unwrap();
+        }
+    }
+    std::fs::write(q.repo.join(".grimoire.toml"), "store = \"./local-store\"\n").unwrap();
+    for args in [vec!["check"], vec!["tool", "board", "{}"], vec!["tool", "file_ticket", A_TICKET], vec!["serve", "--port", "0"], vec!["uninstall", "--delete-store"]] {
+        let out = run(&q.repo, &args);
+        assert!(!out.status.success(), "{args:?}: {}", text(&out));
+        assert!(text(&out).contains("inside the repository"), "{args:?}: {}", text(&out));
+    }
+    assert!(!inside.join(grimoire_server::store_io::LOCK_FILE).exists(), "refused before any lock file was made");
+    assert!(inside.join("grimoire.json").is_file() && q.repo.join(".grimoire.toml").is_file(), "and nothing deleted");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-finishes-a-deletion-stopped-part-way", "checks": ["crates/cli/src#uninstall-store"]}
+/// ```
+#[test]
+fn uninstall_finishes_a_deletion_stopped_part_way() {
+    // A person's file inside a record folder makes the folder more than a store.
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    std::fs::create_dir_all(p.store.join("pages").join("archive")).unwrap();
+    std::fs::write(p.store.join("pages").join("archive").join("photo.jpg"), "mine").unwrap();
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success() && text(&out).contains("pages/archive"), "{}", text(&out));
+    assert!(p.store.join("pages").join("archive").join("photo.jpg").is_file());
+    std::fs::remove_dir_all(p.store.join("pages").join("archive")).unwrap();
+
+    // Stopped after grimoire.json went: the lock file and empty record folders are left, and .grimoire.toml.
+    for e in std::fs::read_dir(&p.store).unwrap().flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if e.path().is_dir() {
+            std::fs::remove_dir_all(e.path()).unwrap();
+            std::fs::create_dir(e.path()).unwrap();
+        } else if name != grimoire_server::store_io::LOCK_FILE {
+            std::fs::remove_file(e.path()).unwrap();
+        }
+    }
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists() && !p.repo.join(".grimoire.toml").exists(), "{}", text(&out));
+
+    // Stopped after the folder went but before .grimoire.toml did.
+    let q = bare_repo();
+    assert!(run(&q.repo, &["init", "--store", &q.store.to_string_lossy()]).status.success());
+    std::fs::remove_dir_all(&q.store).unwrap();
+    let out = run(&q.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!q.repo.join(".grimoire.toml").exists());
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "an-explicit-store-resolves-as-the-project-file-does", "checks": ["crates/server/src/store_io#location", "crates/cli/src#store-resolution"]}
+/// ```
+#[test]
+fn an_explicit_store_resolves_as_the_project_file_does() {
+    let (p, _) = project();
+    // A relative --store from below the repository is the repository's, as .grimoire.toml would read it.
+    let rel = format!("../{}", p.store.file_name().unwrap().to_string_lossy());
+    let check = run(&p.repo.join("src"), &["check", "--store", &rel]);
+    assert!(check.status.success(), "{}", text(&check));
+    // A bare name is a name, even where a folder of that name happens to sit in the working directory.
+    std::fs::create_dir_all(p.repo.join("src").join("store")).unwrap();
+    let named = run(&p.repo.join("src"), &["check", "--store", "store"]);
+    assert!(!named.status.success(), "{}", text(&named));
+    assert!(text(&named).contains("stores"), "looked under the stores directory: {}", text(&named));
+}

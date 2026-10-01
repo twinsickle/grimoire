@@ -62,6 +62,7 @@ pub fn load(store_dir: &Path) -> Result<Loaded, OpenError> {
     if !repo.is_dir() {
         return Err(OpenError::NoRepository(repo));
     }
+    store_io::refuse_inside(store_dir, &repo)?;
     let extractor = Extractor::for_languages(&repo, &store.config.languages);
     let (extracted, extract_errors) = extractor.extract_all()?;
     let files: BTreeMap<String, FileExtraction> = extracted.into_iter().map(|f| (f.path.clone(), f)).collect();
