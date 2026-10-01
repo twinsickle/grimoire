@@ -561,3 +561,32 @@ fn an_explicit_store_resolves_as_the_project_file_does() {
     assert!(!named.status.success(), "{}", text(&named));
     assert!(text(&named).contains("stores"), "looked under the stores directory: {}", text(&named));
 }
+
+/// One raw HTTP/1.0 exchange with a daemon: the status code.
+fn status_of(port: u16, method: &str, path: &str, extra_headers: &str, body: &str) -> u16 {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    write!(s, "{method} {path} HTTP/1.0\r\n{extra_headers}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let mut answer = String::new();
+    s.read_to_string(&mut answer).unwrap();
+    answer.split_whitespace().nth(1).unwrap().parse().unwrap()
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-daemon-runs-the-local-policy", "checks": ["crates/server/src#local-policy-installed"]}
+/// ```
+#[test]
+fn the_daemon_runs_the_local_policy() {
+    let (p, _) = project();
+    let (_daemon, port) = serve(&p);
+    let page = r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#;
+    // A caller on this machine may read and write.
+    assert_eq!(status_of(port, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
+    assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\n", page), 200);
+    // A page on another site, or a name rebound to this machine, is refused.
+    assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\nOrigin: https://example.com\r\n", page), 403);
+    assert_eq!(status_of(port, "GET", "/api/status", "Host: evil.example\r\n", ""), 403);
+}

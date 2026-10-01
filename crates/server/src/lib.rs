@@ -1,9 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."}]}
 //! ```
 
+pub mod access;
 pub mod client;
 pub mod daemon;
 pub mod http;
@@ -40,7 +41,8 @@ pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
 
     let _watcher = watch::start(daemon.clone())?;
     let ui = opts.ui_dir.clone().map_or(http::Ui::Embedded, http::Ui::Dir);
-    let app = http::router(daemon.clone(), ui);
+    // The local policy, the only one there is: callers on this machine may read and write.
+    let app = http::router(daemon.clone(), ui, Arc::new(access::Local));
     let addr = SocketAddr::from(([127, 0, 0, 1], opts.port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     daemon.mark_serving(opts.port)?;

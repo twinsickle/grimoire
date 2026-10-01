@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them."}]}
+//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them."},{"id":"caller-checked","statement":"A tool call runs only once may_call allows the caller the trust step put on the HTTP request rmcp hands over; a call it refuses, a reader's write or a call with no caller, comes back as a tool-level error result carrying the error object, and the tool never runs."}]}
 //! ```
 
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::{ErrorData, RoleServer, ServerHandler};
 
+use crate::access::Caller;
 use crate::daemon::Daemon;
 
 #[derive(Clone)]
@@ -65,11 +66,16 @@ impl ServerHandler for McpServer {
         tool_defs().into_iter().find(|t| t.name == name)
     }
 
-    async fn call_tool(&self, request: CallToolRequestParams, _context: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
+    async fn call_tool(&self, request: CallToolRequestParams, context: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
         let input = request.arguments.map(serde_json::Value::Object).unwrap_or_else(|| serde_json::json!({}));
         let daemon = self.daemon.clone();
         let name = request.name.to_string();
-        let result = tokio::task::spawn_blocking(move || daemon.call(&name, input)).await.map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        // The caller the trust step admitted, carried on the HTTP request rmcp hands over.
+        let caller = context.extensions.get::<axum::http::request::Parts>().and_then(|p| p.extensions.get::<Caller>()).cloned();
+        let result = match crate::access::may_call(caller.as_ref(), &name) {
+            Err(refused) => Err(refused),
+            Ok(()) => tokio::task::spawn_blocking(move || daemon.call(&name, input)).await.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
+        };
         Ok(match result {
             Ok(output) => {
                 let text = serde_json::to_string_pretty(&output).unwrap_or_default();

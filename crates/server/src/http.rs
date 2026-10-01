@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own, whose Sec-Fetch-Site is cross-site or same-site, or whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."}]}
+//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own, whose Sec-Fetch-Site is cross-site or same-site, or whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."}]}
 //! ```
 
 use std::convert::Infallible;
@@ -9,14 +9,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{Path, Query, Request, State};
-use axum::http::header::{CONTENT_TYPE, HOST, ORIGIN};
+use axum::extract::{Path, Query, State};
+use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderMap, StatusCode, Uri};
-use axum::middleware::{self, Next};
+use axum::middleware;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use futures::stream::Stream;
 use grimoire_core::ToolError;
 use serde_json::{json, Value};
@@ -24,6 +24,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::access::{self, Caller, Policy};
 use crate::daemon::Daemon;
 
 /// Where the UI's files come from.
@@ -45,16 +46,16 @@ pub enum Ui {
 #[allow_missing = true]
 struct Built;
 
-pub fn router(daemon: Arc<Daemon>, ui: Ui) -> Router {
+pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
     let mut app = Router::new()
         .route("/api/tools", get(list_tools))
         .route("/api/events", get(events))
         .route("/api/{tool}", get(call_get).post(call_post))
         .with_state(daemon.clone())
         .nest_service("/mcp", crate::mcp::service(daemon))
-        // Everything above is refused to other sites; the UI's files below are
+        // Everything above passes the trust step first; the UI's files below are
         // served to any navigation, so a link to the UI from elsewhere opens it.
-        .layer(middleware::from_fn(same_origin));
+        .layer(middleware::from_fn_with_state(policy, access::admit));
     match ui {
         Ui::Dir(dir) => {
             let index = dir.join("index.html");
@@ -64,47 +65,6 @@ pub fn router(daemon: Arc<Daemon>, ui: Ui) -> Router {
         Ui::None => app = app.fallback(no_ui),
     }
     app
-}
-
-/// Refuse a request a browser makes on behalf of another site. Agents, MCP
-/// clients and the CLI send no Origin and no Sec-Fetch-Site, and a loopback Host.
-async fn same_origin(req: Request, next: Next) -> Response {
-    match refusal(req.headers()) {
-        Some(why) => (StatusCode::FORBIDDEN, Json(serde_json::to_value(ToolError::invalid(why, vec![])).unwrap_or_default())).into_response(),
-        None => next.run(req).await,
-    }
-}
-
-/// Why a request is refused, if it is: a Host that is not a loopback name
-/// (DNS rebinding), a fetch the browser marks as from another site, or an
-/// Origin other than the daemon's own.
-fn refusal(headers: &HeaderMap) -> Option<String> {
-    let host = headers.get(HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-    if !is_loopback(host) {
-        return Some(format!("Host `{host}` is not a loopback name; the daemon answers only localhost, 127.0.0.1 and [::1]"));
-    }
-    if let Some(site) = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()) {
-        if site == "cross-site" || site == "same-site" {
-            return Some(format!("a request from another site ({site}) is refused"));
-        }
-    }
-    if let Some(origin) = headers.get(ORIGIN) {
-        let origin = origin.to_str().unwrap_or("");
-        if origin != format!("http://{host}") {
-            return Some(format!("a request from origin `{origin}` is refused; only the daemon's own origin may call it from a browser"));
-        }
-    }
-    None
-}
-
-/// `localhost`, `127.0.0.1` or `[::1]`, with or without a port.
-fn is_loopback(host: &str) -> bool {
-    let name = if let Some(rest) = host.strip_prefix('[') {
-        rest.split(']').next().map(|n| format!("[{n}]")).unwrap_or_default()
-    } else {
-        host.split(':').next().unwrap_or("").to_string()
-    };
-    matches!(name.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "[::1]")
 }
 
 /// Whether this binary holds a UI. Asked on every request, so a debug daemon
@@ -162,9 +122,12 @@ fn error_response(e: ToolError) -> Response {
     (status, Json(serde_json::to_value(&e).unwrap_or_default())).into_response()
 }
 
-async fn run(daemon: Arc<Daemon>, tool: String, input: Value) -> Response {
+async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, tool: String, input: Value) -> Response {
     if !grimoire_core::tools::TOOL_NAMES.contains(&tool.as_str()) {
         return error_response(ToolError::invalid(format!("unknown tool `{tool}`"), vec![]));
+    }
+    if let Err(e) = access::may_call(caller.as_ref(), &tool) {
+        return (StatusCode::FORBIDDEN, Json(serde_json::to_value(&e).unwrap_or_default())).into_response();
     }
     let result = tokio::task::spawn_blocking(move || daemon.call(&tool, input)).await;
     match result {
@@ -174,7 +137,7 @@ async fn run(daemon: Arc<Daemon>, tool: String, input: Value) -> Response {
     }
 }
 
-async fn call_post(State(daemon): State<Arc<Daemon>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
+async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
     // A form can post a body spelled as JSON with a form content type, and a
     // browser sends a form without asking first; JSON cannot be sent that way.
     let json_body = headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|ct| ct.split(';').next().is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json")));
@@ -190,12 +153,12 @@ async fn call_post(State(daemon): State<Arc<Daemon>>, Path(tool): Path<String>, 
             Err(e) => return error_response(ToolError::invalid(format!("body is not JSON: {e}"), vec![])),
         }
     };
-    run(daemon, tool, input).await
+    run(daemon, caller.map(|Extension(c)| c), tool, input).await
 }
 
 /// GET form for convenience: each query value is parsed as JSON when it is,
 /// otherwise taken as a string, so `?ref=page:overview&depth=3` works.
-async fn call_get(State(daemon): State<Arc<Daemon>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
+async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
     // A write always takes a POST with a JSON body: a GET is the easiest
     // request for another site to forge.
     if grimoire_core::tools::is_write(&tool) {
@@ -207,7 +170,7 @@ async fn call_get(State(daemon): State<Arc<Daemon>>, Path(tool): Path<String>, Q
         let parsed = serde_json::from_str::<Value>(&v).ok().filter(|p| !p.is_string()).unwrap_or(Value::String(v));
         input.insert(k, parsed);
     }
-    run(daemon, tool, Value::Object(input)).await
+    run(daemon, caller.map(|Extension(c)| c), tool, Value::Object(input)).await
 }
 
 async fn events(State(daemon): State<Arc<Daemon>>) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
@@ -222,38 +185,6 @@ async fn events(State(daemon): State<Arc<Daemon>>) -> Sse<impl Stream<Item = Res
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn headers(pairs: &[(&'static str, &str)]) -> HeaderMap {
-        let mut h = HeaderMap::new();
-        for (k, v) in pairs {
-            h.insert(*k, v.parse().expect("header value"));
-        }
-        h
-    }
-
-    /// # Test contract
-    ///
-    /// ```json
-    /// {"test": "only-the-daemons-own-origin", "checks": ["crates/server/src/http#same-origin"]}
-    /// ```
-    #[test]
-    fn only_the_daemons_own_origin() {
-        // Agents: no Origin, no Sec-Fetch-Site, a loopback Host with or without a port.
-        for host in ["127.0.0.1", "127.0.0.1:4242", "localhost:4242", "LOCALHOST", "[::1]:4242"] {
-            assert_eq!(refusal(&headers(&[("host", host)])), None, "{host}");
-        }
-        // The daemon's own UI, and the dev server proxying to it.
-        assert_eq!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("origin", "http://127.0.0.1:4242"), ("sec-fetch-site", "same-origin")])), None);
-        assert_eq!(refusal(&headers(&[("host", "localhost:4242"), ("sec-fetch-site", "none")])), None, "typed into the address bar");
-        // Another site, a rebound name, a request marked cross-site, a missing Host.
-        assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("origin", "https://example.com")])).is_some());
-        assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("origin", "null")])).is_some());
-        assert!(refusal(&headers(&[("host", "evil.example:4242")])).is_some(), "DNS rebinding");
-        assert!(refusal(&headers(&[("host", "127.0.0.1.evil.example")])).is_some());
-        assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("sec-fetch-site", "cross-site")])).is_some(), "an image tag elsewhere");
-        assert!(refusal(&headers(&[("host", "127.0.0.1:4242"), ("sec-fetch-site", "same-site")])).is_some(), "another port on localhost");
-        assert!(refusal(&HeaderMap::new()).is_some());
-    }
 
     /// # Test contract
     ///

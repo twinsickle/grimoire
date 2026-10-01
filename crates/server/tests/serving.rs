@@ -36,6 +36,11 @@ fn serve() -> Served {
 
 /// The same store, served with the given UI.
 fn serve_with(ui: http::Ui) -> Served {
+    serve_as(ui, Arc::new(grimoire_server::access::Local))
+}
+
+/// The same store, served with the given UI behind the given policy.
+fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> Served {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let dir = std::env::temp_dir().join(format!("grimoire-serving-{}-{nanos}", std::process::id()));
     let repo = dir.join("repo");
@@ -49,7 +54,7 @@ fn serve_with(ui: http::Ui) -> Served {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
     let port = listener.local_addr().unwrap().port();
-    let app = http::router(daemon.clone(), ui);
+    let app = http::router(daemon.clone(), ui, policy);
     runtime.spawn(async move { axum::serve(listener, app).await });
     Served { dir, port, daemon, _runtime: runtime }
 }
@@ -343,4 +348,88 @@ fn the_embedded_ui_or_a_page_saying_there_is_none() {
     }
     // The API and MCP serve whatever the UI.
     assert_eq!(request(s.port, "POST", "/api/status", Some(&json!({}))).0, 200);
+}
+
+/// A policy that admits nobody, as a server policy would a caller without a token.
+struct Nobody;
+
+impl grimoire_server::access::Policy for Nobody {
+    fn admit(&self, _: &axum::http::HeaderMap) -> Result<grimoire_server::access::Caller, String> {
+        Err("no one is admitted".into())
+    }
+}
+
+/// A policy that admits every caller to read only.
+struct Readers;
+
+impl grimoire_server::access::Policy for Readers {
+    fn admit(&self, _: &axum::http::HeaderMap) -> Result<grimoire_server::access::Caller, String> {
+        Ok(grimoire_server::access::Caller { who: "reader".into(), access: grimoire_server::access::Access::Read })
+    }
+}
+
+fn mcp_call(port: u16, tool: &str, arguments: Value) -> Value {
+    mcp(port, 1, "tools/call", json!({ "name": tool, "arguments": arguments }))
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-refused-caller-reaches-no-tool", "checks": ["crates/server/src/http#every-route-passes", "crates/server/src/access#one-step"]}
+/// ```
+#[test]
+fn a_refused_caller_reaches_no_tool() {
+    let s = serve_as(http::Ui::None, Arc::new(Nobody));
+    let page = json!({ "slug": "goal", "title": "Goal", "body": "b", "links": [] });
+    let mcp_write = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "put_page", "arguments": page } });
+    let initialize = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2026-07-28", "capabilities": {}, "clientInfo": { "name": "t", "version": "1" } } });
+    let list = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} });
+    for (method, path, body) in [
+        ("GET", "/api/tools", None),
+        ("GET", "/api/events", None),
+        ("GET", "/api/get?ref=page:goal", None),
+        ("HEAD", "/api/get?ref=page:goal", None),
+        ("OPTIONS", "/api/put_page", None),
+        ("POST", "/api/put_page", Some(&page)),
+        ("POST", "/mcp", Some(&mcp_write)),
+        ("POST", "/mcp/", Some(&mcp_write)),
+        ("POST", "/mcp", Some(&initialize)),
+        ("POST", "/mcp", Some(&list)),
+        ("GET", "/mcp", None),
+        ("DELETE", "/mcp", None),
+    ] {
+        let (code, body) = request(s.port, method, path, body);
+        assert_eq!(code, 403, "{method} {path}: {body}");
+        if method != "HEAD" {
+            assert_eq!(json(&body)["error"], "invalid", "{method} {path}: the error object");
+        }
+    }
+    assert!(s.daemon.call("get", json!({ "ref": "page:goal" })).is_err(), "nothing was written");
+    // The UI's files are not behind the step: a link to the UI from anywhere opens it.
+    assert_eq!(request(s.port, "GET", "/", None).0, 200);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-reader-cannot-write", "checks": ["crates/server/src/access#writes-need-write", "crates/server/src/mcp#caller-checked", "req:daemon-trust-model"]}
+/// ```
+#[test]
+fn a_reader_cannot_write() {
+    let s = serve_as(http::Ui::None, Arc::new(Readers));
+    s.daemon.call("put_page", json!({ "slug": "goal", "title": "Goal", "body": "b", "links": [] })).unwrap();
+    // Reads answer, over the JSON API and MCP.
+    let (code, body) = request(s.port, "GET", "/api/get?ref=page:goal", None);
+    assert_eq!((code, json(&body)["node"]["title"].clone()), (200, json!("Goal")));
+    let read = mcp_call(s.port, "get", json!({ "ref": "page:goal" }));
+    assert_eq!(read["result"]["isError"], json!(false), "{read}");
+    // Writes are refused before they run, over both.
+    let (code, body) = request(s.port, "POST", "/api/put_page", Some(&json!({ "slug": "goal", "title": "Changed", "body": "b", "links": [] })));
+    assert_eq!(code, 403, "{body}");
+    assert!(json(&body)["message"].as_str().unwrap().contains("may only read"), "{body}");
+    let write = mcp_call(s.port, "delete_node", json!({ "ref": "page:goal" }));
+    assert_eq!(write["result"]["isError"], json!(true), "{write}");
+    assert!(write["result"]["structuredContent"]["message"].as_str().unwrap().contains("may only read"), "{write}");
+    let after = s.daemon.call("get", json!({ "ref": "page:goal" })).unwrap();
+    assert_eq!(after["node"]["title"], "Goal", "neither write ran");
 }
