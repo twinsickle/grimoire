@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -59,7 +59,9 @@ pub struct Outline {
     pub unplaced: Vec<Tree>,
 }
 
-pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>) -> Outline {
+/// The grimoire as trees from the roots (or `root`) to `depth`; with
+/// `pages_only` the trees hold pages alone, their counts unchanged.
+pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>, pages_only: bool) -> Outline {
     let findings = lint(g, &Rule::ALL);
     let mut per_node: HashMap<&Reference, (usize, usize)> = HashMap::new();
     let mut checks: HashMap<&Reference, BTreeSet<&str>> = HashMap::new();
@@ -78,9 +80,9 @@ pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>) -> Outline {
         .nodes
         .iter()
         .filter(|(r, n)| matches!(n, Node::Module(m) if in_grimoire(m)) && g.inbound_with(r, Relation::Links).next().is_none())
-        .map(|(r, _)| tree(g, r, 1, &on, &mut HashSet::new()))
+        .map(|(r, _)| tree(g, r, 1, false, &on, &mut HashSet::new()))
         .collect();
-    Outline { roots: roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, &on, &mut HashSet::new())).collect(), unplaced }
+    Outline { roots: roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, pages_only, &on, &mut HashSet::new())).collect(), unplaced }
 }
 
 /// A module is part of the grimoire when it is expected to carry a contract
@@ -96,13 +98,15 @@ struct Findings<'a> {
     checks: HashMap<&'a Reference, BTreeSet<&'a str>>,
 }
 
-fn tree(g: &Graph, r: &Reference, depth: usize, on: &Findings, path: &mut HashSet<Reference>) -> Tree {
+/// The tree at `r` to `depth`; with `pages_only` its children are its pages
+/// alone, though every count still covers the whole subtree.
+fn tree(g: &Graph, r: &Reference, depth: usize, pages_only: bool, on: &Findings, path: &mut HashSet<Reference>) -> Tree {
     let node = g.get(r);
     let title = node.map(Node::title).unwrap_or_else(|| format!("(missing) {r}"));
     let mut children = Vec::new();
     if depth > 0 && path.insert(r.clone()) {
-        for c in children_of(g, r) {
-            children.push(tree(g, &c, depth - 1, on, path));
+        for c in children_of(g, r).into_iter().filter(|c| !pages_only || c.kind == Kind::Page) {
+            children.push(tree(g, &c, depth - 1, pages_only, on, path));
         }
         path.remove(r);
     }
@@ -228,7 +232,7 @@ mod tests {
     #[test]
     fn outline_names_the_checks_on_each_node() {
         let g = graph();
-        let t = outline(&g, 4, Some(&Reference::module("src/a/ready"))).roots;
+        let t = outline(&g, 4, Some(&Reference::module("src/a/ready")), false).roots;
         let checks = |id: &str| t[0].children.iter().find(|c| c.r#ref == Reference::criterion("src/a/ready", id)).map(|c| c.checks.clone());
         assert_eq!(checks("reads-only"), Some(vec!["uncovered-criterion".to_string(), "untested".to_string()]));
         assert_eq!(checks("guarantee"), Some(vec![]), "named by a requirement and checked by a test");
@@ -251,10 +255,10 @@ mod tests {
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let expected = Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2 };
         for depth in [0, 1, 4] {
-            let o = outline(&g, depth, None);
+            let o = outline(&g, depth, None, false);
             assert_eq!(o.roots[0].rollup, expected, "the rollup is the whole subtree's at depth {depth}");
         }
-        let o = outline(&g, 1, None);
+        let o = outline(&g, 1, None, false);
         let gr = &o.roots[0].children[0];
         assert_eq!(gr.rollup, expected);
         assert_eq!(gr.baselined, 1);
@@ -277,7 +281,7 @@ mod tests {
         s.pages.insert("again".into(), crate::graph::fixtures::page("again", &["page:git-readiness", "module:src/a/ready"]));
         s.pages.get_mut("overview").expect("fixture").links.push("page:again".parse().expect("reference"));
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
-        let o = outline(&g, 2, None);
+        let o = outline(&g, 2, None, false);
         assert_eq!(o.roots[0].rollup, Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2 });
     }
 
@@ -289,7 +293,7 @@ mod tests {
     #[test]
     fn outline_from_roots() {
         let g = graph();
-        let t = outline(&g, 3, None).roots;
+        let t = outline(&g, 3, None, false).roots;
         assert_eq!(t.len(), 1);
         assert_eq!(t[0].r#ref, Reference::page("overview"));
         let gr = &t[0].children[0];
@@ -300,8 +304,56 @@ mod tests {
         let module = gr.children.iter().find(|c| c.r#ref.kind == Kind::Module).unwrap();
         assert_eq!(module.children.len(), 2);
         // A shallow outline still counts the findings deep below it.
-        let shallow = outline(&g, 0, None).roots;
+        let shallow = outline(&g, 0, None, false).roots;
         assert_eq!(shallow[0].findings, t[0].findings);
         assert!(shallow[0].children.is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "pages-only-keeps-the-counts", "checks": ["crates/core/src/query/outline#pages-only"]}
+    /// ```
+    #[test]
+    fn pages_only_keeps_the_counts() {
+        // A page linked twice (from overview and from again), a cycle back to
+        // overview, and a baselined finding, so inherited counts are not all zero.
+        let mut s = crate::graph::fixtures::store();
+        s.pages.insert("again".into(), crate::graph::fixtures::page("again", &["page:git-readiness", "page:overview", "module:src/a/ready"]));
+        s.pages.get_mut("overview").expect("fixture").links.push("page:again".parse().expect("reference"));
+        let plain = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let inherited = lint(&plain, &Rule::ALL).into_iter().find(|f| f.check == "untested" && f.r#ref == Reference::criterion("src/a/ready", "reads-only")).expect("fixture has it");
+        s.baseline = Some(Baseline { date: "2026-10-01".into(), reason: "Adopted.".into(), findings: vec![inherited.key()] });
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        // The full outline cut down to its pages, keeping the nesting.
+        fn pruned(t: &Tree) -> serde_json::Value {
+            let children: Vec<_> = t.children.iter().filter(|c| c.r#ref.kind == Kind::Page).map(pruned).collect();
+            serde_json::json!([t.r#ref, t.title, t.coverage, t.findings, t.baselined, t.checks, t.tests, t.rollup, children])
+        }
+        fn kept(t: &Tree) -> serde_json::Value {
+            assert_eq!(t.r#ref.kind, Kind::Page, "nothing but pages");
+            let children: Vec<_> = t.children.iter().map(kept).collect();
+            serde_json::json!([t.r#ref, t.title, t.coverage, t.findings, t.baselined, t.checks, t.tests, t.rollup, children])
+        }
+        let roots = std::iter::once(None).chain(s.pages.keys().map(|p| Some(Reference::page(p))));
+        let mut baselined = 0;
+        for root in roots {
+            for depth in [0, 1, 2, 64] {
+                let full = outline(&g, depth, root.as_ref(), false);
+                let pages = outline(&g, depth, root.as_ref(), true);
+                let expected: Vec<_> = full.roots.iter().map(pruned).collect();
+                assert_eq!(pages.roots.iter().map(kept).collect::<Vec<_>>(), expected, "the full outline's pages, nested as there, from {root:?} at {depth}");
+                assert_eq!(serde_json::to_value(&pages.unplaced).expect("json"), serde_json::to_value(&full.unplaced).expect("json"), "unplaced unchanged");
+                baselined += pages.roots.iter().map(|t| t.baselined).sum::<usize>();
+            }
+        }
+        assert!(baselined > 0, "the inherited counts compared are not all zero");
+        let whole = outline(&g, 64, None, false);
+        let deep = outline(&g, 64, None, true);
+        fn has_other(t: &Tree) -> bool {
+            t.r#ref.kind != Kind::Page || t.children.iter().any(has_other)
+        }
+        assert!(whole.roots.iter().any(has_other), "the fixture has more than pages beneath them");
+        assert!(deep.roots[0].children.iter().any(|c| !c.children.is_empty()), "and pages nested more than one deep");
     }
 }

@@ -2,11 +2,11 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."}]}
  * ```
  */
 
-import { Fragment, useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { TicketGraph } from "./TicketGraph";
@@ -48,6 +48,7 @@ import {
   type ModuleNode,
   type Ref,
   type ReqNode,
+  type RestsOn as RestsOnNode,
   type Summary,
   type TicketNode,
 } from "../types";
@@ -81,7 +82,7 @@ export function NodeView() {
         <Findings ref={ref} />
       </div>
       <aside>
-        <RestsOn ref={ref} />
+        <RestsOn key={ref} ref={ref} />
         <RestsOnMe ref={ref} />
         <Edges title="Links out" edges={node.out} />
         <Edges title="Linked from" edges={node.in} />
@@ -449,22 +450,46 @@ function TestView({ n }: { n: TestNode }) {
   );
 }
 
+/** A node it rests on: its newest decision in full, the earlier ones folded beneath. */
+function RestsOnItem({ r }: { r: RestsOnNode }) {
+  const [open, setOpen] = useState(false);
+  const [newest, ...earlier] = r.decisions;
+  return (
+    <li className="flex flex-col items-stretch">
+      <RefLink ref={r.ref} title={r.title} />
+      {newest && <Decision date={newest.date} text={newest.text} />}
+      {earlier.length > 0 && (
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="self-start text-[12.5px] text-accent bg-transparent border-none p-0 hover:underline">
+          {open ? "Hide earlier decisions" : `${earlier.length} earlier decision${earlier.length === 1 ? "" : "s"}`}
+        </button>
+      )}
+      {open && earlier.map((d, i) => <Decision key={i} date={d.date} text={d.text} />)}
+    </li>
+  );
+}
+
+/** How many nodes the Rests on panel shows before folding the rest behind Show all. */
+const FOLD_AT = 20;
+
 function RestsOn({ ref }: { ref: Ref }) {
   const { data } = useQuery(() => api.restsOn(ref, 3), [ref]);
+  const [all, setAll] = useState(false);
   if (!data) return null;
+  const shown = all ? data.nodes : data.nodes.slice(0, FOLD_AT);
   return (
     <div className={card}>
       <h3 className="mb-2">Rests on</h3>
       {data.nodes.length === 0 && <p className={empty}>Nothing below this node.</p>}
-      <ul className={list}>
-        {data.nodes.slice(0, 40).map((r) => (
-          <li key={r.ref} className="flex flex-col items-stretch">
-            <RefLink ref={r.ref} title={r.title} />
-            {r.decisions[0] && <Decision date={r.decisions[0].date} text={r.decisions[0].text} />}
-          </li>
+      <ul className={list} aria-label="Rests on">
+        {shown.map((r) => (
+          <RestsOnItem key={r.ref} r={r} />
         ))}
-        {data.nodes.length > 40 && <li className="text-fg-faint">…and {data.nodes.length - 40} more</li>}
       </ul>
+      {data.nodes.length > FOLD_AT && (
+        <button type="button" aria-expanded={all} onClick={() => setAll(!all)} className="mt-2 text-[13px] text-accent bg-transparent border-none p-0 hover:underline">
+          {all ? "Show fewer" : `Show all ${data.nodes.length}`}
+        </button>
+      )}
     </div>
   );
 }

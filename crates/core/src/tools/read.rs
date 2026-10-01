@@ -39,6 +39,8 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
             struct In {
                 depth: Option<usize>,
                 root: Option<Reference>,
+                #[serde(default)]
+                pages_only: bool,
             }
             let i: In = parse(input)?;
             if let Some(r) = &i.root {
@@ -47,7 +49,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 }
             }
             let g = state.graph();
-            answer(name, query::outline(g, i.depth.unwrap_or(2), i.root.as_ref()), None)
+            answer(name, query::outline(g, i.depth.unwrap_or(2), i.root.as_ref(), i.pages_only), None)
         }
         "rests_on" => {
             #[derive(Deserialize)]

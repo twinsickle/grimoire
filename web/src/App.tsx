@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the grimoire, the board and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the board at /board; a node page at /n/<ref> for every other kind; /map redirects to /; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand, the second Board; exactly one tab is lit at all times: Grimoire on the grimoire view, Board on /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."}]}
+ * {"purpose":"The shell: routes to the grimoire, the board and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the board at /board; a node page at /n/<ref> for every other kind; /map redirects to /; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand, the second Board; exactly one tab is lit at all times: Grimoire on the grimoire view, Board on /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."}]}
  * ```
  */
 
@@ -130,17 +130,26 @@ function Top() {
 
 function Search() {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<Summary[]>([]);
+  const [hits, setHits] = useState<{ q: string; nodes: Summary[] }>({ q: "", nodes: [] });
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const box = useRef<HTMLDivElement>(null);
+  // Each find is numbered; only the latest one's answer is kept, so a slower
+  // answer to earlier text can neither replace the hits nor be opened by Enter.
+  // The hits carry the text they answer and show only for that text, so none
+  // are offered while the latest text is still being answered.
+  const latest = useRef(0);
   useEffect(() => {
+    const n = ++latest.current;
     if (!q.trim()) return;
-    const t = setTimeout(() => api.find(q, undefined, 12).then((r) => setHits(r.nodes)).catch(() => setHits([])), 120);
+    const keep = (nodes: Summary[]) => {
+      if (n === latest.current) setHits({ q, nodes });
+    };
+    const t = setTimeout(() => api.find(q, undefined, 12).then((r) => keep(r.nodes)).catch(() => keep([])), 120);
     return () => clearTimeout(t);
   }, [q]);
   // An empty box shows nothing, derived rather than cleared in the effect.
-  const shown = q.trim() ? hits : [];
+  const shown = q.trim() && hits.q === q ? hits.nodes : [];
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (!box.current?.contains(e.target as Node)) setOpen(false);

@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the grimoire's own level is shown: the root page drawn as any page is, with the whole grimoire's rollup bars and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail lists its pages nested and ordered as its tree, ending with Unplaced only when the outline's unplaced list is not empty, and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
+ * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the grimoire's own level is shown: the root page drawn as any page is, with the whole grimoire's rollup bars and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists its pages nested and ordered as its tree, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
  * ```
  */
 
@@ -11,7 +11,7 @@ import { api, useQuery } from "../api";
 import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
 import { idOf, kindOf, localId, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
-/** Deep enough to reach every page, so the rail is the whole outline. */
+/** Deep enough to reach every page, so the rail is every page of the outline. */
 const ALL = 64;
 
 /** Where the grimoire view stands: the root, one page, or the modules no page links. */
@@ -19,7 +19,7 @@ export type At = { root: true } | { page: Ref } | { unplaced: true };
 
 /** Read the grimoire: a rail of every page, and the root, a page or the unplaced modules beside it. */
 export function HomeView({ at }: { at: At }) {
-  const { data, error } = useQuery(() => api.outline(ALL), []);
+  const { data, error } = useQuery(() => api.outline({ depth: ALL, pages_only: true }), []);
   if (error) return <ErrorBox error={error} />;
   if (!data) return <p className="text-fg-dim">Loading…</p>;
   const root = data.roots[0];
@@ -30,9 +30,9 @@ export function HomeView({ at }: { at: At }) {
     <div className="grid grid-cols-[250px_minmax(0,1fr)] gap-8 items-start max-w-[150ch] mx-auto">
       <Rail root={root} unplaced={data.unplaced} selected={selected} />
       <div className="min-w-0">
-        {"root" in at && <PagePane tree={root} above={[]} />}
+        {"root" in at && <PagePane at={root.ref} above={[]} />}
         {"unplaced" in at && <UnplacedPane modules={data.unplaced} />}
-        {"page" in at && (path ? <PagePane tree={path[path.length - 1]} above={path.slice(0, -1)} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
+        {"page" in at && (path ? <PagePane at={at.page} above={path.slice(0, -1)} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
       </div>
     </div>
   );
@@ -196,7 +196,17 @@ function AreaCard({ tree }: { tree: Tree }) {
 // A page
 // ---------------------------------------------------------------------------
 
-function PagePane({ tree, above }: { tree: Tree; above: Tree[] }) {
+/** A page beside the rail, from the outline rooted at it: its pages, and its modules with their criteria. */
+function PagePane({ at, above }: { at: Ref; above: Tree[] }) {
+  const { data, error } = useQuery(() => api.outline({ root: at, depth: 2 }), [at]);
+  if (error) return <ErrorBox error={error} />;
+  // The hook keeps the last answer while the next loads; another page's is not this one's.
+  const tree = data?.roots[0];
+  if (!tree || tree.ref !== at) return <p className="text-fg-dim">Loading…</p>;
+  return <PageView tree={tree} above={above} />;
+}
+
+function PageView({ tree, above }: { tree: Tree; above: Tree[] }) {
   const { data } = useQuery(() => api.get(tree.ref), [tree.ref]);
   const page = data?.node as PageNode | undefined;
   const modules = tree.children.filter((c) => kindOf(c.ref) === "module");

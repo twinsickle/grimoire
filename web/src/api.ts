@@ -31,7 +31,7 @@ export const api = {
   status: () => call("status"),
   find: (query: string, kinds?: string[], limit = 20) => call("find", { query, kinds, limit }),
   get: (ref: Ref) => call("get", { ref }),
-  outline: (depth: number, root?: Ref) => call("outline", { depth, root }),
+  outline: (input: { depth?: number; root?: Ref; pages_only?: boolean }) => call("outline", input),
   restsOn: (ref: Ref, depth?: number) => call("rests_on", { ref, depth }),
   restsOnMe: (ref: Ref) => call("rests_on_me", { ref }),
   coverage: (ref: Ref) => call("coverage", { ref }),

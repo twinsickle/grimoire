@@ -137,6 +137,69 @@ test("search offers find's results as links, and Enter opens the first", async (
  * # Test contract
  *
  * ```json
+ * {"test": "search-drops-an-earlier-answer", "checks": ["web/src/App#search-is-find"]}
+ * ```
+ */
+test("an answer to earlier text arriving last is dropped, and Enter opens the latest's first", async ({ page }) => {
+  // find for "rea" is held until "readiness" has been answered, then answers with a node that exists nowhere.
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/find", async (route) => {
+    if (route.request().postDataJSON().query !== "rea") return route.continue();
+    await held;
+    await route.fulfill({ json: { nodes: [{ ref: "page:stale", title: "Stale answer" }] } });
+  });
+  await page.goto("/");
+  const search = page.getByPlaceholder("Find a page, requirement, module, ticket…");
+  const early = page.waitForRequest((r) => r.url().endsWith("/api/find") && r.postDataJSON().query === "rea");
+  await search.fill("rea");
+  await early;
+  const answered = page.waitForResponse((r) => r.url().endsWith("/api/find") && r.request().postDataJSON().query === "readiness");
+  await search.fill("readiness");
+  await answered;
+  const first = (await tool<{ nodes: { ref: string }[] }>(page, "find", { query: "readiness", limit: 12 })).nodes[0].ref;
+  await expect(page.locator(`header a[href="/n/${encodeURIComponent(first)}"]`)).toBeVisible();
+  const late = page.waitForResponse((r) => r.url().endsWith("/api/find") && r.request().postDataJSON().query === "rea");
+  release();
+  await late;
+  await expect(page.locator("header a[href='/n/page%3Astale']")).toHaveCount(0);
+  await expect(page.locator(`header a[href="/n/${encodeURIComponent(first)}"]`)).toBeVisible();
+  await search.press("Enter");
+  await expect(page).toHaveURL(`/n/${encodeURIComponent(first)}`);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "search-offers-nothing-for-text-not-yet-answered", "checks": ["web/src/App#search-is-find"]}
+ * ```
+ */
+test("while the latest text is unanswered, earlier results are not offered and Enter opens nothing", async ({ page }) => {
+  // find for "goal" is held, so "readiness"'s answer is the only one there is.
+  await page.route("**/api/find", async (route) => {
+    if (route.request().postDataJSON().query !== "goal") return route.continue();
+    await new Promise(() => {});
+  });
+  await page.goto("/board");
+  const search = page.getByPlaceholder("Find a page, requirement, module, ticket…");
+  await search.fill("readiness");
+  const first = (await tool<{ nodes: { ref: string }[] }>(page, "find", { query: "readiness", limit: 12 })).nodes[0].ref;
+  const hit = page.locator(`header a[href="/n/${encodeURIComponent(first)}"]`);
+  await expect(hit).toBeVisible();
+  const asked = page.waitForRequest((r) => r.url().endsWith("/api/find") && r.postDataJSON().query === "goal");
+  await search.fill("goal");
+  await expect(hit).toHaveCount(0);
+  await search.press("Enter");
+  await asked;
+  await search.press("Enter");
+  await expect(page).toHaveURL("/board");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "every-request-is-a-tool", "checks": ["web/src/api#tools-only"]}
  * ```
  */
@@ -396,12 +459,33 @@ test("a page lists each module it links once, with its criteria beneath it", asy
  * ```
  */
 test("the rail is the outline's pages, ending with the unplaced modules", async ({ page }) => {
+  const asked: object[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/api/outline")) asked.push(r.postDataJSON());
+  });
   await page.goto("/");
   await expect(page.locator(rail)).toBeVisible();
   const outline = await tool<Outline>(page, "outline", { depth: 64 });
+  // The rail reads pages only; the root beside it, its own outline at depth 2.
+  await expect(page.locator("main h1").first()).toHaveText(outline.roots[0].title);
+  expect(asked).toContainEqual({ depth: 64, pages_only: true });
+  expect(asked).toContainEqual({ root: outline.roots[0].ref, depth: 2 });
+  expect(asked).not.toContainEqual({ depth: 64 });
   // The root links to /, every other page to its node page, in the outline's order.
   const expected = pagesOf(outline.roots).slice(1).map((t) => t.ref);
   expect(await linkedRefs(page, rail)).toEqual(expected);
+  // Nested as the tree: each page's entry sits as deep in the rail's lists as the page in the outline.
+  const depths = (trees: Tree[], d = 0): string[] => trees.filter((t) => t.ref.startsWith("page:")).flatMap((t) => [`${d} ${t.ref}`, ...depths(t.children, d + 1)]);
+  const nested = await page.locator(`${rail} li > a`).evaluateAll((as) =>
+    as.map((a) => {
+      let d = -1;
+      for (let e: Element | null = a; e && e.tagName !== "NAV"; e = e.parentElement) if (e.tagName === "LI") d++;
+      const href = a.getAttribute("href") ?? "";
+      return `${d} ${href === "/" ? "root" : decodeURIComponent(href.slice("/n/".length))}`;
+    }),
+  );
+  expect(nested).toEqual(depths(outline.roots).map((s, i) => (i === 0 ? s.replace(outline.roots[0].ref, "root") : s)));
+  expect(nested.some((s) => s.startsWith("2 "))).toBe(true);
   expect(outline.unplaced.map((t) => t.ref)).toEqual(["module:src/loose"]);
   const unplaced = page.locator(rail).getByRole("link", { name: /Unplaced/ });
   await expect(unplaced).toContainText(String(outline.unplaced.length));
@@ -409,6 +493,30 @@ test("the rail is the outline's pages, ending with the unplaced modules", async 
   await expect(page).toHaveURL(/\/unplaced$/);
   await expect(page.locator("main a[href='/n/module%3Asrc%2Floose']")).toBeVisible();
   await expect(page.locator("main")).toContainText("no contract");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-pane-never-shows-another-page", "checks": ["web/src/views/Home#outline-driven"]}
+ * ```
+ */
+test("going from one page to another never shows the first under the second", async ({ page }) => {
+  // The outline rooted at architecture is held, so the pane can only be the old page's or loading.
+  await page.route("**/api/outline", async (route) => {
+    if (route.request().postDataJSON().root !== "page:architecture") return route.continue();
+    await new Promise(() => {});
+  });
+  await page.goto("/n/page%3Agoal");
+  const heading = page.locator("main h1").first();
+  await expect(heading).toHaveText("Goal");
+  const asked = page.waitForRequest((r) => r.url().endsWith("/api/outline") && r.postDataJSON().root === "page:architecture");
+  await page.locator(rail).getByRole("link", { name: "Architecture" }).click();
+  await asked;
+  await expect(page).toHaveURL("/n/page%3Aarchitecture");
+  await expect(page.locator("main")).toContainText("Loading…");
+  await expect(page.locator("main h1", { hasText: "Goal" })).toHaveCount(0);
 });
 
 /**
@@ -687,6 +795,54 @@ test("a ticket resting on many nodes folds them into counts that unfold, and fol
   await graph.getByRole("button", { name: "Fold all" }).click();
   await expect(graph.locator("[data-graph-node^='req:']")).toHaveCount(0);
   await expect(graph.getByRole("button", { name: "Fold all" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "rests-on-folds-and-cuts-nothing", "checks": ["web/src/views/Node#rests-on"]}
+ * ```
+ */
+test("the Rests on panel shows every node with every decision, folding past twenty and earlier decisions", async ({ page }) => {
+  // A synthetic answer of 46 nodes; the last a requirement with two decisions in force, newest first.
+  const nodes = [
+    ...Array.from({ length: 45 }, (_, i) => ({ ref: `req:r${i}`, title: `Requirement ${i}`, via: [], decisions: [] })),
+    {
+      ref: "req:last",
+      title: "The last requirement",
+      via: [],
+      decisions: [
+        { date: "2026-09-30", text: "The newer decision." },
+        { date: "2026-09-15", text: "The middle decision." },
+        { date: "2026-09-01", text: "The older decision." },
+      ],
+    },
+  ];
+  await page.route("**/api/rests_on", async (route) => {
+    if (route.request().postDataJSON().depth !== 3) return route.continue();
+    await route.fulfill({ json: { nodes } });
+  });
+  await page.goto("/n/req%3Aready-needs-commit");
+  const panel = page.getByRole("list", { name: "Rests on" });
+  await expect(panel.locator(":scope > li")).toHaveCount(20);
+  // The first twenty, in the tool's order.
+  expect(await panel.locator(":scope > li").evaluateAll((ls) => ls.map((l) => l.querySelector("a")?.textContent?.trim()))).toEqual(Array.from({ length: 20 }, (_, i) => expect.stringContaining(`Requirement ${i}`)));
+  const all = page.getByRole("button", { name: "Show all 46" });
+  await all.click();
+  await expect(panel.locator(":scope > li")).toHaveCount(46);
+  const last = panel.locator(":scope > li").last();
+  await expect(last).toContainText("The last requirement");
+  await expect(last).toContainText("The newer decision.");
+  await expect(last).not.toContainText("The middle decision.");
+  await expect(last).not.toContainText("The older decision.");
+  await last.getByRole("button", { name: "2 earlier decisions" }).click();
+  const text = await last.innerText();
+  expect(text.indexOf("The newer decision.")).toBeGreaterThan(-1);
+  expect(text.indexOf("The newer decision.")).toBeLessThan(text.indexOf("The middle decision."));
+  expect(text.indexOf("The middle decision.")).toBeLessThan(text.indexOf("The older decision."));
+  await page.getByRole("button", { name: "Show fewer" }).click();
+  await expect(panel.locator(":scope > li")).toHaveCount(20);
 });
 
 /**

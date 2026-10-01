@@ -626,7 +626,7 @@ mod tests {
         // Were a page to link one anyway, the outline counts it toward nothing.
         s.pages.get_mut("git-readiness").expect("fixture").links.push(Reference::req("ready-only-with-commit"));
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
-        let o = crate::query::outline(&g, 4, Some(&Reference::page("git-readiness")));
+        let o = crate::query::outline(&g, 4, Some(&Reference::page("git-readiness")), false);
         let node = o.roots[0].children.iter().find(|c| c.r#ref == Reference::req("ready-only-with-commit")).expect("linked");
         assert!(node.children.is_empty() && node.rollup.requirements == 0, "no children and no count: {:?}", node.rollup);
     }
