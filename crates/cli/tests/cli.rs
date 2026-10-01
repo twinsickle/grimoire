@@ -452,7 +452,7 @@ fn a_locked_store_is_not_deleted() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-inside-the-repository-is-refused", "checks": ["crates/server/src/store_io#outside-repository", "req:store-location"]}
+/// {"test": "a-store-inside-the-repository-is-refused", "checks": ["crates/server/src/store_io/location#outside-repository", "req:store-location"]}
 /// ```
 #[test]
 fn a_store_inside_the_repository_is_refused() {
@@ -546,7 +546,7 @@ fn uninstall_finishes_a_deletion_stopped_part_way() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-explicit-store-resolves-as-the-project-file-does", "checks": ["crates/server/src/store_io#location", "crates/cli/src#store-resolution"]}
+/// {"test": "an-explicit-store-resolves-as-the-project-file-does", "checks": ["crates/server/src/store_io/location#resolution", "crates/cli/src#store-resolution"]}
 /// ```
 #[test]
 fn an_explicit_store_resolves_as_the_project_file_does() {

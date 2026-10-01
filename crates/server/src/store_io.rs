@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; resolve a store by name or path and find a repository's .grimoire.toml.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json for each active ticket, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline or start that does not parse."},{"id":"location","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"lock","statement":"lock takes an exclusive operating-system lock on the lock file of an existing store outside its repository, and lock_new on a directory about to hold a store, held for as long as the value returned lives; a directory that is not a store, or a store inside its repository, is refused before any lock file is made; when another process holds the lock, it fails naming the holder, the daemon serve.json names given as likely, since a crashed daemon leaves one, or else another grimoire process, and changes nothing."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json for each active ticket, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline or start that does not parse."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -10,6 +10,12 @@ use grimoire_core::model::*;
 use grimoire_core::ops::Changed;
 use grimoire_core::store::{validate_baseline, validate_config, validate_page, validate_requirement, validate_ticket};
 use grimoire_core::{Malformed, Store};
+
+mod location;
+mod lock;
+
+pub use location::{find_project, refuse_inside, store_for_repo, stores_dir, write_project_file, PROJECT_FILE};
+pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreIoError {
@@ -31,126 +37,6 @@ pub enum StoreIoError {
     Locked(PathBuf, String),
     #[error("store {0} is inside the repository {1}; a store lives outside the repository it describes")]
     InsideRepository(PathBuf, PathBuf),
-}
-
-/// The empty file a writer locks.
-pub const LOCK_FILE: &str = "lock";
-
-/// The store's write lock, held for as long as this value lives. Dropping
-/// it releases it, and so does the process ending, however it ends.
-#[derive(Debug)]
-pub struct StoreLock {
-    _file: std::fs::File,
-}
-
-/// Take the write lock of an existing store, or fail saying who holds it.
-/// Nothing is created in a directory that is not a store, nor in a store
-/// that lives inside its repository, since both are refused anyway: the
-/// directory must hold grimoire.json naming a repository outside it.
-pub fn lock(store_dir: &Path) -> Result<StoreLock, StoreIoError> {
-    let config = store_dir.join(CONFIG_FILE);
-    if !config.is_file() {
-        return Err(StoreIoError::NotAStore(store_dir.to_path_buf()));
-    }
-    let config: StoreConfig = read_json(&config).map_err(|e| StoreIoError::BadConfig(store_dir.to_path_buf(), e))?;
-    refuse_inside(store_dir, Path::new(&config.repository))?;
-    take(store_dir)
-}
-
-/// Take the write lock of a store about to be written whole, for init and
-/// scaffold: the directory must exist, and need not hold a store yet. The
-/// caller has refused a location inside the repository already.
-pub fn lock_new(store_dir: &Path) -> Result<StoreLock, StoreIoError> {
-    if !store_dir.is_dir() {
-        return Err(StoreIoError::NotAStore(store_dir.to_path_buf()));
-    }
-    take(store_dir)
-}
-
-fn take(store_dir: &Path) -> Result<StoreLock, StoreIoError> {
-    let path = store_dir.join(LOCK_FILE);
-    let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&path).map_err(|e| StoreIoError::Io(path.clone(), e))?;
-    match file.try_lock() {
-        Ok(()) => Ok(StoreLock { _file: file }),
-        Err(std::fs::TryLockError::WouldBlock) => Err(StoreIoError::Locked(store_dir.to_path_buf(), holder(store_dir))),
-        Err(std::fs::TryLockError::Error(e)) => Err(StoreIoError::Io(path, e)),
-    }
-}
-
-/// Who holds the lock, as far as the store says: a locked file cannot be
-/// read on every platform, so a daemon is named from its serve.json, which
-/// a daemon that crashed leaves behind, so the name is given as likely.
-fn holder(store_dir: &Path) -> String {
-    match read_serving(store_dir) {
-        Some(s) => format!("the daemon serving it on port {} (process {}), or, if that daemon is gone, another grimoire process", s.port, s.pid),
-        None => "another grimoire process, a command writing it or a daemon starting".to_string(),
-    }
-}
-
-/// The store a project file or `init` names, resolved the one way both
-/// use: an absolute path as it is, a path with a separator relative to the
-/// repository, and a bare name under the stores directory. `.` and `..`
-/// are paths, never names: a name is one plain component, joined to the
-/// stores directory (where a link a person made there still leads where
-/// they pointed it).
-pub fn store_for_repo(arg: &str, repo: &Path) -> Result<PathBuf, StoreIoError> {
-    let p = Path::new(arg);
-    let mut parts = p.components();
-    let a_name = matches!((parts.next(), parts.next()), (Some(std::path::Component::Normal(_)), None)) && !arg.contains(['/', '\\']);
-    if p.is_absolute() {
-        Ok(p.to_path_buf())
-    } else if a_name {
-        Ok(stores_dir()?.join(arg))
-    } else {
-        Ok(repo.join(arg))
-    }
-}
-
-/// `path` made absolute with `.` and `..` resolved, through links as far as
-/// it exists, so a path not created yet still resolves to where it would be.
-fn resolved(path: &Path) -> std::io::Result<PathBuf> {
-    let abs = std::path::absolute(path)?;
-    let mut existing = abs.as_path();
-    let mut rest = Vec::new();
-    let base = loop {
-        match existing.canonicalize() {
-            Ok(c) => break c,
-            Err(_) => match (existing.parent(), existing.file_name()) {
-                (Some(parent), Some(name)) => {
-                    rest.push(name.to_os_string());
-                    existing = parent;
-                }
-                _ => break existing.to_path_buf(),
-            },
-        }
-    };
-    let mut out = base;
-    for name in rest.into_iter().rev() {
-        out.push(name);
-    }
-    // `absolute` keeps `..`; what did not exist cannot be a link, so it folds lexically.
-    let mut folded = PathBuf::new();
-    for c in out.components() {
-        match c {
-            std::path::Component::ParentDir => {
-                folded.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => folded.push(other),
-        }
-    }
-    Ok(folded)
-}
-
-/// Refuse a store that resolves inside `repo`, the repository it describes,
-/// whether or not the store exists yet.
-pub fn refuse_inside(store_dir: &Path, repo: &Path) -> Result<(), StoreIoError> {
-    let store = resolved(store_dir).map_err(|e| StoreIoError::Io(store_dir.to_path_buf(), e))?;
-    let repo_at = resolved(repo).map_err(|e| StoreIoError::Io(repo.to_path_buf(), e))?;
-    if store.starts_with(&repo_at) {
-        return Err(StoreIoError::InsideRepository(store_dir.to_path_buf(), repo.to_path_buf()));
-    }
-    Ok(())
 }
 
 pub const CONFIG_FILE: &str = "grimoire.json";
@@ -181,8 +67,6 @@ pub fn remove_serving(store_dir: &Path) {
 pub fn read_serving(store_dir: &Path) -> Option<Serving> {
     read_json(&store_dir.join(SERVE_FILE)).ok()
 }
-pub const PROJECT_FILE: &str = ".grimoire.toml";
-
 fn dir_of(kind: Kind) -> &'static str {
     match kind {
         Kind::Page => "pages",
@@ -190,48 +74,6 @@ fn dir_of(kind: Kind) -> &'static str {
         Kind::Ticket => "tickets",
         _ => unreachable!("only store kinds are persisted"),
     }
-}
-
-/// The platform data directory for stores: `<data>/grimoire/stores`.
-pub fn stores_dir() -> Result<PathBuf, StoreIoError> {
-    let dirs = directories::ProjectDirs::from("", "", "grimoire").ok_or(StoreIoError::NoDataDir)?;
-    Ok(dirs.data_dir().join("stores"))
-}
-
-/// A `--store` argument: a path if it looks like one or exists as a
-/// directory, otherwise a name under the stores directory.
-pub fn resolve_store(arg: &str) -> Result<PathBuf, StoreIoError> {
-    let p = Path::new(arg);
-    if p.is_dir() || arg.contains('/') || arg.contains('\\') || p.is_absolute() {
-        return Ok(p.to_path_buf());
-    }
-    Ok(stores_dir()?.join(arg))
-}
-
-/// Walk up from `start` to the nearest `.grimoire.toml` and return the
-/// directory holding it and the store it names, resolved.
-pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
-    let mut dir = Some(start.to_path_buf());
-    while let Some(d) = dir {
-        let f = d.join(PROJECT_FILE);
-        if f.is_file() {
-            let text = std::fs::read_to_string(&f).map_err(|e| StoreIoError::Io(f.clone(), e))?;
-            let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| StoreIoError::BadProjectFile(f.clone(), e.to_string()))?;
-            let store = doc.get("store").and_then(|s| s.as_str()).ok_or_else(|| StoreIoError::BadProjectFile(f.clone(), "missing `store`".into()))?;
-            let resolved = store_for_repo(store, &d)?;
-            return Ok((d, resolved));
-        }
-        dir = d.parent().map(Path::to_path_buf);
-    }
-    Err(StoreIoError::NoProjectFile(start.to_path_buf()))
-}
-
-/// Write `.grimoire.toml` into a repository.
-pub fn write_project_file(repo: &Path, store: &str) -> Result<PathBuf, StoreIoError> {
-    let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names the store that holds this project's grimoire.\nstore = {}\n", toml::Value::String(store.to_string()));
-    std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
-    Ok(f)
 }
 
 fn read_json<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> Result<T, String> {
@@ -446,7 +288,7 @@ pub fn today() -> String {
 mod tests {
     use super::*;
 
-    fn temp() -> PathBuf {
+    pub(super) fn temp() -> PathBuf {
         let d = std::env::temp_dir().join(format!("grimoire-store-io-{}-{}", std::process::id(), rand_suffix()));
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -454,71 +296,6 @@ mod tests {
 
     fn rand_suffix() -> u128 {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-    }
-
-    /// # Test contract
-    ///
-    /// ```json
-    /// {"test": "one-lock-holder-at-a-time", "checks": ["crates/server/src/store_io#lock"]}
-    /// ```
-    #[test]
-    fn one_lock_holder_at_a_time() {
-        let dir = temp();
-        let (store_dir, repo) = (dir.join("store"), dir.join("repo"));
-        std::fs::create_dir_all(&repo).unwrap();
-        // Not a store yet: lock refuses and makes nothing, lock_new takes it for a store being written.
-        std::fs::create_dir_all(&store_dir).unwrap();
-        assert!(matches!(lock(&store_dir), Err(StoreIoError::NotAStore(_))));
-        assert!(!store_dir.join(LOCK_FILE).exists(), "no lock file in what is not a store");
-        drop(lock_new(&store_dir).unwrap());
-        let config = StoreConfig { version: 1, repository: repo.to_string_lossy().into(), roots: vec![], languages: vec![], scope: Scope::default(), order: Default::default() };
-        write_all(&store_dir, &Store::new(config), false).unwrap();
-        let held = lock(&store_dir).unwrap();
-        // A second holder, here another handle, is refused and told who holds it.
-        match lock(&store_dir) {
-            Err(StoreIoError::Locked(_, who)) => assert_eq!(who, "another grimoire process, a command writing it or a daemon starting"),
-            other => panic!("expected Locked, got {other:?}"),
-        }
-        assert!(matches!(lock_new(&store_dir), Err(StoreIoError::Locked(..))), "one lock, whichever way it is taken");
-        // A serve.json names the daemon, but only as likely, since a crashed one leaves it behind.
-        write_serving(&store_dir, 4299).unwrap();
-        let refused = lock(&store_dir).unwrap_err().to_string();
-        assert!(refused.contains("the daemon serving it on port 4299") && refused.contains(&format!("process {}", std::process::id())), "{refused}");
-        assert!(refused.contains("if that daemon is gone, another grimoire process"), "{refused}");
-        drop(held);
-        assert!(lock(&store_dir).is_ok(), "released when the holder goes");
-        assert!(matches!(lock(&dir.join("missing")), Err(StoreIoError::NotAStore(_))), "no store, no lock file made");
-        assert!(!dir.join("missing").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// # Test contract
-    ///
-    /// ```json
-    /// {"test": "a-store-inside-its-repository-is-refused", "checks": ["crates/server/src/store_io#outside-repository"]}
-    /// ```
-    #[test]
-    fn a_store_inside_its_repository_is_refused() {
-        let dir = temp();
-        let repo = dir.join("repo");
-        std::fs::create_dir_all(repo.join("src")).unwrap();
-        let inside = |store: &Path| matches!(refuse_inside(store, &repo), Err(StoreIoError::InsideRepository(..)));
-        assert!(inside(&repo.join("local-store")), "not created yet");
-        assert!(inside(&repo.join("src")), "an existing folder in it");
-        assert!(inside(&repo), "the repository itself");
-        assert!(inside(&repo.join("src").join("..").join("store")), "through ..");
-        assert!(inside(&dir.join("elsewhere").join("..").join("repo").join("store")), "back in through ..");
-        assert!(refuse_inside(&dir.join("store"), &repo).is_ok(), "beside it");
-        assert!(refuse_inside(&repo.join("..").join("store"), &repo).is_ok(), "beside it, through ..");
-        assert!(refuse_inside(&dir.join("repo-store"), &repo).is_ok(), "a name that only starts like it");
-        // How a store argument resolves for a repository: a name only when it is one plain component.
-        let stores = stores_dir().unwrap();
-        assert_eq!(store_for_repo("mine", &repo).unwrap(), stores.join("mine"));
-        for path in ["..", ".", "./mine", "../mine", "a/b"] {
-            assert_eq!(store_for_repo(path, &repo).unwrap(), repo.join(path), "{path} is a path, never a name");
-        }
-        assert_eq!(store_for_repo(&dir.to_string_lossy(), &repo).unwrap(), dir);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -646,26 +423,6 @@ mod tests {
         // persist a delete
         persist(&dir, &loaded, &Changed::Deleted(Reference::page("overview"))).unwrap();
         assert!(!dir.join("pages").join("overview.json").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// # Test contract
-    ///
-    /// ```json
-    /// {"test": "project-file-round-trip", "checks": ["crates/server/src/store_io#location"]}
-    /// ```
-    #[test]
-    fn project_file_round_trip() {
-        let dir = temp();
-        let nested = dir.join("a").join("b");
-        std::fs::create_dir_all(&nested).unwrap();
-        write_project_file(&dir, "my-store").unwrap();
-        let (root, store) = find_project(&nested).unwrap();
-        assert_eq!(root, dir);
-        assert!(store.ends_with("my-store"));
-        write_project_file(&dir, "./local-store").unwrap();
-        let (_, store) = find_project(&nested).unwrap();
-        assert_eq!(store, dir.join("./local-store"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
