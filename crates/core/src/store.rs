@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty after trimming, a date is ISO YYYY-MM-DD, a ticket body is at most 4000 characters, and a ticket's decision is present exactly when its status is closed."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -79,7 +79,7 @@ pub fn is_slug(s: &str) -> bool {
     !prev_dash
 }
 
-/// ISO `YYYY-MM-DD` with a plausible month and day.
+/// ISO `YYYY-MM-DD` naming a day the calendar has, leap years included.
 pub fn is_date(s: &str) -> bool {
     let b = s.as_bytes();
     if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
@@ -89,9 +89,37 @@ pub fn is_date(s: &str) -> bool {
     if !(digits(0..4) && digits(5..7) && digits(8..10)) {
         return false;
     }
+    let y: u32 = s[0..4].parse().unwrap_or(0);
     let m: u32 = s[5..7].parse().unwrap_or(0);
     let d: u32 = s[8..10].parse().unwrap_or(0);
-    (1..=12).contains(&m) && (1..=31).contains(&d)
+    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
+    let days = match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days).contains(&d)
+}
+
+/// A path written as absolute on some platform: a drive (`C:/` or `C:\`),
+/// a network share (`\\server\share` or `//server/share`, naming both), or
+/// a leading `/`. Read by its spelling, the same everywhere, since the core
+/// does no I/O and a store must validate on every platform. The device
+/// prefixes `\\?\` and `\\.\` are not a repository's name.
+pub fn is_absolute_path(p: &str) -> bool {
+    let b = p.as_bytes();
+    let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'/' || b[2] == b'\\');
+    let share = p.strip_prefix(r"\\").or_else(|| p.strip_prefix("//")).map(|rest| {
+        let mut parts = rest.split(['/', '\\']);
+        let (server, share) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+        !server.is_empty() && server != "?" && server != "." && !share.is_empty()
+    });
+    match share {
+        Some(named) => named,
+        None => drive || p.starts_with('/'),
+    }
 }
 
 fn check_slug(errors: &mut Vec<FieldError>, field: &str, s: &str) {
@@ -103,6 +131,15 @@ fn check_slug(errors: &mut Vec<FieldError>, field: &str, s: &str) {
 fn check_required(errors: &mut Vec<FieldError>, field: &str, s: &str) {
     if s.trim().is_empty() {
         errors.push(FieldError::new(field, "is required and may not be empty"));
+    } else {
+        check_trimmed(errors, field, s);
+    }
+}
+
+/// The write tools trim every string, so an untrimmed one on disk is a hand edit.
+fn check_trimmed(errors: &mut Vec<FieldError>, field: &str, s: &str) {
+    if s != s.trim() {
+        errors.push(FieldError::new(field, "must not begin or end with whitespace"));
     }
 }
 
@@ -118,6 +155,11 @@ fn check_refs(errors: &mut Vec<FieldError>, field: &str, refs: &[Reference], all
     for r in refs {
         if !seen.insert(r) {
             errors.push(FieldError::new(field, format!("duplicate reference {r}")));
+        }
+        // A file's name may begin with a space, so the parser takes one; a stored reference written with whitespace at its ends is a hand edit.
+        let written = r.to_string();
+        if written != written.trim() {
+            errors.push(FieldError::new(field, format!("`{written}` must not begin or end with whitespace")));
         }
         if let Some(allowed) = allowed {
             if !allowed.contains(&r.kind) {
@@ -161,6 +203,9 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
         if d.supersedes.iter().any(|&p| p == 0 || p as usize > i) {
             e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "may name only earlier decisions, by position from 1"));
         }
+        if d.supersedes.iter().enumerate().any(|(j, p)| d.supersedes[..j].contains(p)) {
+            e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "names each earlier decision once"));
+        }
     }
     for w in r.decisions.windows(2) {
         if w[0].date > w[1].date {
@@ -184,6 +229,9 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
         (Status::Closed, None) => e.push(FieldError::new("decision", "required when status is closed")),
         (Status::Closed, Some(d)) => {
             check_decision(&mut e, "decision", d);
+            if !t.body.is_empty() {
+                e.push(FieldError::new("body", "must be empty once the ticket is closed, since closing discards it"));
+            }
             // A ticket has one decision, so there is nothing earlier for it to supersede.
             if !d.supersedes.is_empty() {
                 e.push(FieldError::new("decision.supersedes", "a ticket's one decision supersedes nothing"));
@@ -203,20 +251,62 @@ pub fn validate_baseline(b: &Baseline) -> Vec<FieldError> {
         e.push(FieldError::new("date", "must be an ISO date YYYY-MM-DD"));
     }
     check_required(&mut e, "reason", &b.reason);
+    for (i, f) in b.findings.iter().enumerate() {
+        check_required(&mut e, &format!("findings[{i}].check"), &f.check);
+    }
     e
+}
+
+/// A started ticket's snapshot: its ticket's slug, and a fingerprint for
+/// each node, keyed by its reference.
+pub fn validate_start(s: &Start) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    check_slug(&mut e, "ticket", &s.ticket);
+    for (key, print) in &s.fingerprints {
+        if key.parse::<Reference>().is_err() {
+            e.push(FieldError::new("fingerprints", format!("`{key}` is not a reference")));
+        }
+        check_trimmed(&mut e, "fingerprints", key);
+        check_required(&mut e, &format!("fingerprints[{key}]"), print);
+    }
+    e
+}
+
+/// Every string in `v`, however deep, with its leading and trailing
+/// whitespace taken off: what the write tools do to their input, and what
+/// reading a version 1 store does to its records.
+pub fn trim_strings(v: &mut serde_json::Value) {
+    use serde_json::Value;
+    match v {
+        Value::String(s) if s.trim().len() != s.len() => *s = s.trim().to_string(),
+        Value::Array(items) => items.iter_mut().for_each(trim_strings),
+        Value::Object(fields) => fields.values_mut().for_each(trim_strings),
+        _ => {}
+    }
 }
 
 pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     let mut e = Vec::new();
-    if c.version != StoreConfig::CURRENT_VERSION {
-        e.push(FieldError::new("version", format!("unknown store version {}; this build knows {}", c.version, StoreConfig::CURRENT_VERSION)));
+    if c.version != StoreConfig::CURRENT_VERSION && c.version != StoreConfig::TRIMMED_ON_READ {
+        e.push(FieldError::new("version", format!("unknown store version {}; this build knows {} and reads {}", c.version, StoreConfig::CURRENT_VERSION, StoreConfig::TRIMMED_ON_READ)));
     }
     check_required(&mut e, "repository", &c.repository);
+    if !c.repository.trim().is_empty() && !is_absolute_path(&c.repository) {
+        e.push(FieldError::new("repository", format!("`{}` is not an absolute path; the repository is named by where it is, like `C:/work/app` or `/home/me/app`", c.repository)));
+    }
+    for l in &c.languages {
+        check_required(&mut e, "languages", l);
+    }
     if c.roots.is_empty() {
         e.push(FieldError::new("roots", "at least one root page is required"));
     }
     for r in &c.roots {
         check_slug(&mut e, "roots", r);
+    }
+    for (band, slugs) in [("order.next", &c.order.next), ("order.high", &c.order.high), ("order.later", &c.order.later)] {
+        for s in slugs {
+            check_slug(&mut e, band, s);
+        }
     }
     for (field, prefixes) in [("scope.include", &c.scope.include), ("scope.exclude", &c.scope.exclude)] {
         for p in prefixes {
@@ -231,7 +321,7 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
 /// A repository-relative, `/`-separated path with nothing that could climb
 /// out of the repository or name another drive.
 pub fn is_scope_prefix(p: &str) -> bool {
-    !p.is_empty() && !p.contains('\\') && !p.contains(':') && p.split('/').all(|s| !s.is_empty() && s != "." && s != "..")
+    !p.is_empty() && !p.contains('\\') && !p.contains(':') && p.split('/').all(|s| !s.is_empty() && s == s.trim() && s != "." && s != "..")
 }
 
 impl Store {
@@ -264,7 +354,7 @@ mod tests {
         for ok in ["crates/core", "web", "a/b/c"] {
             assert!(is_scope_prefix(ok), "{ok}");
         }
-        for bad in ["", "/abs", "../out", "a/../b", "./a", "a/", "C:/x", "a\\b"] {
+        for bad in ["", "/abs", "../out", "a/../b", "./a", "a/", "C:/x", "a\\b", " src", "src ", "a/ b"] {
             assert!(!is_scope_prefix(bad), "{bad}");
         }
     }
@@ -306,14 +396,26 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "config-rules", "checks": ["crates/core/src/model#config-record"]}
+    /// {"test": "config-rules", "checks": ["crates/core/src/model#config-record", "crates/core/src/store#config-rules"]}
     /// ```
     #[test]
     fn config_rules() {
         let config = |version: u32, roots: Vec<String>| StoreConfig { version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default(), order: Default::default() };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
+        assert!(validate_config(&config(StoreConfig::TRIMMED_ON_READ, vec!["overview".into()])).is_empty(), "version 1 is read, to be migrated");
         assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![]))[0].field, "roots");
+        // The repository is absolute by its spelling, the same on every platform.
+        let at = |repository: &str| StoreConfig { repository: repository.into(), ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
+        for absolute in ["C:/repo", r"c:\repo", "/home/me/repo", r"\\server\share\repo", r"\\server\share", "//server/share/repo"] {
+            assert!(validate_config(&at(absolute)).is_empty(), "{absolute}");
+        }
+        for relative in ["repo", "./repo", "../repo", "C:repo", "~/repo", r"\\", r"\\server", "//server/", r"\\?\C:\repo", r"\\.\pipe\x", "//?/x/y"] {
+            let errors = validate_config(&at(relative));
+            assert!(errors.iter().any(|e| e.field == "repository" && e.reason.contains("not an absolute path")), "{relative}: {errors:?}");
+        }
+        let languages = StoreConfig { languages: vec![" rust".into()], ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
+        assert_eq!(validate_config(&languages)[0].field, "languages");
     }
 
     /// # Test contract
@@ -327,6 +429,17 @@ mod tests {
         assert!(validate_page(&page("One line")).iter().all(|e| e.field != "title"));
         assert!(validate_page(&page("Two\nlines")).iter().any(|e| e.field == "title"));
         assert!(validate_page(&page("   ")).iter().any(|e| e.field == "title"), "required strings are non-empty after trimming");
+        // Untrimmed is malformed, wherever the string sits: a hand edit, since the tools trim.
+        let untrimmed = |errors: Vec<FieldError>, field: &str| errors.iter().any(|e| e.field == field && e.reason == "must not begin or end with whitespace");
+        assert!(untrimmed(validate_page(&page(" Goal")), "title"));
+        assert!(untrimmed(validate_page(&Page { body: "b\n".into(), ..page("Goal") }), "body"));
+        let mut req = Requirement { slug: "r".into(), title: "R".into(), statement: "S ".into(), scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: " w".into(), then: "t".into() }], covered_by: vec![], decisions: vec![Decision::new("2026-09-30", "why\n")], retired: false };
+        let errors = validate_requirement(&req);
+        assert!(untrimmed(errors.clone(), "statement") && untrimmed(errors.clone(), "scenarios[0].when") && untrimmed(errors, "decisions[0].text"));
+        req.statement = "S".into();
+        req.scenarios[0].when = "w".into();
+        req.decisions[0].text = "why".into();
+        assert!(validate_requirement(&req).is_empty());
         let ticket = |body: String| Ticket { slug: "t".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Open, touches: vec![], relies_on: vec![], body, decision: None };
         assert!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX))).is_empty());
         assert_eq!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX + 1)))[0].field, "body");
@@ -358,6 +471,11 @@ mod tests {
     fn date_rules() {
         assert!(is_date("2026-09-27"));
         assert!(!is_date("2026-13-01"));
+        // A day the calendar has, leap years included.
+        assert!(!is_date("2026-02-31") && !is_date("2026-04-31") && !is_date("2026-00-10") && !is_date("2026-01-00"));
+        assert!(is_date("2026-01-31") && is_date("2026-12-31"));
+        assert!(is_date("2024-02-29") && is_date("2000-02-29"), "leap years");
+        assert!(!is_date("2026-02-29") && !is_date("1900-02-29"), "not leap years");
         assert!(!is_date("26-09-27"));
         assert!(!is_date("2026/09/27"));
     }
@@ -390,8 +508,45 @@ mod tests {
         t.decision = Some(Decision { supersedes: vec![1], ..Decision::new("2026-01-01", "done") });
         assert_eq!(validate_ticket(&t)[0].field, "decision.supersedes");
         t.decision = Some(Decision::new("2026-01-01", "done"));
+        // Closing discards the body, so a closed ticket holding one was not closed by the tools.
+        t.body = " ".into();
+        assert_eq!(validate_ticket(&t)[0].field, "body");
+        t.body.clear();
         t.status = Status::Open;
         assert_eq!(validate_ticket(&t)[0].field, "decision");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "every-stored-string-is-trimmed", "checks": ["crates/core/src/store#field-rules"]}
+    /// ```
+    #[test]
+    fn every_stored_string_is_trimmed() {
+        // A reference written with whitespace at its ends is a hand edit; a file whose name begins with a space is not.
+        let linking = |link: &str| Page { slug: "p".into(), title: "P".into(), body: "b".into(), links: vec![link.parse().unwrap()] };
+        assert!(validate_page(&linking("page:goal ")).iter().any(|e| e.field == "links"));
+        assert!(validate_page(&linking("module:src/a")).is_empty());
+        assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
+        let order = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
+        assert_eq!(validate_config(&order)[0].field, "order.next");
+        // A baseline finding's check, and a start's ticket and fingerprints.
+        let baseline: Baseline = serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();
+        assert_eq!(validate_baseline(&baseline)[0].field, "findings[0].check");
+        let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into() };
+        assert!(validate_start(&start("page:goal", "f1")).is_empty());
+        assert!(!validate_start(&start("page:goal ", "f1")).is_empty(), "a key that is not a reference");
+        assert!(!validate_start(&start("page:goal", " f1")).is_empty(), "an untrimmed fingerprint");
+        assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default() }).is_empty());
+        // A decision supersedes each earlier one once.
+        let mut req = Requirement { slug: "r".into(), title: "R".into(), statement: "S".into(), scenarios: vec![], covered_by: vec![], decisions: vec![Decision::new("2026-09-01", "a"), Decision::new("2026-09-02", "b"), Decision { supersedes: vec![1, 2], ..Decision::new("2026-09-03", "c") }], retired: false };
+        assert!(validate_requirement(&req).is_empty());
+        req.decisions[2].supersedes = vec![1, 1];
+        assert!(validate_requirement(&req).iter().any(|e| e.reason == "names each earlier decision once"));
+        // What the tools and a version 1 read do to a record: every string, at any depth.
+        let mut v = serde_json::json!({"title": " T ", "list": ["a\n", 1, {"deep": "\tx"}]});
+        trim_strings(&mut v);
+        assert_eq!(v, serde_json::json!({"title": "T", "list": ["a", 1, {"deep": "x"}]}));
     }
 
     /// # Test contract

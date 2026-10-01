@@ -472,7 +472,11 @@ impl Scope {
 }
 
 impl StoreConfig {
-    pub const CURRENT_VERSION: u32 = 1;
+    /// Version 2 holds only trimmed strings. A version 1 store, from before
+    /// the write tools trimmed, is read with its strings trimmed and is
+    /// rewritten as version 2 by the first writer to take its lock.
+    pub const CURRENT_VERSION: u32 = 2;
+    pub const TRIMMED_ON_READ: u32 = 1;
 }
 
 // ---------------------------------------------------------------------------

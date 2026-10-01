@@ -182,7 +182,8 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
             let req = Requirement {
                 slug: slug.clone(),
                 title: title_of(&c.id),
-                statement: c.statement.clone(),
+                // Trimmed as every stored string is: a contract may hold a stray space.
+                statement: c.statement.trim().to_string(),
                 scenarios: Vec::new(),
                 covered_by: vec![Reference::criterion(&c.module, &c.id)],
                 decisions: Vec::new(),

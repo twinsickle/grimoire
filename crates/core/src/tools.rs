@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."}]}
 //! ```
 
 use serde::Deserialize;
@@ -77,8 +77,10 @@ pub fn is_write(name: &str) -> bool {
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
-pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<Outcome, ToolError> {
+pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
     if is_write(name) {
+        // Every string a write stores is trimmed here, once, so no write tool can forget.
+        crate::store::trim_strings(&mut input);
         write::call(state, name, input, today)
     } else {
         read::call(state, name, input)
@@ -127,5 +129,25 @@ mod tests {
         let v = serde_json::to_value(&e).unwrap();
         assert_eq!(v["error"], "invalid");
         assert_eq!(v["details"].as_array().unwrap().len(), 2);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "writes-trim-their-input", "checks": ["crates/core/src/tools#trims-input"]}
+    /// ```
+    #[test]
+    fn writes_trim_their_input() {
+        let mut s = state();
+        call(&mut s, "put_page", json!({ "slug": " aim ", "title": "Aim ", "body": "\n**Why.** b\n\n", "links": [" page:overview"] }), "2026-09-30").unwrap();
+        let page = &s.store().pages["aim"];
+        assert_eq!((page.title.as_str(), page.body.as_str(), page.links[0].to_string()), ("Aim", "**Why.** b", "page:overview".to_string()));
+        // Strings at any depth: a requirement's scenarios.
+        let req = json!({ "slug": "r", "title": "R", "statement": "It SHALL hold.\n", "scenarios": [{ "title": " t", "given": "g ", "when": "w", "then": "t\t" }], "covered_by": [] });
+        call(&mut s, "put_requirement", req, "2026-09-30").unwrap();
+        let r = &s.store().requirements["r"];
+        assert_eq!((r.statement.as_str(), r.scenarios[0].title.as_str(), r.scenarios[0].given.as_str(), r.scenarios[0].then.as_str()), ("It SHALL hold.", "t", "g", "t"));
+        // A read's input is as given: a reference with a space is not a reference.
+        assert!(call(&mut s, "get", json!({ "ref": " page:aim" }), "2026-09-30").is_err());
     }
 }

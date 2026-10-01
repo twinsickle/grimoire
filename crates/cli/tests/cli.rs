@@ -590,3 +590,102 @@ fn the_daemon_runs_the_local_policy() {
     assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\nOrigin: https://example.com\r\n", page), 403);
     assert_eq!(status_of(port, "GET", "/api/status", "Host: evil.example\r\n", ""), 403);
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-re-points-a-moved-checkout-and-refuses-a-copy", "checks": ["crates/cli/src#init-repoints", "req:store-config-record"]}
+/// ```
+#[test]
+fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
+    let (p, _) = project();
+    let store = p.store.to_string_lossy().to_string();
+    assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
+    // A copy: the first checkout still exists, so the store stays its own.
+    let copy = p.dir.join("copy");
+    std::fs::create_dir_all(copy.join("src")).unwrap();
+    std::fs::write(copy.join("Cargo.toml"), "[package]\nname = \"c\"\nversion = \"0.1.0\"\n").unwrap();
+    let out = run(&copy, &["init", "--store", &store]);
+    assert!(!out.status.success() && text(&out).contains("still exists"), "{}", text(&out));
+    assert!(!copy.join(".grimoire.toml").exists(), "a refusal writes nothing");
+    // A move: the checkout is renamed, .grimoire.toml and all, and the old path is gone.
+    let moved = p.dir.join("moved");
+    std::fs::rename(&p.repo, &moved).unwrap();
+    let out = run(&moved, &["init", "--store", &store]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("re-pointed store"), "{}", text(&out));
+    let goal = run(&moved, &["tool", "get", r#"{"ref":"page:goal"}"#]);
+    assert!(goal.status.success() && text(&goal).contains("\"Goal\""), "the history moved with it: {}", text(&goal));
+    // Moving re-points without re-baselining: the baseline is the one init made the first time.
+    let baseline: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p.store.join("baseline.json")).unwrap()).unwrap();
+    assert_eq!(baseline["reason"], "adopted at init");
+    // A file where the old checkout was is not the old checkout: a move from there is still a move.
+    let elsewhere = p.dir.join("elsewhere");
+    std::fs::rename(&moved, &elsewhere).unwrap();
+    std::fs::write(&moved, "not a repository").unwrap();
+    let out = run(&elsewhere, &["init", "--store", &store]);
+    assert!(out.status.success() && text(&out).contains("re-pointed store"), "{}", text(&out));
+    std::fs::remove_file(&moved).unwrap();
+    std::fs::rename(&elsewhere, &moved).unwrap();
+    assert!(run(&moved, &["init", "--store", &store]).status.success());
+    // A checkout whose project file names some other store is not this project moved.
+    let stranger = p.dir.join("stranger");
+    std::fs::create_dir_all(&stranger).unwrap();
+    std::fs::write(stranger.join(".grimoire.toml"), "store = \"../other-store\"\n").unwrap();
+    std::fs::rename(&moved, p.dir.join("gone")).unwrap();
+    let out = run(&stranger, &["init", "--store", &store]);
+    assert!(!out.status.success() && text(&out).contains("does not name this store"), "{}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-adopts-only-a-store-it-made", "checks": ["crates/cli/src#init-adopts"]}
+/// ```
+#[test]
+fn init_adopts_only_a_store_it_made() {
+    let (p, first) = project();
+    assert!(text(&first).contains("adopted at init"), "a new store is adopted: {}", text(&first));
+    let baseline = std::fs::read(p.store.join("baseline.json")).unwrap();
+    // Something new, then init again: the baseline stays as it was, so the new finding still counts.
+    std::fs::write(p.repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+    let again = run(&p.repo, &["init", "--store", &p.store.to_string_lossy(), "--languages", " rust "]);
+    assert!(again.status.success(), "{}", text(&again));
+    assert!(text(&again).contains("kept    the store's baseline"), "{}", text(&again));
+    assert_eq!(std::fs::read(p.store.join("baseline.json")).unwrap(), baseline, "re-running init does not re-baseline");
+    assert!(!run(&p.repo, &["check"]).status.success(), "the new finding is new, not hidden");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-trims-what-it-is-given", "checks": ["crates/server/src/store_io#whole-store-valid", "req:store-field-rules"]}
+/// ```
+#[test]
+fn init_trims_what_it_is_given() {
+    let p = bare_repo();
+    let out = run(&p.repo, &["init", "--store", &p.store.to_string_lossy(), "--languages", " rust "]);
+    assert!(out.status.success(), "{}", text(&out));
+    let config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p.store.join("grimoire.json")).unwrap()).unwrap();
+    assert_eq!(config["languages"], serde_json::json!(["rust"]));
+    assert_eq!(config["version"], 2, "a new store is written at the current version");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-adopts-a-scaffolded-store", "checks": ["crates/cli/src#init-adopts"]}
+/// ```
+#[test]
+fn init_adopts_a_scaffolded_store() {
+    // The README's setup: scaffold a store from the contracts, then init. The store has no baseline yet, so init adopts.
+    let p = bare_repo();
+    let store = p.store.to_string_lossy().to_string();
+    let scaffold = run(&p.repo, &["scaffold", "--store", &store]);
+    assert!(scaffold.status.success(), "{}", text(&scaffold));
+    let init = run(&p.repo, &["init", "--store", &store]);
+    assert!(init.status.success() && text(&init).contains("adopted at init"), "{}", text(&init));
+    let check = run(&p.repo, &["check"]);
+    assert!(check.status.success(), "the hook passes on the next commit: {}", text(&check));
+}

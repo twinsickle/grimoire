@@ -8,7 +8,7 @@ use std::path::Path;
 
 use grimoire_core::model::StoreConfig;
 
-use super::{read_json, read_serving, refuse_inside, StoreIoError, CONFIG_FILE};
+use super::{migrate, read_config, read_serving, refuse_inside, StoreIoError};
 
 /// The empty file a writer locks.
 pub const LOCK_FILE: &str = "lock";
@@ -25,13 +25,15 @@ pub struct StoreLock {
 /// that lives inside its repository, since both are refused anyway: the
 /// directory must hold grimoire.json naming a repository outside it.
 pub fn lock(store_dir: &Path) -> Result<StoreLock, StoreIoError> {
-    let config = store_dir.join(CONFIG_FILE);
-    if !config.is_file() {
-        return Err(StoreIoError::NotAStore(store_dir.to_path_buf()));
-    }
-    let config: StoreConfig = read_json(&config).map_err(|e| StoreIoError::BadConfig(store_dir.to_path_buf(), e))?;
+    let config = read_config(store_dir)?;
     refuse_inside(store_dir, Path::new(&config.repository))?;
-    take(store_dir)
+    let held = take(store_dir)?;
+    // The first writer of a version 1 store rewrites it as version 2, under the lock it now holds.
+    if config.version == StoreConfig::TRIMMED_ON_READ {
+        let rewritten = migrate(store_dir)?;
+        tracing::info!("store {} is now version {}: {rewritten} record(s) rewritten with their strings trimmed", store_dir.display(), StoreConfig::CURRENT_VERSION);
+    }
+    Ok(held)
 }
 
 /// Take the write lock of a store about to be written whole, for init and
@@ -87,7 +89,7 @@ mod tests {
         assert!(matches!(lock(&store_dir), Err(StoreIoError::NotAStore(_))));
         assert!(!store_dir.join(LOCK_FILE).exists(), "no lock file in what is not a store");
         drop(lock_new(&store_dir).unwrap());
-        let config = StoreConfig { version: 1, repository: repo.to_string_lossy().into(), roots: vec![], languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
         write_all(&store_dir, &Store::new(config), false).unwrap();
         let held = lock(&store_dir).unwrap();
         // A second holder, here another handle, is refused and told who holds it.
@@ -106,7 +108,7 @@ mod tests {
         assert!(matches!(lock(&dir.join("missing")), Err(StoreIoError::NotAStore(_))), "no store, no lock file made");
         // A store that names a repository holding it is refused before a lock file is made.
         let inside = repo.join("store");
-        let config = StoreConfig { version: 1, repository: repo.to_string_lossy().into(), roots: vec![], languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
         write_all(&inside, &Store::new(config), false).unwrap();
         assert!(matches!(lock(&inside), Err(StoreIoError::InsideRepository(..))));
         assert!(!inside.join(LOCK_FILE).exists());
