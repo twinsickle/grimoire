@@ -285,15 +285,16 @@ mod tests {
     /// A repository with one contracted module and one without a contract,
     /// and an empty store pointed at it.
     struct Harness {
-        dir: PathBuf,
         repo: PathBuf,
         store: PathBuf,
+        /// Held, not read: dropping it removes the folder.
+        _tmp: tempfile::TempDir,
     }
 
     impl Harness {
         fn new() -> Harness {
-            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-            let dir = std::env::temp_dir().join(format!("grimoire-daemon-{}-{nanos}", std::process::id()));
+            let tmp = tempfile::Builder::new().prefix("grimoire-daemon-").tempdir().unwrap();
+            let dir = tmp.path().to_path_buf();
             let repo = dir.join("repo");
             std::fs::create_dir_all(repo.join("src")).unwrap();
             std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"h\"\nversion = \"0.1.0\"\n").unwrap();
@@ -303,7 +304,7 @@ mod tests {
             let store = dir.join("store");
             let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
             store_io::write_all(&store, &Store::new(config), false).unwrap();
-            Harness { dir, repo, store }
+            Harness { repo, store, _tmp: tmp }
         }
 
         fn open(&self) -> Daemon {
@@ -325,12 +326,6 @@ mod tests {
             }
             out.sort();
             out
-        }
-    }
-
-    impl Drop for Harness {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
 
@@ -516,8 +511,8 @@ mod tests {
     #[test]
     fn the_source_reader_stays_inside_the_repository() {
         use grimoire_core::tools::SourceReader;
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("grimoire-source-{}-{nanos}", std::process::id()));
+        let tmp = tempfile::Builder::new().prefix("grimoire-source-").tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
         let repo = dir.join("repo");
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::write(repo.join("src").join("lib.rs"), "\u{feff}pub fn a() {}\n").unwrap();
@@ -544,6 +539,5 @@ mod tests {
         let before = std::fs::read_dir(repo.join("src")).unwrap().count();
         let _ = reader.read("src/lib.rs", big);
         assert_eq!(std::fs::read_dir(repo.join("src")).unwrap().count(), before, "reading writes nothing");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

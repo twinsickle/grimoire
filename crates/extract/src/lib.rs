@@ -308,11 +308,11 @@ export class Box {
         assert_eq!(x.languages(), vec!["rust", "typescript"]);
     }
 
-    fn temp_repo(files: &[(&str, &[u8])]) -> PathBuf {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("grimoire-extract-{}-{nanos}", std::process::id()));
+    /// A repository of the given files in a fresh folder, removed when dropped.
+    fn temp_repo(files: &[(&str, &[u8])]) -> tempfile::TempDir {
+        let dir = tempfile::Builder::new().prefix("grimoire-extract-").tempdir().unwrap();
         for (rel, bytes) in files {
-            let p = dir.join(rel);
+            let p = dir.path().join(rel);
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, bytes).unwrap();
         }
@@ -326,10 +326,10 @@ export class Box {
     /// ```
     #[test]
     fn the_walk_skips_what_gitignore_ignores() {
-        let dir = temp_repo(&[(".gitignore", b"target/\n"), ("src/lib.rs", b"pub fn a() {}\n"), ("target/debug/build/out.rs", b"pub fn generated() {}\n")]);
-        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let tmp = temp_repo(&[(".gitignore", b"target/\n"), ("src/lib.rs", b"pub fn a() {}\n"), ("target/debug/build/out.rs", b"pub fn generated() {}\n")]);
+        let dir = tmp.path();
+        let x = Extractor::for_languages(dir, &["rust".to_string()]);
         assert_eq!(x.walk().unwrap(), vec!["src/lib.rs".to_string()], "build output is never parsed, with or without git");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -339,13 +339,13 @@ export class Box {
     /// ```
     #[test]
     fn each_file_is_fingerprinted_as_read() {
-        let dir = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n")]);
-        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let tmp = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n")]);
+        let dir = tmp.path();
+        let x = Extractor::for_languages(dir, &["rust".to_string()]);
         let first = x.extract_path("src/lib.rs").unwrap().digest;
         assert_eq!(first, grimoire_core::fingerprint::of_text("pub fn a() {}\n"));
         std::fs::write(dir.join("src").join("lib.rs"), "pub fn a() { }\n").unwrap();
         assert_ne!(x.extract_path("src/lib.rs").unwrap().digest, first, "one byte changes it");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -355,8 +355,9 @@ export class Box {
     /// ```
     #[test]
     fn one_file_is_extracted_alone() {
-        let dir = temp_repo(&[("src/a.rs", b"pub fn a() {}\n"), ("src/b.rs", &[0xff, 0xfe, 0x00])]);
-        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let tmp = temp_repo(&[("src/a.rs", b"pub fn a() {}\n"), ("src/b.rs", &[0xff, 0xfe, 0x00])]);
+        let dir = tmp.path();
+        let x = Extractor::for_languages(dir, &["rust".to_string()]);
         let a = x.extract_path("src/a.rs").unwrap();
         assert_eq!(a.path, "src/a.rs");
         assert!(a.decls.iter().any(|d| d.path == "a"));
@@ -364,7 +365,6 @@ export class Box {
         let (files, errors) = x.extract_all().unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(errors.len(), 1);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -374,13 +374,13 @@ export class Box {
     /// ```
     #[test]
     fn a_call_between_functions_makes_no_edge() {
-        let dir = temp_repo(&[("src/lib.rs", b"pub mod a;\npub mod b;\n"), ("src/a.rs", b"pub fn run() { crate::b::run(); }\n"), ("src/b.rs", b"pub fn run() {}\n")]);
-        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let tmp = temp_repo(&[("src/lib.rs", b"pub mod a;\npub mod b;\n"), ("src/a.rs", b"pub fn run() { crate::b::run(); }\n"), ("src/b.rs", b"pub fn run() {}\n")]);
+        let dir = tmp.path();
+        let x = Extractor::for_languages(dir, &["rust".to_string()]);
         let (files, _) = x.extract_all().unwrap();
         let g = grimoire_core::graph::Graph::build(&grimoire_core::Store::default(), &grimoire_core::Extraction::from_files(&files), &[]);
         let decl_to_decl = g.edges.iter().filter(|e| e.from.kind == grimoire_core::model::Kind::Decl && e.to.kind == grimoire_core::model::Kind::Decl).count();
         assert_eq!(decl_to_decl, 0, "a.rs calls b's run, and no edge says so");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -390,11 +390,12 @@ export class Box {
     /// ```
     #[test]
     fn extraction_writes_nothing() {
-        let dir = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n"), ("src/b.rs", b"pub fn b() {}\n")]);
+        let tmp = temp_repo(&[("src/lib.rs", b"pub fn a() {}\n"), ("src/b.rs", b"pub fn b() {}\n")]);
+        let dir = tmp.path();
         let snapshot = || {
             // Every path, and each file's modification time. A directory's own time is
             // left out: NTFS updates it lazily, after files already written.
-            let mut v: Vec<(PathBuf, Option<std::time::SystemTime>)> = ignore::WalkBuilder::new(&dir)
+            let mut v: Vec<(PathBuf, Option<std::time::SystemTime>)> = ignore::WalkBuilder::new(dir)
                 .hidden(false)
                 .build()
                 .flatten()
@@ -407,10 +408,9 @@ export class Box {
             v
         };
         let before = snapshot();
-        let x = Extractor::for_languages(&dir, &["rust".to_string()]);
+        let x = Extractor::for_languages(dir, &["rust".to_string()]);
         x.extract_all().unwrap();
         x.extract_path("src/b.rs").unwrap();
         assert_eq!(snapshot(), before, "nothing created or modified");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

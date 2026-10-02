@@ -35,3 +35,6 @@ tracing.workspace = true
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
 rust-embed = { version = "8", features = ["mime-guess"] }
+
+[dev-dependencies]
+tempfile.workspace = true

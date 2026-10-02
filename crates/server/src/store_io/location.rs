@@ -120,7 +120,8 @@ mod tests {
     /// ```
     #[test]
     fn a_store_inside_its_repository_is_refused() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let repo = dir.join("repo");
         std::fs::create_dir_all(repo.join("src")).unwrap();
         let inside = |store: &Path| matches!(refuse_inside(store, &repo), Err(StoreIoError::InsideRepository(..)));
@@ -145,7 +146,6 @@ mod tests {
             assert_eq!(store_for_repo(path, &repo).unwrap(), repo.join(path), "{path} is a path, never a name");
         }
         assert_eq!(store_for_repo(&dir.to_string_lossy(), &repo).unwrap(), dir);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -155,17 +155,17 @@ mod tests {
     /// ```
     #[test]
     fn project_file_round_trip() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let nested = dir.join("a").join("b");
         std::fs::create_dir_all(&nested).unwrap();
-        write_project_file(&dir, "my-store").unwrap();
+        write_project_file(dir, "my-store").unwrap();
         let (root, store) = find_project(&nested).unwrap();
         assert_eq!(root, dir);
         assert!(store.ends_with("my-store"));
-        write_project_file(&dir, "./local-store").unwrap();
+        write_project_file(dir, "./local-store").unwrap();
         let (_, store) = find_project(&nested).unwrap();
         assert_eq!(store, dir.join("./local-store"));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A link at `link` to the folder `target`: a junction on Windows, which

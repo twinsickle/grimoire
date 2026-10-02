@@ -388,14 +388,9 @@ pub fn today() -> String {
 mod tests {
     use super::*;
 
-    pub(super) fn temp() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("grimoire-store-io-{}-{}", std::process::id(), rand_suffix()));
-        std::fs::create_dir_all(&d).unwrap();
-        d
-    }
-
-    fn rand_suffix() -> u128 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    /// A fresh folder, unique however many tests run at once, removed when dropped.
+    pub(super) fn temp() -> tempfile::TempDir {
+        tempfile::Builder::new().prefix("grimoire-store-io-").tempdir().unwrap()
     }
 
     /// # Test contract
@@ -405,13 +400,13 @@ mod tests {
     /// ```
     #[test]
     fn a_failed_write_leaves_no_temporary_file() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         // A folder where the record should be: the rename fails, and the temporary file goes with it.
         std::fs::create_dir_all(dir.join("pages").join("goal.json").join("x")).unwrap();
         assert!(write_atomic(&dir.join("pages").join("goal.json"), "{}").is_err());
         let left: Vec<_> = std::fs::read_dir(dir.join("pages")).unwrap().flatten().map(|e| e.file_name()).collect();
         assert_eq!(left, vec![std::ffi::OsString::from("goal.json")], "only the folder that was there");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -421,7 +416,8 @@ mod tests {
     /// ```
     #[test]
     fn a_version_1_store_is_read_trimmed_and_migrated_by_its_first_writer() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let (store_dir, repo) = (dir.join("store"), dir.join("repo"));
         std::fs::create_dir_all(&repo).unwrap();
         // Written by an earlier build, whose tools stored strings as they were given.
@@ -457,7 +453,6 @@ mod tests {
         let (store, malformed) = load(&store_dir).unwrap();
         assert!(!store.pages.contains_key("goal"));
         assert!(malformed[0].reason.contains("title: must not begin or end with whitespace"), "{malformed:?}");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -467,7 +462,8 @@ mod tests {
     /// ```
     #[test]
     fn a_whole_store_that_would_not_load_is_not_written() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into()], languages: vec!["rust ".into()], scope: Scope::default(), order: Default::default() };
         let store = Store::new(config);
         assert!(matches!(write_all(&dir.join("store"), &store, false), Err(StoreIoError::Invalid(..))));
@@ -504,7 +500,6 @@ mod tests {
         write_all(&dir.join("store"), &good, true).unwrap();
         let back = load(&dir.join("store")).unwrap().0;
         assert!(back.starts.is_empty() && back.baseline.is_none(), "replaced whole");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A rename's writes persisted only up to each point, as a failure there
@@ -537,20 +532,20 @@ mod tests {
         assert!(matches!(steps.last(), Some(Changed::Deleted(r)) if *r == vision), "the old record goes last");
         // The store on disk after the original rename stopped after `first` steps and a rerun after `second`.
         let on_disk = |first: usize, rerun: Option<(&Store, &[Changed], usize)>| {
-            let dir = temp();
-            write_all(&dir, &store, false).unwrap();
-            persist(&dir, &store, &Changed::Started("0001".into())).unwrap();
+            let tmp = temp();
+            let dir = tmp.path();
+            write_all(dir, &store, false).unwrap();
+            persist(dir, &store, &Changed::Started("0001".into())).unwrap();
             for step in &steps[..first] {
-                persist(&dir, &done, step).unwrap();
+                persist(dir, &done, step).unwrap();
             }
             if let Some((state, again, second)) = rerun {
                 for step in &again[..second] {
-                    persist(&dir, state, step).unwrap();
+                    persist(dir, state, step).unwrap();
                 }
             }
-            let (loaded, malformed) = load(&dir).unwrap();
+            let (loaded, malformed) = load(dir).unwrap();
             assert!(malformed.is_empty(), "{malformed:?}");
-            std::fs::remove_dir_all(&dir).unwrap();
             loaded
         };
         let valid = |s: &Store, at: &str| {
@@ -601,22 +596,22 @@ mod tests {
     /// ```
     #[test]
     fn round_trip_and_malformed() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
-        write_all(&dir, &store, false).unwrap();
-        assert!(matches!(write_all(&dir, &store, false), Err(StoreIoError::Exists(_))));
+        write_all(dir, &store, false).unwrap();
+        assert!(matches!(write_all(dir, &store, false), Err(StoreIoError::Exists(_))));
         std::fs::write(dir.join("pages").join("bad.json"), "{ not json").unwrap();
         std::fs::write(dir.join("tickets").join("t.json"), r#"{"slug":"other","title":"T","kind":"change","priority":"next","status":"open","touches":[],"relies_on":[],"body":"b","decision":null}"#).unwrap();
-        let (loaded, malformed) = load(&dir).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
         assert_eq!(loaded.pages.len(), 1);
         assert_eq!(malformed.len(), 2);
         assert_eq!(malformed[0].path, "pages/bad.json");
         assert!(malformed[1].reason.contains("named `t`"));
         // persist a delete
-        persist(&dir, &loaded, &Changed::Deleted(Reference::page("overview"))).unwrap();
+        persist(dir, &loaded, &Changed::Deleted(Reference::page("overview"))).unwrap();
         assert!(!dir.join("pages").join("overview.json").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -626,14 +621,14 @@ mod tests {
     /// ```
     #[test]
     fn tolerates_a_byte_order_mark() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
-        write_all(&dir, &store, false).unwrap();
+        write_all(dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&cfg).unwrap();
         std::fs::write(&cfg, format!("\u{feff}{text}")).unwrap();
-        assert!(load(&dir).is_ok());
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(load(dir).is_ok());
     }
 
     /// # Test contract
@@ -643,54 +638,54 @@ mod tests {
     /// ```
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
             reason: "adopted at init".into(),
             findings: vec![FindingKey { rule: Rule::Unspecified, check: "no-scenario".into(), r#ref: Reference::req("x"), edge: None }],
         });
-        write_all(&dir, &store, false).unwrap();
-        let (loaded, malformed) = load(&dir).unwrap();
+        write_all(dir, &store, false).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
         assert!(malformed.is_empty());
         assert_eq!(loaded.baseline, store.baseline);
 
         std::fs::write(dir.join(BASELINE_FILE), "{ not json").unwrap();
-        let (loaded, malformed) = load(&dir).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
         assert!(loaded.baseline.is_none(), "a broken baseline holds nothing: every finding is new");
         assert_eq!(malformed[0].path, BASELINE_FILE);
 
         store.baseline = None;
-        persist(&dir, &store, &Changed::Baseline).unwrap();
+        persist(dir, &store, &Changed::Baseline).unwrap();
         assert!(!dir.join(BASELINE_FILE).exists());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn the_serving_marker_is_this_process_s_to_remove() {
-        let dir = temp();
-        write_serving(&dir, 4242).unwrap();
-        assert_eq!(read_serving(&dir), Some(Serving { port: 4242, pid: std::process::id() }));
-        remove_serving(&dir);
-        assert!(read_serving(&dir).is_none());
+        let tmp = temp();
+        let dir = tmp.path();
+        write_serving(dir, 4242).unwrap();
+        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id() }));
+        remove_serving(dir);
+        assert!(read_serving(dir).is_none());
         std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();
-        remove_serving(&dir);
-        assert!(read_serving(&dir).is_some(), "another process's marker is left alone");
-        std::fs::remove_dir_all(&dir).unwrap();
+        remove_serving(dir);
+        assert!(read_serving(dir).is_some(), "another process's marker is left alone");
     }
 
     #[test]
     fn config_persists_its_scope() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
-        write_all(&dir, &store, false).unwrap();
+        write_all(dir, &store, false).unwrap();
         let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
         assert!(!text.contains("scope"), "an empty scope is not written");
         store.config.scope = Scope { include: vec!["crates/core".into()], exclude: vec![] };
-        persist(&dir, &store, &Changed::Config).unwrap();
-        let (loaded, _) = load(&dir).unwrap();
+        persist(dir, &store, &Changed::Config).unwrap();
+        let (loaded, _) = load(dir).unwrap();
         assert_eq!(loaded.config.scope.include, vec!["crates/core".to_string()]);
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -700,9 +695,10 @@ mod tests {
     /// ```
     #[test]
     fn writes_leave_no_partial_file() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
-        write_all(&dir, &store, false).unwrap();
+        write_all(dir, &store, false).unwrap();
         let path = dir.join("pages").join("big.json");
         let reader = {
             let path = path.clone();
@@ -724,12 +720,11 @@ mod tests {
         for i in 0..200 {
             let body = "x".repeat(20_000 + i * 97);
             store.pages.insert("big".into(), Page { slug: "big".into(), title: "Big".into(), body, links: vec![] });
-            persist(&dir, &store, &Changed::Page("big".into())).unwrap();
+            persist(dir, &store, &Changed::Page("big".into())).unwrap();
         }
         assert!(reader.join().unwrap() > 0, "the reader saw records");
         let leftovers: Vec<_> = std::fs::read_dir(dir.join("pages")).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".tmp")).collect();
         assert!(leftovers.is_empty(), "no temporary file is left behind");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// # Test contract
@@ -739,21 +734,21 @@ mod tests {
     /// ```
     #[test]
     fn a_start_is_written_and_removed() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.tickets.insert("0040".into(), Ticket { slug: "0040".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
         store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
-        write_all(&dir, &store, false).unwrap();
-        persist(&dir, &store, &Changed::Started("0040".into())).unwrap();
+        write_all(dir, &store, false).unwrap();
+        persist(dir, &store, &Changed::Started("0040".into())).unwrap();
         let text = std::fs::read_to_string(dir.join(STARTS_DIR).join("0040.json")).unwrap();
         assert!(!text.contains("date"), "a start carries no date");
-        let (loaded, malformed) = load(&dir).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
         assert!(malformed.is_empty(), "{malformed:?}");
         assert_eq!(loaded.starts, store.starts);
         store.starts.remove("0040");
-        persist(&dir, &store, &Changed::Closed("0040".into())).unwrap();
+        persist(dir, &store, &Changed::Closed("0040".into())).unwrap();
         assert!(!dir.join(STARTS_DIR).join("0040.json").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -5,7 +5,6 @@
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,17 +15,12 @@ use grimoire_server::{http, store_io};
 use serde_json::{json, Value};
 
 struct Served {
-    dir: PathBuf,
     port: u16,
     daemon: Arc<Daemon>,
     /// Held, not read: dropping it stops the server.
     _runtime: tokio::runtime::Runtime,
-}
-
-impl Drop for Served {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
+    /// Held, not read, and last, so the server has stopped before its folder is removed.
+    _tmp: tempfile::TempDir,
 }
 
 /// A store over a one-file repository, served with no UI.
@@ -41,8 +35,8 @@ fn serve_with(ui: http::Ui) -> Served {
 
 /// The same store, served with the given UI behind the given policy.
 fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> Served {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("grimoire-serving-{}-{nanos}", std::process::id()));
+    let tmp = tempfile::Builder::new().prefix("grimoire-serving-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
     let repo = dir.join("repo");
     std::fs::create_dir_all(repo.join("src")).unwrap();
     std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"s\"\nversion = \"0.1.0\"\n").unwrap();
@@ -56,7 +50,7 @@ fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> S
     let port = listener.local_addr().unwrap().port();
     let app = http::router(daemon.clone(), ui, policy);
     runtime.spawn(async move { axum::serve(listener, app).await });
-    Served { dir, port, daemon, _runtime: runtime }
+    Served { port, daemon, _runtime: runtime, _tmp: tmp }
 }
 
 /// One HTTP/1.0 exchange: the status code and the body.
@@ -305,8 +299,8 @@ fn get_runs_reads_only() {
 /// ```
 #[test]
 fn a_ui_directory_overrides_and_routes_land_on_its_index() {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("grimoire-ui-{}-{nanos}", std::process::id()));
+    let tmp = tempfile::Builder::new().prefix("grimoire-ui-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
     std::fs::create_dir_all(dir.join("assets")).unwrap();
     std::fs::write(dir.join("index.html"), "<div id=\"override\"></div>").unwrap();
     std::fs::write(dir.join("assets").join("app.js"), "run()").unwrap();
@@ -319,7 +313,6 @@ fn a_ui_directory_overrides_and_routes_land_on_its_index() {
     let (_, head, body) = request_as(s.port, "GET", "/assets/app.js", None, "127.0.0.1", "");
     assert_eq!(body, "run()");
     assert!(head.to_ascii_lowercase().contains("javascript"), "{head}");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// # Test contract

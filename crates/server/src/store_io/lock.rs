@@ -81,7 +81,8 @@ mod tests {
     /// ```
     #[test]
     fn one_lock_holder_at_a_time() {
-        let dir = temp();
+        let tmp = temp();
+        let dir = tmp.path();
         let (store_dir, repo) = (dir.join("store"), dir.join("repo"));
         std::fs::create_dir_all(&repo).unwrap();
         // Not a store yet: lock refuses and makes nothing, lock_new takes it for a store being written.
@@ -113,6 +114,5 @@ mod tests {
         assert!(matches!(lock(&inside), Err(StoreIoError::InsideRepository(..))));
         assert!(!inside.join(LOCK_FILE).exists());
         assert!(!dir.join("missing").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

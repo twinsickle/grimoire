@@ -14,12 +14,8 @@ struct Project {
     dir: PathBuf,
     repo: PathBuf,
     store: PathBuf,
-}
-
-impl Drop for Project {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
+    /// Held, not read: dropping it removes the folder.
+    _tmp: tempfile::TempDir,
 }
 
 const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Say a.\",\"criteria\":[]}\n//! ```\npub fn a() {}\n";
@@ -27,15 +23,15 @@ const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpos
 /// A repository with two modules and no contracts, initialised with a store
 /// beside it.
 fn project() -> (Project, Output) {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("grimoire-cli-{}-{nanos}", std::process::id()));
+    let tmp = tempfile::Builder::new().prefix("grimoire-cli-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
     let repo = dir.join("repo");
     std::fs::create_dir_all(repo.join("src")).unwrap();
     std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"c\"\nversion = \"0.1.0\"\n").unwrap();
     std::fs::write(repo.join("src").join("lib.rs"), "pub mod a;\n").unwrap();
     std::fs::write(repo.join("src").join("a.rs"), "pub fn a() {}\n").unwrap();
     let store = dir.join("store");
-    let p = Project { dir, repo, store };
+    let p = Project { dir, repo, store, _tmp: tmp };
     let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
     assert!(init.status.success(), "{}", text(&init));
     (p, init)
@@ -210,8 +206,8 @@ fn check_and_the_lint_tool_report_the_same_findings() {
 
 /// A repository before init: its files, and where its store will go.
 fn bare_repo() -> Project {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("grimoire-cli-u-{}-{nanos}", std::process::id()));
+    let tmp = tempfile::Builder::new().prefix("grimoire-cli-u-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
     let repo = dir.join("repo");
     std::fs::create_dir_all(repo.join("src")).unwrap();
     std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
@@ -219,7 +215,7 @@ fn bare_repo() -> Project {
     std::fs::write(repo.join("src").join("lib.rs"), CONTRACTED).unwrap();
     std::fs::write(repo.join("CLAUDE.md"), "# Mine\n").unwrap();
     let store = dir.join("store");
-    Project { dir, repo, store }
+    Project { dir, repo, store, _tmp: tmp }
 }
 
 /// # Test contract

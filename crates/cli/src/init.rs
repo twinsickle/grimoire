@@ -219,11 +219,9 @@ mod tests {
     use super::*;
     use super::guidance::{MARK_END, MARK_START};
 
-    pub(super) fn temp() -> PathBuf {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("grimoire-init-{}-{nanos}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
-        d
+    /// A fresh folder, unique however many tests run at once, removed when dropped.
+    pub(super) fn temp() -> tempfile::TempDir {
+        tempfile::Builder::new().prefix("grimoire-init-").tempdir().unwrap()
     }
 
     /// # Test contract
@@ -233,13 +231,14 @@ mod tests {
     /// ```
     #[test]
     fn installs_and_merges() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
         std::fs::write(repo.join(".mcp.json"), r#"{"mcpServers":{"other":{"type":"stdio","command":"x"}}}"#).unwrap();
 
         std::fs::write(repo.join("CLAUDE.md"), "# My project\n\nUse tabs.\n").unwrap();
 
-        let wrote = install(&repo, 4343).unwrap();
+        let wrote = install(repo, 4343).unwrap();
         // Three skill files per harness, two guidance files, .mcp.json, .codex/config.toml, the hook.
         assert_eq!(wrote.len(), 11);
         let noted: Vec<_> = wrote.iter().filter(|w| !matches!(w, Wrote::Written(_))).collect();
@@ -266,12 +265,11 @@ mod tests {
         assert!(hook.contains("exec grimoire check"));
 
         // Second run: idempotent, hook recognised as ours, one section not two.
-        let again = install(&repo, 4343).unwrap();
+        let again = install(repo, 4343).unwrap();
         assert!(again.iter().all(|w| matches!(w, Wrote::Written(_) | Wrote::Noted { .. })));
         let claude = std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap();
         assert_eq!(claude.matches(MARK_START).count(), 1);
         assert!(claude.starts_with("# My project\n\nUse tabs.\n"));
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 
     /// # Test contract
@@ -281,15 +279,15 @@ mod tests {
     /// ```
     #[test]
     fn each_guidance_file_names_its_own_skill() {
-        let repo = temp();
-        install(&repo, 4242).unwrap();
+        let tmp = temp();
+        let repo = tmp.path();
+        install(repo, 4242).unwrap();
         let claude = std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap();
         let agents = std::fs::read_to_string(repo.join("AGENTS.md")).unwrap();
         assert!(claude.contains("`.claude/skills/grimoire/SKILL.md`") && !claude.contains(".agents/"), "{claude}");
         assert!(agents.contains("`.agents/skills/grimoire/SKILL.md`") && !agents.contains(".claude/"), "{agents}");
         assert!(!claude.contains("{skill}") && !agents.contains("{skill}"), "the placeholder is filled");
         assert!(GUIDANCE_MD.matches("{skill}").count() == 1, "the source names the skill once, by placeholder");
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 
     /// # Test contract
@@ -299,8 +297,9 @@ mod tests {
     /// ```
     #[test]
     fn every_harness_gets_the_skill_and_the_tools() {
-        let repo = temp();
-        let wrote = install(&repo, 4343).unwrap();
+        let tmp = temp();
+        let repo = tmp.path();
+        let wrote = install(repo, 4343).unwrap();
         for harness in &HARNESSES {
             for (rel, text) in SKILL_FILES {
                 let on_disk = std::fs::read_to_string(repo.join(format!("{}/{rel}", harness.skill_dir))).unwrap();
@@ -315,9 +314,8 @@ mod tests {
         let paths: Vec<&PathBuf> = wrote.iter().map(|w| match w {
             Wrote::Written(p) | Wrote::Noted { path: p, .. } | Wrote::Skipped { path: p, .. } => p,
         }).collect();
-        assert!(paths.iter().all(|p| p.starts_with(&repo)), "{paths:?}");
+        assert!(paths.iter().all(|p| p.starts_with(repo)), "{paths:?}");
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Noted { path, note } if path.ends_with(CODEX_REL) && note.contains("trusted"))));
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 
     /// # Test contract
@@ -327,13 +325,13 @@ mod tests {
     /// ```
     #[test]
     fn a_refused_file_leaves_the_repository_as_it_was() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".codex")).unwrap();
         std::fs::write(repo.join(CODEX_REL), "mcp_servers = { docs = { url = \"x\" } }\n").unwrap();
-        let before = walk(&repo);
-        assert!(matches!(install(&repo, 4242), Err(InitError::BadToml(..))));
-        assert_eq!(walk(&repo), before, "nothing is written before every file's text is known");
-        std::fs::remove_dir_all(&repo).unwrap();
+        let before = walk(repo);
+        assert!(matches!(install(repo, 4242), Err(InitError::BadToml(..))));
+        assert_eq!(walk(repo), before, "nothing is written before every file's text is known");
     }
 
     /// Criterion project-agnostic: what init installs is the same for every
@@ -410,21 +408,21 @@ mod tests {
     /// ```
     #[test]
     fn leaves_foreign_hook_alone() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
         std::fs::write(repo.join(HOOK_REL), "#!/bin/sh\nnpm test\n").unwrap();
-        let wrote = install(&repo, 4242).unwrap();
+        let wrote = install(repo, 4242).unwrap();
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { .. })));
         assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), "#!/bin/sh\nnpm test\n");
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 
     #[test]
     fn no_git_is_a_note_not_an_error() {
-        let repo = temp();
-        let wrote = install(&repo, 4242).unwrap();
+        let tmp = temp();
+        let repo = tmp.path();
+        let wrote = install(repo, 4242).unwrap();
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { note, .. } if note.contains("not a git repository"))));
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 
     pub(super) fn walk(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {

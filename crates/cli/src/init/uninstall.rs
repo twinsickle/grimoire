@@ -214,7 +214,8 @@ mod tests {
     /// ```
     #[test]
     fn uninstall_puts_the_repository_back() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
         // Compact, in its own key order, with a key of its own: kept as data, not as layout.
         std::fs::write(repo.join(".mcp.json"), r#"{"mcpServers":{"other":{"type":"stdio","command":"x"}},"z":1}"#).unwrap();
@@ -226,8 +227,8 @@ model = \"o4\"
 ";
         std::fs::create_dir_all(repo.join(".codex")).unwrap();
         std::fs::write(repo.join(CODEX_REL), codex_own).unwrap();
-        install(&repo, 4242).unwrap();
-        let undone = uninstall(&repo);
+        install(repo, 4242).unwrap();
+        let undone = uninstall(repo);
         assert_eq!(std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap(), "# My project\n\nUse tabs.\n", "a person's text is back exactly");
         assert!(!repo.join("AGENTS.md").exists(), "a file init created holds nothing else, so it goes");
         let mcp: Value = serde_json::from_str(&std::fs::read_to_string(repo.join(".mcp.json")).unwrap()).unwrap();
@@ -254,7 +255,7 @@ model = \"o4\"
         ]);
         assert_eq!(undone, expected);
         // A second run: every path accounted for, nothing done.
-        let again = uninstall(&repo);
+        let again = uninstall(repo);
         assert_eq!(again.len(), 11, "{again:?}");
         assert!(again.iter().all(|u| matches!(u, Undone::Left { .. } | Undone::Absent(_))), "{again:?}");
     }
@@ -262,27 +263,30 @@ model = \"o4\"
     #[test]
     fn uninstall_leaves_a_hook_that_is_not_inits_as_installed() {
         for own in ["#!/bin/sh\nnpm test\ngrimoire check\n".to_string(), hook_script().replace("exec grimoire check", "npm test\nexec grimoire check")] {
-            let repo = temp();
+            let tmp = temp();
+            let repo = tmp.path();
             std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
             std::fs::write(repo.join(HOOK_REL), &own).unwrap();
-            let undone = uninstall(&repo);
+            let undone = uninstall(repo);
             assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), own, "an edited hook stays, even with init's marker in it");
             assert!(undone.iter().any(|u| matches!(u, Undone::Left { path, note } if path.ends_with("pre-commit") && note.contains("grimoire check"))), "{undone:?}");
         }
         // init's script, even with Windows line endings, is init's.
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
         std::fs::write(repo.join(HOOK_REL), hook_script().replace('\n', "\r\n")).unwrap();
-        uninstall(&repo);
+        uninstall(repo);
         assert!(!repo.join(HOOK_REL).exists());
     }
 
     #[test]
     fn uninstall_empties_what_init_made_from_nothing() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        install(&repo, 4242).unwrap();
-        uninstall(&repo);
+        install(repo, 4242).unwrap();
+        uninstall(repo);
         assert!(!repo.join(".mcp.json").exists());
         assert!(!repo.join("CLAUDE.md").exists());
         assert!(!repo.join(".claude").exists());
@@ -297,12 +301,13 @@ model = \"o4\"
     /// ```
     #[test]
     fn nothing_changes_until_the_plan_is_applied() {
-        let repo = temp();
+        let tmp = temp();
+        let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        install(&repo, 4242).unwrap();
-        let before: Vec<_> = walk(&repo);
-        let plan = plan_uninstall(&repo);
-        assert_eq!(walk(&repo), before, "planning only reads");
+        install(repo, 4242).unwrap();
+        let before: Vec<_> = walk(repo);
+        let plan = plan_uninstall(repo);
+        assert_eq!(walk(repo), before, "planning only reads");
         assert!(plan.report().iter().any(|u| matches!(u, Undone::Removed(_))));
     }
 
@@ -313,19 +318,19 @@ model = \"o4\"
     /// ```
     #[test]
     fn a_failure_part_way_says_what_was_done() {
-        let repo = temp();
-        install(&repo, 4242).unwrap();
-        let plan = plan_uninstall(&repo);
+        let tmp = temp();
+        let repo = tmp.path();
+        install(repo, 4242).unwrap();
+        let plan = plan_uninstall(repo);
         // A folder where the plan expects to remove init's guidance file: that step fails.
         std::fs::remove_file(repo.join("AGENTS.md")).unwrap();
         std::fs::create_dir(repo.join("AGENTS.md")).unwrap();
-        let stopped = plan.apply(&repo).unwrap_err();
+        let stopped = plan.apply(repo).unwrap_err();
         assert!(matches!(&stopped.error, InitError::Io(p, _) if p.ends_with("AGENTS.md")), "{:?}", stopped.error);
         // What came before it in the plan was done, and is reported; nothing after it was touched.
         assert!(stopped.done.iter().all(|u| !matches!(u, Undone::Removed(p) | Undone::Changed(p) if p.ends_with("AGENTS.md") || p.ends_with(".mcp.json"))), "{:?}", stopped.done);
         assert!(stopped.done.contains(&Undone::Removed(repo.join(".claude/skills/grimoire/SKILL.md"))), "{:?}", stopped.done);
         assert!(!repo.join(".claude/skills/grimoire/SKILL.md").exists());
         assert!(repo.join(".mcp.json").is_file(), "the steps after the failure were not run");
-        std::fs::remove_dir_all(&repo).unwrap();
     }
 }

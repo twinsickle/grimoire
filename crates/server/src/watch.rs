@@ -181,8 +181,8 @@ mod tests {
     /// ```
     #[test]
     fn ignored_paths_never_reach_the_daemon() {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("grimoire-watch-{}-{nanos}", std::process::id()));
+        let tmp = tempfile::Builder::new().prefix("grimoire-watch-").tempdir().unwrap();
+        let dir = tmp.path().to_path_buf();
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("web")).unwrap();
         std::fs::create_dir_all(dir.join(".git").join("info")).unwrap();
@@ -208,6 +208,5 @@ mod tests {
         assert!(i.ignores(&dir.join("web").join("dist").join("x.js")), "read once and kept");
         i.forget(&dir.join("web").join(".gitignore"));
         assert!(!i.ignores(&dir.join("web").join("dist").join("x.js")), "read again after the change");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
