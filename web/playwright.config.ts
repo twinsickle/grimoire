@@ -26,7 +26,12 @@ export default defineConfig({
     actionTimeout: 10_000,
   },
   expect: {
-    toHaveScreenshot: { maxDiffPixelRatio: 0.005, animations: "disabled", caret: "hide" },
+    // Any pixel more than one colour level off fails. The run-to-run noise is
+    // anti-aliasing at most one level off on each channel (a YIQ distance of
+    // 0.0038), which 0.005 ignores; two levels is 0.0076, and one changed glyph
+    // moves 3 or 4 pixels at full contrast (measured 2026-10-01). Pixels the
+    // comparator classes as anti-aliasing are left out whatever their colour.
+    toHaveScreenshot: { threshold: 0.005, maxDiffPixels: 0, animations: "disabled", caret: "hide" },
   },
   webServer: {
     command: "node serve.mjs",
