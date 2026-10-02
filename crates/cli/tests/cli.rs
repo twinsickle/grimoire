@@ -3,6 +3,7 @@
 // An integration test is not cfg(test), so clippy's tests exemption misses it.
 #![allow(clippy::unwrap_used)]
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output};
@@ -23,6 +24,14 @@ const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpos
 /// A repository with two modules and no contracts, initialised with a store
 /// beside it.
 fn project() -> (Project, Output) {
+    let p = uninitialised();
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    (p, init)
+}
+
+/// The same repository before init, and where its store will go.
+fn uninitialised() -> Project {
     let tmp = tempfile::Builder::new().prefix("grimoire-cli-").tempdir().unwrap();
     let dir = tmp.path().to_path_buf();
     let repo = dir.join("repo");
@@ -31,10 +40,7 @@ fn project() -> (Project, Output) {
     std::fs::write(repo.join("src").join("lib.rs"), "pub mod a;\n").unwrap();
     std::fs::write(repo.join("src").join("a.rs"), "pub fn a() {}\n").unwrap();
     let store = dir.join("store");
-    let p = Project { dir, repo, store, _tmp: tmp };
-    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
-    assert!(init.status.success(), "{}", text(&init));
-    (p, init)
+    Project { dir, repo, store, _tmp: tmp }
 }
 
 fn run(cwd: &Path, args: &[&str]) -> Output {
@@ -142,14 +148,124 @@ fn the_store_is_found_from_anywhere() {
 /// ```
 #[test]
 fn only_init_writes_the_repository() {
-    let (p, _) = project();
-    let after_init = files(&p.repo);
-    assert!(after_init.iter().any(|f| f.ends_with(".grimoire.toml")), "init wrote the integration");
-    run(&p.repo, &["check"]);
-    run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]);
-    run(&p.repo, &["adopt", "--reason", "again"]);
-    run(&p.repo, &["tool", "status"]);
-    assert_eq!(files(&p.repo), after_init, "no other command writes into the repository");
+    let p = uninitialised();
+    // A git directory, so init writes its hook too.
+    std::fs::create_dir_all(p.repo.join(".git").join("hooks")).unwrap();
+    let before = state(&p.repo);
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    let after_init = state(&p.repo);
+    // Every file's modified time set well into the past, so a later write shows however coarse the clock.
+    let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+    for (at, e) in &after_init {
+        if matches!(e, Entry::File(..)) {
+            std::fs::File::options().write(true).open(p.repo.join(at)).unwrap().set_modified(past).unwrap();
+        }
+    }
+    let reported: BTreeSet<String> = String::from_utf8_lossy(&init.stdout)
+        .lines()
+        .filter_map(|l| l.strip_prefix("wrote   "))
+        .map(|l| relative(&p.repo, l.split(": ").next().unwrap_or(l)))
+        .collect();
+    // The whole integration, as req:cli-repository-untouched names it.
+    let integration: BTreeSet<String> = [
+        ".grimoire.toml",
+        ".claude/skills/grimoire/SKILL.md",
+        ".claude/skills/grimoire/references/contracts.md",
+        ".claude/skills/grimoire/references/changes.md",
+        ".agents/skills/grimoire/SKILL.md",
+        ".agents/skills/grimoire/references/contracts.md",
+        ".agents/skills/grimoire/references/changes.md",
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".mcp.json",
+        ".codex/config.toml",
+        ".git/hooks/pre-commit",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    assert_eq!(reported, integration, "init reports writing the whole integration");
+    // init changes exactly the files it reports, and creates no folder but those holding them.
+    let (files, folders): (BTreeSet<String>, BTreeSet<String>) = changed(&before, &after_init).into_iter().partition(|f| matches!(after_init.get(f), Some(Entry::File(..))));
+    assert_eq!(files, reported, "init writes the integration it reports, and nothing else");
+    for f in &folders {
+        assert!(!before.contains_key(f) && reported.iter().any(|r| r.starts_with(&format!("{f}/"))), "init made {f}, which holds nothing it reports");
+    }
+    // Every other command leaves every folder, byte and modified time as it was.
+    let scaffolded = p.dir.join("scaffolded");
+    let mut now = state(&p.repo);
+    for args in [
+        &["check"][..],
+        &["tool", "lint"],
+        &["tool", "outline"],
+        &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#],
+        &["tool", "file_ticket", A_TICKET],
+        &["adopt", "--reason", "again"],
+        &["tool", "status"],
+        &["scaffold", "--store", &scaffolded.to_string_lossy()],
+    ] {
+        let out = run(&p.repo, args);
+        assert!(out.status.success(), "{args:?}: {}", text(&out));
+        let after = state(&p.repo);
+        assert_eq!(changed(&now, &after), BTreeSet::new(), "{args:?} wrote into the repository");
+        now = after;
+    }
+    assert!(scaffolded.join("grimoire.json").is_file(), "scaffold wrote its store, outside the repository");
+
+    // A repository with its own pre-commit hook: init leaves it exactly as it was and says so.
+    let own = uninitialised();
+    let hook = own.repo.join(".git").join("hooks").join("pre-commit");
+    std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    std::fs::write(&hook, "#!/bin/sh\ncargo test\n").unwrap();
+    std::fs::File::options().write(true).open(&hook).unwrap().set_modified(past).unwrap();
+    let before = state(&own.repo);
+    let init = run(&own.repo, &["init", "--store", &own.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    let out = String::from_utf8_lossy(&init.stdout);
+    assert!(out.lines().any(|l| l.starts_with("skipped ") && relative(&own.repo, l).contains(".git/hooks/pre-commit")), "{out}");
+    assert!(!out.lines().any(|l| l.starts_with("wrote ") && l.contains("pre-commit")), "{out}");
+    assert_eq!(state(&own.repo).get(".git/hooks/pre-commit"), before.get(".git/hooks/pre-commit"), "the person's hook is untouched, to the modified time");
+}
+
+/// One entry under a repository: a folder, or a file with its bytes,
+/// modified time and read-only flag. A folder's own modified time is left
+/// out: NTFS updates it lazily, so it moves after the fixture's writes
+/// whatever runs next.
+#[derive(Debug, PartialEq, Eq)]
+enum Entry {
+    Folder,
+    File(Vec<u8>, std::time::SystemTime, bool),
+}
+
+/// Every folder and file under `dir`, by its path relative to `dir` with forward slashes.
+fn state(dir: &Path) -> BTreeMap<String, Entry> {
+    let mut out = BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let (path, meta) = (e.path(), e.metadata().unwrap());
+            let at = relative(dir, &path.to_string_lossy());
+            if meta.is_dir() {
+                out.insert(at, Entry::Folder);
+                stack.push(path);
+            } else {
+                out.insert(at, Entry::File(std::fs::read(&path).unwrap(), meta.modified().unwrap(), meta.permissions().readonly()));
+            }
+        }
+    }
+    out
+}
+
+/// The paths added, removed or changed between two states.
+fn changed(before: &BTreeMap<String, Entry>, after: &BTreeMap<String, Entry>) -> BTreeSet<String> {
+    before.keys().chain(after.keys()).filter(|k| before.get(*k) != after.get(*k)).cloned().collect()
+}
+
+/// A path under the repository as init prints it, relative and with forward slashes.
+fn relative(repo: &Path, path: &str) -> String {
+    let (repo, path) = (repo.to_string_lossy().replace('\\', "/"), path.replace('\\', "/"));
+    path.strip_prefix(&format!("{repo}/")).unwrap_or(&path).to_string()
 }
 
 struct Serving(Child);
