@@ -5,7 +5,7 @@ This project's grimoire (pages, requirements, the module contracts in the
 code) is the truth of what it is meant to do. Code and grimoire change in the
 same piece of work; the pre-commit hook checks they agree.
 
-- Orient first: `outline` at depth 2, then the pages the root links,
+- Orient first: `outline` at depth 2, then the pages each root links,
   in their order, then your area. `get` a module before opening its files.
 - Every module in the contract scope carries a `# Module contract`. New
   module, new contract; changed guarantee, changed criterion; new criterion, a
@@ -57,3 +57,12 @@ repository only.
   `grimoire check` alone; `init` owns it.
 - The skill and its `references/` are installed verbatim into other
   repositories. Nothing about this repository goes in them; it goes here.
+- Review before close: the handbook's `review` page carries the rule; this is
+  how it is run here. Run Codex read-only,
+  `codex exec -s read-only -C <repo> -o <out.md> --json - < <prompt>`, with
+  a prompt naming the ticket, the goal page and the nodes it touched and
+  relied on, telling it to read the grimoire only through the read-only
+  tools over HTTP (never the store's files, never a write tool) and to
+  ignore the untracked `.codex/`. Check each finding against the code
+  before acting. Say what the review found and what was done in the
+  ticket's closing decision, and in the commit message when there is one.

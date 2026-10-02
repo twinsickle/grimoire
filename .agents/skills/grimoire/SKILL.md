@@ -72,7 +72,7 @@ it created in `warnings`. Every warning is work to do now.
 ## Orienting
 
 When the task is unclear or new to the session: `status`, then `outline`
-(depth 2), then `board`. Read the pages the root links, in their order, before
+(depth 2), then `board`. Read the pages each root links, in their order, before
 reading code.
 
 **Before opening a source file, `get` its module.** The module node gives
@@ -148,7 +148,14 @@ the code.
    changed but whose body did not is the failure this step exists to catch.
    Fix it, or remove the reference from `touches` with `update_ticket` and
    say why it did not need changing.
-4. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
+4. If the project documents a review step (in its `CLAUDE.md` or
+   `AGENTS.md`, a skill, or a hook), run it now, before closing: a finding
+   that holds is fixed now or filed as its own ticket, and the decision
+   below says what the review found. Grimoire has no opinion on what the
+   review is.
+   If the project has a visual check for a user interface, run it and look
+   at the output; a type check proves nothing about how a view renders.
+5. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
    paragraph: what was chosen and why, written so someone reading it in a
    year without the ticket body understands. It returns `findings`, the new
    findings on the nodes the ticket touched; if any are present, fix them and
@@ -159,11 +166,6 @@ the code.
    ticket, since this one is closed) or the node did not need changing
    (say so in the decision, and next time remove it from `touches` before
    closing). `null` means the ticket was started before snapshots existed.
-5. If the project documents a review step (in its `CLAUDE.md` or
-   `AGENTS.md`, a skill, or a hook), run it now. Grimoire has no opinion on
-   what the review is.
-   If the project has a visual check for a user interface, run it and look
-   at the output; a type check proves nothing about how a view renders.
 6. Commit the code and the grimoire changes together only when the user has
    asked for a commit. The store is outside the repository; the commit is the
    code and its contracts.
