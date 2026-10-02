@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, architecture, constraints, conventions and glossary pages seeded with prompting text, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture, constraints and conventions pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,13 +15,15 @@ pub const ARCHITECTURE_SLUG: &str = "architecture";
 
 /// The story pages every grimoire starts with, in reading order, with the
 /// prompt each carries until someone writes it. The convention: what this
-/// is, what it does, and how.
-pub const STORY: [(&str, &str, &str); 5] = [
-    ("goal", "Goal", "What this project is and what it is not, as short statements a reader can check against the code. No motivation, no history, no milestones. This is the first page a person or agent reads."),
+/// is, what it promises, the words it uses, how it is built, what must hold
+/// and how things are done. The first three read without the last three.
+pub const STORY: [(&str, &str, &str); 6] = [
+    ("goal", "Goal", "What this project is and what it is not, for the people who use it, as short statements a reader can check against the code. This is the shallowest depth: how it is built belongs to the architecture, what it promises to the guarantees. No motivation, no history, no milestones. This is the first page a person or agent reads."),
+    ("guarantees", "Guarantees", "What this project promises the people who use it: one page per guarantee beneath this one, each linking the requirements that make the promise. A guarantee is intent the code is held to; it may be unheld, and then it says so."),
+    ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each. It defines the words the pages after it use; the goal and the guarantees read without it."),
     (ARCHITECTURE_SLUG, "Architecture", "A high-level inventory of what exists and why: one line saying what the system is; the pipeline, how data moves through the parts; the layers with their responsibilities and what each is built from; the design principles behind them; and the physical layout. Every line checkable against the repository. The pages below are its areas, one per module group, seeded from the module contracts."),
     (crate::lint::CONSTRAINTS_PAGE, "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
     ("conventions", "Conventions", "How things are done here, as opposed to what must hold: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong; a convention a lint could check belongs under constraints as a requirement instead."),
-    ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each."),
 ];
 
 /// Turn any path-ish text into a slug, or `node` if nothing survives.
@@ -278,13 +280,22 @@ mod tests {
         let s = scaffold(&x, "C:/repo", &["rust".into()]);
         assert!(s.pages.contains_key("overview"));
         assert_eq!(s.requirements.len(), 3);
-        // The story outline: root links the four story pages in order, and
+        // The story outline: root links the six story pages in order, and
         // the top-level group hangs under architecture.
         let root_links: Vec<String> = s.pages["overview"].links.iter().map(|r| r.to_string()).collect();
-        assert_eq!(root_links, vec!["page:goal", "page:architecture", "page:constraints", "page:conventions", "page:glossary"]);
+        assert_eq!(root_links, vec!["page:goal", "page:guarantees", "page:glossary", "page:architecture", "page:constraints", "page:conventions"]);
         assert!(s.pages["architecture"].links.iter().any(|r| r.kind == Kind::Page && r.id == "src-a"), "{:?}", s.pages["architecture"].links);
         assert!(s.pages["overview"].links.iter().all(|r| r.id != "src-a"));
-        assert!(s.pages["goal"].body.contains("What this project is and what it is not"));
+        // The prompts name the depths: the goal is for the people who use the
+        // project and leaves how it is built to the architecture; a guarantee
+        // may be unheld; the glossary defines the words the later pages use.
+        let goal = &s.pages["goal"].body;
+        for clause in ["What this project is and what it is not", "for the people who use it", "shallowest depth", "belongs to the architecture", "to the guarantees"] {
+            assert!(goal.contains(clause), "the goal's prompt says {clause:?}: {goal}");
+        }
+        let guarantees = &s.pages["guarantees"].body;
+        assert!(guarantees.contains("promises the people who use it") && guarantees.contains("may be unheld"), "{guarantees}");
+        assert!(s.pages["glossary"].body.contains("the words the pages after it use"), "{}", s.pages["glossary"].body);
         let g = Graph::build(&s, &x, &[]);
         let f = lint(&g, &[Rule::Dangling]);
         assert!(f.is_empty(), "{f:?}");

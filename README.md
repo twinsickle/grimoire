@@ -7,8 +7,8 @@ agents through MCP.
 
 Grimoire's own grimoire is its design document and lives in its own store,
 not in this repository: run the daemon (below) and read it at
-http://127.0.0.1:4242, starting from the goal, architecture, constraints, conventions and
-glossary pages, or ask it over the tools. The tool surface and the store
+http://127.0.0.1:4242, starting from the pages the root links, in their order, or ask it over the
+tools. The tool surface and the store
 schema are requirements in the grimoire too, under the Tools and Store pages,
 and `GET /api/tools` on a running daemon lists every tool with its input
 schema. [examples/](./examples/) holds the notes on other projects it is
