@@ -57,7 +57,7 @@ repository only.
   `grimoire check` alone; `init` owns it.
 - The skill and its `references/` are installed verbatim into other
   repositories. Nothing about this repository goes in them; it goes here.
-- Review before close: the handbook's `review` page carries the rule; this is
+- Review before close: the rites' `review` page carries the rule; this is
   how it is run here. Run Codex read-only,
   `codex exec -s read-only -C <repo> -o <out.md> --json - < <prompt>`, with
   a prompt naming the ticket, the goal page and the nodes it touched and
