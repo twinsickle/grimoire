@@ -1,4 +1,8 @@
 {
+  "roots": [
+    "overview",
+    "handbook"
+  ],
   "pages": [
     {
       "slug": "overview",
@@ -42,6 +46,20 @@
       "links": [
         "req:ready-writes-nothing"
       ]
+    },
+    {
+      "slug": "handbook",
+      "title": "Handbook",
+      "body": "A second story beside the first, at the top of its own tree.",
+      "links": [
+        "page:runbook"
+      ]
+    },
+    {
+      "slug": "runbook",
+      "title": "Runbook",
+      "body": "How the fixture is run, under the second root.",
+      "links": []
     }
   ],
   "requirements": [

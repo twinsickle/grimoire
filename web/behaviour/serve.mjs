@@ -1,6 +1,7 @@
 // Serve the behaviour fixture: copy its repository to a temporary directory
 // (the sources are kept as .rs.txt so Grimoire's own extraction never reads
-// them), initialise a store there, fill it from store.json through the tools,
+// them), initialise a store there, fill it from store.json through the tools
+// (its pages under two roots),
 // adopt what it finds as the baseline, add the new work, and run `grimoire serve` with the built UI until Playwright stops it.
 //
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
@@ -50,6 +51,8 @@ function grimoire(...args) {
 grimoire("init", "--store", store);
 const records = JSON.parse(readFileSync(join(here, "fixture", "store.json"), "utf8"));
 for (const page of records.pages) grimoire("tool", "put_page", JSON.stringify(page));
+// More than one root, so the views show every root and not only the first.
+grimoire("tool", "configure", JSON.stringify({ roots: records.roots }));
 for (const req of records.requirements) grimoire("tool", "put_requirement", JSON.stringify(req));
 for (const { close, ...ticket } of records.tickets) {
   const ref = JSON.parse(grimoire("tool", "file_ticket", JSON.stringify(ticket))).node.ref;

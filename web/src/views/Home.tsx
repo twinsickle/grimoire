@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the grimoire's own level is shown: the root page drawn as any page is, with the whole grimoire's rollup bars and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists its pages nested and ordered as its tree, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
+ * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the first root's level is shown: the first root page drawn as any page is, with its rollup bars (the whole grimoire's when there is one root) and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
  * ```
  */
 
@@ -22,20 +22,33 @@ export function HomeView({ at }: { at: At }) {
   const { data, error } = useQuery(() => api.outline({ depth: ALL, pages_only: true }), []);
   if (error) return <ErrorBox error={error} />;
   if (!data) return <p className="text-fg-dim">Loading…</p>;
-  const root = data.roots[0];
-  if (!root) return <p className={empty}>No root page. The store's `roots` names none that exist.</p>;
-  const selected = "page" in at ? at.page : "unplaced" in at ? "unplaced" : root.ref;
-  const path = "page" in at ? pathTo(root, at.page) : null;
+  // The first root is the grimoire's root, at /; a later one is read by selecting it.
+  const first = data.roots[0];
+  if (!first) return <p className={empty}>No root page. The store's `roots` names none that exist.</p>;
+  const path = "page" in at ? pathIn(data.roots, at.page) : null;
+  // The rail marks the one entry the pane shows: the path to it, since a page linked twice appears twice.
+  const selected = "unplaced" in at ? "unplaced" : "root" in at ? trailOf([first]) : path ? trailOf(path) : "";
   return (
     <div className="grid grid-cols-[250px_minmax(0,1fr)] gap-8 items-start max-w-[150ch] mx-auto">
-      <Rail root={root} unplaced={data.unplaced} selected={selected} />
+      <Rail roots={data.roots} unplaced={data.unplaced} selected={selected} />
       <div className="min-w-0">
-        {"root" in at && <PagePane at={root.ref} above={[]} />}
+        {"root" in at && <PagePane at={first.ref} above={[]} home={first.ref} />}
         {"unplaced" in at && <UnplacedPane modules={data.unplaced} />}
-        {"page" in at && (path ? <PagePane at={at.page} above={path.slice(0, -1)} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
+        {"page" in at && (path ? <PagePane at={at.page} above={path.slice(0, -1)} home={first.ref} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
       </div>
     </div>
   );
+}
+
+/** The trees from a root down to `ref`: a root is itself; any other page is under the first root that reaches it. */
+function pathIn(roots: Tree[], ref: Ref): Tree[] | null {
+  const root = roots.find((r) => r.ref === ref);
+  if (root) return [root];
+  for (const r of roots) {
+    const p = pathTo(r, ref);
+    if (p) return p;
+  }
+  return null;
 }
 
 /** The trees from the root down to `ref`, first found in link order. */
@@ -50,15 +63,20 @@ function pathTo(t: Tree, ref: Ref): Tree[] | null {
 
 const pages = (t: Tree) => t.children.filter((c) => kindOf(c.ref) === "page");
 
+/** A rail entry's identity: the pages from its root down to it. */
+const trailOf = (path: Tree[]) => path.map((t) => t.ref).join(" / ");
+
 // ---------------------------------------------------------------------------
 // The rail
 // ---------------------------------------------------------------------------
 
-function Rail({ root, unplaced, selected }: { root: Tree; unplaced: Tree[]; selected: string }) {
+function Rail({ roots, unplaced, selected }: { roots: Tree[]; unplaced: Tree[]; selected: string }) {
   return (
     <nav aria-label="Pages" className="sticky top-0 max-h-[calc(100vh-6rem)] overflow-auto bg-bg-1 border border-line rounded-md py-2">
       <ul className="list-none m-0 p-0">
-        <RailItem tree={root} depth={0} selected={selected} to="/" />
+        {roots.map((r, i) => (
+          <RailItem key={r.ref} tree={r} trail={r.ref} depth={0} selected={selected} to={i === 0 ? "/" : undefined} />
+        ))}
       </ul>
       {unplaced.length > 0 && (
         <Link
@@ -79,8 +97,8 @@ function railRow(on: boolean): string {
   return `flex items-center gap-2 pr-2.5 py-1 text-[13.5px] hover:no-underline ${on ? "bg-bg-3 text-fg" : "text-fg-dim hover:text-fg"}`;
 }
 
-function RailItem({ tree, depth, selected, to }: { tree: Tree; depth: number; selected: string; to?: string }) {
-  const on = tree.ref === selected;
+function RailItem({ tree, trail, depth, selected, to }: { tree: Tree; trail: string; depth: number; selected: string; to?: string }) {
+  const on = trail === selected;
   const fresh = tree.findings - tree.baselined;
   return (
     <li>
@@ -96,7 +114,7 @@ function RailItem({ tree, depth, selected, to }: { tree: Tree; depth: number; se
       {pages(tree).length > 0 && (
         <ul className="list-none m-0 p-0">
           {pages(tree).map((c) => (
-            <RailItem key={c.ref} tree={c} depth={depth + 1} selected={selected} />
+            <RailItem key={c.ref} tree={c} trail={`${trail} / ${c.ref}`} depth={depth + 1} selected={selected} />
           ))}
         </ul>
       )}
@@ -197,16 +215,17 @@ function AreaCard({ tree }: { tree: Tree }) {
 // ---------------------------------------------------------------------------
 
 /** A page beside the rail, from the outline rooted at it: its pages, and its modules with their criteria. */
-function PagePane({ at, above }: { at: Ref; above: Tree[] }) {
+function PagePane({ at, above, home }: { at: Ref; above: Tree[]; home: Ref }) {
   const { data, error } = useQuery(() => api.outline({ root: at, depth: 2 }), [at]);
   if (error) return <ErrorBox error={error} />;
   // The hook keeps the last answer while the next loads; another page's is not this one's.
   const tree = data?.roots[0];
   if (!tree || tree.ref !== at) return <p className="text-fg-dim">Loading…</p>;
-  return <PageView tree={tree} above={above} />;
+  return <PageView tree={tree} above={above} home={home} />;
 }
 
-function PageView({ tree, above }: { tree: Tree; above: Tree[] }) {
+/** `home` is the first root, whose page is /; every other page in the breadcrumb is its node page. */
+function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref }) {
   const { data } = useQuery(() => api.get(tree.ref), [tree.ref]);
   const page = data?.node as PageNode | undefined;
   const modules = tree.children.filter((c) => kindOf(c.ref) === "module");
@@ -216,9 +235,9 @@ function PageView({ tree, above }: { tree: Tree; above: Tree[] }) {
       <header className="flex flex-col gap-2.5">
         {above.length > 0 && (
           <nav aria-label="Breadcrumb" className="text-[13px] text-fg-dim flex gap-1.5">
-            {above.map((t, i) => (
+            {above.map((t) => (
               <span key={t.ref}>
-                <Link to={i === 0 ? "/" : nodePath(t.ref)}>{t.title}</Link> /
+                <Link to={t.ref === home ? "/" : nodePath(t.ref)}>{t.title}</Link> /
               </span>
             ))}
           </nav>

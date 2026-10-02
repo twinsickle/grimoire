@@ -1,6 +1,7 @@
 /**
  * What each view does, against the fixture store serve.mjs builds: a root
- * page, an area with one requirement and two contracted modules, a module
+ * page and a second root with one page under it, an area with one
+ * requirement and two contracted modules, a module
  * without a contract, one test, and tickets open, high, closed and a gap.
  * Every finding at that point is adopted as the baseline, and one requirement
  * added after it, so the views have inherited and new findings to tell apart.
@@ -422,6 +423,11 @@ test("the root shows the grimoire's own level: its body, its bars and its pages 
   await expect(card).toContainText(`${architecture.tested} of ${architecture.criteria}`);
   const whole = outline.roots[0].rollup;
   await expect(page.getByRole("meter", { name: "Requirements held" }).first()).toHaveAttribute("aria-valuemax", String(whole.requirements));
+  // With a second root, the root is still the first root's level: the second is no card and none of its pages shows.
+  expect(outline.roots.map((t) => t.ref)).toEqual(["page:overview", "page:handbook"]);
+  await expect(page.locator("main h1").first()).toHaveText(outline.roots[0].title);
+  expect(cards).not.toContain("page:handbook");
+  await expect(page.locator(`main a[href^="/n/page%3A"]:not(${rail} a)`)).toHaveCount(cards.length);
 });
 
 /**
@@ -486,6 +492,9 @@ test("the rail is the outline's pages, ending with the unplaced modules", async 
   );
   expect(nested).toEqual(depths(outline.roots).map((s, i) => (i === 0 ? s.replace(outline.roots[0].ref, "root") : s)));
   expect(nested.some((s) => s.startsWith("2 "))).toBe(true);
+  // Every root at the top level, the first linking to / and each later one to its own page.
+  expect(nested.filter((s) => s.startsWith("0 "))).toEqual(["0 root", "0 page:handbook"]);
+  expect(nested).toContain("1 page:runbook");
   expect(outline.unplaced.map((t) => t.ref)).toEqual(["module:src/loose"]);
   const unplaced = page.locator(rail).getByRole("link", { name: /Unplaced/ });
   await expect(unplaced).toContainText(String(outline.unplaced.length));
@@ -493,6 +502,62 @@ test("the rail is the outline's pages, ending with the unplaced modules", async 
   await expect(page).toHaveURL(/\/unplaced$/);
   await expect(page.locator("main a[href='/n/module%3Asrc%2Floose']")).toBeVisible();
   await expect(page.locator("main")).toContainText("no contract");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-under-a-later-root-opens-from-it", "checks": ["web/src/views/Home#outline-driven"]}
+ * ```
+ */
+test("a page under a later root opens beside the rail, its breadcrumb from that root", async ({ page }) => {
+  await page.goto("/n/page%3Arunbook");
+  await expect(page.locator("main h1").first()).toHaveText("Runbook");
+  const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(crumbs).toHaveText("Handbook /");
+  await expect(crumbs.getByRole("link", { name: "Handbook" })).toHaveAttribute("href", "/n/page%3Ahandbook");
+  await expect(page.locator(rail).locator("a[aria-current='page']")).toHaveAttribute("href", "/n/page%3Arunbook");
+  // The later root is its own page beside the rail, with no breadcrumb.
+  await crumbs.getByRole("link", { name: "Handbook" }).click();
+  await expect(page.locator("main h1").first()).toHaveText("Handbook");
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+  await expect(page.locator("#pages a[href='/n/page%3Arunbook']")).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-root-or-a-page-reached-twice-is-one-entry", "checks": ["web/src/views/Home#outline-driven"]}
+ * ```
+ */
+test("a root linked from another root opens as a root, and a page reached twice marks one entry", async ({ page }) => {
+  // The rail's answer, rewritten so overview also links handbook and handbook also links goal.
+  await page.route("**/api/outline", async (route) => {
+    if (!route.request().postDataJSON().pages_only) return route.continue();
+    const answer = (await (await route.fetch()).json()) as Outline;
+    const [overview, handbook] = answer.roots;
+    const goal = overview.children.find((t) => t.ref === "page:goal")!;
+    handbook.children.push(goal);
+    overview.children.push(handbook);
+    await route.fulfill({ json: answer });
+  });
+  const current = page.locator(`${rail} a[aria-current='page']`);
+  await page.goto("/n/page%3Ahandbook");
+  await expect(page.locator("main h1").first()).toHaveText("Handbook");
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
+  await expect(page.locator(`${rail} a[href='/n/page%3Ahandbook']`)).toHaveCount(2);
+  await expect(current).toHaveCount(1);
+  // The current entry is the top-level root, not the one nested under overview.
+  expect(await current.evaluate((a) => a.closest("ul")?.parentElement?.tagName)).toBe("NAV");
+  await page.goto("/n/page%3Agoal");
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Fixture /");
+  await expect(page.locator(`${rail} a[href='/n/page%3Agoal']`)).toHaveCount(3);
+  await expect(current).toHaveCount(1);
+  await expect(current).toHaveAttribute("href", "/n/page%3Agoal");
+  // The one under the first root, which the breadcrumb names: a direct child of the root's list.
+  expect(await current.evaluate((a) => a.closest("ul")?.closest("li")?.querySelector("a")?.getAttribute("href"))).toBe("/");
 });
 
 /**
