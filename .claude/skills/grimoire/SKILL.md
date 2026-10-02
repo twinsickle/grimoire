@@ -72,9 +72,8 @@ it created in `warnings`. Every warning is work to do now.
 ## Orienting
 
 When the task is unclear or new to the session: `status`, then `outline`
-(depth 2), then `board`. The root page links the story in reading order:
-`goal`, `architecture`, `constraints`, `glossary`, then the areas under
-architecture. Read those pages before reading code.
+(depth 2), then `board`. Read the pages the root links, in their order, before
+reading code.
 
 **Before opening a source file, `get` its module.** The module node gives
 its purpose, its criteria, its files and what it imports; `get` on a file

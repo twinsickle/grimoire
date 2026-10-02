@@ -206,6 +206,10 @@ fn mcp_instructions_carry_the_rules() {
     for rule in ["Orient first", "Work is a ticket", "same piece of work", "`# Module contract`", "`find` before writing any reference", "Never write the store's files", "never on your own decision"] {
         assert!(text.contains(rule), "the instructions say {rule:?}: {text}");
     }
+    // The reading order is the root page's links; a list of the story pages here goes stale.
+    let lower = text.to_lowercase();
+    let named: Vec<&str> = grimoire_core::scaffold::STORY.iter().map(|(slug, _, _)| *slug).filter(|slug| lower.contains(slug)).collect();
+    assert!(named.len() < 3, "the instructions list the story pages {named:?}: {text}");
 }
 
 /// # Test contract
