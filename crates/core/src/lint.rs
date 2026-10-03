@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."},{"id":"ticket-cycle","statement":"An open or active ticket whose relies_on leads back to itself through other open or active tickets is malformed with the check ticket-cycle, naming the loop."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, an open or active ticket or a test to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement the Constraints page links that names no criterion and that no test checks is uncovered with the check unheld."},{"id":"ticket-cycle","statement":"An open or active ticket whose relies_on leads back to itself through other open or active tickets is malformed with the check ticket-cycle, naming the loop."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -310,7 +310,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "dangling-reports-open-not-closed", "checks": ["crates/core/src/lint#closed-exempt"]}
+    /// {"test": "dangling-reports-open-not-closed", "checks": ["crates/core/src/lint#dangling-edge", "crates/core/src/lint#closed-exempt"]}
     /// ```
     #[test]
     fn dangling_reports_open_not_closed() {
@@ -318,28 +318,44 @@ mod tests {
         let f = lint(&g, &[Rule::Dangling]);
         let r = refs(&f);
         assert_eq!(r, vec!["Dangling req:stale".to_string()]);
-    }
-
-    #[test]
-    fn uncovered_reports_each_rule() {
-        let g = graph();
-        let f = lint(&g, &[Rule::Uncovered]);
-        let r = refs(&f);
-        assert!(r.contains(&"Uncovered criterion:src/a/ready#reads-only".to_string()));
-        assert!(r.contains(&"Uncovered criterion:src/a/layout#stable".to_string()));
-        assert!(r.contains(&"Uncovered module:src/a/layout".to_string()));
-        assert!(r.contains(&"Uncovered module:src/b/unrelated".to_string()));
-        assert!(r.contains(&"Uncovered page:orphan".to_string()));
-        assert!(!r.contains(&"Uncovered page:overview".to_string()));
-        assert!(!r.contains(&"Uncovered criterion:src/a/ready#guarantee".to_string()));
-        // unrelated is reported twice: unlinked and contractless.
-        assert_eq!(r.iter().filter(|s| s.ends_with("module:src/b/unrelated")).count(), 2);
+        // On the node that owns the edge, naming the edge and the missing node; the closed ticket's edge to a missing node is not there.
+        let e = f[0].edge.as_ref().expect("a dangling finding carries its edge");
+        assert_eq!((f[0].check.as_str(), e.from.to_string().as_str(), e.to.to_string().as_str()), ("dangling-edge", "req:stale", "criterion:src/a/ready#gone"));
+        assert!(f[0].reason.contains("does not exist"), "{}", f[0].reason);
     }
 
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "findings-are-stable", "checks": ["crates/core/src/lint#stable-order", "crates/core/src/lint#grimoire-material-only"]}
+    /// {"test": "uncovered-reports-each-rule", "checks": ["crates/core/src/lint#uncovered-criterion", "crates/core/src/lint#no-contract", "crates/core/src/lint#unlinked-page", "crates/core/src/lint#unlinked-requirement"]}
+    /// ```
+    #[test]
+    fn uncovered_reports_each_rule() {
+        // A requirement no page links, beside the fixture's.
+        let mut s = crate::graph::fixtures::store();
+        let mut loose = s.requirements["stale"].clone();
+        loose.slug = "loose".into();
+        s.requirements.insert("loose".into(), loose);
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let f = lint(&g, &[Rule::Uncovered]);
+        let check = |check: &str, r: Reference| f.iter().find(|x| x.check == check && x.r#ref == r).map(|x| x.reason.clone());
+        assert!(check("uncovered-criterion", Reference::criterion("src/a/ready", "reads-only")).is_some(), "named by no requirement");
+        assert!(check("uncovered-criterion", Reference::criterion("src/a/ready", "guarantee")).is_none(), "named by one");
+        let why = check("no-contract", Reference::module("src/b/unrelated"));
+        assert_eq!(why.as_deref(), Some("module has no usable contract: no `# Module contract` block found"), "expected to carry one and carries none");
+        assert!(check("no-contract", Reference::module("src/a/ready")).is_none(), "carries one");
+        assert!(check("unlinked-page", Reference::page("orphan")).is_some());
+        assert!(check("unlinked-page", Reference::page("overview")).is_none(), "a root");
+        assert!(check("unlinked-requirement", Reference::req("loose")).is_some());
+        assert!(check("unlinked-requirement", Reference::req("stale")).is_none(), "linked by a page");
+        // unrelated is reported twice: unlinked and contractless.
+        assert_eq!(refs(&f).iter().filter(|s| s.ends_with("module:src/b/unrelated")).count(), 2);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "test-files-are-not-grimoire", "checks": ["crates/core/src/lint#grimoire-material-only"]}
     /// ```
     #[test]
     fn test_files_are_not_grimoire() {
@@ -354,6 +370,11 @@ mod tests {
         assert!(r.iter().any(|x| x.ends_with("module:src/b/unrelated")), "a module expected to carry a contract still is");
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "findings-are-stable", "checks": ["crates/core/src/lint#stable-order"]}
+    /// ```
     #[test]
     fn stable_order() {
         let g = graph();
