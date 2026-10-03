@@ -16,6 +16,8 @@ export const ROUTES: Route[] = [
   { name: "board", path: "/board", content: "section[id^='band-']" },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
   { name: "node-ticket", path: node("ticket:0006"), content: "section[aria-label='What this ticket rests on']" },
+  // A closed ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
+  { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='What this ticket rests on']" },
   { name: "node-module", path: node("module:src/ready"), content: "h1" },
   { name: "node-criterion", path: node("criterion:src/ready#needs-commit"), content: "h1" },
   { name: "node-file", path: node("file:src/ready.rs"), content: "[aria-label='Source of src/ready.rs'] table" },

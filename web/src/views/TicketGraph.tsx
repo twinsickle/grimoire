@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Draw a ticket's graph on its page: the layout of its whole rests_on walk from web/src/graph, as boxes that link to each node's page over lines between them, with folded counts that unfold.","criteria":[{"id":"on-ticket-page","statement":"A ticket's page shows the graph of its whole rests_on walk above its touches, each node a link to its page showing its kind and title, each folded count a button naming how many of which kind under which node it unfolds, and while any count is unfolded a button that folds them all again; each node link names the node it hangs under, so the edges are read out as well as drawn; a ticket that rests on nothing draws no graph, its page saying so in what it rests on."}]}
+ * {"purpose":"Draw a ticket's graph on its page: the layout of its whole rests_on walk from web/src/graph, as boxes that link to each node's page over lines between them, with folded counts that unfold.","criteria":[{"id":"on-ticket-page","statement":"A ticket's page shows the graph of its whole rests_on walk above its touches, each node a link to its page showing its kind and title, except a reference the page names as no longer existing, drawn as a dimmed box with its kind and id that links nowhere and is labelled so, each folded count a button naming how many of which kind under which node it unfolds, and while any count is unfolded a button that folds them all again; each node link names the node it hangs under, so the edges are read out as well as drawn; a ticket that rests on nothing draws no graph, its page saying so in what it rests on."}]}
  * ```
  */
 
@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { KindTag } from "../components";
 import { layout, type GraphItem, type GraphLine } from "../graph";
-import { kindOf, nodePath, type Kind, type Ref } from "../types";
+import { idOf, kindOf, nodePath, type Kind, type Ref } from "../types";
 
 const COL = 224;
 const BOX = 190;
@@ -29,8 +29,8 @@ const PLURAL: Record<Kind, string> = {
   test: "tests",
 };
 
-/** What a ticket rests on, drawn as a tree from the ticket at the left. */
-export function TicketGraph({ ticket, title }: { ticket: Ref; title: string }) {
+/** What a ticket rests on, drawn as a tree from the ticket at the left; `gone` names the references that no longer exist. */
+export function TicketGraph({ ticket, title, gone }: { ticket: Ref; title: string; gone: Set<Ref> }) {
   const [unfolded, setUnfolded] = useState<Set<string>>(new Set());
   const { data } = useQuery(() => api.restsOn(ticket), [ticket]);
   // A ticket resting on nothing would draw one lone box; the page already says it rests on nothing.
@@ -58,7 +58,7 @@ export function TicketGraph({ ticket, title }: { ticket: Ref; title: string }) {
             ))}
           </svg>
           {g.items.map((i) => (
-            <Item key={i.type === "node" ? `n:${i.ref}` : `f:${i.key}`} item={i} onUnfold={unfold} />
+            <Item key={i.type === "node" ? `n:${i.ref}` : `f:${i.key}`} item={i} gone={i.type === "node" && gone.has(i.ref)} onUnfold={unfold} />
           ))}
         </div>
       </div>
@@ -76,7 +76,7 @@ function elbow(l: GraphLine): string {
   return `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`;
 }
 
-function Item({ item, onUnfold }: { item: GraphItem; onUnfold: (key: string) => void }) {
+function Item({ item, gone, onUnfold }: { item: GraphItem; gone: boolean; onUnfold: (key: string) => void }) {
   const style = { left: item.col * COL, top: item.row * ROW, width: BOX, height: BOX_H };
   if (item.type === "fold") {
     const what = `${item.count} ${item.count === 1 ? item.kind : PLURAL[item.kind]}`;
@@ -92,6 +92,24 @@ function Item({ item, onUnfold }: { item: GraphItem; onUnfold: (key: string) => 
         </span>
         <span>+{what}</span>
       </button>
+    );
+  }
+  // A node that no longer exists has no page: a box that says so, and links nowhere.
+  if (gone) {
+    return (
+      <span
+        style={style}
+        title="no longer exists"
+        aria-label={`${kindOf(item.ref)} ${idOf(item.ref)}, no longer exists${item.parentTitle ? `, under ${item.parentTitle}` : ""}`}
+        data-graph-node={item.ref}
+        data-gone={item.ref}
+        className="absolute flex items-center gap-2 px-2 border border-dashed border-line rounded-md bg-bg-1"
+      >
+        <span className="shrink-0">
+          <KindTag ref={item.ref} />
+        </span>
+        <span className="text-fg-faint text-[12.5px] line-through overflow-hidden text-ellipsis whitespace-nowrap">{idOf(item.ref)}</span>
+      </span>
     );
   }
   return (

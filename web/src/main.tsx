@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Mount the application into the page.","criteria":[]}
+ * {"purpose":"Mount the application into the page.","criteria":[{"id":"mounts-app","statement":"The application is rendered into the page's #root element, and the page holds nothing else of its own."}]}
  * ```
  */
 

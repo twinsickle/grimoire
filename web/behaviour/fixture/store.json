@@ -141,9 +141,13 @@
       "kind": "change",
       "priority": "later",
       "touches": [
-        "module:src/ready"
+        "module:src/ready",
+        "req:ready-old-name"
       ],
-      "body": "Closed by the fixture.",
+      "relies_on": [
+        "page:old-naming"
+      ],
+      "body": "Closed by the fixture, touching a requirement and relying on a page that have since gone.",
       "close": "Named ready."
     },
     {

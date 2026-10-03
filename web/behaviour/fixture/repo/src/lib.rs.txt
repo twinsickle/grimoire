@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the fixture's modules together.","criteria":[]}
+//! {"purpose":"Hold the fixture's modules together.","criteria":[{"id":"names-both","statement":"Both modules are declared here."}]}
 //! ```
 
 pub mod ready;

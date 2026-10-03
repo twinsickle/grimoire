@@ -19,7 +19,7 @@ struct Project {
     _tmp: tempfile::TempDir,
 }
 
-const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Say a.\",\"criteria\":[]}\n//! ```\npub fn a() {}\n";
+const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Offer a.\",\"criteria\":[{\"id\":\"exports-a\",\"statement\":\"The module exports a function named a.\"}]}\n//! ```\npub fn a() {}\n";
 
 /// A repository with two modules and no contracts, initialised with a store
 /// beside it.
@@ -96,8 +96,9 @@ fn init_adopts_what_it_finds() {
 fn check_fails_only_on_new_findings() {
     let (p, _) = project();
     let before = baseline_count(&p.store);
-    // A fix prunes the baseline, with no daemon running.
-    std::fs::write(p.repo.join("src").join("a.rs"), CONTRACTED).unwrap();
+    // A fix prunes the baseline, with no daemon running: the module without a
+    // contract goes (a contract would bring a criterion, and findings of its own).
+    std::fs::remove_file(p.repo.join("src").join("a.rs")).unwrap();
     assert!(run(&p.repo, &["check"]).status.success());
     assert!(baseline_count(&p.store) < before, "check pruned the fixed finding");
     // Breaking it again is new, and fails.
@@ -527,7 +528,7 @@ fn a_cli_writer_beside_a_holder_is_refused() {
     assert!(!scaffold.status.success() && text(&scaffold).contains("in use"), "{}", text(&scaffold));
     // Reads take no lock: a read tool answers, and check reports, without the
     // baseline pruning it would write: a finding init adopted is fixed meanwhile.
-    std::fs::write(p.repo.join("src").join("a.rs"), CONTRACTED).unwrap();
+    std::fs::remove_file(p.repo.join("src").join("a.rs")).unwrap();
     let read = run(&p.repo, &["tool", "board", "{}"]);
     assert!(read.status.success(), "{}", text(&read));
     let check = run(&p.repo, &["check"]);

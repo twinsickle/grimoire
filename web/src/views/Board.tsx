@@ -2,15 +2,15 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open and active changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, the start and close actions, and a link to its own page."}]}
+ * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open and active changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."}]}
  * ```
  */
 
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
-import { ErrorBox, Folded, Markdown, RefLink, StatusTag, TicketActions, empty, errorBox, mono } from "../components";
-import { idOf, nodePath, type Board, type BoardTicket, type Priority, type Ref, type Summary, type TicketKind, type TicketNode } from "../types";
+import { ErrorBox, Folded, GoneRef, Markdown, RefLink, StatusTag, TicketActions, empty, errorBox, mono } from "../components";
+import { goneOf, idOf, nodePath, type Board, type BoardTicket, type Priority, type Ref, type Summary, type TicketKind, type TicketNode } from "../types";
 
 const BANDS: Priority[] = ["next", "high", "later"];
 const BAND_COLOR: Record<Priority, string> = { next: "text-bad", high: "text-warn", later: "text-fg-dim" };
@@ -374,6 +374,7 @@ function Ticket({ t }: { t: BoardTicket }) {
   const n = data.node as TicketNode;
   const titles: Record<string, string> = {};
   for (const e of n.out) if (e.title) titles[e.ref] = e.title;
+  const gone = goneOf(n);
   const waits = t.waits_on ?? [];
   const relies = n.relies_on.filter((r) => !waits.some((w) => w.ref === r));
   const label = "m-0 mb-1 text-[11.5px] uppercase tracking-[0.05em] text-fg-dim font-semibold";
@@ -416,7 +417,7 @@ function Ticket({ t }: { t: BoardTicket }) {
           <ul className="list-none m-0 p-0 flex flex-col gap-0.5 text-[13px]">
             {n.touches.map((r) => (
               <li key={r} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                <RefLink ref={r} title={titles[r]} />
+                {gone.has(r) ? <GoneRef ref={r} /> : <RefLink ref={r} title={titles[r]} />}
               </li>
             ))}
           </ul>
@@ -427,7 +428,7 @@ function Ticket({ t }: { t: BoardTicket }) {
             <ul className="list-none m-0 p-0 flex flex-col gap-0.5 text-[13px]">
               {relies.map((r) => (
                 <li key={r} className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                  <RefLink ref={r} title={titles[r]} />
+                  {gone.has(r) ? <GoneRef ref={r} /> : <RefLink ref={r} title={titles[r]} />}
                 </li>
               ))}
             </ul>

@@ -366,7 +366,7 @@ mod tests {
         assert_eq!(line, 1);
         assert_eq!(text, "\n# Module contract\n\n```json\n{}\n```\n", "one line per source line, the opening `/**` included");
         // The heading is on line 2, and that is the line the contract reports.
-        let contract = "/**\n * # Module contract\n *\n * ```json\n * {\"purpose\":\"P\",\"criteria\":[]}\n * ```\n */\nexport const a = 1;\n";
+        let contract = "/**\n * # Module contract\n *\n * ```json\n * {\"purpose\":\"P\",\"criteria\":[{\"id\":\"a\",\"statement\":\"S\"}]}\n * ```\n */\nexport const a = 1;\n";
         assert_eq!(crate::extract_source(&a, "web/src/a.ts", contract).contract_line, Some(2));
         let src = "\n// # Module contract\n// text\nconst a = 1;\n";
         let (text, line) = a.leading_doc(src).unwrap();

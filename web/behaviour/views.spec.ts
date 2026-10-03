@@ -3,7 +3,8 @@
  * page and a second root with one page under it, an area with one
  * requirement and two contracted modules, a module
  * without a contract, one test, and tickets open, high, closed and a gap, the
- * first active with a proposal.
+ * first active with a proposal and one closed touching a requirement and
+ * relying on a page that no longer exist.
  * Every finding at that point is adopted as the baseline, and one requirement
  * added after it, so the views have inherited and new findings to tell apart.
  * Every reference is a link to /n/<ref>, so a view's structure can be read
@@ -70,6 +71,24 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
   await page.goto("/nowhere");
   await expect(page.locator("header")).toBeVisible();
   await expect(page.locator("main *")).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-application-is-all-the-page-holds", "checks": ["web/src/main#mounts-app"]}
+ * ```
+ */
+test("the application is mounted into #root, and the page holds nothing else", async ({ page }) => {
+  for (const { path, content } of ROUTES) {
+    await page.goto(path);
+    await expect(page.locator(`#root ${content}`).first(), path).toBeVisible();
+    await expect(page.locator("#root header").first(), path).toBeVisible();
+    // The page's own markup is the mount point and the script that fills it.
+    await expect(page.locator("body > :not(script)"), path).toHaveCount(1);
+    await expect(page.locator("body > #root"), path).toHaveCount(1);
+  }
 });
 
 /**
@@ -259,6 +278,12 @@ test("a reference is a link to its node, tagged with its kind", async ({ page })
   await expect(link.locator("xpath=..")).toContainText("module");
   await link.click();
   await expect(page).toHaveURL("/n/module%3Asrc%2Fready");
+  // The one exception: a closed ticket's reference to a node that no longer exists keeps its kind tag and is text, marked.
+  await page.goto("/n/ticket%3A0004");
+  const gone = page.locator("main [data-gone='req:ready-old-name']").first();
+  await expect(gone).toHaveText("reqready-old-nameno longer exists");
+  await expect(gone.locator("a")).toHaveCount(0);
+  await expect(page.locator("main a[href='/n/req%3Aready-old-name']")).toHaveCount(0);
 });
 
 /**
@@ -345,6 +370,20 @@ test("a board row opens into the whole ticket, with what it waits on and its act
   await gap.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toHaveCount(0);
   expect((await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0003" })).node.status).toBe("closed");
+  // A closed ticket opens the same way: what it touched that still exists is a link, what no longer exists is marked and is none.
+  await page.getByRole("button", { name: /^Closed/ }).click();
+  await page.getByRole("button", { name: "Show Name the readiness module" }).click();
+  const closed = page.locator("#closed li[data-ticket='ticket:0004']");
+  await expect(closed.locator("a[href='/n/module%3Asrc%2Fready']").first()).toBeVisible();
+  // One it touched and one it relied on, each listed under its own heading.
+  for (const [ref, href] of [
+    ["req:ready-old-name", "/n/req%3Aready-old-name"],
+    ["page:old-naming", "/n/page%3Aold-naming"],
+  ]) {
+    await expect(closed.locator(`[data-gone='${ref}']`), ref).toContainText("no longer exists");
+    await expect(closed.locator(`[data-gone='${ref}'] a`), ref).toHaveCount(0);
+    await expect(closed.locator(`a[href='${href}']`), ref).toHaveCount(0);
+  }
 });
 
 /**
@@ -623,8 +662,8 @@ test("pages mark new findings apart from inherited ones, and criteria and requir
  */
 test("every node kind has a page", async ({ page }) => {
   const nodes = ROUTES.filter((r) => r.path.startsWith("/n/"));
-  const kinds = nodes.map((r) => decodeURIComponent(r.path.slice("/n/".length)).split(":")[0]).sort();
-  expect(kinds, "one node page of every kind").toEqual(["criterion", "decl", "file", "module", "page", "req", "test", "ticket"]);
+  const kinds = [...new Set(nodes.map((r) => decodeURIComponent(r.path.slice("/n/".length)).split(":")[0]))].sort();
+  expect(kinds, "a node page of every kind").toEqual(["criterion", "decl", "file", "module", "page", "req", "test", "ticket"]);
   for (const { path } of nodes) {
     await page.goto(path);
     await expect(page.locator("h1"), path).toBeVisible();
@@ -652,6 +691,57 @@ test("an open ticket is started and closed from its page; a closed one offers ne
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-closed-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/TicketGraph#on-ticket-page"]}
+ * ```
+ */
+test("a closed ticket's reference that leads nowhere is marked and not a link; an open ticket's stays a link", async ({ page }) => {
+  // The fixture's closed ticket touches a module that exists and a requirement that does not.
+  const closed = await tool<{ node: { status: string; touches: string[]; out: { ref: string; title: string | null }[] } }>(page, "get", { ref: "ticket:0004" });
+  expect(closed.node.status).toBe("closed");
+  expect(closed.node.out.find((e) => e.ref === "req:ready-old-name")?.title, "get gives the missing end no title").toBeNull();
+  await page.goto("/n/ticket%3A0004");
+  await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
+  // Under Touches, Rests on and Links out: text with the mark, never a link.
+  const gone = page.locator("main [data-gone='req:ready-old-name']:not([data-graph-node])");
+  await expect(gone).toHaveCount(3);
+  for (const mark of await gone.all()) {
+    await expect(mark).toContainText("ready-old-name");
+    await expect(mark).toContainText("no longer exists");
+    await expect(mark.locator("a")).toHaveCount(0);
+  }
+  // In the graph: a box that says so and is no link, beside the module's, which is one.
+  const graph = page.getByRole("region", { name: "What this ticket rests on" });
+  const box = graph.locator("[data-graph-node='req:ready-old-name']");
+  await expect(box).toHaveText("reqready-old-name");
+  await expect(box).toHaveAttribute("aria-label", "req ready-old-name, no longer exists, under Name the readiness module");
+  expect(await box.evaluate((e) => e.tagName)).toBe("SPAN");
+  expect(await graph.locator("[data-graph-node='module:src/ready']").evaluate((e) => e.tagName)).toBe("A");
+  // Under Relies on too: the page it relied on is gone, marked there, in Rests on and in Links out, and drawn so.
+  const relied = page.locator("main [data-gone='page:old-naming']:not([data-graph-node])");
+  await expect(relied).toHaveCount(3);
+  await expect(page.locator("main h2", { hasText: "Relies on" }).locator("xpath=following-sibling::ul[1]").locator("[data-gone='page:old-naming']")).toContainText("no longer exists");
+  await expect(page.locator("main h2", { hasText: "Touches" }).locator("xpath=following-sibling::ul[1]").locator("[data-gone='req:ready-old-name']")).toContainText("no longer exists");
+  expect(await graph.locator("[data-graph-node='page:old-naming']").evaluate((e) => e.tagName)).toBe("SPAN");
+  const refs = await linkedRefs(page);
+  expect(refs).not.toContain("req:ready-old-name");
+  expect(refs).not.toContain("page:old-naming");
+  expect(refs, "what still exists is a link as before").toContain("module:src/ready");
+  // The same answer for a ticket still open: the check reports that one, and the page links it as before.
+  await page.route("**/api/get", async (route) => {
+    if (route.request().postDataJSON().ref !== "ticket:0004") return route.continue();
+    await route.fulfill({ json: { ...closed, node: { ...closed.node, status: "open", decision: null } } });
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
+  await expect(page.locator("main [data-gone]")).toHaveCount(0);
+  expect((await linkedRefs(page)).filter((r) => r === "req:ready-old-name"), "the graph, Touches, Rests on and Links out").toHaveLength(4);
+  expect((await linkedRefs(page)).filter((r) => r === "page:old-naming"), "the graph, Relies on, Rests on and Links out").toHaveLength(4);
 });
 
 /**

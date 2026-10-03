@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is a link to that node's page, tagged with its kind."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."}]}
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."}]}
  * ```
  */
 
@@ -82,6 +82,17 @@ export function RefLink({ ref, title, mono: isMono = false }: { ref: Ref; title?
         {title ?? idOf(ref)}
       </Link>
       {title && <span className={`text-fg-faint ${mono}`}>{idOf(ref)}</span>}
+    </span>
+  );
+}
+
+/** A reference whose node no longer exists: its kind and id as text, marked, since a link would lead nowhere. */
+export function GoneRef({ ref }: { ref: Ref }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" data-gone={ref}>
+      <KindTag ref={ref} />
+      <span className={`${mono} text-fg-dim`}>{idOf(ref)}</span>
+      <Badge tone="warn">no longer exists</Badge>
     </span>
   );
 }

@@ -6,7 +6,7 @@ import { ApiError, call } from "./api";
 import { decisionsInForce } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
-import { idOf, kindOf, localId } from "./types";
+import { goneOf, idOf, kindOf, localId, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -27,6 +27,26 @@ test("a reference splits at the first colon and nowhere else", () => {
   // A criterion or test id after the last #, though the module or file name holds one.
   expect(localId("criterion:src/a#b#kept")).toBe("kept");
   expect(localId("test:src/a#b.ts#holds")).toBe("holds");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "only-a-closed-tickets-references-are-gone", "checks": ["web/src/types#gone-references"]}
+ * ```
+ */
+test("a closed ticket's untitled references are gone; an open ticket's and another node's are not", () => {
+  const out = [
+    { ref: "module:src/ready", relation: "touches", title: "Decide whether a workspace is ready." },
+    { ref: "req:ready-old-name", relation: "touches", title: null },
+  ];
+  const ticket = (status: string) => ({ ref: "ticket:0004", status, in: [], out }) as unknown as AnyNode;
+  expect([...goneOf(ticket("closed"))]).toEqual(["req:ready-old-name"]);
+  expect(goneOf(ticket("open")).size).toBe(0);
+  expect(goneOf(ticket("active")).size).toBe(0);
+  // A page linking a requirement that does not exist is a dangling finding, not history.
+  expect(goneOf({ ref: "page:readiness", in: [], out } as unknown as AnyNode).size).toBe(0);
 });
 
 /**

@@ -17,13 +17,16 @@ contract` followed by a fenced `json` block holding one object:
 ```
 
 - `purpose`: one sentence, non-empty.
-- `criteria`: a list, may be empty. Each `id` is a slug
-  (`^[a-z0-9]+(-[a-z0-9]+)*$`), unique within the module. Each `statement`
-  is one sentence stating something someone could check against the code:
-  a guarantee, a boundary, a rule. Not a description of what the code does
-  line by line.
-- The block is strict JSON: unknown fields, a missing `purpose` or a
-  duplicate id make the contract malformed, and the module is reported.
+- `criteria`: a list of at least one; a contract promises something. Each
+  `id` is a slug (`^[a-z0-9]+(-[a-z0-9]+)*$`), unique within the module.
+  Each `statement` is one sentence stating something someone could check
+  against the code: a guarantee, a boundary, a rule. Not a description of
+  what the code does line by line.
+- The block is strict JSON: unknown fields, a missing `purpose`, an empty
+  `criteria` or a duplicate id make the contract malformed, and the module
+  is reported. A module with nothing of its own to promise (a pure
+  re-export) states one criterion, or is taken out of the contract scope
+  with `configure`, which is the person's call.
 - A criterion is addressed as `criterion:<module id>#<id>`. Renaming an id
   is a change to the grimoire: the requirement naming it goes dangling and the lint
   says so; update the requirement's `covered_by` in the same piece of work.

@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's page without one names each active ticket whose proposal would change it."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's page without one names each active ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; an open or active ticket's references are links as before, since the check reports those."}]}
  * ```
  */
 
@@ -16,6 +16,7 @@ import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight
 import {
   Badge,
   ErrorBox,
+  GoneRef,
   KindTag,
   Markdown,
   PriorityTag,
@@ -34,6 +35,7 @@ import {
   rel,
 } from "../components";
 import {
+  goneOf,
   idOf,
   localId,
   nodePath,
@@ -67,6 +69,7 @@ export function NodeView() {
   if (!data || data.node.ref !== ref) return <p className="text-fg-dim">Loading…</p>;
   const node = data.node;
   const kind = kindOf(ref);
+  const gone = goneOf(node);
   return (
     <div className={`grid grid-cols-1 gap-6 items-start max-w-[150ch] mx-auto ${kind === "file" ? "" : "lg:grid-cols-[minmax(0,1fr)_360px]"}`}>
       <div>
@@ -79,7 +82,7 @@ export function NodeView() {
           <DraftNotice ref={ref} ticket={ticket} drafts={data.drafts} />
         </div>
         {kind === "req" && <Req n={node as ReqNode} />}
-        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} />}
+        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} gone={gone} />}
         {kind === "module" && <Module n={node as ModuleNode} />}
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
         {kind === "file" && <File n={node as FileNode} />}
@@ -88,9 +91,9 @@ export function NodeView() {
         <Findings ref={ref} />
       </div>
       <aside>
-        <RestsOn key={ref} ref={ref} />
+        <RestsOn key={ref} ref={ref} gone={gone} />
         <RestsOnMe ref={ref} />
-        <Edges title="Links out" edges={node.out} />
+        <Edges title="Links out" edges={node.out} gone={gone} />
         <Edges title="Linked from" edges={node.in} />
       </aside>
     </div>
@@ -205,7 +208,7 @@ function Req({ n }: { n: ReqNode }) {
   );
 }
 
-function Ticket({ n, proposal }: { n: TicketNode; proposal?: ProposalView }) {
+function Ticket({ n, proposal, gone }: { n: TicketNode; proposal?: ProposalView; gone: Set<Ref> }) {
   const ref = `ticket:${n.slug}`;
   const related = useQuery(() => api.relatedTickets(ref), [ref]);
   return (
@@ -222,11 +225,11 @@ function Ticket({ n, proposal }: { n: TicketNode; proposal?: ProposalView }) {
         </div>
       )}
       {n.status === "active" && <Proposed ticket={ref} proposal={proposal} />}
-      <TicketGraph key={ref} ticket={ref} title={n.title} />
+      <TicketGraph key={ref} ticket={ref} title={n.title} gone={gone} />
       <h2>Touches</h2>
-      <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} />
+      <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} gone={gone} />
       <h2>Relies on</h2>
-      <RefList refs={n.relies_on} empty="Nothing declared." titles={titlesOf(n.out)} />
+      <RefList refs={n.relies_on} empty="Nothing declared." titles={titlesOf(n.out)} gone={gone} />
       <h2>Related gaps and questions</h2>
       {related.data && <TicketTable tickets={related.data.tickets} empty="None touch what this ticket touches." />}
     </>
@@ -271,13 +274,13 @@ function Proposed({ ticket, proposal }: { ticket: Ref; proposal?: ProposalView }
   );
 }
 
-function RefList({ refs, empty: emptyText, titles = {} }: { refs: Ref[]; empty: string; titles?: Record<string, string> }) {
+function RefList({ refs, empty: emptyText, titles = {}, gone }: { refs: Ref[]; empty: string; titles?: Record<string, string>; gone?: Set<Ref> }) {
   if (refs.length === 0) return <p className={empty}>{emptyText}</p>;
   return (
     <ul className={list}>
       {refs.map((r) => (
         <li key={r} className={item}>
-          <RefLink ref={r} title={titles[r]} />
+          {gone?.has(r) ? <GoneRef ref={r} /> : <RefLink ref={r} title={titles[r]} />}
         </li>
       ))}
     </ul>
@@ -515,12 +518,12 @@ function TestView({ n }: { n: TestNode }) {
 }
 
 /** A node it rests on: its newest decision in full, the earlier ones folded beneath. */
-function RestsOnItem({ r }: { r: RestsOnNode }) {
+function RestsOnItem({ r, gone }: { r: RestsOnNode; gone: boolean }) {
   const [open, setOpen] = useState(false);
   const [newest, ...earlier] = r.decisions;
   return (
     <li className="flex flex-col items-stretch">
-      <RefLink ref={r.ref} title={r.title} />
+      {gone ? <GoneRef ref={r.ref} /> : <RefLink ref={r.ref} title={r.title} />}
       {newest && <Decision date={newest.date} text={newest.text} />}
       {earlier.length > 0 && (
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="self-start text-[12.5px] text-accent bg-transparent border-none p-0 hover:underline">
@@ -535,7 +538,7 @@ function RestsOnItem({ r }: { r: RestsOnNode }) {
 /** How many nodes the Rests on panel shows before folding the rest behind Show all. */
 const FOLD_AT = 20;
 
-function RestsOn({ ref }: { ref: Ref }) {
+function RestsOn({ ref, gone }: { ref: Ref; gone: Set<Ref> }) {
   const { data } = useQuery(() => api.restsOn(ref, 3), [ref]);
   const [all, setAll] = useState(false);
   if (!data) return null;
@@ -546,7 +549,7 @@ function RestsOn({ ref }: { ref: Ref }) {
       {data.nodes.length === 0 && <p className={empty}>Nothing below this node.</p>}
       <ul className={list} aria-label="Rests on">
         {shown.map((r) => (
-          <RestsOnItem key={r.ref} r={r} />
+          <RestsOnItem key={r.ref} r={r} gone={gone.has(r.ref)} />
         ))}
       </ul>
       {data.nodes.length > FOLD_AT && (
@@ -583,7 +586,7 @@ function RestsOnMe({ ref }: { ref: Ref }) {
   );
 }
 
-function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: string; title: string | null }[] }) {
+function Edges({ title, edges, gone }: { title: string; edges: { ref: Ref; relation: string; title: string | null }[]; gone?: Set<Ref> }) {
   if (edges.length === 0) return null;
   return (
     <div className={card}>
@@ -592,7 +595,7 @@ function Edges({ title, edges }: { title: string; edges: { ref: Ref; relation: s
         {edges.map((e, i) => (
           <li key={i} className={item}>
             <span className={rel}>{e.relation}</span>
-            <RefLink ref={e.ref} title={e.title ?? undefined} />
+            {gone?.has(e.ref) ? <GoneRef ref={e.ref} /> : <RefLink ref={e.ref} title={e.title ?? undefined} />}
           </li>
         ))}
       </ul>
