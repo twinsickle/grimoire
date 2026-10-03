@@ -78,6 +78,8 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
+export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, waiting: Array<Summary>, };
+
 export type Linked = { ref: Ref, title: string | null, };
 
 export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, };
@@ -150,7 +152,7 @@ export type SourceLocation = { file: string, line: number, contract_line?: numbe
 
 export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, };
 
-export type Status = "open" | "active" | "closed";
+export type Status = "open" | "active" | "landing" | "closed";
 
 export type StatusAnswer = { repository: string, roots: Array<string>, languages: Array<string>, version: string, supported_languages: Array<string>, 
 /**
@@ -221,6 +223,7 @@ export type ToolAnswers = {
   retire_node: Written;
   start_ticket: Started;
   close_ticket: Closed;
+  land_ticket: Landed;
   rename_node: Renamed;
   reorder: Reordered;
   configure: Configured;

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open and active change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any open ticket it relies on, then active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the open and active gaps and questions no open or active change relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the gaps and questions not closed that no change not closed relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -53,7 +53,7 @@ pub struct BoardTicket {
 }
 
 pub fn board(g: &Graph, f: &BoardFilter) -> Board {
-    let default_status = [Status::Open, Status::Active];
+    let default_status = [Status::Open, Status::Active, Status::Landing];
     let default_kinds = [TicketKind::Change];
     let status = f.status.unwrap_or(&default_status);
     let kinds = f.kinds.unwrap_or(&default_kinds);
@@ -63,7 +63,7 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Board {
         .into_iter()
         .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)), followed_by: None })
         .collect();
-    // Gaps and questions an open or active change relies on are attached to it.
+    // Gaps and questions a change that is not closed relies on are attached to it.
     let attached: HashSet<&Reference> = g.tickets().filter(|t| t.kind == TicketKind::Change && t.status != Status::Closed).flat_map(|t| t.relies_on.iter()).collect();
     let unattached = g
         .tickets()
@@ -120,8 +120,8 @@ fn newest_decision(t: &Ticket) -> (String, Option<u64>, String) {
 }
 
 /// One band: the tickets its order list names, in that order; then the rest,
-/// each after any open or active ticket it relies on, choosing among those
-/// ready by active before open, then title. A loop of relies_on is broken by
+/// each after any ticket not closed that it relies on, choosing among those
+/// ready by landing before active before open, then title. A loop of relies_on is broken by
 /// the same rule. `band` arrives sorted by status and title.
 fn band_order<'a>(g: &Graph, band: Vec<&'a Ticket>, list: &[String]) -> Vec<&'a Ticket> {
     let mut out: Vec<&Ticket> = list.iter().filter_map(|s| band.iter().copied().find(|t| &t.slug == s)).collect();
@@ -179,6 +179,7 @@ mod tests {
         // No list: a ticket after the open ticket it relies on, otherwise active, then title.
         assert_eq!(band(&[], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["b", "c", "a"]);
         assert_eq!(band(&[], &[("a", Open, &[]), ("z", Active, &[])]), vec!["z", "a"], "active before open");
+        assert_eq!(band(&[], &[("a", Open, &[]), ("m", Status::Landing, &[]), ("z", Active, &[])]), vec!["m", "z", "a"], "a landing change is listed, and first");
         // A list comes first, in its order; the rest follow.
         assert_eq!(band(&["b"], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["b", "c", "a"]);
         assert_eq!(band(&["a", "c"], &[("a", Open, &["ticket:c"]), ("b", Open, &[]), ("c", Open, &[])]), vec!["a", "c", "b"], "a person's order wins over dependency");

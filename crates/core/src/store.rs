@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -19,9 +19,9 @@ pub struct Store {
     pub tickets: BTreeMap<String, Ticket>,
     /// The findings accepted as inherited at adoption; none until `adopt`.
     pub baseline: Option<Baseline>,
-    /// The snapshot taken when each active ticket started, by slug.
+    /// The snapshot taken when each active or landing ticket started, by slug.
     pub starts: BTreeMap<String, Start>,
-    /// Each active ticket's proposed change to the truth, by slug.
+    /// Each active or landing ticket's proposed change to the truth, by slug.
     pub proposals: BTreeMap<String, Proposal>,
     /// The ticket a write lands in when it names none: the one last started.
     pub current: Option<String>,
@@ -261,10 +261,13 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
         e.push(FieldError::new("body", format!("at most {TICKET_BODY_MAX} characters")));
     }
     match (t.status, &t.decision) {
-        (Status::Closed, None) => e.push(FieldError::new("decision", "required when status is closed")),
-        (Status::Closed, Some(d)) => {
+        (Status::Landing | Status::Closed, None) => e.push(FieldError::new("decision", format!("required when status is {}", t.status.name()))),
+        (Status::Landing | Status::Closed, Some(d)) => {
             check_decision(&mut e, "decision", d);
-            if !t.body.is_empty() {
+            // A landing ticket keeps its body until its change lands.
+            if t.status == Status::Landing {
+                check_required(&mut e, "body", &t.body);
+            } else if !t.body.is_empty() {
                 e.push(FieldError::new("body", "must be empty once the ticket is closed, since closing discards it"));
             }
             // A ticket has one decision, so there is nothing earlier for it to supersede.
@@ -272,7 +275,7 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
                 e.push(FieldError::new("decision.supersedes", "a ticket's one decision supersedes nothing"));
             }
         }
-        (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is closed")),
+        (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is landing or closed")),
         (_, None) => {
             check_required(&mut e, "body", &t.body);
         }
@@ -583,6 +586,16 @@ mod tests {
         t.body.clear();
         t.status = Status::Open;
         assert_eq!(validate_ticket(&t)[0].field, "decision");
+        // A landing ticket carries its decision and keeps its body until its change lands.
+        t.status = Status::Landing;
+        assert_eq!(validate_ticket(&t)[0].field, "body");
+        t.body = "b".into();
+        assert!(validate_ticket(&t).is_empty());
+        t.decision = None;
+        assert_eq!(validate_ticket(&t)[0].reason, "required when status is landing");
+        t.status = Status::Active;
+        t.decision = Some(Decision::new("2026-01-01", "done"));
+        assert_eq!(validate_ticket(&t)[0].reason, "must be null unless status is landing or closed");
     }
 
     /// # Test contract

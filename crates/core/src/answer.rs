@@ -152,6 +152,19 @@ pub struct Closed {
     pub untouched: Option<Vec<Reference>>,
 }
 
+/// `land_ticket`: whether a ticket landed, and when one did what its close
+/// answers; then the tickets still waiting to land.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Landed {
+    pub landed: bool,
+    pub node: Option<NodeView>,
+    pub findings: Vec<Finding>,
+    pub baselined: usize,
+    pub untouched: Option<Vec<Reference>>,
+    pub waiting: Vec<Summary>,
+}
+
 /// A test block in the code that still names a renamed node.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -255,6 +268,7 @@ answers! {
     Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket", "retire_node"],
     Started => ["start_ticket"],
     Closed => ["close_ticket"],
+    Landed => ["land_ticket"],
     Renamed => ["rename_node"],
     Reordered => ["reorder"],
     Configured => ["configure"],

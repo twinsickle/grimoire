@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, file, update, start and close a ticket, rename, reorder and delete a node, adopt a baseline, configure the store; a requirement's decisions are kept by the decisions module beneath.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, and its links and marks are rewritten, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or an open or active ticket, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead) and a closed ticket are invalid, derived kinds are invalid and a missing node is not_found."},{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named active ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on and a deletion as a mark, so the truth is untouched; a ticket that is not active is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a decision, a supersession, a retirement, a deletion) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed."},{"id":"current-ticket","statement":"start_ticket makes the started ticket the store's current one and close_ticket clears it when it closes that one; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"close-applies-proposal","statement":"moved names every proposed record whose truth fingerprint differs from the base it was written against, or that was proposed as new and now exists, a record equal to the truth's never among them; apply_proposal writes the proposed records that differ from the truth's and removes the deleted ones in one pass and drops the proposal."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, file, update, start and close a ticket, rename, reorder and delete a node, adopt a baseline, configure the store; a requirement's decisions are kept by the decisions module beneath.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, tickets that are not closed, roots, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, and its links and marks are rewritten, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of a ticket that is not closed, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead) and a closed ticket are invalid, derived kinds are invalid and a missing node is not_found."},{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named active or landing ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on and a deletion as a mark, so the truth is untouched; a ticket that is neither is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a decision, a supersession, a retirement, a deletion) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed."},{"id":"closes-when-landed","statement":"decide_ticket writes a change's decision ahead of its landing: an active ticket becomes landing and a landing one has its decision replaced, keeping its body, proposal and start; a gap or question is invalid, and an open or closed ticket a conflict."},{"id":"current-ticket","statement":"start_ticket makes the started ticket the store's current one and close_ticket clears it when it closes that one, a landing ticket staying current until then; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"close-applies-proposal","statement":"moved names every proposed record whose truth fingerprint differs from the base it was written against, or that was proposed as new and now exists, a record equal to the truth's never among them; apply_proposal writes the proposed records that differ from the truth's and removes the deleted ones in one pass and drops the proposal."}]}
 //! ```
 
 use serde::Serialize;
@@ -107,13 +107,13 @@ pub enum Proposing {
 /// Run `op`, a write that changes intent, as `ticket`'s proposal: it runs on
 /// the store as the proposal would leave it, and what it changed is kept in
 /// the proposal, each record with the fingerprint of the truth's record it
-/// rests on. The truth is untouched. The ticket must be active, and a
+/// rests on. The truth is untouched. The ticket must be active or landing, and a
 /// partial write on a record whose truth moved since it was proposed is a
 /// conflict naming the record.
 pub fn propose<T>(store: &mut Store, ticket: &str, how: Proposing, op: impl FnOnce(&mut Store) -> Result<(T, Changed), ToolError>) -> Result<(T, Changed), ToolError> {
     match store.tickets.get(ticket) {
         None => return Err(ToolError::not_found(&Reference::ticket(ticket))),
-        Some(t) if t.status != Status::Active => return Err(ToolError::conflict(format!("ticket:{ticket} is {}, not active: a change belongs to an active ticket", format!("{:?}", t.status).to_lowercase()))),
+        Some(t) if !t.status.is_live() => return Err(ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: a change belongs to a ticket being worked", t.status.name()))),
         _ => {}
     }
     let mut work = store.applied(ticket);
@@ -223,6 +223,20 @@ pub fn moved(store: &Store, ticket: &str) -> Vec<FieldError> {
     let Some(p) = store.proposals.get(ticket) else { return vec![] };
     let refs = p.pages.keys().map(|s| Reference::page(s)).chain(p.requirements.keys().map(|s| Reference::req(s))).chain(p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok()));
     refs.filter(|r| record_moved(store, p, r)).map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; read it again and propose again")).collect()
+}
+
+/// Every landing ticket whose proposal rests on a truth that has since
+/// moved, with the records that moved: its landing would be refused.
+pub fn landing_moved(store: &Store) -> std::collections::BTreeMap<String, Vec<String>> {
+    store
+        .tickets
+        .values()
+        .filter(|t| t.status == Status::Landing)
+        .filter_map(|t| {
+            let refs: Vec<String> = moved(store, &t.slug).into_iter().map(|e| e.field).collect();
+            (!refs.is_empty()).then(|| (t.slug.clone(), refs))
+        })
+        .collect()
 }
 
 /// Apply `ticket`'s proposal to the truth, in one pass, and drop it. The
@@ -470,15 +484,15 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     Ok((new, Changed::Many(changes)))
 }
 
-/// Replace one band's order with `order`, every entry an open or active
-/// ticket of that priority, named once.
+/// Replace one band's order with `order`, every entry a ticket of that
+/// priority that is not closed, named once.
 pub fn reorder(store: &mut Store, priority: Priority, order: &[Reference]) -> Result<(Vec<String>, Changed), ToolError> {
     let mut errors = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for r in order {
         let ok = r.kind == Kind::Ticket && store.tickets.get(&r.id).is_some_and(|t| t.status != Status::Closed && t.priority == priority);
         if !ok {
-            errors.push(FieldError::new("order", format!("{r} is not an open or active {} ticket", format!("{priority:?}").to_lowercase())));
+            errors.push(FieldError::new("order", format!("{r} is not a {} ticket that is still open, active or landing", format!("{priority:?}").to_lowercase())));
         } else if !seen.insert(&r.id) {
             errors.push(FieldError::new("order", format!("{r} is named twice")));
         }
@@ -662,6 +676,25 @@ pub fn close_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Res
     if store.current.as_deref() == Some(r.id.as_str()) {
         store.current = None;
     }
+    Ok((t, Changed::Ticket(r.id.clone())))
+}
+
+/// Write a change's decision ahead of its landing: an active ticket becomes
+/// landing and keeps its body, its proposal and its start; a landing one has
+/// its decision replaced. A gap or question has nothing to land.
+pub fn decide_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Result<(Ticket, Changed), ToolError> {
+    let existing = ticket_mut(store, r)?;
+    if existing.kind != TicketKind::Change {
+        return Err(ToolError::invalid(format!("{r} is a {}: a gap or question closes on its answer and has nothing to land", format!("{:?}", existing.kind).to_lowercase()), vec![]));
+    }
+    if !existing.status.is_live() {
+        return Err(ToolError::conflict(format!("{r} is {}, not active: only a ticket being worked waits for its change to land", existing.status.name())));
+    }
+    let mut t = existing.clone();
+    t.status = Status::Landing;
+    t.decision = Some(decision);
+    invalid_if(validate_ticket(&t), "ticket")?;
+    *existing = t.clone();
     Ok((t, Changed::Ticket(r.id.clone())))
 }
 
@@ -963,5 +996,29 @@ mod tests {
         s.current = Some("later-1".into());
         assert!(matches!(delete_node(&mut s, &Reference::ticket("gap-2")).unwrap(), Changed::Deleted(_)));
         assert_eq!(s.current.as_deref(), Some("later-1"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-landing-ticket-is-renamed-and-reordered-like-an-active-one", "checks": ["crates/core/src/ops#rename", "crates/core/src/ops#reorder", "crates/core/src/ops#delete-node"]}
+    /// ```
+    #[test]
+    fn a_landing_ticket_is_renamed_and_reordered_like_an_active_one() {
+        let mut s = crate::graph::fixtures::store();
+        // later-1 touches page:orphan; its decision is written and it waits to land.
+        let t = s.tickets.get_mut("later-1").unwrap();
+        t.status = Status::Landing;
+        t.decision = Some(Decision::new("2026-10-03", "Done."));
+        assert!(validate_ticket(&s.tickets["later-1"]).is_empty());
+        // A rename reaches its references, as it reaches an active ticket's.
+        rename_node(&mut s, &Reference::page("orphan"), "kept").unwrap();
+        assert_eq!(s.tickets["later-1"].touches, vec![Reference::page("kept")]);
+        // It keeps its place in its band's order.
+        let (order, _) = reorder(&mut s, Priority::Later, &[Reference::ticket("later-1")]).unwrap();
+        assert_eq!(order, vec!["later-1".to_string()]);
+        // And it is not history yet: it can be deleted, its decision with it.
+        delete_node(&mut s, &Reference::ticket("later-1")).unwrap();
+        assert!(!s.tickets.contains_key("later-1"));
     }
 }

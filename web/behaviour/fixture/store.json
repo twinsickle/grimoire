@@ -203,6 +203,16 @@
       ],
       "body": "Built on the detached-heads gap.",
       "close": "Counted."
+    },
+    {
+      "title": "Report why a workspace is not ready",
+      "kind": "change",
+      "priority": "next",
+      "touches": [
+        "module:src/ready"
+      ],
+      "body": "Landing: its decision is written and its change has yet to land.",
+      "land": "Reported in one line, once it lands."
     }
   ],
   "after_adoption": {

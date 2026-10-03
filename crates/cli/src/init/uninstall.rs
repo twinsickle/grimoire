@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Take Grimoire's integration back out of a repository: plan what happens to every path of it before changing any, then carry the plan out.","criteria":[{"id":"removes-only-its-own","statement":"uninstall plans every path of the integration before changing any, then removes both harnesses' skill files and their folders only when left empty; Grimoire's section from CLAUDE.md and AGENTS.md only when its marker lines form exactly one pair, cut out byte for byte so line endings, a byte-order mark and the person's text survive, the file removed only when nothing else is left; the grimoire entry from .mcp.json with the other servers and keys kept; the grimoire server from .codex/config.toml only when it is as init wrote it, last in the file, with every other byte kept, otherwise leaving it with a note; and the pre-commit hook only when it is init's script unedited. Every file of the integration gets one result, removed, changed, left with why, or absent, and each folder init made is reported when it is removed empty; a failure part way stops at once and returns what was already done."}]}
+//! {"purpose":"Take Grimoire's integration back out of a repository: plan what happens to every path of it before changing any, then carry the plan out.","criteria":[{"id":"removes-only-its-own","statement":"uninstall plans every path of the integration before changing any, then removes both harnesses' skill files and their folders only when left empty; Grimoire's section from CLAUDE.md and AGENTS.md only when its marker lines form exactly one pair, cut out byte for byte so line endings, a byte-order mark and the person's text survive, the file removed only when nothing else is left; the grimoire entry from .mcp.json with the other servers and keys kept; the grimoire server from .codex/config.toml only when it is as init wrote it, last in the file, with every other byte kept, otherwise leaving it with a note; and the pre-commit and post-commit hooks, each only when it is init's script unedited. Every file of the integration gets one result, removed, changed, left with why, or absent, and each folder init made is reported when it is removed empty; a failure part way stops at once and returns what was already done."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::{guidance::without_guidance, hook_script, io, write, without_codex_server, InitError, CODEX_REL, HARNESSES, HOOK_REL, MCP_REL, SKILL_FILES};
+use super::{guidance::without_guidance, hooks, io, write, without_codex_server, InitError, CODEX_REL, HARNESSES, MCP_REL, SKILL_FILES};
 
 /// What uninstall did, or will do, to one path of the integration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,20 +136,22 @@ pub fn plan_uninstall(repo: &Path) -> Plan {
         }
     });
 
-    // The hook: only init's own script, unedited.
-    let hook = repo.join(HOOK_REL);
-    steps.push(if !hook.is_file() {
-        (Undone::Absent(hook), None)
-    } else {
-        let existing = std::fs::read_to_string(&hook).unwrap_or_default();
-        if existing.replace("\r\n", "\n") == hook_script() {
-            (Undone::Removed(hook), Some(Op::Remove))
-        } else if existing.contains("grimoire check") {
-            left(hook, "not init's script as installed (a hook of your own, or init's edited); take out the `grimoire check` line".into())
+    // The hooks: each only when it is init's own script, unedited.
+    for (rel, script, command) in hooks() {
+        let hook = repo.join(rel);
+        steps.push(if !hook.is_file() {
+            (Undone::Absent(hook), None)
         } else {
-            left(hook, "a hook of your own; Grimoire has nothing in it".into())
-        }
-    });
+            let existing = std::fs::read_to_string(&hook).unwrap_or_default();
+            if existing.replace("\r\n", "\n") == script {
+                (Undone::Removed(hook), Some(Op::Remove))
+            } else if existing.contains(command) {
+                left(hook, format!("not init's script as installed (a hook of your own, or init's edited); take out the `{command}` line"))
+            } else {
+                left(hook, "a hook of your own; Grimoire has nothing in it".into())
+            }
+        });
+    }
     Plan { steps }
 }
 
@@ -200,6 +202,7 @@ impl Plan {
 mod tests {
     use super::*;
     use crate::init::tests::{temp, walk};
+    use crate::init::{hook_script, HOOK_REL, LANDING_HOOK_REL};
     use crate::init::install;
     use serde_json::json;
 
@@ -246,6 +249,7 @@ model = \"o4\"
             Undone::Changed(repo.join(".mcp.json")),
             Undone::Changed(repo.join(CODEX_REL)),
             Undone::Removed(repo.join(HOOK_REL)),
+            Undone::Removed(repo.join(LANDING_HOOK_REL)),
             Undone::Removed(repo.join(".claude/skills/grimoire/references")),
             Undone::Removed(repo.join(".claude/skills/grimoire")),
             Undone::Removed(repo.join(".agents/skills/grimoire/references")),
@@ -256,7 +260,7 @@ model = \"o4\"
         assert_eq!(undone, expected);
         // A second run: every path accounted for, nothing done.
         let again = uninstall(repo);
-        assert_eq!(again.len(), 11, "{again:?}");
+        assert_eq!(again.len(), 12, "{again:?}");
         assert!(again.iter().all(|u| matches!(u, Undone::Left { .. } | Undone::Absent(_))), "{again:?}");
     }
 

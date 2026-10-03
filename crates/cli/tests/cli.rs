@@ -182,6 +182,7 @@ fn only_init_writes_the_repository() {
         ".mcp.json",
         ".codex/config.toml",
         ".git/hooks/pre-commit",
+        ".git/hooks/post-commit",
     ]
     .into_iter()
     .map(String::from)
@@ -809,4 +810,80 @@ fn init_adopts_a_scaffolded_store() {
     assert!(init.status.success() && text(&init).contains("adopted at init"), "{}", text(&init));
     let check = run(&p.repo, &["check"]);
     assert!(check.status.success(), "the hook passes on the next commit: {}", text(&check));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-commit-lands-the-ticket-waiting-on-it", "checks": ["crates/cli/src#land", "crates/cli/src/init#landing-hook"]}
+/// ```
+#[test]
+fn a_commit_lands_the_ticket_waiting_on_it() {
+    // A real git repository, so the hooks init installs are the ones that run,
+    // with this build first on the path, since the hooks call `grimoire` by name.
+    let p = uninitialised();
+    let _ = std::fs::remove_dir_all(p.repo.join(".git"));
+    let bin_dir = Path::new(BIN).parent().unwrap().to_path_buf();
+    let path = std::env::join_paths(std::iter::once(bin_dir).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()))).unwrap();
+    let git = |args: &[&str]| Command::new("git").args(args).current_dir(&p.repo).env("PATH", &path).output().expect("this test needs git");
+    for args in [&["init", "-q"][..], &["config", "user.email", "t@example.com"], &["config", "user.name", "T"], &["config", "commit.gpgsign", "false"]] {
+        assert!(git(args).status.success(), "git {args:?}");
+    }
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    let tool = |name: &str, input: &str| -> serde_json::Value {
+        let o = run(&p.repo, &["tool", name, input]);
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    let status = |ticket: &str| tool("get", &format!(r#"{{"ref":"{ticket}"}}"#))["node"]["status"].as_str().unwrap().to_string();
+    let commit = |message: &str| {
+        assert!(git(&["add", "-A"]).status.success());
+        git(&["commit", "-q", "-m", message])
+    };
+    let ticket = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    // A commit made while the ticket is still being worked lands nothing, and is not refused for it.
+    let c = commit("work");
+    assert!(c.status.success(), "{}", text(&c));
+    assert!(text(&c).contains("no ticket was waiting to land"), "{}", text(&c));
+    assert_eq!(status(&ticket), "active");
+    // The decision is written and the ticket waits; a commit the check refuses lands nothing.
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
+    assert_eq!(status(&ticket), "landing");
+    std::fs::write(p.repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
+    let refused = commit("a module with no contract");
+    assert!(!refused.status.success(), "the check refuses a new finding: {}", text(&refused));
+    assert_eq!(status(&ticket), "landing");
+    // The next commit that passes the check lands it: the ticket is closed with the decision written before.
+    std::fs::remove_file(p.repo.join("src").join("b.rs")).unwrap();
+    std::fs::write(p.repo.join("notes.txt"), "landed\n").unwrap();
+    let c = commit("land");
+    assert!(c.status.success(), "{}", text(&c));
+    assert!(text(&c).contains(&format!("landed {ticket}")), "{}", text(&c));
+    let closed = tool("get", &format!(r#"{{"ref":"{ticket}"}}"#));
+    assert_eq!((closed["node"]["status"].as_str(), closed["node"]["decision"]["text"].as_str()), (Some("closed"), Some("Done.")));
+    // Named, a ticket that is not landing is refused, and only then does the command exit non-zero.
+    let again = run(&p.repo, &["land", &ticket]);
+    assert!(!again.status.success() && text(&again).contains("landing refused"), "{}", text(&again));
+    assert!(run(&p.repo, &["land"]).status.success(), "nothing waiting is not a failure");
+    // A store that cannot be reached is said, with a non-zero exit, and changes nothing.
+    let gone = p.dir.join("no-such-store");
+    let unreachable = run(&p.repo, &["land", "--store", &gone.to_string_lossy()]);
+    assert!(!unreachable.status.success() && text(&unreachable).contains("is not a store"), "{}", text(&unreachable));
+    // `git merge` makes its merge commit without invoking the pre-commit or post-commit hook, so a ticket landing then waits for the command.
+    let second = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("start_ticket", &format!(r#"{{"ref":"{second}"}}"#));
+    assert!(git(&["switch", "-q", "-c", "side"]).status.success());
+    std::fs::write(p.repo.join("side.txt"), "side\n").unwrap();
+    assert!(commit("on a branch").status.success());
+    assert!(git(&["switch", "-q", "-"]).status.success());
+    std::fs::write(p.repo.join("main.txt"), "main\n").unwrap();
+    assert!(commit("on the main line").status.success());
+    tool("close_ticket", &format!(r#"{{"ref":"{second}","decision":{{"text":"Merged."}},"when":"landed"}}"#));
+    let merge = git(&["merge", "--no-ff", "-q", "-m", "merge", "side"]);
+    assert!(merge.status.success(), "{}", text(&merge));
+    assert_eq!(status(&second), "landing", "a merge runs no post-commit hook: {}", text(&merge));
+    let by_hand = run(&p.repo, &["land"]);
+    assert!(by_hand.status.success() && text(&by_hand).contains(&format!("landed {second}")), "{}", text(&by_hand));
 }

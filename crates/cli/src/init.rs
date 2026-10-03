@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, and a pre-commit hook running the check. The guidance section, the Codex configuration and the uninstall plan each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the daemon's URL to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."}]}
+//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the landing. The guidance section, the Codex configuration and the uninstall plan each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"landing-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire land, so a commit lands the ticket waiting on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the daemon's URL to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -47,6 +47,7 @@ pub const CODEX_REL: &str = ".codex/config.toml";
 /// What `.codex/config.toml` still needs of the person.
 pub const CODEX_TRUST: &str = "Codex reads this only once the project is trusted in your own Codex configuration (~/.codex/config.toml); init leaves that to you";
 pub const HOOK_REL: &str = ".git/hooks/pre-commit";
+pub const LANDING_HOOK_REL: &str = ".git/hooks/post-commit";
 
 /// The guidance section for one harness, naming its copy of the skill.
 pub fn section(harness: &Harness) -> String {
@@ -86,6 +87,16 @@ const HOOK_MARK: &str = "Installed by `grimoire init`";
 /// The hook script: fails the commit when the grimoire is inconsistent.
 pub fn hook_script() -> String {
     "#!/bin/sh\n# Installed by `grimoire init`. Fails the commit when the grimoire and the code disagree.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"pre-commit: grimoire is not on PATH; the grimoire was not checked\" >&2\n  exit 0\nfi\nexec grimoire check\n".to_string()
+}
+
+/// The post-commit hook: tells Grimoire the commit landed, so the ticket waiting on it closes.
+pub fn landing_hook_script() -> String {
+    "#!/bin/sh\n# Installed by `grimoire init`. Lands the ticket waiting on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was landed\" >&2\n  exit 0\nfi\nexec grimoire land\n".to_string()
+}
+
+/// init's hooks: where each goes, its script, and the command it runs.
+pub fn hooks() -> [(&'static str, String, &'static str); 2] {
+    [(HOOK_REL, hook_script(), "grimoire check"), (LANDING_HOOK_REL, landing_hook_script(), "grimoire land")]
 }
 
 /// Write the integration into `repo`: `plan_install`, then apply it.
@@ -154,23 +165,27 @@ impl Install {
             });
         }
 
-        // Pre-commit hook: only when the repository is a git checkout and has none.
+        // The hooks, the check before a commit and the landing after it: only
+        // when the repository is a git checkout, and each only where there is none.
         let git = repo.join(".git");
-        if git.is_dir() {
-            let hook = repo.join(HOOK_REL);
-            if hook.exists() {
+        for (rel, script, command) in hooks() {
+            let hook = repo.join(rel);
+            let kind = rel.rsplit('/').next().unwrap_or(rel);
+            if !git.is_dir() {
+                out.push(Wrote::Skipped { path: hook, note: format!("not a git repository; run `{command}` from your own hook or CI") });
+            } else if hook.exists() {
                 let existing = std::fs::read_to_string(&hook).unwrap_or_default();
                 if existing.contains(HOOK_MARK) {
                     // Ours: rewrite, so a changed script reaches the repository.
-                    write(&hook, &hook_script())?;
+                    write(&hook, &script)?;
                     out.push(Wrote::Written(hook));
-                } else if existing.contains("grimoire check") {
-                    out.push(Wrote::Skipped { path: hook, note: "the existing pre-commit hook already runs `grimoire check`".into() });
+                } else if existing.contains(command) {
+                    out.push(Wrote::Skipped { path: hook, note: format!("the existing {kind} hook already runs `{command}`") });
                 } else {
-                    out.push(Wrote::Skipped { path: hook, note: "a pre-commit hook already exists; add `grimoire check` to it".into() });
+                    out.push(Wrote::Skipped { path: hook, note: format!("a {kind} hook already exists; add `{command}` to it") });
                 }
             } else {
-                write(&hook, &hook_script())?;
+                write(&hook, &script)?;
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -178,8 +193,6 @@ impl Install {
                 }
                 out.push(Wrote::Written(hook));
             }
-        } else {
-            out.push(Wrote::Skipped { path: repo.join(HOOK_REL), note: "not a git repository; run `grimoire check` from your own hook or CI".into() });
         }
 
         Ok(out)
@@ -227,7 +240,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber"]}
+    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber", "crates/cli/src/init#landing-hook"]}
     /// ```
     #[test]
     fn installs_and_merges() {
@@ -239,8 +252,14 @@ mod tests {
         std::fs::write(repo.join("CLAUDE.md"), "# My project\n\nUse tabs.\n").unwrap();
 
         let wrote = install(repo, 4343).unwrap();
-        // Three skill files per harness, two guidance files, .mcp.json, .codex/config.toml, the hook.
-        assert_eq!(wrote.len(), 11);
+        // Three skill files per harness, two guidance files, .mcp.json, .codex/config.toml, the two hooks.
+        assert_eq!(wrote.len(), 12);
+        // The check before a commit and the landing after it, each quiet when grimoire is not on the path.
+        for (rel, _, command) in hooks() {
+            let hook = std::fs::read_to_string(repo.join(rel)).unwrap();
+            assert!(hook.contains(HOOK_MARK) && hook.ends_with(&format!("exec {command}\n")) && hook.contains("exit 0"), "{rel}: {hook}");
+        }
+        assert!(landing_hook_script().contains("exec grimoire land"));
         let noted: Vec<_> = wrote.iter().filter(|w| !matches!(w, Wrote::Written(_))).collect();
         assert_eq!(noted, [&Wrote::Noted { path: repo.join(CODEX_REL), note: CODEX_TRUST.into() }]);
 

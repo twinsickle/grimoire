@@ -71,13 +71,13 @@ impl State {
         self.store.current.clone()
     }
     /// The graph for a view: the truth when `ticket` is none, else the truth
-    /// as that ticket's proposal would leave it. A ticket that is not active
-    /// is a conflict, one that does not exist not_found.
+    /// as that ticket's proposal would leave it. A ticket that is neither
+    /// active nor landing is a conflict, one that does not exist not_found.
     pub fn graph_for(&mut self, ticket: Option<&str>) -> Result<&Graph, crate::ops::ToolError> {
         let Some(ticket) = ticket else { return Ok(self.graph()) };
         match self.store.tickets.get(ticket) {
             None => return Err(crate::ops::ToolError::not_found(&crate::model::Reference::ticket(ticket))),
-            Some(t) if t.status != crate::model::Status::Active => return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, not active: only an active ticket has a proposal to read", format!("{:?}", t.status).to_lowercase()))),
+            Some(t) if !t.status.is_live() => return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: only a ticket being worked has a proposal to read", t.status.name()))),
             _ => {}
         }
         if self.view.as_ref().is_none_or(|(t, _)| t != ticket) {

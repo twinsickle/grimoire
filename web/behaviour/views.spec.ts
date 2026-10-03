@@ -3,8 +3,8 @@
  * page and a second root with one page under it, an area with one
  * requirement and two contracted modules, a module
  * without a contract, one test, and tickets open, high, closed and a gap, the
- * first active with a proposal and one closed touching a requirement and
- * relying on a page that no longer exist.
+ * first active with a proposal, one landing, and one closed touching a
+ * requirement and relying on a page that no longer exist.
  * Every finding at that point is adopted as the baseline, and one requirement
  * added after it, so the views have inherited and new findings to tell apart.
  * Every reference is a link to /n/<ref>, so a view's structure can be read
@@ -1140,4 +1140,36 @@ test("a page names the ticket that would change it, and reads as proposed on req
   await expect(main.locator("h1")).toHaveText("Detached heads");
   await expect(main.getByText("draft", { exact: true })).toBeVisible();
   await expect(page.locator(rail)).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-landing-ticket-shows-its-decision-as-waiting", "checks": ["web/src/views/Node#ticket-actions", "web/src/views/Board#first-screen"]}
+ * ```
+ */
+test("a landing ticket shows its decision as waiting to land, on its page and on the board", async ({ page }) => {
+  // Filed and landed here, last of all, so the fixture's own tickets are as the other specs expect them.
+  const ref = (await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Wait to land", kind: "change", priority: "high", touches: ["module:src/ready"], body: "Its decision is written before its change lands." })).node.ref;
+  await tool(page, "start_ticket", { ref });
+  await tool(page, "close_ticket", { ref, decision: { text: "Decided, and waiting.", date: "2026-01-20" }, when: "landed" });
+  await page.goto(`/n/${encodeURIComponent(ref)}`);
+  const main = page.locator("main");
+  await expect(main).toContainText("landing");
+  await expect(main).toContainText("Decided, and waiting.");
+  await expect(main).toContainText("written, waiting for its change to land");
+  // Not closed yet: its body and proposal are kept, and it can still be closed from its page.
+  await expect(main).toContainText("Its decision is written before its change lands.");
+  await expect(page.getByRole("heading", { name: "Proposed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
+  // On the board it is listed with the changes, marked as waiting to land.
+  await page.goto("/board");
+  await expect(row(page, ref)).toContainText("waiting to land");
+  await expect(row(page, ref)).toContainText("landing");
+  await expect(row(page, ref)).not.toContainText("ready");
+  // The landing closes it with the decision written before.
+  const landed = await tool<{ landed: boolean; node: { status: string; decision: { text: string } } }>(page, "land_ticket", { ref });
+  expect([landed.landed, landed.node.status, landed.node.decision.text]).toEqual([true, "closed", "Decided, and waiting."]);
 });

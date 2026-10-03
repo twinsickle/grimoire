@@ -36,7 +36,7 @@ fn tool_defs() -> Vec<Tool> {
             };
             let mut t = Tool::new(d.name, d.description, schema);
             let read_only = !grimoire_core::tools::is_write(d.name);
-            t.annotations = Some(ToolAnnotations::new().read_only(read_only).destructive(d.name == "delete_node" || d.name == "close_ticket").open_world(false));
+            t.annotations = Some(ToolAnnotations::new().read_only(read_only).destructive(d.name == "delete_node" || d.name == "close_ticket" || d.name == "land_ticket").open_world(false));
             t
         })
         .collect()
@@ -49,7 +49,7 @@ impl ServerHandler for McpServer {
             .with_instructions(
                 "This project's grimoire (pages, requirements with decisions, the module contracts in the code) is the truth of what it is meant to do; code and grimoire change in the same piece of work. \
                  Orient first: `outline` at depth 2, then the pages each root links, in their order; `get` a module before opening its files. \
-                 Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the grimoire before the code, under the ticket: a write that changes intent names its `ticket` or lands in the one last started, and reaches the truth when the ticket closes; `lint`, fix what you created, `close_ticket`. \
+                 Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the grimoire before the code, under the ticket: a write that changes intent names its `ticket` or lands in the one last started, and reaches the truth when the ticket closes; `lint`, fix what you created, `close_ticket`, with `when: landed` when its code has still to land: `grimoire land` then closes it, run by the post-commit hook where `init` installed one, else by a pipeline or by you once the change has landed. \
                  Every module in the contract scope carries a `# Module contract`; a new criterion gets a requirement. `find` before writing any reference. Never write the store's files. \
                  A gap or question closes on the person's answer to options you lay out, never on your own decision. \
                  `lint` is `grimoire check`; `status` shows the build's version and languages beside the store's.",

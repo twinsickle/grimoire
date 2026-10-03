@@ -2,7 +2,7 @@
 // (the sources are kept as .rs.txt so Grimoire's own extraction never reads
 // them), initialise a store there, fill it from store.json through the tools
 // under tickets of its own (its pages under two roots), adopt what it finds as
-// the baseline, add the new work, leave one ticket active with a proposal,
+// the baseline, add the new work, leave one ticket landing and one active with a proposal,
 // and run `grimoire serve` with the built UI until Playwright stops it.
 //
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
@@ -63,7 +63,7 @@ function under(title, write) {
   write();
   tool("close_ticket", { ref, decision: { text: "Seeded.", date: "2026-01-10" } });
 }
-const tickets = records.tickets.map(({ close, ...ticket }) => ({ close, ref: tool("file_ticket", ticket).node.ref }));
+const tickets = records.tickets.map(({ close, land, ...ticket }) => ({ close, land, ref: tool("file_ticket", ticket).node.ref }));
 under("Seed the pages and requirements", () => {
   for (const page of records.pages) tool("put_page", page);
   // More than one root, so the views show every root and not only the first.
@@ -85,6 +85,16 @@ under("Add the new work", () => {
   for (const req of records.after_adoption.requirements) tool("put_requirement", req);
   for (const [ref, add_links] of Object.entries(records.after_adoption.links)) tool("patch_page", { ref, add_links });
 });
+
+// One ticket is left landing, its decision written and its change yet to
+// land, so the views have one to show. It is started before the draft below,
+// which is the one left current.
+for (const { land, ref } of tickets) {
+  if (land) {
+    tool("start_ticket", { ref });
+    tool("close_ticket", { ref, decision: { text: land, date: "2026-01-16" }, when: "landed" });
+  }
+}
 
 // The first ticket stays active with a proposal, so the views have a draft
 // to show: a page and a requirement, each read from the truth and changed in

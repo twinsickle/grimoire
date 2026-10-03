@@ -42,7 +42,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 27] = [
+pub const TOOL_NAMES: [&str; 28] = [
     "find",
     "get",
     "outline",
@@ -64,6 +64,7 @@ pub const TOOL_NAMES: [&str; 27] = [
     "update_ticket",
     "start_ticket",
     "close_ticket",
+    "land_ticket",
     "delete_node",
     "rename_node",
     "adopt",
@@ -78,7 +79,7 @@ pub fn proposes(name: &str) -> bool {
 }
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "land_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.

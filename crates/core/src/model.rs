@@ -301,7 +301,25 @@ pub enum Priority {
 pub enum Status {
     Open,
     Active,
+    /// Its decision is written and its change has yet to land: active in
+    /// every other respect, and closed by the landing.
+    Landing,
     Closed,
+}
+
+impl Status {
+    /// Whether a ticket in this status holds a proposal and a start: it is being worked or waits to land.
+    pub fn is_live(self) -> bool {
+        matches!(self, Status::Active | Status::Landing)
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Status::Open => "open",
+            Status::Active => "active",
+            Status::Landing => "landing",
+            Status::Closed => "closed",
+        }
+    }
 }
 
 /// An intended change to the grimoire, or a gap or question about it.

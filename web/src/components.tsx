@@ -124,7 +124,7 @@ export function PriorityTag({ p }: { p: Priority }) {
   return <span className={`font-mono font-semibold text-[11px] uppercase tracking-[0.05em] ${PRIORITY_COLOR[p]}`}>{p}</span>;
 }
 
-const STATUS_COLOR: Record<Status, string> = { open: "text-fg-dim", active: "text-accent", closed: "text-fg-faint" };
+const STATUS_COLOR: Record<Status, string> = { open: "text-fg-dim", active: "text-accent", landing: "text-warn", closed: "text-fg-faint" };
 
 export function StatusTag({ s }: { s: Status }) {
   return <span className={STATUS_COLOR[s]}>{s}</span>;
@@ -213,7 +213,7 @@ export function Folded({ text }: { text: string }) {
 }
 
 /**
- * Start an open ticket, or close an open or active one with a decision,
+ * Start an open ticket, or close one that is not yet closed with a decision,
  * through the start_ticket and close_ticket tools.
  */
 export function TicketActions({ ticket, status }: { ticket: Ref; status: Status }) {

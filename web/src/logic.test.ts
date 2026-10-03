@@ -45,6 +45,7 @@ test("a closed ticket's untitled references are gone; an open ticket's and anoth
   expect([...goneOf(ticket("closed"))]).toEqual(["req:ready-old-name"]);
   expect(goneOf(ticket("open")).size).toBe(0);
   expect(goneOf(ticket("active")).size).toBe(0);
+  expect(goneOf(ticket("landing")).size).toBe(0);
   // A page linking a requirement that does not exist is a dangling finding, not history.
   expect(goneOf({ ref: "page:readiness", in: [], out } as unknown as AnyNode).size).toBe(0);
 });

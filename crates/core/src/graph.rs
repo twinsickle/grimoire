@@ -95,6 +95,8 @@ pub struct Graph {
     pub unresolved_imports: usize,
     /// The store's baseline, as identities to match findings against.
     pub baseline: HashSet<FindingKey>,
+    /// Landing tickets the truth moved under, each with the records that moved, for the lint.
+    pub landing_moved: BTreeMap<String, Vec<String>>,
     /// Configured languages the running build cannot extract, and the ones
     /// it can; set by whoever knows the build (`State`), empty otherwise.
     pub unsupported_languages: Vec<String>,
@@ -110,7 +112,10 @@ impl Graph {
     /// proposed records in place and the deleted ones gone, over the same
     /// extraction. The truth's graph when the ticket has no proposal.
     pub fn with_proposal(store: &Store, ticket: &str, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
-        Graph::build(&store.applied(ticket), extraction, malformed)
+        let mut g = Graph::build(&store.applied(ticket), extraction, malformed);
+        // Judged against the truth itself: with its own proposal laid on top, a ticket's records never look moved.
+        g.landing_moved = crate::ops::landing_moved(store);
+        g
     }
 
     pub fn build(store: &Store, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
@@ -120,6 +125,7 @@ impl Graph {
             unresolved_imports: extraction.unresolved_imports,
             baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
             order: store.config.order.clone(),
+            landing_moved: crate::ops::landing_moved(store),
             ..Default::default()
         };
 
@@ -310,7 +316,7 @@ pub(crate) mod fixtures {
             touches: touches.iter().map(|l| l.parse().unwrap()).collect(),
             relies_on: relies_on.iter().map(|l| l.parse().unwrap()).collect(),
             body: if status == Status::Closed { String::new() } else { "Do it.".into() },
-            decision: if status == Status::Closed { Some(Decision::new("2026-01-01", "Done.")) } else { None },
+            decision: if matches!(status, Status::Landing | Status::Closed) { Some(Decision::new("2026-01-01", "Done.")) } else { None },
         }
     }
 

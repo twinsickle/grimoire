@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"writes-through-daemon","statement":"tool, adopt and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, and a pre-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check: under it the records go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock file, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock file and empty record folders, a rerun removes and finishes."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool and adopt for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check to the store's removal; refused, it writes nothing. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists, or the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, names the tickets still landing, and exits non-zero when a landing was refused, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check: under it the records go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock file, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock file and empty record folders, a rerun removes and finishes."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check to the store's removal; refused, it writes nothing. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists, or the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."}]}
 //! ```
 
 mod init;
@@ -65,7 +65,8 @@ enum Command {
     },
     /// Point a repository at a store and install the integration: .grimoire.toml,
     /// the agent skill and its references, a marked section in CLAUDE.md and
-    /// AGENTS.md, the MCP entry and a pre-commit hook running `check`.
+    /// AGENTS.md, the MCP entry, a pre-commit hook running `check` and a
+    /// post-commit hook running `land`.
     Init {
         #[arg(long)]
         repo: Option<PathBuf>,
@@ -95,6 +96,14 @@ enum Command {
         /// Why the present findings are accepted as inherited work.
         #[arg(long)]
         reason: String,
+    },
+    /// Tell Grimoire a change landed: close the ticket waiting on it with the
+    /// decision it carries. With no ticket, the current one when it is landing.
+    Land {
+        #[arg(long)]
+        store: Option<String>,
+        /// The ticket to land, a slug or a ticket: reference. Defaults to the current ticket.
+        ticket: Option<String>,
     },
     /// Run one tool against the store and print its output: on the daemon
     /// serving the store when there is one, directly otherwise.
@@ -190,6 +199,47 @@ fn repoint_moved_store(store_dir: &Path, recorded: &str, repo: &Path, repo_str: 
     store_io::persist(store_dir, &store, &grimoire_core::ops::Changed::Config)?;
     println!("re-pointed store {} from {recorded}, which is gone, to {repo_str}", store_dir.display());
     Ok(())
+}
+
+/// Land a ticket and say what happened, for the post-commit hook and for a
+/// pipeline. A commit with no ticket waiting on it is ordinary and exits 0;
+/// a landing that was refused exits 1, and so does a store that cannot be
+/// reached, which a pipeline must hear of and a post-commit hook cannot act on.
+fn land(store_dir: &Path, ticket: Option<&str>) -> anyhow::Result<()> {
+    let input = match ticket {
+        Some(t) => json!({ "ref": format!("ticket:{}", t.strip_prefix("ticket:").unwrap_or(t)) }),
+        None => json!({}),
+    };
+    match run_tool(store_dir, "land_ticket", input, None)? {
+        Ok(out) => {
+            if out["landed"].as_bool() == Some(true) {
+                println!("landed {}: {}", out["node"]["ref"].as_str().unwrap_or("the ticket"), out["node"]["title"].as_str().unwrap_or(""));
+                let new = out["findings"].as_array().map_or(0, Vec::len);
+                if new > 0 {
+                    println!("{new} new finding(s) on what it touched; run `grimoire check`");
+                }
+                // What a close answers with is seen here now: the nodes the ticket named and never changed.
+                let untouched: Vec<&str> = out["untouched"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+                if !untouched.is_empty() {
+                    println!("touched but never changed: {}", untouched.join(", "));
+                }
+            } else {
+                println!("no ticket was waiting to land");
+            }
+            let waiting: Vec<String> = out["waiting"].as_array().into_iter().flatten().map(|w| format!("{} ({})", w["ref"].as_str().unwrap_or("?"), w["title"].as_str().unwrap_or(""))).collect();
+            if !waiting.is_empty() {
+                println!("still waiting to land: {}; land one with `grimoire land <ticket>`", waiting.join(", "));
+            }
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("landing refused: {}", e["message"].as_str().unwrap_or("unknown error"));
+            for d in e["details"].as_array().into_iter().flatten() {
+                eprintln!("  {}: {}", d["field"].as_str().unwrap_or("?"), d["reason"].as_str().unwrap_or(""));
+            }
+            std::process::exit(1)
+        }
+    }
 }
 
 /// Adopt and say what it did, for `adopt` and the end of `init`.
@@ -562,6 +612,7 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Uninstall { repo, delete_store } => uninstall(repo, delete_store),
         Command::Adopt { store, reason } => adopt(&store_dir(store.as_deref())?, &reason, None),
+        Command::Land { store, ticket } => land(&store_dir(store.as_deref())?, ticket.as_deref()),
         Command::Tool { store, name, input } => {
             let store_dir = store_dir(store.as_deref())?;
             let input: Value = match input {

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, or with when: landed the findings as its proposal leaves them and no such list, land_ticket answers whether a ticket landed, what its close answers when one did, and the tickets still landing, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the tickets still landing, and takes no ticket field."}]}
 //! ```
 
 use serde::Deserialize;
@@ -179,39 +179,73 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 text: String,
                 date: Option<String>,
             }
+            #[derive(Deserialize, Default, PartialEq)]
+            #[serde(rename_all = "lowercase")]
+            enum When {
+                #[default]
+                Now,
+                Landed,
+            }
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct In {
                 r#ref: Reference,
                 decision: DecisionIn,
+                #[serde(default)]
+                when: When,
             }
             let i: In = parse(input)?;
-            let touched: Vec<Reference> = match state.store.tickets.get(&i.r#ref.id) {
-                Some(t) if i.r#ref.kind == Kind::Ticket && t.status != Status::Closed => t.touches.clone(),
-                Some(_) if i.r#ref.kind == Kind::Ticket => return Err(ToolError::conflict(format!("{} is already closed", i.r#ref))),
-                _ => return Err(ToolError::not_found(&i.r#ref)),
-            };
+            let touched = open_ticket_touches(state, &i.r#ref)?;
             // Nothing below may fail once the proposal is applied, so the decision is checked first.
             let decision = Decision::new(i.decision.date.unwrap_or_else(|| today.to_string()), i.decision.text);
             if !crate::store::is_date(&decision.date) || decision.text.trim().is_empty() {
                 return Err(ToolError::invalid("a decision is a dated paragraph: text, and an ISO date naming a day", vec![]));
             }
-            // The proposal applies only onto the truth it was written against.
-            let moved = ops::moved(state.store(), &i.r#ref.id);
-            if !moved.is_empty() {
-                return Err(ToolError::conflict_with(format!("{} cannot close: the truth moved under its proposal; read what moved again and propose it again", i.r#ref), moved));
+            if i.when == When::Landed {
+                // The decision is written and the ticket waits: nothing reaches the truth until its change lands.
+                let moved = ops::moved(state.store(), &i.r#ref.id);
+                if !moved.is_empty() {
+                    return Err(ToolError::conflict_with(format!("{} cannot wait to land: the truth moved under its proposal; read what moved again and propose it again", i.r#ref), moved));
+                }
+                let (_, changed) = ops::decide_ticket(state.store_mut(), &i.r#ref, decision)?;
+                // What the check before the landing will see: the truth with this ticket's proposal on it.
+                let g = state.graph_for(Some(&i.r#ref.id))?;
+                let node = query::view(g, &i.r#ref).expect("just written");
+                let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
+                return answer(name, Closed { node, findings, baselined, untouched: None }, Some(changed));
             }
-            let applied = ops::apply_proposal(state.store_mut(), &i.r#ref.id);
-            // Compared before the close, which changes the ticket's own record,
-            // and after the proposal landed, so a proposed change counts as one.
-            let untouched = state.store.starts.get(&i.r#ref.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
-            ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
-            state.store_mut().starts.remove(&i.r#ref.id);
-            let changed = Changed::Many(vec![applied, Changed::Closed(i.r#ref.id.clone()), Changed::Current]);
-            let g = state.graph();
-            let node = query::view(g, &i.r#ref).expect("just written");
-            let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
-            answer(name, Closed { node, findings, baselined, untouched }, Some(changed))
+            let (closed, changed) = close_now(state, &i.r#ref, decision, touched)?;
+            answer(name, closed, Some(changed))
+        }
+        "land_ticket" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Option<Reference>,
+            }
+            let i: In = parse(input)?;
+            // Named, the ticket must be landing; unnamed, the current ticket lands when it is, and otherwise nothing does.
+            let target = match i.r#ref {
+                Some(r) => match state.store.tickets.get(&r.id) {
+                    Some(t) if r.kind == Kind::Ticket && t.status == Status::Landing => Some(r),
+                    Some(t) if r.kind == Kind::Ticket => return Err(ToolError::conflict(format!("{r} is {}, not landing: its decision is written with close_ticket and when: landed", t.status.name()))),
+                    _ => return Err(ToolError::not_found(&r)),
+                },
+                None => state.store.current.as_ref().filter(|c| state.store.tickets.get(*c).is_some_and(|t| t.status == Status::Landing)).map(|c| Reference::ticket(c)),
+            };
+            let landed = match target {
+                None => None,
+                Some(r) => {
+                    let touched = open_ticket_touches(state, &r)?;
+                    let decision = state.store.tickets[&r.id].decision.clone().expect("a landing ticket carries its decision");
+                    Some(close_now(state, &r, decision, touched)?)
+                }
+            };
+            let waiting: Vec<query::Summary> = state.store.tickets.values().filter(|t| t.status == Status::Landing).map(query::ticket_summary).collect();
+            match landed {
+                None => answer(name, Landed { landed: false, node: None, findings: vec![], baselined: 0, untouched: None, waiting }, None),
+                Some((c, changed)) => answer(name, Landed { landed: true, node: Some(c.node), findings: c.findings, baselined: c.baselined, untouched: c.untouched, waiting }, Some(changed)),
+            }
         }
         "rename_node" => {
             #[derive(Deserialize)]
@@ -302,6 +336,37 @@ fn written(name: &str, state: &mut State, view: Option<&str>, r: &Reference, cha
 
 /// The new findings, which are the caller's to act on, and how many
 /// baselined ones were left out: inherited work, listed by `lint`.
+/// The nodes a ticket that is not closed touches; a closed one is a conflict.
+fn open_ticket_touches(state: &State, r: &Reference) -> Result<Vec<Reference>, ToolError> {
+    match state.store.tickets.get(&r.id) {
+        Some(t) if r.kind == Kind::Ticket && t.status != Status::Closed => Ok(t.touches.clone()),
+        Some(_) if r.kind == Kind::Ticket => Err(ToolError::conflict(format!("{r} is already closed"))),
+        _ => Err(ToolError::not_found(r)),
+    }
+}
+
+/// Close a ticket at once: its proposal applied to the truth it was written
+/// against, or the close refused naming what moved; then what the close
+/// answers with and what changed. Shared by close_ticket and land_ticket.
+fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<Reference>) -> Result<(Closed, Changed), ToolError> {
+    // The proposal applies only onto the truth it was written against.
+    let moved = ops::moved(state.store(), &r.id);
+    if !moved.is_empty() {
+        return Err(ToolError::conflict_with(format!("{r} cannot close: the truth moved under its proposal; read what moved again and propose it again"), moved));
+    }
+    let applied = ops::apply_proposal(state.store_mut(), &r.id);
+    // Compared before the close, which changes the ticket's own record,
+    // and after the proposal landed, so a proposed change counts as one.
+    let untouched = state.store.starts.get(&r.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
+    ops::close_ticket(state.store_mut(), r, decision)?;
+    state.store_mut().starts.remove(&r.id);
+    let changed = Changed::Many(vec![applied, Changed::Closed(r.id.clone()), Changed::Current]);
+    let g = state.graph();
+    let node = query::view(g, r).expect("just written");
+    let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
+    Ok((Closed { node, findings, baselined, untouched }, changed))
+}
+
 fn split_new(findings: Vec<lint::Finding>) -> (Vec<lint::Finding>, usize) {
     let total = findings.len();
     let new: Vec<lint::Finding> = findings.into_iter().filter(|f| !f.baselined).collect();
@@ -719,5 +784,68 @@ mod tests {
         let out = call(&mut s, "delete_node", json!({ "ref": "ticket:phase-62" }), "2026-10-02").unwrap();
         assert!(matches!(out.changed, Some(Changed::Many(ref cs)) if matches!(cs.last(), Some(Changed::Current))), "{:?}", out.changed);
         assert!(s.store().current.is_none() && !s.store().proposals.contains_key("phase-62") && !s.store().starts.contains_key("phase-62"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-change-waits-to-land-and-the-landing-closes-it", "checks": ["crates/core/src/tools/write#lands", "crates/core/src/tools/write#land-answers", "crates/core/src/ops#closes-when-landed", "crates/core/src/tools/read#ticket-view"]}
+    /// ```
+    #[test]
+    fn a_change_waits_to_land_and_the_landing_closes_it() {
+        let mut s = state();
+        let code = |r: Result<Outcome, ToolError>| r.unwrap_err().code();
+        let truth = s.store().pages["orphan"].clone();
+        let orphan = |body: &str| json!({ "slug": "orphan", "title": "Orphan", "body": body, "links": [], "ticket": "later-1" });
+        let landed = |text: &str| json!({ "ref": "ticket:later-1", "decision": { "text": text }, "when": "landed" });
+        call(&mut s, "put_page", orphan("proposed"), "2026-10-03").unwrap();
+        // Nothing to land yet: later-1 is active, and no ticket is current. Not an error, and nothing changes.
+        let none = call(&mut s, "land_ticket", json!({}), "2026-10-03").unwrap();
+        assert_eq!((none.output["landed"].clone(), none.output["node"].clone()), (json!(false), json!(null)));
+        assert!(none.changed.is_none());
+        assert_eq!(code(call(&mut s, "land_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03")), "conflict", "active, not landing");
+        // The decision is written and the ticket waits: its body, proposal and start kept, the truth untouched.
+        let out = call(&mut s, "close_ticket", landed("Done."), "2026-10-03").unwrap();
+        assert_eq!((out.output["node"]["status"].clone(), out.output["untouched"].clone()), (json!("landing"), json!(null)));
+        let t = s.store().tickets["later-1"].clone();
+        assert_eq!((t.status, t.decision.as_ref().map(|d| d.text.as_str()), t.body.is_empty()), (Status::Landing, Some("Done."), false));
+        assert!(s.store().proposals.contains_key("later-1"));
+        assert_eq!(s.store().pages["orphan"], truth);
+        // It is still written and read with its proposal, and its decision can be written again.
+        call(&mut s, "put_page", orphan("proposed again"), "2026-10-03").unwrap();
+        assert_eq!(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "later-1" }), "2026-10-03").unwrap().output["node"]["body"], "proposed again");
+        call(&mut s, "close_ticket", landed("Done, said better."), "2026-10-04").unwrap();
+        // A gap has nothing to land, and an open ticket is not being worked.
+        assert_eq!(code(call(&mut s, "close_ticket", json!({ "ref": "ticket:gap-1", "decision": { "text": "A." }, "when": "landed" }), "2026-10-04")), "invalid");
+        assert_eq!(code(call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "A." }, "when": "landed" }), "2026-10-04")), "conflict");
+        // The truth moves under it: the landing is refused naming the record, the ticket is still landing, and its decision cannot be written again either.
+        ops::put_page(s.store_mut(), Page { body: "moved".into(), ..truth.clone() }).unwrap();
+        let e = call(&mut s, "land_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-05").unwrap_err();
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!((v["error"].clone(), v["details"][0]["field"].clone()), (json!("conflict"), json!("page:orphan")));
+        assert_eq!(s.store().tickets["later-1"].status, Status::Landing);
+        assert_eq!(s.store().pages["orphan"].body, "moved", "nothing applied");
+        assert_eq!(code(call(&mut s, "close_ticket", landed("Again."), "2026-10-05")), "conflict");
+        // Proposed again over the truth as it now is. Unnamed, only the current ticket lands, so it is listed as waiting.
+        call(&mut s, "put_page", orphan("proposed"), "2026-10-05").unwrap();
+        let waiting = call(&mut s, "land_ticket", json!({}), "2026-10-05").unwrap();
+        assert_eq!((waiting.output["landed"].clone(), waiting.output["waiting"][0]["ref"].clone()), (json!(false), json!("ticket:later-1")));
+        // Named, it lands: closed with the decision written before and that decision's date.
+        let out = call(&mut s, "land_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-06").unwrap();
+        assert_eq!((out.output["landed"].clone(), out.output["node"]["status"].clone(), out.output["waiting"].clone()), (json!(true), json!("closed"), json!([])));
+        let t = s.store().tickets["later-1"].clone();
+        assert_eq!(t.decision.map(|d| (d.date, d.text)), Some(("2026-10-04".to_string(), "Done, said better.".to_string())));
+        assert!(t.body.is_empty() && !s.store().proposals.contains_key("later-1") && !s.store().starts.contains_key("later-1"));
+        assert_eq!(s.store().pages["orphan"].body, "proposed");
+        // The current ticket stays current while landing, lands unnamed, and stops being current.
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-06").unwrap();
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." }, "when": "landed" }), "2026-10-06").unwrap();
+        assert_eq!(s.store().current.as_deref(), Some("phase-62"));
+        let out = call(&mut s, "land_ticket", json!({}), "2026-10-06").unwrap();
+        assert_eq!(out.output["landed"], true);
+        assert_eq!(out.output["untouched"], json!(["req:ready-only-with-commit", "module:src/a/ready"]), "compared with its start when it lands: what it named and never changed");
+        assert!(s.store().current.is_none() && s.store().tickets["phase-62"].status == Status::Closed);
+        // land_ticket applies at once and takes no ticket.
+        assert_eq!(code(call(&mut s, "land_ticket", json!({ "ticket": "later-1" }), "2026-10-06")), "invalid");
     }
 }

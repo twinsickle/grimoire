@@ -64,7 +64,8 @@ it created in `warnings`. Every warning is work to do now.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
-  `high`, `later`.
+  `high`, `later`; statuses `open`, `active`, `landing` (its decision
+  written, its change yet to land) and `closed`.
 - `put_page` and `put_requirement` **replace** the record. To add or remove
   a page's links, `patch_page`; it touches nothing else. For a requirement,
   `get` first and send the whole thing back; existing decisions are kept.
@@ -185,9 +186,28 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    ticket, since this one is closed) or the node did not need changing
    (say so in the decision, and next time remove it from `touches` before
    closing). `null` means the ticket was started before snapshots existed.
-6. Commit the code and the grimoire changes together only when the user has
-   asked for a commit. The store is outside the repository; the commit is the
-   code and its contracts.
+
+   When the change has code that has still to land, add `"when": "landed"`.
+   The decision is written and the ticket becomes `landing`: nothing reaches
+   the truth yet, the ticket keeps its proposal and stays the current one,
+   and the check still judges the code against that proposal. Its answer
+   carries the findings as the proposal leaves them and no `untouched`. The
+   landing then closes it with that decision: `grimoire land`. The
+   post-commit hook runs it after every commit where `init` installed one
+   (it leaves a hook of the project's own alone and installs none outside
+   git, and says so), and a pipeline runs it as `grimoire land <ticket>`
+   when the change reaches its main line. Where neither does, run it
+   yourself once the change has landed. So the truth moves when the code
+   lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
+   is refused and the ticket stays `landing`, reported as `landing-moved`:
+   write the moved records again under the ticket and run
+   `grimoire land <ticket>`. A change with nothing to land, a gap and a
+   question close at once, without `when`.
+6. Commit the code only when the user has asked for a commit. The store is
+   outside the repository; the commit is the code and its contracts. For a
+   `landing` ticket the commit closes it where the post-commit hook is
+   installed, and the hook prints what landed and any ticket still waiting;
+   if nothing says it landed, run `grimoire land`.
 
 ## Sequence: file a ticket
 

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the open and active tickets whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -51,7 +51,8 @@ fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
             d.sort_by(|a, b| b.date.cmp(&a.date));
             d
         }
-        Some(Node::Ticket(t)) => t.decision.iter().cloned().collect(),
+        // A landing ticket carries a decision already written; nothing is decided until it lands.
+        Some(Node::Ticket(t)) if t.status == Status::Closed => t.decision.iter().cloned().collect(),
         _ => Vec::new(),
     }
 }
@@ -248,5 +249,38 @@ mod tests {
         assert!(r.is_empty(), "a retired requirement has nothing below it: {:?}", r.iter().map(|x| &x.r#ref).collect::<Vec<_>>());
         let from_ticket = rests_on(&g, &Reference::ticket("phase-62"), None);
         assert!(from_ticket.iter().all(|x| x.via.last() != Some(&Reference::req("ready-only-with-commit"))), "nothing reached through it");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-landing-tickets-decision-is-not-yet-decided", "checks": ["crates/core/src/query/walks#bounded-walk"]}
+    /// ```
+    #[test]
+    fn a_landing_tickets_decision_is_not_yet_decided() {
+        let mut store = crate::graph::fixtures::store();
+        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Landing, &[], &[]));
+        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Open, &[], &["ticket:waits", "ticket:old"]);
+        store.tickets.insert(t.slug.clone(), t);
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+        let r = rests_on(&g, &Reference::ticket("new"), None);
+        let decisions = |slug: &str| r.iter().find(|x| x.r#ref == Reference::ticket(slug)).unwrap().decisions.len();
+        assert_eq!((decisions("waits"), decisions("old")), (0, 1), "a decision written is not one in force until the change lands");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-landing-ticket-still-reaches-what-it-touches", "checks": ["crates/core/src/query/walks#rests-on-me"]}
+    /// ```
+    #[test]
+    fn a_landing_ticket_still_reaches_what_it_touches() {
+        let mut store = crate::graph::fixtures::store();
+        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Landing, &["page:orphan"], &[]));
+        store.tickets.insert("done".into(), crate::graph::fixtures::ticket("done", TicketKind::Change, Priority::Next, Status::Closed, &["page:orphan"], &[]));
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+        let reaching: Vec<String> = rests_on_me(&g, &Reference::page("orphan")).tickets.iter().map(|t| t.r#ref.to_string()).collect();
+        assert!(reaching.contains(&"ticket:waits".to_string()), "{reaching:?}");
+        assert!(!reaching.contains(&"ticket:done".to_string()), "a closed ticket no longer reaches it: {reaching:?}");
     }
 }
