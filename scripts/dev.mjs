@@ -1,30 +1,72 @@
 #!/usr/bin/env node
-// This repository's dev loop in one console: the daemon under bacon, rebuilt
-// on every Rust change, and the Vite dev server, the UI with hot reload.
-// Their output is merged, each line prefixed with where it came from; Ctrl+C,
-// or either one stopping, stops both.
+// This repository's dev loop in one console, in the setup a team uses: the
+// shared server that holds this project's intent, the daemon under bacon,
+// rebuilt on every Rust change, which reads that intent with this checkout's
+// code, and the Vite dev server, the UI with hot reload. Their output is
+// merged, each line prefixed with where it came from; Ctrl+C, or any one
+// stopping, stops them all.
 //
 //   node scripts/dev.mjs        (or `npm run dev:all` in web/)
+//
+// The server is the build last installed (`cargo install --path crates/cli`),
+// as a host runs a release, and is run from a copy, so installing again while
+// the loop runs works: a running program cannot be replaced on Windows. A
+// change to the server's side takes effect when the loop is next started
+// after an install. Its address is the one `.grimoire.toml` names; a project
+// file naming a server that is not this machine, or naming a store, starts
+// none, and the loop is then the daemon and the UI alone. Whoever runs the
+// loop is signed in to the server if the server says they are not, with a
+// token of their own made for it; no token is ever revoked here.
 //
 // Stopping is forceful, as bacon's own restarts are: the daemon does not get
 // to remove its serving marker, which every command already tolerates, since
 // they check that a daemon answers before deferring to it.
 
 import { spawn, spawnSync } from "node:child_process";
-import { constants } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { constants, homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const windows = process.platform === "win32";
+const exe = windows ? "grimoire.exe" : "grimoire";
 
+/** Stop before anything is started, saying why. */
+function refuse(why) {
+  process.stderr.write(`dev: ${why}\n`);
+  process.exit(1);
+}
+
+// The server this project names: the one address, written once, in the file every command reads.
+// A project file that names a store, as when going back from the team setup, has no server to start.
+const named = readFileSync(join(root, ".grimoire.toml"), "utf8").match(/^\s*server\s*=\s*"([^"]+)"/m);
+const address = named ? new URL(named[1]) : null;
+const local = address !== null && ["127.0.0.1", "localhost", "[::1]"].includes(address.hostname);
+
+// The build last installed, or the one GRIMOIRE_BIN names.
+const installed = process.env.GRIMOIRE_BIN ?? join(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin", exe);
+if (local && !existsSync(installed)) refuse(`${installed} does not exist; install it with \`cargo install --path crates/cli\``);
+
+// The store the server serves: this project's own, where it has always been.
+const store = process.env.GRIMOIRE_DEV_STORE ?? "grimoire";
+
+// The server runs a copy of the installed build, so the installed one can be
+// replaced while the loop runs.
+const serverBin = join(root, "target", "dev-server", exe);
+if (local) {
+  mkdirSync(dirname(serverBin), { recursive: true });
+  copyFileSync(installed, serverBin);
+}
+
+const server = { name: "server", command: serverBin, args: ["serve", "--shared", "--store", store, "--port", address?.port || "80"], cwd: root, colour: 33 };
 const processes = [
   { name: "daemon", command: "bacon", args: ["serve", "--headless"], cwd: root, colour: 36 },
   // Vite's own entry point, run with this Node: no shell, which on Windows
   // would be needed for npm's .cmd and would break paths with spaces.
   { name: "ui", command: process.execPath, args: [join(root, "web", "node_modules", "vite", "bin", "vite.js")], cwd: join(root, "web"), colour: 35 },
 ];
-const width = Math.max(...processes.map((p) => p.name.length));
+const width = Math.max(...[server, ...processes].map((p) => p.name.length));
 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
@@ -82,7 +124,8 @@ function stopTree(child, signal) {
 }
 
 let reason = null;
-let open = processes.length;
+let open = 0;
+const children = [];
 
 /** Record why the loop is stopping, once; later events do not change it. */
 function stopAll(code) {
@@ -98,10 +141,12 @@ function stopAll(code) {
   }, 5000).unref();
 }
 
-const children = processes.map((p) => {
+function start(p) {
+  open += 1;
   // Off Windows each child leads its own process group, so the whole group
   // can be stopped at once; on Windows taskkill stops the tree.
   const child = spawn(p.command, p.args, { cwd: p.cwd, detached: !windows, stdio: ["ignore", "pipe", "pipe"] });
+  children.push(child);
   prefix(p, child.stdout, process.stdout);
   prefix(p, child.stderr, process.stderr);
   child.on("error", (e) => {
@@ -124,7 +169,7 @@ const children = processes.map((p) => {
     if (open === 0) process.exitCode = reason ?? 0;
   });
   return child;
-});
+}
 
 // A signal to the loop wins over a child's own ending: on Windows Ctrl+C
 // reaches the children too, and whichever is noticed first must not decide.
@@ -134,3 +179,62 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     else process.exitCode = reason = bySignal(signal);
   });
 }
+
+/** Whether the server answers at all: any HTTP answer will do, a refusal included. */
+async function answering() {
+  try {
+    await fetch(new URL("/api/status", address), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Run the installed build in this checkout and wait for it. */
+const grimoire = (args, input) => spawnSync(installed, args, { cwd: root, encoding: "utf8", input });
+
+/**
+ * Sign whoever runs the loop in to the server, if the server says they are
+ * not: a token of their own, made beside the store and kept outside the
+ * repository by `login`. A read through the server is what says whether they
+ * are; it also fetches this checkout's copy of the intent, so the daemon
+ * finds one when it opens. Only the server refusing the sign-in is taken for
+ * not being signed in: anything else that fails is said and stops the loop.
+ * No token is revoked, so one another checkout uses is never taken from it;
+ * a token left over is removed by hand with `grimoire token revoke`.
+ */
+function signIn() {
+  const asked = grimoire(["tool", "status"]);
+  if (asked.status === 0) return true;
+  const said = (asked.stderr || asked.stdout).trim();
+  if (!said.includes("refused this machine")) {
+    write(server, process.stderr, `the server's intent could not be read: ${said}`);
+    return false;
+  }
+  // A slug of its own: who and where, and when, so no two are ever the same.
+  const who = `${process.env.USER ?? process.env.USERNAME ?? "someone"}-${hostname()}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const name = `dev-${who}-${Date.now().toString(36)}`;
+  write(server, process.stdout, `not signed in to the server: making the token \`${name}\` and signing in`);
+  const made = grimoire(["token", "add", name, "--store", store]);
+  const login = made.status === 0 ? grimoire(["login"], made.stdout) : made;
+  const signed = login.status === 0 ? grimoire(["tool", "status"]) : login;
+  if (signed.status === 0) return true;
+  write(server, process.stderr, `could not sign in: ${(signed.stderr || signed.stdout).trim()}`);
+  return false;
+}
+
+// The server first: the daemon reads its intent from it. Then the rest.
+if (!local) write(server, process.stdout, address ? `${address.origin} is not this machine: no server is started here` : ".grimoire.toml names a store: no server is started, and the daemon serves that store");
+if (local) {
+  start(server);
+  const deadline = Date.now() + 30_000;
+  while (reason === null && !(await answering())) {
+    if (Date.now() > deadline) {
+      write(server, process.stderr, `no answer at ${address.origin} after 30 seconds; stopping`);
+      stopAll(1);
+    }
+    await new Promise((wait) => setTimeout(wait, 200));
+  }
+  if (reason === null && !signIn()) stopAll(1);
+}
+if (reason === null) processes.forEach(start);

@@ -27,10 +27,22 @@ Above the marker is what `init` writes into any project. This part is this
 repository only.
 
 - Dev loop: `node scripts/dev.mjs` (or `npm run dev:all` in `web/`) runs
-  both in one console, output prefixed, stopped together by Ctrl+C:
-  `bacon serve --headless`, the daemon on 4242, and `npm run dev`, the UI
-  on 5173. The pre-commit hook runs the installed
+  all three in one console, output prefixed, stopped together by Ctrl+C:
+  the shared server on 4243, `bacon serve --headless`, the daemon on 4242,
+  and `npm run dev`, the UI on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
+- Team setup: the rites' `setup` page carries the rule; this is how it is
+  run here. `.grimoire.toml` names the server on this machine, which the
+  loop starts from a copy of the installed build, signing you in the first
+  time with a token of your own, named `dev-…`, and revoking none. The daemon on 4242 reads the server's
+  intent with this checkout's code and sends every write there; the tools,
+  the HTTP API and the review are reached on 4242 as before. A commit lands
+  nothing: after it, run `grimoire land <ticket>`. A change to the server's
+  side takes effect after `cargo install --path crates/cli` and a restart of
+  the loop. With the server away, reads and `grimoire check` go on from the
+  copy last fetched and every write is refused; to go back to a store of
+  its own, `.grimoire.toml` names `store = "grimoire"` again, and the loop
+  then starts no server.
 - A release binary carries the built UI: `sh scripts/release` builds `web/`,
   then `cargo build --release`, and checks the binary serves its UI. A debug
   build reads `web/dist` from disk, so `bacon serve` alone serves the last

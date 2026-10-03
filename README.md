@@ -75,21 +75,31 @@ in place of the platform's.
 
 ## Development loop
 
-Grimoire is developed pointed at itself: `.grimoire.toml` names the store
-`grimoire`, seeded from this repository's own module contracts and refined
-through the tools. Its own repository is the first target, its own grimoire the
-first store, and the daemon under development is the one its developers and
-their agents use. Four layers: content is live (the daemon re-parses a saved
-file), the daemon restarts on change (bacon), the UI hot-reloads (Vite), and
-agents reach the dev daemon directly (`.mcp.json` and the skill).
+Grimoire is developed pointed at itself, in the setup a team uses: its
+grimoire is the store `grimoire`, seeded from this repository's own module
+contracts and refined through the tools, served by a shared server on this
+machine, which `.grimoire.toml` names. The daemon under development reads that
+intent with this checkout's code and sends its writes there, and is the one
+its developers and their agents use. Four layers: content is live (the daemon
+re-parses a saved file), the daemon restarts on change (bacon), the UI
+hot-reloads (Vite), and agents reach the dev daemon directly (`.mcp.json` and
+the skill).
 
 ```
-cargo install bacon          # once
-bacon serve                  # rebuild and restart the daemon on every save, port 4242
-bacon lint                   # grimoire check on save
+cargo install bacon                    # once
+cargo install --path crates/cli        # the build the server and the hooks run
+cd web && npm install && cd ..         # once
+node scripts/dev.mjs                   # the server on 4243, the daemon on 4242 rebuilt on every save, the UI on 5173
+bacon lint                             # grimoire check on save
 bacon test
-cd web && npm install && npm run dev   # the UI with hot reload on 5173, proxied to the daemon
 ```
+
+`node scripts/dev.mjs` starts the server from a copy of the installed build,
+signs you in to it the first time with a token of your own, and stops
+everything together. A change to
+the server's side takes effect when the loop is next started after
+`cargo install --path crates/cli`. A commit lands no ticket here, as on any
+team: `grimoire land <ticket>` does, after the commit.
 
 `bacon serve` also serves a built UI from `web/dist` on 4242 when one exists
 (`npm run build`). During UI work use the Vite server on 5173 instead.

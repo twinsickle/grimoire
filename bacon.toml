@@ -1,5 +1,6 @@
 # Development loop. `bacon serve` rebuilds and restarts the daemon on every
-# save, pointed at this repository's own store (see .grimoire.toml).
+# save. It reads this repository's intent from the server .grimoire.toml
+# names, which `node scripts/dev.mjs` starts beside it.
 # See "Development loop" in README.md.
 
 default_job = "check"
@@ -25,7 +26,8 @@ command = ["cargo", "test", "--workspace", "--color", "always"]
 need_stdout = true
 
 # The daemon. Long-running, so bacon kills and restarts it when the source
-# changes. The store is the one .grimoire.toml names.
+# changes. Its intent is the server's that .grimoire.toml names, with this
+# checkout's code.
 [jobs.serve]
 command = ["cargo", "run", "--quiet", "--", "serve", "--port", "4242", "--ui-dir", "web/dist"]
 need_stdout = true

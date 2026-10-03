@@ -1,2 +1,2 @@
-# Written once by `grimoire init`. Names the store that holds this project's grimoire.
-store = "grimoire"
+# Written once by `grimoire init`. Names the server that holds this project's grimoire.
+server = "http://127.0.0.1:4243"
