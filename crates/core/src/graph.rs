@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, so every query and lint answers over a branch's own intent when asked to."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -106,6 +106,13 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// The graph as `ticket`'s proposal would leave it: the truth with the
+    /// proposed records in place and the deleted ones gone, over the same
+    /// extraction. The truth's graph when the ticket has no proposal.
+    pub fn with_proposal(store: &Store, ticket: &str, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
+        Graph::build(&store.applied(ticket), extraction, malformed)
+    }
+
     pub fn build(store: &Store, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
         let mut g = Graph {
             roots: store.config.roots.clone(),
@@ -433,5 +440,25 @@ mod tests {
         let loc = g.source_of(&decl).expect("the declaration is found");
         assert_eq!((loc.file.as_str(), loc.line), ("src/a#b.ts", 7));
         assert_eq!(g.source_of(&criterion).map(|l| l.file), Some("src/a#b.ts".to_string()));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-proposal-is-read-as-a-branch", "checks": ["crates/core/src/graph#with-proposal"]}
+    /// ```
+    #[test]
+    fn a_proposal_is_read_as_a_branch() {
+        let mut s = super::fixtures::store();
+        let ext = crate::extraction::fixtures::extraction();
+        crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Whole, |w| crate::ops::put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::module("src/a/ready")] })).unwrap();
+        crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Partial, |w| crate::ops::delete_node(w, &Reference::page("orphan")).map(|c| ((), c))).unwrap();
+        let branch = Graph::with_proposal(&s, "later-1", &ext, &[]);
+        assert!(branch.get(&Reference::page("aim")).is_some() && branch.get(&Reference::page("orphan")).is_none());
+        assert!(branch.inbound(&Reference::module("src/a/ready")).any(|e| e.from == Reference::page("aim")), "joined with the same extraction");
+        let truth = Graph::build(&s, &ext, &[]);
+        assert!(truth.get(&Reference::page("aim")).is_none() && truth.get(&Reference::page("orphan")).is_some());
+        // A ticket with no proposal is the truth.
+        assert!(Graph::with_proposal(&s, "phase-62", &ext, &[]).get(&Reference::page("orphan")).is_some());
     }
 }

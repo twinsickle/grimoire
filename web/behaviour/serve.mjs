@@ -1,8 +1,9 @@
 // Serve the behaviour fixture: copy its repository to a temporary directory
 // (the sources are kept as .rs.txt so Grimoire's own extraction never reads
 // them), initialise a store there, fill it from store.json through the tools
-// (its pages under two roots),
-// adopt what it finds as the baseline, add the new work, and run `grimoire serve` with the built UI until Playwright stops it.
+// under tickets of its own (its pages under two roots), adopt what it finds as
+// the baseline, add the new work, leave one ticket active with a proposal,
+// and run `grimoire serve` with the built UI until Playwright stops it.
 //
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
 
@@ -50,24 +51,54 @@ function grimoire(...args) {
 
 grimoire("init", "--store", store);
 const records = JSON.parse(readFileSync(join(here, "fixture", "store.json"), "utf8"));
-for (const page of records.pages) grimoire("tool", "put_page", JSON.stringify(page));
-// More than one root, so the views show every root and not only the first.
-grimoire("tool", "configure", JSON.stringify({ roots: records.roots }));
-for (const req of records.requirements) grimoire("tool", "put_requirement", JSON.stringify(req));
-for (const { close, ...ticket } of records.tickets) {
-  const ref = JSON.parse(grimoire("tool", "file_ticket", JSON.stringify(ticket))).node.ref;
+const tool = (name, input) => JSON.parse(grimoire("tool", name, JSON.stringify(input)));
+
+// A write that changes intent lands in a ticket's proposal and reaches the
+// truth when the ticket closes, so the fixture is seeded under tickets of its
+// own, filed after the ten the specs name by id and closed before them, with
+// earlier dates, so the board's recently closed stay the fixture's.
+function under(title, write) {
+  const ref = tool("file_ticket", { title, kind: "change", priority: "later", touches: [], body: "Seeds the fixture." }).node.ref;
+  tool("start_ticket", { ref });
+  write();
+  tool("close_ticket", { ref, decision: { text: "Seeded.", date: "2026-01-10" } });
+}
+const tickets = records.tickets.map(({ close, ...ticket }) => ({ close, ref: tool("file_ticket", ticket).node.ref }));
+under("Seed the pages and requirements", () => {
+  for (const page of records.pages) tool("put_page", page);
+  // More than one root, so the views show every root and not only the first.
+  tool("configure", { roots: records.roots });
+  for (const req of records.requirements) tool("put_requirement", req);
+});
+for (const { close, ref } of tickets) {
   if (close) {
-    grimoire("tool", "start_ticket", JSON.stringify({ ref }));
+    tool("start_ticket", { ref });
     // A fixed date, so a view showing a decision renders the same on any day.
-    grimoire("tool", "close_ticket", JSON.stringify({ ref, decision: { text: close, date: "2026-01-15" } }));
+    tool("close_ticket", { ref, decision: { text: close, date: "2026-01-15" } });
   }
 }
 
 // Everything so far is inherited; what follows is new work, so the views
 // have both to show apart.
-grimoire("tool", "adopt", JSON.stringify({ reason: "The fixture's findings are inherited, so the views show them apart from new ones." }));
-for (const req of records.after_adoption.requirements) grimoire("tool", "put_requirement", JSON.stringify(req));
-for (const [ref, add_links] of Object.entries(records.after_adoption.links)) grimoire("tool", "patch_page", JSON.stringify({ ref, add_links }));
+tool("adopt", { reason: "The fixture's findings are inherited, so the views show them apart from new ones." });
+under("Add the new work", () => {
+  for (const req of records.after_adoption.requirements) tool("put_requirement", req);
+  for (const [ref, add_links] of Object.entries(records.after_adoption.links)) tool("patch_page", { ref, add_links });
+});
+
+// The first ticket stays active with a proposal, so the views have a draft
+// to show: a page and a requirement, each read from the truth and changed in
+// one field.
+const draft = tickets[0].ref;
+tool("start_ticket", { ref: draft });
+const { slug, title, body, links } = tool("get", { ref: "page:readiness" }).node;
+tool("put_page", { slug, title, body: `Proposed: readiness also counts a detached head.
+
+${body}`, links, ticket: draft });
+const req = tool("get", { ref: "req:ready-needs-commit" }).node;
+tool("put_requirement", { slug: req.slug, title: `${req.title}, detached too`, statement: req.statement, scenarios: req.scenarios, covered_by: req.covered_by, ticket: draft });
+// And a page the truth does not have yet.
+tool("put_page", { slug: "detached", title: "Detached heads", body: "Proposed by the first ticket: a page the truth does not have yet.", links: [], ticket: draft });
 
 const ui = join(here, "..", "dist");
 const daemon = spawn(bin, ["serve", "--port", port, "--ui-dir", ui], { cwd: repo, stdio: "inherit" });

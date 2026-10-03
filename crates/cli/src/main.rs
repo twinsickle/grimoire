@@ -439,7 +439,9 @@ fn main() -> anyhow::Result<()> {
             } else {
                 rules.iter().map(|r| serde_json::from_value(serde_json::Value::String(r.clone())).with_context(|| format!("unknown rule `{r}`"))).collect::<anyhow::Result<_>>()?
             };
-            let g = loaded.state.graph();
+            // On a branch the current ticket is the branch; its proposal is the intent the code is judged against.
+            let current = loaded.state.current();
+            let g = loaded.state.graph_for(current.as_deref())?;
             let findings = lint::lint(g, &rules);
             let new = lint::new_count(&findings);
             if json {

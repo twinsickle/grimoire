@@ -199,6 +199,8 @@ fn only_init_writes_the_repository() {
         &["check"][..],
         &["tool", "lint"],
         &["tool", "outline"],
+        &["tool", "file_ticket", A_TICKET],
+        &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#],
         &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#],
         &["tool", "file_ticket", A_TICKET],
         &["adopt", "--reason", "again"],
@@ -695,8 +697,10 @@ fn the_daemon_runs_the_local_policy() {
     let (p, _) = project();
     let (_daemon, port) = serve(&p);
     let page = r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#;
-    // A caller on this machine may read and write.
+    // A caller on this machine may read and write; a change of intent lands in a started ticket.
     assert_eq!(status_of(port, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
+    assert_eq!(status_of(port, "POST", "/api/file_ticket", "Host: 127.0.0.1\r\n", A_TICKET), 200);
+    assert_eq!(status_of(port, "POST", "/api/start_ticket", "Host: 127.0.0.1\r\n", r#"{"ref":"ticket:0001"}"#), 200);
     assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\n", page), 200);
     // A page on another site, or a name rebound to this machine, is refused.
     assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\nOrigin: https://example.com\r\n", page), 403);
@@ -712,7 +716,11 @@ fn the_daemon_runs_the_local_policy() {
 fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
     let (p, _) = project();
     let store = p.store.to_string_lossy().to_string();
+    // A page written under a ticket and landed in the truth by its close.
+    assert!(run(&p.repo, &["tool", "file_ticket", A_TICKET]).status.success());
+    assert!(run(&p.repo, &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
     assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
+    assert!(run(&p.repo, &["tool", "close_ticket", r#"{"ref":"ticket:0001","decision":{"text":"Done."}}"#]).status.success());
     // A copy: the first checkout still exists, so the store stays its own.
     let copy = p.dir.join("copy");
     std::fs::create_dir_all(copy.join("src")).unwrap();

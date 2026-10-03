@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; close_ticket answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -13,16 +13,23 @@ use crate::answer::*;
 use crate::lint::{self, Rule};
 use crate::model::*;
 use crate::ops::{self, Changed, ToolError};
+use crate::store::FieldError;
 use crate::query;
 
 /// Run the write tool `name`. `today` is the ISO date used when a decision has none.
-pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<Outcome, ToolError> {
+/// A write that changes intent lands in the proposal of the `ticket` its input
+/// names, else the store's current ticket, and is refused with neither; the
+/// truth changes only when a ticket closes.
+pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
+    // Only a write that changes intent takes `ticket`; any other write refuses it with the fields it does not know.
+    let ticket = if super::proposes(name) { super::take_ticket(&mut input)? } else { None };
     match name {
         "put_page" => {
             let page: Page = parse(input)?;
-            let (node, changed) = ops::put_page(state.store_mut(), page)?;
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
+            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Whole, |s| ops::put_page(s, page))?;
             let r = Reference::page(&node.slug);
-            written(name, state, &r, changed)
+            written(name, state, Some(&t), &r, changed)
         }
         "patch_page" => {
             #[derive(Deserialize)]
@@ -36,8 +43,9 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             }
             let i: In = parse(input)?;
             let patch = ops::PagePatch { title: i.title, body: i.body, add_links: i.add_links.unwrap_or_default(), remove_links: i.remove_links.unwrap_or_default() };
-            let (_, changed) = ops::patch_page(state.store_mut(), &i.r#ref, patch)?;
-            written(name, state, &i.r#ref, changed)
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
+            let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::patch_page(s, &i.r#ref, patch))?;
+            written(name, state, Some(&t), &i.r#ref, changed)
         }
         "put_requirement" => {
             #[derive(Deserialize)]
@@ -53,9 +61,10 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             }
             let i: In = parse(input)?;
             let req = Requirement { slug: i.slug, title: i.title, statement: i.statement, scenarios: i.scenarios, covered_by: i.covered_by, decisions: vec![], retired: false };
-            let (node, changed) = ops::put_requirement(state.store_mut(), req)?;
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
+            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Whole, |s| ops::put_requirement(s, req))?;
             let r = Reference::req(&node.slug);
-            written(name, state, &r, changed)
+            written(name, state, Some(&t), &r, changed)
         }
         "record_decision" => {
             #[derive(Deserialize)]
@@ -68,10 +77,12 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
                 supersedes: Vec<u32>,
             }
             let i: In = parse(input)?;
-            let (node, changed) = ops::record_decision(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()), i.supersedes)?;
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
+            let date = i.date.unwrap_or_else(|| today.to_string());
+            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::record_decision(s, &i.r#ref, i.text, date, i.supersedes))?;
             let r = Reference::req(&node.slug);
-            let node = query::view(state.graph(), &r).expect("just written");
-            answer(name, NodeAnswer { node }, Some(changed))
+            let node = query::view(state.graph_for(Some(&t))?, &r).expect("just written");
+            answer(name, NodeAnswer { node, proposal: None, drafts: None }, Some(changed))
         }
         "supersede" => {
             #[derive(Deserialize)]
@@ -82,9 +93,10 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
                 supersedes: Vec<u32>,
             }
             let i: In = parse(input)?;
-            let (_, changed) = ops::supersede(state.store_mut(), &i.r#ref, i.decision, &i.supersedes)?;
-            let node = query::view(state.graph(), &i.r#ref).expect("just written");
-            answer(name, NodeAnswer { node }, Some(changed))
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
+            let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::supersede(s, &i.r#ref, i.decision, &i.supersedes))?;
+            let node = query::view(state.graph_for(Some(&t))?, &i.r#ref).expect("just written");
+            answer(name, NodeAnswer { node, proposal: None, drafts: None }, Some(changed))
         }
         "retire_node" => {
             #[derive(Deserialize)]
@@ -95,11 +107,13 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
                 date: Option<String>,
             }
             let i: In = parse(input)?;
+            let t = ops::target_ticket(state.store(), ticket.as_deref())?;
             // What retiring leaves behind: the criteria it named, and the tests that hold it.
-            let mut named: Vec<Reference> = state.store().requirements.get(&i.r#ref.id).map(|q| q.covered_by.clone()).unwrap_or_default();
-            named.extend(state.graph().inbound_with(&i.r#ref, crate::model::Relation::Checks).map(|e| e.from.clone()));
-            let (_, changed) = ops::retire_node(state.store_mut(), &i.r#ref, i.text, i.date.unwrap_or_else(|| today.to_string()))?;
-            let g = state.graph();
+            let mut named: Vec<Reference> = state.store().applied(&t).requirements.get(&i.r#ref.id).map(|q| q.covered_by.clone()).unwrap_or_default();
+            named.extend(state.graph_for(Some(&t))?.inbound_with(&i.r#ref, crate::model::Relation::Checks).map(|e| e.from.clone()));
+            let date = i.date.unwrap_or_else(|| today.to_string());
+            let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::retire_node(s, &i.r#ref, i.text, date))?;
+            let g = state.graph_for(Some(&t))?;
             let node = query::view(g, &i.r#ref).expect("just written");
             let (warnings, baselined) = split_new(lint::lint_touching(g, &named));
             answer(name, Written { node, warnings, baselined }, Some(changed))
@@ -122,7 +136,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             let t = ops::NewTicket { title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
             let (node, changed) = ops::file_ticket(state.store_mut(), t)?;
             let r = Reference::ticket(&node.slug);
-            written(name, state, &r, changed)
+            written(name, state, None, &r, changed)
         }
         "update_ticket" => {
             #[derive(Deserialize)]
@@ -138,7 +152,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             let i: In = parse(input)?;
             let patch = ops::TicketPatch { title: i.title, priority: i.priority, touches: i.touches, relies_on: i.relies_on, body: i.body };
             let (_, changed) = ops::update_ticket(state.store_mut(), &i.r#ref, patch)?;
-            written(name, state, &i.r#ref, changed)
+            written(name, state, None, &i.r#ref, changed)
         }
         "start_ticket" => {
             let i: RefIn = parse(input)?;
@@ -147,7 +161,8 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
             // added to touches after they changed.
             let fingerprints = crate::fingerprint::all(state.graph()).into_iter().map(|(r, fp)| (r.to_string(), fp)).collect();
             state.store_mut().starts.insert(i.r#ref.id.clone(), Start { ticket: i.r#ref.id.clone(), fingerprints });
-            let changed = Changed::Started(i.r#ref.id.clone());
+            // The started ticket is now current, so writes that name none land in it.
+            let changed = Changed::Many(vec![Changed::Started(i.r#ref.id.clone()), Changed::Current]);
             let g = state.graph();
             let node = query::view(g, &i.r#ref).expect("just written");
             let rests_on = query::rests_on(g, &i.r#ref, None);
@@ -165,21 +180,34 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
                 date: Option<String>,
             }
             #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
             struct In {
                 r#ref: Reference,
                 decision: DecisionIn,
             }
             let i: In = parse(input)?;
             let touched: Vec<Reference> = match state.store.tickets.get(&i.r#ref.id) {
-                Some(t) if i.r#ref.kind == Kind::Ticket => t.touches.clone(),
+                Some(t) if i.r#ref.kind == Kind::Ticket && t.status != Status::Closed => t.touches.clone(),
+                Some(_) if i.r#ref.kind == Kind::Ticket => return Err(ToolError::conflict(format!("{} is already closed", i.r#ref))),
                 _ => return Err(ToolError::not_found(&i.r#ref)),
             };
-            // Compared before the close, which changes the ticket's own record.
-            let untouched = state.store.starts.get(&i.r#ref.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
+            // Nothing below may fail once the proposal is applied, so the decision is checked first.
             let decision = Decision::new(i.decision.date.unwrap_or_else(|| today.to_string()), i.decision.text);
+            if !crate::store::is_date(&decision.date) || decision.text.trim().is_empty() {
+                return Err(ToolError::invalid("a decision is a dated paragraph: text, and an ISO date naming a day", vec![]));
+            }
+            // The proposal applies only onto the truth it was written against.
+            let moved = ops::moved(state.store(), &i.r#ref.id);
+            if !moved.is_empty() {
+                return Err(ToolError::conflict_with(format!("{} cannot close: the truth moved under its proposal; read what moved again and propose it again", i.r#ref), moved));
+            }
+            let applied = ops::apply_proposal(state.store_mut(), &i.r#ref.id);
+            // Compared before the close, which changes the ticket's own record,
+            // and after the proposal landed, so a proposed change counts as one.
+            let untouched = state.store.starts.get(&i.r#ref.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
             ops::close_ticket(state.store_mut(), &i.r#ref, decision)?;
             state.store_mut().starts.remove(&i.r#ref.id);
-            let changed = Changed::Closed(i.r#ref.id.clone());
+            let changed = Changed::Many(vec![applied, Changed::Closed(i.r#ref.id.clone()), Changed::Current]);
             let g = state.graph();
             let node = query::view(g, &i.r#ref).expect("just written");
             let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
@@ -239,10 +267,19 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
         }
         "delete_node" => {
             let i: RefIn = parse(input)?;
+            // A ticket is not intent and goes at once; a page or requirement is a proposed deletion.
+            let view = match i.r#ref.kind {
+                Kind::Ticket if ticket.is_some() => return Err(ToolError::invalid("`ticket` does not apply: a ticket is deleted at once, with its start and proposal", vec![FieldError::new("ticket", "not taken when deleting a ticket")])),
+                Kind::Ticket => None,
+                _ => Some(ops::target_ticket(state.store(), ticket.as_deref())?),
+            };
             // Edges that pointed at the node become dangling: collect them first.
-            let pointing: Vec<Reference> = state.graph().inbound(&i.r#ref).map(|e| e.from.clone()).collect();
-            let changed = ops::delete_node(state.store_mut(), &i.r#ref)?;
-            let g = state.graph();
+            let pointing: Vec<Reference> = state.graph_for(view.as_deref())?.inbound(&i.r#ref).map(|e| e.from.clone()).collect();
+            let changed = match &view {
+                None => ops::delete_node(state.store_mut(), &i.r#ref)?,
+                Some(t) => ops::propose(state.store_mut(), t, ops::Proposing::Partial, |s| ops::delete_node(s, &i.r#ref).map(|c| ((), c)))?.1,
+            };
+            let g = state.graph_for(view.as_deref())?;
             let mut warnings = Vec::new();
             for from in pointing {
                 warnings.extend(lint::dangling_from(g, &from).into_iter().filter(|f| f.edge.as_ref().is_some_and(|e| e.to == i.r#ref)));
@@ -254,8 +291,10 @@ pub(super) fn call(state: &mut State, name: &str, input: Value, today: &str) -> 
     }
 }
 
-fn written(name: &str, state: &mut State, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
-    let g = state.graph();
+/// Answer a write with the node as it now is in `view`: the proposal a
+/// change of intent landed in, or the truth for a ticket's own record.
+fn written(name: &str, state: &mut State, view: Option<&str>, r: &Reference, changed: Changed) -> Result<Outcome, ToolError> {
+    let g = state.graph_for(view)?;
     let node = query::view(g, r).expect("just written");
     let (warnings, baselined) = split_new(lint::written(g, r));
     answer(name, Written { node, warnings, baselined }, Some(changed))
@@ -311,7 +350,7 @@ mod tests {
     #[test]
     fn put_requirement_warns_when_unspecified() {
         let mut s = state();
-        let req = |scenarios: Value| json!({ "slug": "new-rule", "title": "New", "statement": "It SHALL hold.", "scenarios": scenarios, "covered_by": [] });
+        let req = |scenarios: Value| json!({ "slug": "new-rule", "title": "New", "statement": "It SHALL hold.", "scenarios": scenarios, "covered_by": [], "ticket": "later-1" });
         let out = call(&mut s, "put_requirement", req(json!([])), "2026-09-27").unwrap();
         let w = out.output["warnings"].as_array().unwrap();
         assert_eq!(w.len(), 1);
@@ -360,11 +399,14 @@ mod tests {
         let mut s = state();
         call(&mut s, "adopt", json!({ "reason": "adopted" }), "2026-09-28").unwrap();
         assert!(s.prune_baseline().is_none(), "nothing fixed yet");
-        // Fix the one unspecified requirement.
+        // Fix the one unspecified requirement, under the active ticket, and land it by closing.
         let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
-        call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": scenario, "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap();
+        call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": scenario, "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }), "2026-09-28").unwrap();
+        assert!(s.prune_baseline().is_none(), "a proposal fixes nothing in the truth yet");
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Fixed." } }), "2026-09-28").unwrap();
         assert!(matches!(s.prune_baseline(), Some(Changed::Baseline)));
-        // Break it again: now it is new.
+        // Break it again on a started ticket: lint with no ticket judges the current one, and it is new.
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-09-28").unwrap();
         call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap();
         let lint = call(&mut s, "lint", json!({ "kinds": ["unspecified"] }), "2026-09-28").unwrap().output;
         assert_eq!(lint["new"], 1);
@@ -433,10 +475,10 @@ mod tests {
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-28").unwrap().output;
         assert_eq!(out["findings"], json!([]), "everything on the touched nodes is inherited");
         assert!(out["baselined"].as_u64().unwrap() > 0);
-        let w = call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"] }), "2026-09-28").unwrap().output;
+        let w = call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }), "2026-09-28").unwrap().output;
         assert_eq!(w["warnings"], json!([]), "stale was already dangling and unspecified when adopted");
         assert_eq!(w["baselined"], 2);
-        let fresh = call(&mut s, "put_requirement", json!({ "slug": "fresh", "title": "Fresh", "statement": "It SHALL.", "scenarios": [], "covered_by": [] }), "2026-09-28").unwrap().output;
+        let fresh = call(&mut s, "put_requirement", json!({ "slug": "fresh", "title": "Fresh", "statement": "It SHALL.", "scenarios": [], "covered_by": [], "ticket": "later-1" }), "2026-09-28").unwrap().output;
         assert_eq!(fresh["warnings"][0]["check"], "no-scenario", "new work is handed over");
         assert_eq!(fresh["baselined"], 0);
     }
@@ -449,9 +491,14 @@ mod tests {
     #[test]
     fn record_decision_defaults_to_today() {
         let mut s = state();
-        let out = call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "Why." }), "2026-09-28").unwrap().output;
+        let out = call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "Why.", "ticket": "later-1" }), "2026-09-28").unwrap().output;
         let last = out["node"]["decisions"].as_array().unwrap().last().unwrap().clone();
         assert_eq!(last, json!({ "date": "2026-09-28", "text": "Why." }));
+        // Proposed with its requirement: the truth has no new decision until the ticket closes.
+        assert_eq!(s.store().requirements["ready-only-with-commit"].decisions.len(), 1);
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-09-29").unwrap();
+        let landed = s.store().requirements["ready-only-with-commit"].decisions.last().unwrap();
+        assert_eq!((landed.date.as_str(), landed.text.as_str()), ("2026-09-28", "Why."), "it keeps the date it was recorded");
     }
 
     /// # Test contract
@@ -471,7 +518,13 @@ mod tests {
         call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "touches": ["req:ready-only-with-commit", "module:src/a/ready", "page:orphan", "req:never-was"] }), "2026-09-28").unwrap();
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-28").unwrap();
         assert_eq!(out.output["untouched"], json!(["module:src/a/ready"]), "the requirement and the page changed; a reference that never existed is the lint's");
-        assert!(matches!(out.changed, Some(Changed::Closed(ref slug)) if slug == "phase-62"));
+        // The close applies the proposal, then closes the ticket, then clears the current ticket.
+        let Some(Changed::Many(steps)) = out.changed else { panic!("a close is several changes") };
+        assert!(matches!(steps.first(), Some(Changed::Many(applied)) if applied.iter().any(|c| matches!(c, Changed::Page(p) if p == "orphan")) && applied.iter().any(|c| matches!(c, Changed::Requirement(q) if q == "ready-only-with-commit"))), "{steps:?}");
+        assert!(matches!(&steps[1], Changed::Closed(slug) if slug == "phase-62"));
+        assert!(matches!(steps.last(), Some(Changed::Current)));
+        assert!(s.store().current.is_none(), "closing the current ticket clears it");
+        assert_eq!(s.store().pages["orphan"].body, "Changed before being listed.", "the proposal landed in the truth");
         assert!(!s.store().starts.contains_key("phase-62"), "the start is removed on close");
     }
 
@@ -545,10 +598,11 @@ mod tests {
         assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "Not A Slug" }), "2026-09-28")), "invalid");
         // A copy of the record under the new slug, as a failed rename leaves, is no conflict; a copy that differs in anything is.
         let orphan = s.store().pages["orphan"].clone();
-        let copy = |body: &str| json!({ "slug": "kept", "title": orphan.title, "body": body, "links": orphan.links });
-        call(&mut s, "put_page", copy("changed since"), "2026-09-28").unwrap();
+        // The copy is in the truth, as a failed rename leaves it: written to the store directly, not proposed.
+        let copy = |body: &str| Page { slug: "kept".into(), title: orphan.title.clone(), body: body.into(), links: orphan.links.clone() };
+        ops::put_page(s.store_mut(), copy("changed since")).unwrap();
         assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "kept" }), "2026-09-28")), "conflict");
-        call(&mut s, "put_page", copy(&orphan.body), "2026-09-28").unwrap();
+        ops::put_page(s.store_mut(), copy(&orphan.body)).unwrap();
         call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "kept" }), "2026-09-28").unwrap();
         assert!(!s.store().pages.contains_key("orphan") && s.store().pages["kept"].body == orphan.body);
         // A root page's rename moves the root.
@@ -580,7 +634,7 @@ mod tests {
     #[test]
     fn delete_reports_new_dangling() {
         let mut s = state();
-        let out = call(&mut s, "delete_node", json!({ "ref": "page:git-readiness" }), "2026-09-27").unwrap();
+        let out = call(&mut s, "delete_node", json!({ "ref": "page:git-readiness", "ticket": "later-1" }), "2026-09-27").unwrap();
         let w = out.output["warnings"].as_array().unwrap();
         assert!(w.iter().any(|f| f["ref"] == "page:overview"));
         assert!(w.iter().any(|f| f["ref"] == "ticket:phase-62"));
@@ -598,24 +652,72 @@ mod tests {
         let mut files = crate::extraction::fixtures::extraction_files();
         files[0].tests.push(Test { file: "src/a/ready.rs".into(), name: "holds".into(), line: 50, checks: vec!["req:stale".into()] });
         s.set_extraction(Extraction::from_files(&files));
-        let out = call(&mut s, "retire_node", json!({ "ref": "req:stale", "text": "Gone." }), "2026-09-29").unwrap().output;
+        let out = call(&mut s, "retire_node", json!({ "ref": "req:stale", "text": "Gone.", "ticket": "later-1" }), "2026-09-29").unwrap().output;
         assert!(out["warnings"].as_array().expect("warnings").iter().any(|w| w["check"] == "checks-retired" && w["ref"] == "test:src/a/ready.rs#holds"), "{out}");
-        let e = call(&mut s, "delete_node", json!({ "ref": "req:ready-only-with-commit" }), "2026-09-29").unwrap_err();
+        let e = call(&mut s, "delete_node", json!({ "ref": "req:ready-only-with-commit", "ticket": "later-1" }), "2026-09-29").unwrap_err();
         assert!(e.to_string().contains("retire_node"), "{e}");
-        let out = call(&mut s, "retire_node", json!({ "ref": "req:ready-only-with-commit", "text": "No longer holds." }), "2026-09-29").unwrap().output;
+        let out = call(&mut s, "retire_node", json!({ "ref": "req:ready-only-with-commit", "text": "No longer holds.", "ticket": "later-1" }), "2026-09-29").unwrap().output;
         assert_eq!(out["node"]["retired"], true);
         assert_eq!(out["node"]["decisions"].as_array().map(Vec::len), Some(2));
         assert_eq!(out["node"]["decisions"][1]["supersedes"], json!([1]));
         assert!(out["warnings"].as_array().expect("warnings").iter().any(|w| w["ref"] == "criterion:src/a/ready#guarantee" && w["check"] == "uncovered-criterion"), "{out}");
-        // Still readable by reference.
-        assert_eq!(call(&mut s, "get", json!({ "ref": "req:ready-only-with-commit" }), "2026-09-29").unwrap().output["node"]["retired"], true);
-        let linked = call(&mut s, "supersede", json!({ "ref": "req:ready-only-with-commit", "decision": 2, "supersedes": [1] }), "2026-09-29").unwrap_err();
+        // Still readable by reference, in the proposal; the truth has not moved.
+        assert_eq!(call(&mut s, "get", json!({ "ref": "req:ready-only-with-commit", "ticket": "later-1" }), "2026-09-29").unwrap().output["node"]["retired"], true);
+        assert_ne!(call(&mut s, "get", json!({ "ref": "req:ready-only-with-commit" }), "2026-09-29").unwrap().output["node"]["retired"], true);
+        let linked = call(&mut s, "supersede", json!({ "ref": "req:ready-only-with-commit", "decision": 2, "supersedes": [1], "ticket": "later-1" }), "2026-09-29").unwrap_err();
         // A ticket's decision takes no supersedes, and says so rather than dropping it.
         let closing = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done.", "supersedes": [1] } }), "2026-09-29").unwrap_err();
         assert!(matches!(closing, ToolError::Invalid { .. }), "{closing}");
         // A misspelt field is refused rather than silently dropping the supersession.
-        let typo = call(&mut s, "record_decision", json!({ "ref": "req:stale", "text": "x", "supercedes": [1] }), "2026-09-29").unwrap_err();
+        let typo = call(&mut s, "record_decision", json!({ "ref": "req:stale", "text": "x", "supercedes": [1], "ticket": "later-1" }), "2026-09-29").unwrap_err();
         assert!(matches!(typo, ToolError::Invalid { .. }), "{typo}");
         assert!(matches!(linked, ToolError::Invalid { .. }), "a retired requirement takes nothing more");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-write-lands-in-its-ticket-and-the-close-applies-it", "checks": ["crates/core/src/tools/write#ticket-named"]}
+    /// ```
+    #[test]
+    fn a_write_lands_in_its_ticket_and_the_close_applies_it() {
+        let mut s = state();
+        let code = |r: Result<Outcome, ToolError>| r.unwrap_err().code();
+        let truth = s.store().pages["orphan"].clone();
+        let orphan = |body: &str| json!({ "slug": "orphan", "title": "Orphan", "body": body, "links": [], "ticket": "later-1" });
+        let out = call(&mut s, "put_page", orphan("proposed"), "2026-10-02").unwrap();
+        assert_eq!(out.output["node"]["body"], "proposed", "answered as the proposal holds it");
+        assert!(matches!(out.changed, Some(Changed::Proposed(ref t)) if t == "later-1"));
+        assert_eq!(s.store().pages["orphan"], truth, "the truth is untouched");
+        // Without a ticket and with none current: refused, naming the field.
+        let mut bare = orphan("x");
+        bare.as_object_mut().unwrap().remove("ticket");
+        assert_eq!(code(call(&mut s, "put_page", bare.clone(), "2026-10-02")), "invalid");
+        // With a current ticket, it lands there.
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-02").unwrap();
+        call(&mut s, "put_page", bare, "2026-10-02").unwrap();
+        assert_eq!(s.store().proposals["phase-62"].pages["orphan"].record.body, "x");
+        // No other write takes the field, nor does deleting a ticket.
+        assert_eq!(code(call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "title": "T", "ticket": "later-1" }), "2026-10-02")), "invalid");
+        assert_eq!(code(call(&mut s, "rename_node", json!({ "ref": "page:orphan", "to": "o", "ticket": "later-1" }), "2026-10-02")), "invalid");
+        assert_eq!(code(call(&mut s, "delete_node", json!({ "ref": "ticket:gap-1", "ticket": "later-1" }), "2026-10-02")), "invalid");
+        assert_eq!(code(call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." }, "ticket": "later-1" }), "2026-10-02")), "invalid");
+        assert!(s.store().tickets.contains_key("gap-1") && s.store().tickets["phase-62"].status == Status::Active);
+        // The truth moves under later-1's proposal: its close is a conflict naming the record.
+        ops::put_page(s.store_mut(), Page { body: "moved".into(), ..truth.clone() }).unwrap();
+        let e = call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-10-02").unwrap_err();
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!((v["error"].clone(), v["details"][0]["field"].clone()), (json!("conflict"), json!("page:orphan")));
+        assert_eq!(s.store().tickets["later-1"].status, Status::Active, "not closed");
+        // Proposed again over the truth as it now is, the close applies it.
+        call(&mut s, "put_page", orphan("proposed"), "2026-10-02").unwrap();
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-10-02").unwrap();
+        assert_eq!(s.store().pages["orphan"].body, "proposed");
+        assert!(!s.store().proposals.contains_key("later-1"));
+        assert_eq!(s.store().current.as_deref(), Some("phase-62"), "another ticket's close leaves the current one");
+        // Deleting the current ticket clears it and drops its proposal and start.
+        let out = call(&mut s, "delete_node", json!({ "ref": "ticket:phase-62" }), "2026-10-02").unwrap();
+        assert!(matches!(out.changed, Some(Changed::Many(ref cs)) if matches!(cs.last(), Some(Changed::Current))), "{:?}", out.changed);
+        assert!(s.store().current.is_none() && !s.store().proposals.contains_key("phase-62") && !s.store().starts.contains_key("phase-62"));
     }
 }

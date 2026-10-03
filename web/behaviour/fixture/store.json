@@ -116,7 +116,7 @@
       "touches": [
         "module:src/ready"
       ],
-      "body": "Open, for the ticket actions."
+      "body": "Active, with a proposal: the draft the views show."
     },
     {
       "title": "Explain readiness",

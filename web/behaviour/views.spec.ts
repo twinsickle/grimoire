@@ -2,7 +2,8 @@
  * What each view does, against the fixture store serve.mjs builds: a root
  * page and a second root with one page under it, an area with one
  * requirement and two contracted modules, a module
- * without a contract, one test, and tickets open, high, closed and a gap.
+ * without a contract, one test, and tickets open, high, closed and a gap, the
+ * first active with a proposal.
  * Every finding at that point is adopted as the baseline, and one requirement
  * added after it, so the views have inherited and new findings to tell apart.
  * Every reference is a link to /n/<ref>, so a view's structure can be read
@@ -987,4 +988,66 @@ test("a requirement's page shows its decisions in force and folds the superseded
   await expect(main.getByText("retired", { exact: true })).toHaveCount(0);
   await page.goto("/n/req%3Agone");
   await expect(page.locator("main").getByText("retired", { exact: true })).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-ticket-lists-its-proposal-and-a-node-reads-as-proposed", "checks": ["web/src/views/Node#draft-shown"]}
+ * ```
+ */
+test("an active ticket lists what it proposes, and a node page reads it as proposed", async ({ page }) => {
+  await page.goto("/n/ticket%3A0001");
+  const main = page.locator("main");
+  await expect(main.getByRole("heading", { name: "Proposed" })).toBeVisible();
+  const rows = main.locator("h2:has-text('Proposed') + ul > li");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: "Readiness" })).toContainText("changes body");
+  await expect(rows.filter({ hasText: "Detached heads" })).toContainText("new");
+  const req = rows.filter({ hasText: "Ready only with a commit" });
+  await expect(req).toContainText("changes title");
+  const asProposed = req.getByRole("link", { name: "as proposed" });
+  await expect(asProposed).toHaveAttribute("href", "/n/req%3Aready-needs-commit?ticket=0001");
+  await asProposed.click();
+  await expect(page).toHaveURL(/req%3Aready-needs-commit\?ticket=0001/);
+  await expect(main.locator("h1")).toHaveText("Ready only with a commit, detached too");
+  await expect(main.getByText("draft", { exact: true })).toBeVisible();
+  await main.getByRole("link", { name: "the truth" }).click();
+  await expect(main.locator("h1")).toHaveText("Ready only with a commit");
+  await expect(main.getByText("proposes a change to this")).toBeVisible();
+  await expect(main.getByRole("link", { name: "read it as proposed" })).toHaveAttribute("href", "/n/req%3Aready-needs-commit?ticket=0001");
+  // An open ticket has nothing proposed and no section.
+  await page.goto("/n/ticket%3A0006");
+  await expect(main.getByRole("heading", { name: "Proposed" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-names-its-draft-and-reads-as-proposed", "checks": ["web/src/views/Home#draft-line"]}
+ * ```
+ */
+test("a page names the ticket that would change it, and reads as proposed on request", async ({ page }) => {
+  await page.goto("/n/page%3Areadiness");
+  const main = page.locator("main");
+  const proposed = main.getByText("Proposed: readiness also counts a detached head.");
+  await expect(main.getByText("proposes a change to this")).toBeVisible();
+  await expect(proposed).toHaveCount(0);
+  await main.getByRole("link", { name: "read it as proposed" }).click();
+  await expect(page).toHaveURL(/ticket=0001/);
+  await expect(proposed).toBeVisible();
+  await expect(main.getByText("draft", { exact: true })).toBeVisible();
+  await expect(page.locator(rail)).toBeVisible();
+  // A page no ticket proposes to change carries no line.
+  await page.goto("/n/page%3Agoal");
+  await expect(main.getByText("proposes a change to this")).toHaveCount(0);
+  // A page the proposal adds has no place in the truth's outline, and opens through the ticket.
+  await page.goto("/n/page%3Adetached");
+  await expect(main.getByText("is not in the outline")).toBeVisible();
+  await page.goto("/n/page%3Adetached?ticket=0001");
+  await expect(main.locator("h1")).toHaveText("Detached heads");
+  await expect(main.getByText("draft", { exact: true })).toBeVisible();
+  await expect(page.locator(rail)).toBeVisible();
 });

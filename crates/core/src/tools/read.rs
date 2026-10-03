@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active ticket's proposal would leave it, a ticket that is not active being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."}]}
 //! ```
 
 use serde::Deserialize;
@@ -14,8 +14,17 @@ use crate::model::*;
 use crate::ops::ToolError;
 use crate::query::{self, BoardFilter};
 
-/// Run the read tool `name`.
-pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcome, ToolError> {
+/// Run the read tool `name`. A `ticket` in the input picks the view: the
+/// graph as that ticket's proposal would leave it; absent, the truth, except
+/// that `lint` with none uses the store's current ticket, so the check on a
+/// branch judges the branch's code against the branch's own intent.
+pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Outcome, ToolError> {
+    let view = match super::take_ticket(&mut input)? {
+        Some(t) => Some(t),
+        None if name == "lint" => state.current(),
+        None => None,
+    };
+    let view = view.as_deref();
     match name {
         "find" => {
             #[derive(Deserialize)]
@@ -25,14 +34,15 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 limit: Option<usize>,
             }
             let i: In = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             answer(name, NodesAnswer { nodes: query::find(g, &i.query, i.kinds.as_deref(), i.limit.unwrap_or(20)) }, None)
         }
         "get" => {
             let i: RefIn = parse(input)?;
-            let g = state.graph();
+            let (proposal, drafts) = drafts_of(state.store(), &i.r#ref);
+            let g = state.graph_for(view)?;
             let node = query::view(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
-            answer(name, NodeAnswer { node }, None)
+            answer(name, NodeAnswer { node, proposal, drafts }, None)
         }
         "outline" => {
             #[derive(Deserialize)]
@@ -48,7 +58,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                     return Err(ToolError::invalid(format!("{r} is not a page"), vec![]));
                 }
             }
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             answer(name, query::outline(g, i.depth.unwrap_or(2), i.root.as_ref(), i.pages_only), None)
         }
         "rests_on" => {
@@ -58,7 +68,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 depth: Option<usize>,
             }
             let i: In = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
             }
@@ -66,7 +76,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
         }
         "rests_on_me" => {
             let i: RefIn = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
             }
@@ -74,7 +84,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
         }
         "coverage" => {
             let i: RefIn = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             match (i.r#ref.kind, g.get(&i.r#ref)) {
                 (Kind::Criterion, Some(_)) => answer(name, CoverageAnswer::OfCriterion { requirements: query::requirements_covering(g, &i.r#ref), tests: query::tests_checking(g, &i.r#ref) }, None),
                 (Kind::Module, Some(crate::graph::Node::Module(m))) => answer(name, CoverageAnswer::OfModule { criteria: query::module_coverage(g, m) }, None),
@@ -94,13 +104,13 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 closed: usize,
             }
             let i: In = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref(), closed: i.closed };
             answer(name, query::board(g, &f), None)
         }
         "related_tickets" => {
             let i: RefIn = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             match g.get(&i.r#ref) {
                 Some(crate::graph::Node::Ticket(t)) => answer(name, TicketsAnswer { tickets: query::related_tickets(g, t) }, None),
                 Some(_) => Err(ToolError::invalid(format!("{} is not a ticket", i.r#ref), vec![])),
@@ -113,7 +123,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 kinds: Option<Vec<Rule>>,
             }
             let i: In = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
             let findings = lint::lint(g, &rules);
             let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
@@ -121,7 +131,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
         }
         "module_source" => {
             let i: RefIn = parse(input)?;
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test) {
                 return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
             }
@@ -134,7 +144,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
                 return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
             }
             let reader = state.source.clone();
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             let loc = query::module_source(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
             let file = Reference::file(&loc.file);
             let language = match g.get(&file) {
@@ -158,7 +168,7 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
         "status" => {
             let config = state.store.config.clone();
             let build = state.build.clone();
-            let g = state.graph();
+            let g = state.graph_for(view)?;
             let nodes = Kind::ALL.iter().map(|k| (k.to_string(), g.nodes.keys().filter(|r| r.kind == *k).count())).collect();
             let status = StatusAnswer {
                 repository: config.repository,
@@ -177,6 +187,63 @@ pub(super) fn call(state: &mut State, name: &str, input: Value) -> Result<Outcom
         }
         other => Err(ToolError::invalid(format!("unknown tool `{other}`"), vec![])),
     }
+}
+
+/// What `get` adds about drafts: a ticket's own proposal, or for a page or
+/// requirement the tickets whose proposals would change it. A proposed
+/// record equal to the truth's, or a deletion of what the truth no longer
+/// has, changes nothing at the close and is no draft.
+fn drafts_of(store: &crate::store::Store, r: &Reference) -> (Option<ProposalView>, Option<Vec<Reference>>) {
+    match r.kind {
+        Kind::Ticket => (store.proposals.get(&r.id).map(|p| proposal_view(store, p)), None),
+        Kind::Page | Kind::Req => {
+            let tickets: Vec<Reference> = store.proposals.values().filter(|p| changes(store, p, r)).map(|p| Reference::ticket(&p.ticket)).collect();
+            (None, if tickets.is_empty() { None } else { Some(tickets) })
+        }
+        _ => (None, None),
+    }
+}
+
+/// Whether `p` would change `r` in the truth at its close.
+fn changes(store: &crate::store::Store, p: &Proposal, r: &Reference) -> bool {
+    match r.kind {
+        Kind::Page => p.pages.get(&r.id).is_some_and(|q| store.pages.get(&r.id) != Some(&q.record)) || (p.deleted.contains_key(&r.to_string()) && store.pages.contains_key(&r.id)),
+        Kind::Req => p.requirements.get(&r.id).is_some_and(|q| store.requirements.get(&r.id) != Some(&q.record)) || (p.deleted.contains_key(&r.to_string()) && store.requirements.contains_key(&r.id)),
+        _ => false,
+    }
+}
+
+fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
+    let pages = p
+        .pages
+        .values()
+        .filter(|q| changes(store, p, &Reference::page(&q.record.slug)))
+        .map(|q| {
+            let truth = store.pages.get(&q.record.slug);
+            let differs = truth.map(|t| [("title", t.title != q.record.title), ("body", t.body != q.record.body), ("links", t.links != q.record.links)].into_iter().filter(|(_, d)| *d).map(|(f, _)| f.to_string()).collect()).unwrap_or_default();
+            Draft { r#ref: Reference::page(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
+        })
+        .collect();
+    let requirements = p
+        .requirements
+        .values()
+        .filter(|q| changes(store, p, &Reference::req(&q.record.slug)))
+        .map(|q| {
+            let truth = store.requirements.get(&q.record.slug);
+            let differs = truth
+                .map(|t| {
+                    [("title", t.title != q.record.title), ("statement", t.statement != q.record.statement), ("scenarios", t.scenarios != q.record.scenarios), ("covered_by", t.covered_by != q.record.covered_by), ("decisions", t.decisions != q.record.decisions), ("retired", t.retired != q.record.retired)]
+                        .into_iter()
+                        .filter(|(_, d)| *d)
+                        .map(|(f, _)| f.to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            Draft { r#ref: Reference::req(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
+        })
+        .collect();
+    let deleted = p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok()).filter(|r| changes(store, p, r)).collect();
+    ProposalView { pages, requirements, deleted }
 }
 
 /// What `status` and `adopt` show of a baseline; the entries stay in the store.
@@ -313,5 +380,51 @@ mod tests {
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
         s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", "\n".repeat(SOURCE_LINES + 1))])));
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "reads-take-a-ticket", "checks": ["crates/core/src/tools/read#ticket-view"]}
+    /// ```
+    #[test]
+    fn reads_take_a_ticket() {
+        let mut s = state();
+        let code = |r: Result<crate::tools::Outcome, crate::ops::ToolError>| r.unwrap_err().code();
+        call(&mut s, "put_page", json!({ "slug": "orphan", "title": "ORPHAN", "body": "proposed", "links": ["page:nowhere"], "ticket": "later-1" }), "2026-10-02").unwrap();
+        // The truth, naming the tickets that would change it; the branch, as proposed.
+        let truth = call(&mut s, "get", json!({ "ref": "page:orphan" }), "2026-10-02").unwrap().output;
+        assert_ne!(truth["node"]["body"], "proposed");
+        assert_eq!(truth["drafts"], json!(["ticket:later-1"]));
+        let branch = call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "ticket:later-1" }), "2026-10-02").unwrap().output;
+        assert_eq!(branch["node"]["body"], "proposed");
+        assert_eq!(branch["drafts"], json!(["ticket:later-1"]), "the tickets touching the node, however it is read");
+        // The ticket's page carries its proposal.
+        let t = call(&mut s, "get", json!({ "ref": "ticket:later-1" }), "2026-10-02").unwrap().output;
+        assert_eq!(t["proposal"]["pages"], json!([{ "ref": "page:orphan", "title": "ORPHAN", "new": false, "differs": ["body", "links"] }]));
+        // A record put back equal to the truth's changes nothing at the close, so it is no draft.
+        let same = s.store().pages["orphan"].clone();
+        call(&mut s, "put_page", json!({ "slug": "orphan", "title": same.title, "body": same.body, "links": same.links, "ticket": "later-1" }), "2026-10-02").unwrap();
+        assert!(call(&mut s, "get", json!({ "ref": "page:orphan" }), "2026-10-02").unwrap().output.get("drafts").is_none());
+        assert_eq!(call(&mut s, "get", json!({ "ref": "ticket:later-1" }), "2026-10-02").unwrap().output["proposal"]["pages"], json!([]));
+        call(&mut s, "put_page", json!({ "slug": "orphan", "title": "ORPHAN", "body": "proposed", "links": ["page:nowhere"], "ticket": "later-1" }), "2026-10-02").unwrap();
+        assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "phase-62" }), "2026-10-02")), "conflict", "an open ticket has no branch");
+        assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "nope" }), "2026-10-02")), "not_found");
+        assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": 7 }), "2026-10-02")), "invalid");
+        // lint: the truth without a ticket, the branch with one, the current ticket's branch when there is one.
+        let dangling = |s: &mut State, input: serde_json::Value| call(s, "lint", input, "2026-10-02").unwrap().output["counts"]["dangling"].as_u64().unwrap();
+        let before = dangling(&mut s, json!({}));
+        assert_eq!(dangling(&mut s, json!({ "ticket": "later-1" })), before + 1);
+        s.store_mut().current = Some("later-1".into());
+        assert_eq!(dangling(&mut s, json!({})), before + 1);
+        // Every read takes it: a few of the rest.
+        for (name, input) in [("find", json!({ "query": "orphan" })), ("outline", json!({ "depth": 1 })), ("rests_on", json!({ "ref": "page:orphan" })), ("coverage", json!({ "ref": "module:src/a/ready" }))] {
+            let mut with = input.clone();
+            with["ticket"] = json!("later-1");
+            assert!(call(&mut s, name, with, "2026-10-02").is_ok(), "{name}");
+            let mut bad = input;
+            bad["ticket"] = json!("phase-62");
+            assert_eq!(code(call(&mut s, name, bad, "2026-10-02")), "conflict", "{name}");
+        }
     }
 }

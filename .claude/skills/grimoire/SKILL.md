@@ -48,6 +48,19 @@ it created in `warnings`. Every warning is work to do now.
   is. A requirement that no longer holds is retired with `retire_node`,
   never deleted: `delete_node` refuses one with decisions, and a closed
   ticket.
+- **A write that changes intent lands in a ticket's proposal**, not in the
+  truth: `put_page`, `patch_page`, `put_requirement`, `record_decision`,
+  `supersede`, `retire_node` and `delete_node` of a page or requirement take
+  `ticket` (a slug or `ticket:` reference); absent, they land in the store's
+  current ticket, the one last started; with neither they are refused.
+  The truth changes when the ticket closes. A patch, decision,
+  supersession, retirement or deletion builds on the proposal's copy of the
+  record; when the truth moved under it, the write is refused as a
+  `conflict`: `get` the record and put it whole again under the ticket.
+  Every read takes `ticket` too and then answers as that proposal would
+  leave the graph; `lint` with none uses the current ticket, so a branch is
+  judged against its own intent. Tickets, the baseline, the config, the
+  board's order and `rename_node` apply at once and take no `ticket`.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
@@ -114,7 +127,9 @@ edges.
 ## Sequence: write the spec
 
 The spec is not a document; it is the grimoire after the change, written before
-the code.
+the code, as the ticket's proposal: every write below names the ticket, or
+lands in it as the current one, and the truth is untouched until the close.
+Read the spec back with `ticket` on the reads, or they show the truth.
 
 1. For each node in the ticket's `touches`: `get` it. For a page,
    `put_page` with the new intent and links. For a requirement,
@@ -157,7 +172,11 @@ the code.
    at the output; a type check proves nothing about how a view renders.
 5. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
    paragraph: what was chosen and why, written so someone reading it in a
-   year without the ticket body understands. It returns `findings`, the new
+   year without the ticket body understands. The close applies the ticket's
+   proposal to the truth. It is refused as a `conflict` when the truth moved
+   under the proposal since a record was written, naming each moved record
+   in `details`: `get` each one as the truth now has it, write it again
+   under the ticket, and close again. It returns `findings`, the new
    findings on the nodes the ticket touched; if any are present, fix them and
    re-run `lint`. Closing is allowed with findings; leaving them is not.
    `baselined` counts the inherited ones there; they are not this ticket's.

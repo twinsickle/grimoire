@@ -48,6 +48,8 @@ file: string, };
 
 export type Deleted = { deleted: Ref, warnings: Array<Finding>, baselined: number, };
 
+export type Draft = { ref: Ref, title: string, new: boolean, differs: Array<string>, };
+
 export type EdgeView = { ref: Ref, relation: Relation, title: string | null, };
 
 export type FieldError = { field: string, reason: string, };
@@ -97,7 +99,7 @@ contract_at: [string, number] | null, };
 
 export type ModuleSummary = { ref: Ref, purpose: string | null, };
 
-export type NodeAnswer = { node: NodeView, };
+export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, };
 
 export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test);
 
@@ -110,6 +112,8 @@ export type Outline = { roots: Array<Tree>, unplaced: Array<Tree>, };
 export type Page = { slug: string, title: string, body: string, links: Array<Ref>, };
 
 export type Priority = "next" | "high" | "later";
+
+export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, };
 
 export type Ref = string;
 
@@ -168,7 +172,7 @@ export type TicketKind = "change" | "gap" | "question";
 
 export type TicketsAnswer = { tickets: Array<Summary>, };
 
-export type ToolError = { "error": "not_found", message: string, } | { "error": "invalid", message: string, details: Array<FieldError>, } | { "error": "conflict", message: string, } | { "error": "store_unavailable", message: string, };
+export type ToolError = { "error": "not_found", message: string, } | { "error": "invalid", message: string, details: Array<FieldError>, } | { "error": "conflict", message: string, details: Array<FieldError>, } | { "error": "store_unavailable", message: string, };
 
 export type Tree = { ref: Ref, title: string, 
 /**

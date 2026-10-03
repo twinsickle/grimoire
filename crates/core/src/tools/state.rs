@@ -35,6 +35,8 @@ pub struct State {
     malformed: Vec<Malformed>,
     pub(super) build: Build,
     graph: Option<Graph>,
+    /// The graph as one ticket's proposal would leave it, cached like the truth's.
+    view: Option<(String, Graph)>,
     pub(super) source: Option<std::sync::Arc<dyn SourceReader>>,
 }
 
@@ -62,7 +64,41 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, source: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None }
+    }
+    /// The store's current ticket, the one last started.
+    pub fn current(&self) -> Option<String> {
+        self.store.current.clone()
+    }
+    /// The graph for a view: the truth when `ticket` is none, else the truth
+    /// as that ticket's proposal would leave it. A ticket that is not active
+    /// is a conflict, one that does not exist not_found.
+    pub fn graph_for(&mut self, ticket: Option<&str>) -> Result<&Graph, crate::ops::ToolError> {
+        let Some(ticket) = ticket else { return Ok(self.graph()) };
+        match self.store.tickets.get(ticket) {
+            None => return Err(crate::ops::ToolError::not_found(&crate::model::Reference::ticket(ticket))),
+            Some(t) if t.status != crate::model::Status::Active => return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, not active: only an active ticket has a proposal to read", format!("{:?}", t.status).to_lowercase()))),
+            _ => {}
+        }
+        if self.view.as_ref().is_none_or(|(t, _)| t != ticket) {
+            let mut g = Graph::with_proposal(&self.store, ticket, &self.extraction, &self.malformed);
+            self.flag_languages(&mut g);
+            self.view = Some((ticket.to_string(), g));
+        }
+        Ok(&self.view.as_ref().expect("just built").1)
+    }
+    fn build_graph(&self, store: &Store) -> Graph {
+        let mut g = Graph::build(store, &self.extraction, &self.malformed);
+        self.flag_languages(&mut g);
+        g
+    }
+    /// An unknown build (tests, or a caller that never said) flags nothing.
+    fn flag_languages(&self, g: &mut Graph) {
+        let supported = &self.build.supported_languages;
+        if !supported.is_empty() {
+            g.unsupported_languages = self.store.config.languages.iter().filter(|l| !supported.contains(l)).cloned().collect();
+            g.supported_languages = supported.clone();
+        }
     }
     pub fn store(&self) -> &Store {
         &self.store
@@ -85,21 +121,16 @@ impl State {
         self.store = store;
         self.malformed = malformed;
         self.graph = None;
+        self.view = None;
     }
     pub fn set_extraction(&mut self, extraction: Extraction) {
         self.extraction = extraction;
         self.graph = None;
+        self.view = None;
     }
     pub fn graph(&mut self) -> &Graph {
         if self.graph.is_none() {
-            let mut g = Graph::build(&self.store, &self.extraction, &self.malformed);
-            let supported = &self.build.supported_languages;
-            // An unknown build (tests, or a caller that never said) flags nothing.
-            if !supported.is_empty() {
-                g.unsupported_languages = self.store.config.languages.iter().filter(|l| !supported.contains(l)).cloned().collect();
-                g.supported_languages = supported.clone();
-            }
-            self.graph = Some(g);
+            self.graph = Some(self.build_graph(&self.store));
         }
         self.graph.as_ref().expect("just built")
     }
@@ -114,6 +145,7 @@ impl State {
     }
     pub(super) fn store_mut(&mut self) -> &mut Store {
         self.graph = None;
+        self.view = None;
         &mut self.store
     }
 }

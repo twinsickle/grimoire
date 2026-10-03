@@ -27,8 +27,15 @@ pub fn of_text(text: &str) -> String {
     of_bytes(text.as_bytes())
 }
 
-fn of_json<T: serde::Serialize>(value: &T) -> String {
+/// A stored record's fingerprint, from its JSON: what a proposal remembers
+/// of the truth it was written against, and what `all` gives a page,
+/// requirement or ticket.
+pub fn of_record<T: serde::Serialize>(value: &T) -> String {
     of_text(&serde_json::to_string(value).unwrap_or_default())
+}
+
+fn of_json<T: serde::Serialize>(value: &T) -> String {
+    of_record(value)
 }
 
 /// The fingerprint of every node that can change: stored records, modules,

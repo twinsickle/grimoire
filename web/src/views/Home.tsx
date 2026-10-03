@@ -2,13 +2,14 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the first root's level is shown: the first root page drawn as any page is, with its rollup bars (the whole grimoire's when there is one root) and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."}]}
+ * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the first root's level is shown: the first root page drawn as any page is, with its rollup bars (the whole grimoire's when there is one root) and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither."},{"id":"draft-line","statement":"A page's view carries one line naming each active ticket whose proposal would change the page, linking to the page read as proposed; opened with ?ticket= it reads the page and its pane (its outline at depth 2) through that ticket's proposal and says so, the rail staying the truth's, and a page the proposal adds, which the truth's outline cannot place, opens this way with no breadcrumb; nothing else of a proposal is shown in the grimoire view."}]}
  * ```
  */
 
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
+import { DraftNotice } from "./Node";
 import { idOf, kindOf, localId, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
 /** Deep enough to reach every page, so the rail is every page of the outline. */
@@ -20,6 +21,9 @@ export type At = { root: true } | { page: Ref } | { unplaced: true };
 /** Read the grimoire: a rail of every page, and the root, a page or the unplaced modules beside it. */
 export function HomeView({ at }: { at: At }) {
   const { data, error } = useQuery(() => api.outline({ depth: ALL, pages_only: true }), []);
+  // ?ticket= reads a page as that ticket's proposal would leave it; the rail stays the truth's.
+  const [params] = useSearchParams();
+  const ticket = params.get("ticket") ?? undefined;
   if (error) return <ErrorBox error={error} />;
   if (!data) return <p className="text-fg-dim">Loading…</p>;
   // The first root is the grimoire's root, at /; a later one is read by selecting it.
@@ -34,7 +38,8 @@ export function HomeView({ at }: { at: At }) {
       <div className="min-w-0">
         {"root" in at && <PagePane at={first.ref} above={[]} home={first.ref} />}
         {"unplaced" in at && <UnplacedPane modules={data.unplaced} />}
-        {"page" in at && (path ? <PagePane at={at.page} above={path.slice(0, -1)} home={first.ref} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
+        {/* A page the proposal adds has no place in the truth's outline yet; read through the ticket it opens with no breadcrumb. */}
+        {"page" in at && (path || ticket ? <PagePane at={at.page} above={path ? path.slice(0, -1) : []} home={first.ref} ticket={ticket} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
       </div>
     </div>
   );
@@ -215,8 +220,8 @@ function AreaCard({ tree }: { tree: Tree }) {
 // ---------------------------------------------------------------------------
 
 /** A page beside the rail, from the outline rooted at it: its pages, and its modules with their criteria. */
-function PagePane({ at, above, home }: { at: Ref; above: Tree[]; home: Ref }) {
-  const { data, error } = useQuery(() => api.outline({ root: at, depth: 2 }), [at]);
+function PagePane({ at, above, home, ticket }: { at: Ref; above: Tree[]; home: Ref; ticket?: string }) {
+  const { data, error } = useQuery(() => api.outline(ticket ? { root: at, depth: 2, ticket } : { root: at, depth: 2 }), [at, ticket]);
   if (error) return <ErrorBox error={error} />;
   // The hook keeps the last answer while the next loads; another page's is not this one's.
   const tree = data?.roots[0];
@@ -226,7 +231,10 @@ function PagePane({ at, above, home }: { at: Ref; above: Tree[]; home: Ref }) {
 
 /** `home` is the first root, whose page is /; every other page in the breadcrumb is its node page. */
 function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref }) {
-  const { data } = useQuery(() => api.get(tree.ref), [tree.ref]);
+  // ?ticket= reads the page as that ticket's proposal would leave it; the rail and bars stay the truth's.
+  const [params] = useSearchParams();
+  const ticket = params.get("ticket") ?? undefined;
+  const { data } = useQuery(() => api.get(tree.ref, ticket), [tree.ref, ticket]);
   const page = data?.node as PageNode | undefined;
   const modules = tree.children.filter((c) => kindOf(c.ref) === "module");
   const reqs = tree.children.filter((c) => kindOf(c.ref) === "req");
@@ -249,7 +257,8 @@ function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref 
           <FindingCounts tree={tree} />
         </div>
         <Bars rollup={tree.rollup} />
-        {page ? <Folded key={tree.ref} text={page.body} /> : <p className="text-fg-dim">Loading…</p>}
+        <DraftNotice ref={tree.ref} ticket={ticket} drafts={data?.drafts} />
+        {page ? <Folded key={`${tree.ref}:${ticket ?? ""}`} text={page.body} /> : <p className="text-fg-dim">Loading…</p>}
       </header>
       {pages(tree).length > 0 && <Cards trees={pages(tree)} />}
       {modules.length > 0 && (

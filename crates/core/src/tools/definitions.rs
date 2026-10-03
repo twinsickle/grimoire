@@ -21,10 +21,12 @@ pub fn definitions() -> Vec<ToolDef> {
     let date = json!({ "type": "string", "description": "ISO date YYYY-MM-DD" });
     let decision = json!({ "type": "object", "required": ["text"], "properties": { "text": { "type": "string" }, "date": date }, "additionalProperties": false });
     let scenario = json!({ "type": "object", "required": ["title", "given", "when", "then"], "properties": { "title": {"type":"string"}, "given": {"type":"string"}, "when": {"type":"string"}, "then": {"type":"string"} } });
+    // The reads and the writes that change intent take `ticket`: a read then answers as that ticket's proposal would leave the graph; the write lands in its proposal. No other write takes it.
+    let ticket = json!({ "type": "string", "description": "A ticket slug or ticket: reference. A read answers as that ticket's proposal would leave the graph; a write that changes intent lands in its proposal. Absent, a write lands in the store's current ticket, the one last started, and is refused when there is none; a read sees the truth, except lint, which uses the current ticket." });
     let obj = |required: &[&str], props: Value| json!({ "type": "object", "required": required, "properties": props });
     // Tools whose input refuses fields it does not know say so, so a misspelt field is an error, not ignored.
     let strict = |required: &[&str], props: Value| json!({ "type": "object", "required": required, "properties": props, "additionalProperties": false });
-    vec![
+    let mut defs = vec![
         ToolDef { name: "find", description: "Search nodes by text, optionally by kind. Matches slug, title, statement, purpose, body, declaration path and test name.", input_schema: obj(&["query"], json!({ "query": {"type":"string"}, "kinds": {"type":"array","items":{"type":"string","enum":["page","req","ticket","module","criterion","file","decl","test"]}}, "limit": {"type":"integer","default":20} })) },
         ToolDef { name: "get", description: "One node in full with its edges: `out` is what it links to, `in` is what links to it.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "outline", description: "The grimoire as a tree from the root pages, with coverage, lint-finding counts (and how many are baselined) and the adoption rollup per node, plus the modules no page links. pages_only keeps only pages in the trees, their counts and rollups unchanged: the whole grimoire's shape in a small answer.", input_schema: obj(&[], json!({ "depth": {"type":"integer","default":2}, "root": reference, "pages_only": {"type":"boolean","default":false} })) },
@@ -44,7 +46,7 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "file_ticket", description: "Create an open ticket: a change, gap or question, with the nodes it touches and relies on. The id is generated; the title is the ticket's name.", input_schema: obj(&["title","kind","priority","body"], json!({ "title": {"type":"string"}, "kind": {"type":"string","enum":["change","gap","question"]}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string","description":"Markdown, at most 4000 characters"} })) },
         ToolDef { name: "update_ticket", description: "Change an open or active ticket's title, priority, touches, relies_on or body.", input_schema: obj(&["ref"], json!({ "ref": reference, "title": {"type":"string"}, "priority": {"type":"string","enum":["next","high","later"]}, "touches": refs, "relies_on": refs, "body": {"type":"string"} })) },
         ToolDef { name: "start_ticket", description: "Move a ticket from open to active and return what it rests on and the related gaps and questions.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
-        ToolDef { name: "close_ticket", description: "Close a ticket with its decision. The body is discarded. Returns the new lint findings on the nodes it touched, and how many baselined ones sit there.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
+        ToolDef { name: "close_ticket", description: "Close a ticket with its decision: its proposal is applied to the truth, or the close is refused as a conflict naming the records whose truth moved since they were proposed. The body is discarded. Returns the new lint findings on the nodes it touched, and how many baselined ones sit there.", input_schema: obj(&["ref","decision"], json!({ "ref": reference, "decision": decision })) },
         ToolDef { name: "delete_node", description: "Remove a page, a requirement with no decision, or an open or active ticket. Returns the dangling edges the deletion created. A requirement with decisions is retired with retire_node instead, and a closed ticket is history and stays.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "adopt", description: "Record every present finding as the baseline: inherited work the check does not fail on. Only when the person asks; it needs their reason.", input_schema: obj(&["reason"], json!({ "reason": {"type":"string","description":"Why the present findings are accepted as inherited"} })) },
         ToolDef { name: "configure", description: "Change the store config's roots, languages or contract scope; only the fields given. Answers with the config and how many findings are now new. The repository is set by init only.", input_schema: obj(&[], json!({ "roots": {"type":"array","items":{"type":"string"}}, "languages": {"type":"array","items":{"type":"string"}}, "scope": {"type":"object","properties":{"include":{"type":"array","items":{"type":"string"}},"exclude":{"type":"array","items":{"type":"string"}}},"additionalProperties":false,"description":"Repository-relative path prefixes expected to carry contracts; an empty include means everything"} })) },
@@ -52,7 +54,11 @@ pub fn definitions() -> Vec<ToolDef> {
         ToolDef { name: "reorder", description: "Set the order of one priority band on the board: the tickets listed come first, in that order; the rest follow by dependency, then title.", input_schema: obj(&["priority","order"], json!({ "priority": {"type":"string","enum":["next","high","later"]}, "order": {"type":"array","items": reference} })) },
         ToolDef { name: "source", description: "A node's file as an annotated view: the text of the file holding a module, criterion, file, declaration or test, the node's line, and the lines the graph attaches nodes to (the contract, test blocks, declarations). Reads only files the graph knows.", input_schema: obj(&["ref"], json!({ "ref": reference })) },
         ToolDef { name: "status", description: "Counts of nodes and edges, the repository path, how many imports did not resolve, and the running build's version and supported languages next to the store's languages.", input_schema: obj(&[], json!({})) },
-    ]
+    ];
+    for d in defs.iter_mut().filter(|d| !super::is_write(d.name) || super::proposes(d.name)) {
+        d.input_schema["properties"]["ticket"] = ticket.clone();
+    }
+    defs
 }
 
 #[cfg(test)]
@@ -81,6 +87,20 @@ mod tests {
             if let Err(e) = r {
                 assert_ne!(e.to_string(), format!("unknown tool `{n}`"));
             }
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "ticket-is-offered-where-it-is-taken", "checks": ["crates/core/src/tools/write#ticket-named", "crates/core/src/tools/read#ticket-view"]}
+    /// ```
+    #[test]
+    fn ticket_is_offered_where_it_is_taken() {
+        for d in definitions() {
+            let offered = d.input_schema["properties"].get("ticket").is_some();
+            let taken = !crate::tools::is_write(d.name) || crate::tools::proposes(d.name);
+            assert_eq!(offered, taken, "{}", d.name);
         }
     }
 }

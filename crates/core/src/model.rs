@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text and the positions of earlier decisions each supersedes, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract and an optional contract scope of include and exclude prefixes; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text and the positions of earlier decisions each supersedes, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract and an optional contract scope of include and exclude prefixes; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, and the pages and requirements it deletes by reference with that fingerprint; the current record is the slug of the ticket a write lands in when it names none."}]}
 //! ```
 
 use std::fmt;
@@ -392,6 +392,51 @@ pub struct Start {
     pub fingerprints: std::collections::BTreeMap<String, String>,
 }
 
+/// `proposals/<ticket>.json`: a ticket's proposed change to the truth. The
+/// pages and requirements as they will be once the ticket lands, each with
+/// the fingerprint of the truth's record it was written against (none for a
+/// record the truth does not have), and the records it deletes as marks
+/// carrying that fingerprint. Applied to the truth when the ticket closes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Proposal {
+    pub ticket: String,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub pages: std::collections::BTreeMap<String, Proposed<Page>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub requirements: std::collections::BTreeMap<String, Proposed<Requirement>>,
+    /// Deleted pages and requirements, by reference, with the fingerprint of
+    /// the truth's record when the deletion was proposed.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub deleted: std::collections::BTreeMap<String, String>,
+}
+
+impl Proposal {
+    pub fn new(ticket: &str) -> Self {
+        Proposal { ticket: ticket.to_string(), pages: Default::default(), requirements: Default::default(), deleted: Default::default() }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.pages.is_empty() && self.requirements.is_empty() && self.deleted.is_empty()
+    }
+}
+
+/// A record as a proposal holds it, and what it was written against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Proposed<T> {
+    pub record: T,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+}
+
+/// `current.json`: the ticket a write lands in when it names none, the one
+/// last started on this store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Current {
+    pub ticket: String,
+}
+
 /// `grimoire.json` at the root of a store.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -671,5 +716,28 @@ mod tests {
     fn records_reject_unknown_fields() {
         let bad = r#"{"slug":"a","title":"A","body":"b","links":[],"extra":1}"#;
         assert!(serde_json::from_str::<Page>(bad).is_err());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-proposal-round-trips", "checks": ["crates/core/src/model#proposal-record"]}
+    /// ```
+    #[test]
+    fn a_proposal_round_trips() {
+        let json = r#"{"ticket":"t","pages":{"a":{"record":{"slug":"a","title":"A","body":"b","links":[]},"base":"fp"}},"deleted":{"req:gone":"fp2"}}"#;
+        let p: Proposal = serde_json::from_str(json).unwrap();
+        assert_eq!((p.ticket.as_str(), p.pages["a"].base.as_deref(), p.deleted["req:gone"].as_str()), ("t", Some("fp"), "fp2"));
+        assert!(p.requirements.is_empty() && !p.is_empty());
+        let back = serde_json::to_value(&p).unwrap();
+        assert!(back.get("requirements").is_none(), "an empty map is left out");
+        assert_eq!(serde_json::from_value::<Proposal>(back).unwrap(), p);
+        // A new record carries no base; a field the model lacks is refused.
+        let new: Proposed<Page> = serde_json::from_str(r#"{"record":{"slug":"a","title":"A","body":"b","links":[]}}"#).unwrap();
+        assert_eq!(new.base, None);
+        assert!(serde_json::from_str::<Proposal>(r#"{"ticket":"t","extra":1}"#).is_err());
+        assert!(Proposal::new("t").is_empty());
+        let c: Current = serde_json::from_str(r#"{"ticket":"t"}"#).unwrap();
+        assert_eq!(c.ticket, "t");
     }
 }

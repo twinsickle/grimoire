@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put a page or requirement, file, update, start and close a ticket, rename, reorder and delete a node, adopt a baseline, configure the store; a requirement's decisions are kept by the decisions module beneath.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries and start snapshots), leaving closed tickets as they were; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or an open or active ticket; a requirement with decisions (retire it instead) and a closed ticket are invalid, derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put a page or requirement, file, update, start and close a ticket, rename, reorder and delete a node, adopt a baseline, configure the store; a requirement's decisions are kept by the decisions module beneath.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, open and active tickets, roots, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, and its links and marks are rewritten, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."},{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each an open or active ticket of that priority named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages and scope it is given, refuses a language the build cannot extract, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of an open or active ticket, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or an open or active ticket, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead) and a closed ticket are invalid, derived kinds are invalid and a missing node is not_found."},{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named active ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on and a deletion as a mark, so the truth is untouched; a ticket that is not active is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a decision, a supersession, a retirement, a deletion) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed."},{"id":"current-ticket","statement":"start_ticket makes the started ticket the store's current one and close_ticket clears it when it closes that one; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"close-applies-proposal","statement":"moved names every proposed record whose truth fingerprint differs from the base it was written against, or that was proposed as new and now exists, a record equal to the truth's never among them; apply_proposal writes the proposed records that differ from the truth's and removes the deleted ones in one pass and drops the proposal."}]}
 //! ```
 
 use serde::Serialize;
@@ -25,7 +25,11 @@ pub enum ToolError {
         details: Vec<FieldError>,
     },
     #[error("{message}")]
-    Conflict { message: String },
+    Conflict {
+        message: String,
+        #[serde(default)]
+        details: Vec<FieldError>,
+    },
     #[error("{message}")]
     StoreUnavailable { message: String },
 }
@@ -38,7 +42,12 @@ impl ToolError {
         ToolError::Invalid { message: message.into(), details }
     }
     pub fn conflict(message: impl Into<String>) -> Self {
-        ToolError::Conflict { message: message.into() }
+        ToolError::Conflict { message: message.into(), details: vec![] }
+    }
+    /// A conflict with what conflicts named in `details`, as a close whose
+    /// truth moved names the moved records.
+    pub fn conflict_with(message: impl Into<String>, details: Vec<FieldError>) -> Self {
+        ToolError::Conflict { message: message.into(), details }
     }
     pub fn unavailable(message: impl Into<String>) -> Self {
         ToolError::StoreUnavailable { message: message.into() }
@@ -74,8 +83,190 @@ pub enum Changed {
     Started(String),
     /// A ticket closed: its record, and its snapshot removed.
     Closed(String),
+    /// A ticket's proposal changed: written as it now is, or removed when the
+    /// store no longer holds one for the ticket.
+    Proposed(String),
+    /// The current ticket changed: written as it now is, or removed when none.
+    Current,
     /// Several changes from one write, persisted in this order.
     Many(Vec<Changed>),
+}
+
+/// How a proposed write relates to the record it changes. A whole-record
+/// write (a put) replaces a record the caller has just read, so it rests on
+/// the truth as it is now, whatever the proposal held before. A partial write
+/// (a patch, a decision, a supersession, a retirement, a deletion) builds on
+/// the proposal's copy, which must still rest on the truth: if the truth
+/// moved under it, the write would carry the old truth forward unseen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Proposing {
+    Whole,
+    Partial,
+}
+
+/// Run `op`, a write that changes intent, as `ticket`'s proposal: it runs on
+/// the store as the proposal would leave it, and what it changed is kept in
+/// the proposal, each record with the fingerprint of the truth's record it
+/// rests on. The truth is untouched. The ticket must be active, and a
+/// partial write on a record whose truth moved since it was proposed is a
+/// conflict naming the record.
+pub fn propose<T>(store: &mut Store, ticket: &str, how: Proposing, op: impl FnOnce(&mut Store) -> Result<(T, Changed), ToolError>) -> Result<(T, Changed), ToolError> {
+    match store.tickets.get(ticket) {
+        None => return Err(ToolError::not_found(&Reference::ticket(ticket))),
+        Some(t) if t.status != Status::Active => return Err(ToolError::conflict(format!("ticket:{ticket} is {}, not active: a change belongs to an active ticket", format!("{:?}", t.status).to_lowercase()))),
+        _ => {}
+    }
+    let mut work = store.applied(ticket);
+    let (out, changed) = op(&mut work)?;
+    let mut proposal = store.proposals.get(ticket).cloned().unwrap_or_else(|| Proposal::new(ticket));
+    if how == Proposing::Partial {
+        let stale: Vec<FieldError> = changed_refs(&changed).into_iter().filter(|r| record_moved(store, &proposal, r)).map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; get it as the truth now has it and put it again under the ticket")).collect();
+        if !stale.is_empty() {
+            return Err(ToolError::conflict_with("the truth moved under this proposal's record since it was proposed; get it as the truth now has it and put it again under the ticket", stale));
+        }
+    }
+    absorb(&mut proposal, &work, store, &changed, how);
+    store.proposals.insert(ticket.to_string(), proposal);
+    Ok((out, Changed::Proposed(ticket.to_string())))
+}
+
+/// The pages and requirements a change names, each once.
+fn changed_refs(changed: &Changed) -> Vec<Reference> {
+    let mut out: Vec<Reference> = Vec::new();
+    let mut push = |r: Reference| {
+        if !out.contains(&r) {
+            out.push(r);
+        }
+    };
+    match changed {
+        Changed::Page(slug) => push(Reference::page(slug)),
+        Changed::Requirement(slug) => push(Reference::req(slug)),
+        Changed::Deleted(r) if matches!(r.kind, Kind::Page | Kind::Req) => push(r.clone()),
+        Changed::Many(cs) => cs.iter().flat_map(changed_refs).for_each(push),
+        _ => {}
+    }
+    out
+}
+
+/// Move what an op changed in the working store into the proposal. A whole
+/// write rests on the truth as it is now; a partial write keeps the base the
+/// proposal already held for the record, or its deletion mark's.
+fn absorb(p: &mut Proposal, work: &Store, truth: &Store, changed: &Changed, how: Proposing) {
+    match changed {
+        Changed::Page(slug) => {
+            if let Some(rec) = work.pages.get(slug) {
+                let held = p.deleted.remove(&Reference::page(slug).to_string()).or_else(|| p.pages.get(slug).and_then(|q| q.base.clone()));
+                let now = truth.pages.get(slug).map(crate::fingerprint::of_record);
+                let base = if how == Proposing::Whole { now } else { held.or(now) };
+                p.pages.insert(slug.clone(), Proposed { record: rec.clone(), base });
+            }
+        }
+        Changed::Requirement(slug) => {
+            if let Some(rec) = work.requirements.get(slug) {
+                let held = p.deleted.remove(&Reference::req(slug).to_string()).or_else(|| p.requirements.get(slug).and_then(|q| q.base.clone()));
+                let now = truth.requirements.get(slug).map(crate::fingerprint::of_record);
+                let base = if how == Proposing::Whole { now } else { held.or(now) };
+                p.requirements.insert(slug.clone(), Proposed { record: rec.clone(), base });
+            }
+        }
+        Changed::Deleted(r) => {
+            let (held, now) = match r.kind {
+                Kind::Page => (p.pages.remove(&r.id).and_then(|q| q.base), truth.pages.get(&r.id).map(crate::fingerprint::of_record)),
+                Kind::Req => (p.requirements.remove(&r.id).and_then(|q| q.base), truth.requirements.get(&r.id).map(crate::fingerprint::of_record)),
+                _ => (None, None),
+            };
+            // A record the truth never had leaves no mark: there is nothing to delete at the close.
+            if let Some(fp) = if how == Proposing::Whole { now } else { held.or(now) } {
+                p.deleted.insert(r.to_string(), fp);
+            }
+        }
+        Changed::Many(cs) => {
+            for c in cs {
+                absorb(p, work, truth, c, how);
+            }
+        }
+        // Tickets, the baseline, the config, starts: not intent, never proposed.
+        _ => {}
+    }
+}
+
+/// Whether the truth moved under one record a proposal holds: its base no
+/// longer matches the truth's fingerprint, or it was proposed as new and the
+/// truth now has it. A proposed record equal to the truth's is not a change
+/// and never moved; a deletion of a record already gone has nothing to move.
+/// A record the proposal does not hold has not moved.
+fn record_moved(truth: &Store, p: &Proposal, r: &Reference) -> bool {
+    let now = match r.kind {
+        Kind::Page => truth.pages.get(&r.id).map(crate::fingerprint::of_record),
+        Kind::Req => truth.requirements.get(&r.id).map(crate::fingerprint::of_record),
+        _ => return false,
+    };
+    if let Some(base) = p.deleted.get(&r.to_string()) {
+        return now.as_ref().is_some_and(|n| n != base);
+    }
+    let (base, same) = match r.kind {
+        Kind::Page => match p.pages.get(&r.id) {
+            Some(q) => (q.base.clone(), truth.pages.get(&r.id) == Some(&q.record)),
+            None => return false,
+        },
+        _ => match p.requirements.get(&r.id) {
+            Some(q) => (q.base.clone(), truth.requirements.get(&r.id) == Some(&q.record)),
+            None => return false,
+        },
+    };
+    !same && base != now
+}
+
+/// The proposed records whose truth has moved since they were written, pages
+/// first, then requirements, then deletions.
+pub fn moved(store: &Store, ticket: &str) -> Vec<FieldError> {
+    let Some(p) = store.proposals.get(ticket) else { return vec![] };
+    let refs = p.pages.keys().map(|s| Reference::page(s)).chain(p.requirements.keys().map(|s| Reference::req(s))).chain(p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok()));
+    refs.filter(|r| record_moved(store, p, r)).map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; read it again and propose again")).collect()
+}
+
+/// Apply `ticket`'s proposal to the truth, in one pass, and drop it. The
+/// caller checks `moved` first. Returns what changed, the proposal last.
+pub fn apply_proposal(store: &mut Store, ticket: &str) -> Changed {
+    let mut changes = Vec::new();
+    if let Some(p) = store.proposals.remove(ticket) {
+        for (slug, q) in p.pages {
+            if store.pages.get(&slug) != Some(&q.record) {
+                store.pages.insert(slug.clone(), q.record);
+                changes.push(Changed::Page(slug));
+            }
+        }
+        for (slug, q) in p.requirements {
+            if store.requirements.get(&slug) != Some(&q.record) {
+                store.requirements.insert(slug.clone(), q.record);
+                changes.push(Changed::Requirement(slug));
+            }
+        }
+        for key in p.deleted.keys() {
+            if let Ok(r) = key.parse::<Reference>() {
+                let removed = match r.kind {
+                    Kind::Page => store.pages.remove(&r.id).is_some(),
+                    Kind::Req => store.requirements.remove(&r.id).is_some(),
+                    _ => false,
+                };
+                if removed {
+                    changes.push(Changed::Deleted(r));
+                }
+            }
+        }
+    }
+    changes.push(Changed::Proposed(ticket.to_string()));
+    Changed::Many(changes)
+}
+
+/// The ticket a write that changes intent belongs to: the one given, as a
+/// slug or a `ticket:` reference, else the store's current ticket; neither
+/// is refused, since nothing changes the truth outside a ticket.
+pub fn target_ticket(store: &Store, given: Option<&str>) -> Result<String, ToolError> {
+    match given.map(|g| g.strip_prefix("ticket:").unwrap_or(g).to_string()).or_else(|| store.current.clone()) {
+        Some(t) => Ok(t),
+        None => Err(ToolError::invalid("name the ticket this change belongs to: `ticket` is absent and no ticket is current (start one, or pass ticket)", vec![FieldError::new("ticket", "absent, and no ticket is current")])),
+    }
 }
 
 /// The config fields `configure` may change; the repository is not one.
@@ -134,7 +325,18 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     // left there by a rename that failed part way: then this call finishes it.
     // The comparison is with the record as the rename would write it, so a page
     // that links itself, whose link the rename moved too, still compares equal.
-    let as_renamed = |links: &[Reference]| links.iter().map(|l| if l == r { Reference::new(r.kind, to) } else { l.clone() }).collect::<Vec<_>>();
+    // A list is rewritten the one way everywhere: the old reference becomes the new, kept once, so a rerun compares with what the first run wrote.
+    let rewrite = |refs: &[Reference]| {
+        let mut kept: Vec<Reference> = Vec::with_capacity(refs.len());
+        for l in refs {
+            let l = if l == r { Reference::new(r.kind, to) } else { l.clone() };
+            if !kept.contains(&l) {
+                kept.push(l);
+            }
+        }
+        kept
+    };
+    let as_renamed = |links: &[Reference]| rewrite(links);
     let renamed_already = match r.kind {
         Kind::Page => store.pages.get(to).is_some_and(|there| store.pages.get(&r.id).is_some_and(|p| &Page { slug: to.to_string(), links: as_renamed(&p.links), ..p.clone() } == there)),
         _ => store.requirements.get(to).is_some_and(|there| store.requirements.get(&r.id).is_some_and(|q| &Requirement { slug: to.to_string(), ..q.clone() } == there)),
@@ -142,7 +344,22 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     if exists(store, to) && !renamed_already {
         return Err(ToolError::conflict(format!("{} already exists", Reference::new(r.kind, to))));
     }
+    // A proposal holding a record under the new slug would lose it to the rename;
+    // one a rename that failed part way already moved there is this rename's own.
+    let held_in = store.proposals.values().find(|p| match r.kind {
+        Kind::Page => p.pages.contains_key(to),
+        _ => p.requirements.contains_key(to),
+    });
+    if let Some(p) = held_in.filter(|_| !renamed_already) {
+        return Err(ToolError::conflict(format!("{} is proposed by ticket:{}: close or change that ticket before renaming onto it", Reference::new(r.kind, to), p.ticket)));
+    }
     let new = Reference::new(r.kind, to);
+    // The truth's fingerprint before and after, so a proposal that rested on the old record rests on the renamed one.
+    let fingerprint = |s: &Store, slug: &str| match r.kind {
+        Kind::Page => s.pages.get(slug).map(crate::fingerprint::of_record),
+        _ => s.requirements.get(slug).map(crate::fingerprint::of_record),
+    };
+    let old_fp = fingerprint(store, &r.id);
     let mut changes = Vec::new();
     // The record itself, under its new slug.
     match r.kind {
@@ -160,12 +377,9 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
         }
     }
     let swap = |refs: &mut Vec<Reference>| {
-        let mut hit = false;
-        for x in refs.iter_mut() {
-            if x == r {
-                *x = new.clone();
-                hit = true;
-            }
+        let hit = refs.contains(r);
+        if hit {
+            *refs = rewrite(refs);
         }
         hit
     };
@@ -212,6 +426,44 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
         if let Some(fp) = s.fingerprints.remove(&old_key) {
             s.fingerprints.insert(new_key.clone(), fp);
             changes.push(Changed::Started(s.ticket.clone()));
+        }
+    }
+    // Every proposal: its copy of the record moves with it, its base following
+    // when it rested on the truth's old record; its links and marks are rewritten.
+    let new_fp = fingerprint(store, to);
+    let rebase = |base: Option<String>| if base.is_some() && base == old_fp { new_fp.clone() } else { base };
+    for p in store.proposals.values_mut() {
+        let mut hit = false;
+        match r.kind {
+            Kind::Page => {
+                if let Some(mut q) = p.pages.remove(&r.id) {
+                    q.record.slug = to.to_string();
+                    swap(&mut q.record.links);
+                    q.base = rebase(q.base);
+                    p.pages.insert(to.to_string(), q);
+                    hit = true;
+                }
+            }
+            _ => {
+                if let Some(mut q) = p.requirements.remove(&r.id) {
+                    q.record.slug = to.to_string();
+                    q.base = rebase(q.base);
+                    p.requirements.insert(to.to_string(), q);
+                    hit = true;
+                }
+            }
+        }
+        for q in p.pages.values_mut() {
+            if swap(&mut q.record.links) {
+                hit = true;
+            }
+        }
+        if let Some(fp) = p.deleted.remove(&old_key) {
+            p.deleted.insert(new_key.clone(), rebase(Some(fp)).expect("a mark keeps a fingerprint"));
+            hit = true;
+        }
+        if hit {
+            changes.push(Changed::Proposed(p.ticket.clone()));
         }
     }
     changes.push(Changed::Deleted(r.clone()));
@@ -391,7 +643,9 @@ pub fn start_ticket(store: &mut Store, r: &Reference) -> Result<(Ticket, Changed
         return Err(ToolError::conflict(format!("{r} is {:?}, not open", t.status).to_lowercase()));
     }
     t.status = Status::Active;
-    Ok((t.clone(), Changed::Ticket(r.id.clone())))
+    let t = t.clone();
+    store.current = Some(r.id.clone());
+    Ok((t, Changed::Ticket(r.id.clone())))
 }
 
 pub fn close_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Result<(Ticket, Changed), ToolError> {
@@ -405,6 +659,9 @@ pub fn close_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Res
     t.decision = Some(decision);
     invalid_if(validate_ticket(&t), "ticket")?;
     *existing = t.clone();
+    if store.current.as_deref() == Some(r.id.as_str()) {
+        store.current = None;
+    }
     Ok((t, Changed::Ticket(r.id.clone())))
 }
 
@@ -425,11 +682,19 @@ pub fn delete_node(store: &mut Store, r: &Reference) -> Result<Changed, ToolErro
         Kind::Ticket => store.tickets.remove(&r.id).is_some(),
         _ => return Err(ToolError::invalid(format!("{r} is derived from the repository and cannot be deleted"), vec![])),
     };
-    if removed {
-        Ok(Changed::Deleted(r.clone()))
-    } else {
-        Err(ToolError::not_found(r))
+    if !removed {
+        return Err(ToolError::not_found(r));
     }
+    if r.kind == Kind::Ticket {
+        // Its start and proposal go with it, and it stops being current.
+        store.starts.remove(&r.id);
+        store.proposals.remove(&r.id);
+        if store.current.as_deref() == Some(r.id.as_str()) {
+            store.current = None;
+            return Ok(Changed::Many(vec![Changed::Deleted(r.clone()), Changed::Current]));
+        }
+    }
+    Ok(Changed::Deleted(r.clone()))
 }
 
 #[cfg(test)]
@@ -556,5 +821,147 @@ mod tests {
         assert!(s.tickets.contains_key("old"));
         assert!(delete_node(&mut s, &Reference::req("stale")).is_ok(), "a requirement with no decision can go");
         assert!(delete_node(&mut s, &Reference::ticket("later-1")).is_ok(), "an active ticket can go");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-proposal-leaves-the-truth-alone", "checks": ["crates/core/src/ops#proposal-writes", "crates/core/src/ops#current-ticket"]}
+    /// ```
+    #[test]
+    fn a_proposal_leaves_the_truth_alone() {
+        let mut s = store();
+        let before = s.pages["orphan"].clone();
+        let orphan = |body: &str| Page { body: body.into(), ..before.clone() };
+        // later-1 is active in the fixture: the write runs, and the truth does not move.
+        let (p, changed) = propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("proposed"))).unwrap();
+        assert_eq!(p.body, "proposed");
+        assert!(matches!(changed, Changed::Proposed(ref t) if t == "later-1"));
+        assert_eq!(s.pages["orphan"], before, "the truth is untouched");
+        let q = &s.proposals["later-1"].pages["orphan"];
+        assert_eq!((q.record.body.as_str(), q.base.clone()), ("proposed", Some(crate::fingerprint::of_record(&before))));
+        // The next write sees the proposal's own view and keeps the base; a new record carries no base; a deletion is a mark.
+        let (p, _) = propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &Reference::page("orphan"), PagePatch { add_links: vec![Reference::page("overview")], ..Default::default() })).unwrap();
+        assert_eq!((p.body.as_str(), p.links.len()), ("proposed", 1));
+        assert_eq!(s.proposals["later-1"].pages["orphan"].base, Some(crate::fingerprint::of_record(&before)));
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![] })).unwrap();
+        assert_eq!(s.proposals["later-1"].pages["aim"].base, None);
+        propose(&mut s, "later-1", Proposing::Partial, |w| delete_node(w, &Reference::page("git-readiness")).map(|c| ((), c))).unwrap();
+        assert!(s.proposals["later-1"].deleted.contains_key("page:git-readiness"));
+        assert!(s.pages.contains_key("git-readiness") && !s.pages.contains_key("aim"));
+        // The truth moves under the proposed page: a partial write is refused naming it, a whole write rests on the new truth.
+        put_page(&mut s, orphan("moved")).unwrap();
+        let e = propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &Reference::page("orphan"), PagePatch { title: Some("T".into()), ..Default::default() })).unwrap_err();
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!((v["error"].clone(), v["details"][0]["field"].clone()), (serde_json::json!("conflict"), serde_json::json!("page:orphan")));
+        assert_eq!(s.proposals["later-1"].pages["orphan"].record.title, before.title, "nothing absorbed");
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("proposed again"))).unwrap();
+        assert_eq!(s.proposals["later-1"].pages["orphan"].base, Some(crate::fingerprint::of_record(&s.pages["orphan"])));
+        assert!(moved(&s, "later-1").is_empty(), "rebased");
+        // An open ticket is a conflict, a missing one not found.
+        assert_eq!(propose(&mut s, "phase-62", Proposing::Whole, |w| put_page(w, orphan("x"))).unwrap_err().code(), "conflict");
+        assert_eq!(propose(&mut s, "nope", Proposing::Whole, |w| put_page(w, orphan("x"))).unwrap_err().code(), "not_found");
+        // The current ticket: a start sets it, the target falls back to it, a close of it clears it.
+        assert_eq!(target_ticket(&s, Some("ticket:phase-62")).unwrap(), "phase-62");
+        assert_eq!(target_ticket(&s, Some("phase-62")).unwrap(), "phase-62");
+        assert_eq!(target_ticket(&s, None).unwrap_err().code(), "invalid");
+        start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
+        assert_eq!(s.current.as_deref(), Some("phase-62"));
+        assert_eq!(target_ticket(&s, None).unwrap(), "phase-62");
+        close_ticket(&mut s, &Reference::ticket("later-1"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![] }).unwrap();
+        assert_eq!(s.current.as_deref(), Some("phase-62"), "closing another ticket leaves it");
+        close_ticket(&mut s, &Reference::ticket("phase-62"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![] }).unwrap();
+        assert_eq!(s.current, None);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-close-applies-the-proposal-unless-the-truth-moved", "checks": ["crates/core/src/ops#close-applies-proposal"]}
+    /// ```
+    #[test]
+    fn a_close_applies_the_proposal_unless_the_truth_moved() {
+        let mut s = store();
+        let orphan = s.pages["orphan"].clone();
+        let aim = |body: &str| Page { slug: "aim".into(), title: "Aim".into(), body: body.into(), links: vec![] };
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { body: "proposed".into(), ..orphan.clone() })).unwrap();
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, aim("b"))).unwrap();
+        propose(&mut s, "later-1", Proposing::Partial, |w| delete_node(w, &Reference::page("git-readiness")).map(|c| ((), c))).unwrap();
+        assert!(moved(&s, "later-1").is_empty());
+        // The truth moves under it: the page changed, the new one appeared.
+        put_page(&mut s, Page { body: "moved".into(), ..orphan.clone() }).unwrap();
+        put_page(&mut s, aim("someone else's")).unwrap();
+        let fields = |s: &Store| moved(s, "later-1").into_iter().map(|e| e.field).collect::<Vec<_>>();
+        assert_eq!(fields(&s), vec!["page:aim", "page:orphan"]);
+        // A truth equal to the proposed record is no move, whatever its base.
+        put_page(&mut s, Page { body: "proposed".into(), ..orphan.clone() }).unwrap();
+        s.pages.remove("aim");
+        assert!(fields(&s).is_empty());
+        // A deletion conflicts when the record changed, not when it is already gone.
+        let readiness = s.pages["git-readiness"].clone();
+        put_page(&mut s, Page { body: "moved".into(), ..readiness.clone() }).unwrap();
+        assert_eq!(fields(&s), vec!["page:git-readiness"]);
+        s.pages.remove("git-readiness");
+        assert!(fields(&s).is_empty());
+        put_page(&mut s, readiness).unwrap();
+        // Applied in one pass: only what differs is written, the deleted go, the proposal is dropped.
+        let Changed::Many(cs) = apply_proposal(&mut s, "later-1") else { panic!("one pass") };
+        assert_eq!(s.pages["orphan"].body, "proposed");
+        assert!(s.pages.contains_key("aim") && !s.pages.contains_key("git-readiness"));
+        assert!(!s.proposals.contains_key("later-1"));
+        assert!(matches!(cs[0], Changed::Page(ref p) if p == "aim"), "orphan already equal to the truth is not written: {cs:?}");
+        assert!(matches!(cs[1], Changed::Deleted(ref r) if r.id == "git-readiness"));
+        assert!(matches!(cs[2], Changed::Proposed(ref t) if t == "later-1"));
+        assert_eq!(cs.len(), 3);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-rename-and-a-ticket-deletion-reach-proposals", "checks": ["crates/core/src/ops#rename", "crates/core/src/ops#delete-node"]}
+    /// ```
+    #[test]
+    fn a_rename_and_a_ticket_deletion_reach_proposals() {
+        let mut s = store();
+        let orphan = s.pages["orphan"].clone();
+        // later-1 proposes a change to orphan, a new page linking it, and a deletion of git-readiness.
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { body: "proposed".into(), ..orphan.clone() })).unwrap();
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::page("orphan"), Reference::page("git-readiness")] })).unwrap();
+        propose(&mut s, "later-1", Proposing::Partial, |w| delete_node(w, &Reference::page("git-readiness")).map(|c| ((), c))).unwrap();
+        let (_, changed) = rename_node(&mut s, &Reference::page("orphan"), "lost").unwrap();
+        let Changed::Many(cs) = changed else { panic!("many") };
+        assert!(cs.iter().any(|c| matches!(c, Changed::Proposed(t) if t == "later-1")), "{cs:?}");
+        let p = &s.proposals["later-1"];
+        assert!(!p.pages.contains_key("orphan"));
+        assert_eq!((p.pages["lost"].record.slug.as_str(), p.pages["lost"].record.body.as_str()), ("lost", "proposed"));
+        assert_eq!(p.pages["lost"].base, Some(crate::fingerprint::of_record(&s.pages["lost"])), "the base follows the renamed truth");
+        assert_eq!(p.pages["aim"].record.links[0], Reference::page("lost"), "a proposed link is rewritten");
+        assert!(moved(&s, "later-1").is_empty());
+        // A slug a proposal holds a record under cannot be renamed onto; a page linking both old and new keeps one link.
+        let e = rename_node(&mut s, &Reference::page("git-readiness"), "aim").unwrap_err();
+        assert!(e.code() == "conflict" && e.to_string().contains("ticket:later-1"), "{e}");
+        assert!(s.pages.contains_key("git-readiness") && s.proposals["later-1"].pages.contains_key("aim"), "nothing changed");
+        propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &Reference::page("aim"), PagePatch { add_links: vec![Reference::page("readiness")], ..Default::default() })).unwrap();
+        // A mark is rewritten too.
+        rename_node(&mut s, &Reference::page("git-readiness"), "readiness").unwrap();
+        let p = &s.proposals["later-1"];
+        assert!(p.deleted.contains_key("page:readiness") && !p.deleted.contains_key("page:git-readiness"));
+        assert_eq!(p.pages["aim"].record.links, vec![Reference::page("lost"), Reference::page("readiness")], "the link it already had to the new slug is kept once");
+        assert!(moved(&s, "later-1").is_empty());
+        // Deleting the ticket takes its start, its proposal and its currency with it.
+        start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
+        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default() });
+        let lost = s.pages["lost"].clone();
+        propose(&mut s, "phase-62", Proposing::Whole, |w| put_page(w, Page { body: "theirs".into(), ..lost })).unwrap();
+        let changed = delete_node(&mut s, &Reference::ticket("phase-62")).unwrap();
+        assert!(matches!(&changed, Changed::Many(cs) if matches!(cs[0], Changed::Deleted(ref r) if r.id == "phase-62") && matches!(cs[1], Changed::Current)), "{changed:?}");
+        assert!(!s.tickets.contains_key("phase-62") && !s.starts.contains_key("phase-62") && !s.proposals.contains_key("phase-62"));
+        assert_eq!(s.current, None);
+        assert!(s.proposals.contains_key("later-1"), "another ticket's proposal stays");
+        // Deleting a ticket that is not current leaves the current one.
+        s.tickets.insert("gap-2".into(), Ticket { slug: "gap-2".into(), title: "G".into(), kind: TicketKind::Gap, priority: Priority::Later, status: Status::Open, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+        s.current = Some("later-1".into());
+        assert!(matches!(delete_node(&mut s, &Reference::ticket("gap-2")).unwrap(), Changed::Deleted(_)));
+        assert_eq!(s.current.as_deref(), Some("later-1"));
     }
 }

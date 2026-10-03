@@ -25,11 +25,40 @@ pub struct NodesAnswer {
     pub nodes: Vec<Summary>,
 }
 
-/// `get` and `record_decision`: one node in full.
+/// `get` and `record_decision`: one node in full. A ticket comes with its
+/// proposal as drafts; a page or requirement with the tickets whose
+/// proposals would change it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct NodeAnswer {
     pub node: NodeView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub proposal: Option<ProposalView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub drafts: Option<Vec<Reference>>,
+}
+
+/// A ticket's proposal as a reader sees it: each proposed page and
+/// requirement, and the records it would delete.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ProposalView {
+    pub pages: Vec<Draft>,
+    pub requirements: Vec<Draft>,
+    pub deleted: Vec<Reference>,
+}
+
+/// One proposed record: new to the truth, or changed, naming the fields
+/// that differ from the truth's record.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Draft {
+    pub r#ref: Reference,
+    pub title: String,
+    pub new: bool,
+    pub differs: Vec<String>,
 }
 
 /// `rests_on`: what a node rests on, nearest first.

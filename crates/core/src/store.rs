@@ -21,6 +21,41 @@ pub struct Store {
     pub baseline: Option<Baseline>,
     /// The snapshot taken when each active ticket started, by slug.
     pub starts: BTreeMap<String, Start>,
+    /// Each active ticket's proposed change to the truth, by slug.
+    pub proposals: BTreeMap<String, Proposal>,
+    /// The ticket a write lands in when it names none: the one last started.
+    pub current: Option<String>,
+}
+
+impl Store {
+    /// The store as `ticket`'s proposal would leave it: proposed records in
+    /// place of the truth's, deleted ones gone. The truth itself when the
+    /// ticket has no proposal.
+    pub fn applied(&self, ticket: &str) -> Store {
+        let mut s = self.clone();
+        if let Some(p) = self.proposals.get(ticket) {
+            for (slug, q) in &p.pages {
+                s.pages.insert(slug.clone(), q.record.clone());
+            }
+            for (slug, q) in &p.requirements {
+                s.requirements.insert(slug.clone(), q.record.clone());
+            }
+            for key in p.deleted.keys() {
+                if let Ok(r) = key.parse::<Reference>() {
+                    match r.kind {
+                        Kind::Page => {
+                            s.pages.remove(&r.id);
+                        }
+                        Kind::Req => {
+                            s.requirements.remove(&r.id);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        s
+    }
 }
 
 impl Default for StoreConfig {
@@ -268,6 +303,40 @@ pub fn validate_start(s: &Start) -> Vec<FieldError> {
         }
         check_trimmed(&mut e, "fingerprints", key);
         check_required(&mut e, &format!("fingerprints[{key}]"), print);
+    }
+    e
+}
+
+/// A ticket's proposal: its ticket's slug, each proposed record valid and
+/// held under its own slug, each base a non-empty fingerprint, and each
+/// deletion a page or requirement reference.
+pub fn validate_proposal(p: &Proposal) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    check_slug(&mut e, "ticket", &p.ticket);
+    for (key, q) in &p.pages {
+        if key != &q.record.slug {
+            e.push(FieldError::new("pages", format!("`{key}` holds page `{}`", q.record.slug)));
+        }
+        e.extend(validate_page(&q.record).into_iter().map(|f| FieldError::new(&format!("pages[{key}].{}", f.field), f.reason)));
+        if let Some(b) = &q.base {
+            check_required(&mut e, &format!("pages[{key}].base"), b);
+        }
+    }
+    for (key, q) in &p.requirements {
+        if key != &q.record.slug {
+            e.push(FieldError::new("requirements", format!("`{key}` holds requirement `{}`", q.record.slug)));
+        }
+        e.extend(validate_requirement(&q.record).into_iter().map(|f| FieldError::new(&format!("requirements[{key}].{}", f.field), f.reason)));
+        if let Some(b) = &q.base {
+            check_required(&mut e, &format!("requirements[{key}].base"), b);
+        }
+    }
+    for (key, print) in &p.deleted {
+        match key.parse::<Reference>() {
+            Ok(r) if matches!(r.kind, Kind::Page | Kind::Req) => {}
+            _ => e.push(FieldError::new("deleted", format!("`{key}` is not a page or requirement reference"))),
+        }
+        check_required(&mut e, &format!("deleted[{key}]"), print);
     }
     e
 }

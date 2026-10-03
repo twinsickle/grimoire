@@ -2,13 +2,14 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open or active ticket closed with a decision from its page, through the start_ticket and close_ticket tools."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's page without one names each active ticket whose proposal would change it."}]}
  * ```
  */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
+import type { Draft, ProposalView } from "../generated/tools";
 import { TicketGraph } from "./TicketGraph";
 import { decisionsInForce } from "../decisions";
 import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
@@ -57,9 +58,13 @@ import {
 export function NodeView() {
   const { ref: raw } = useParams();
   const ref = decodeURIComponent(raw ?? "");
-  const { data, error } = useQuery(() => api.get(ref), [ref]);
+  // ?ticket= reads the node as that ticket's proposal would leave it.
+  const [params] = useSearchParams();
+  const ticket = params.get("ticket") ?? undefined;
+  const { data, error } = useQuery(() => api.get(ref, ticket), [ref, ticket]);
   if (error) return <ErrorBox error={error} />;
-  if (!data) return <p className="text-fg-dim">Loading…</p>;
+  // Between two node pages the query keeps the last answer while the next loads; a node of another kind is not this page's.
+  if (!data || data.node.ref !== ref) return <p className="text-fg-dim">Loading…</p>;
   const node = data.node;
   const kind = kindOf(ref);
   return (
@@ -71,9 +76,10 @@ export function NodeView() {
             <code className="text-fg-dim">{idOf(ref)}</code>
           </div>
           <h1>{titleOf(node)}</h1>
+          <DraftNotice ref={ref} ticket={ticket} drafts={data.drafts} />
         </div>
         {kind === "req" && <Req n={node as ReqNode} />}
-        {kind === "ticket" && <Ticket n={node as TicketNode} />}
+        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} />}
         {kind === "module" && <Module n={node as ModuleNode} />}
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
         {kind === "file" && <File n={node as FileNode} />}
@@ -89,6 +95,32 @@ export function NodeView() {
       </aside>
     </div>
   );
+}
+
+/** Read through a ticket, say so; read as the truth, name the drafts that would change it. */
+export function DraftNotice({ ref, ticket, drafts }: { ref: Ref; ticket?: string; drafts?: Ref[] }) {
+  if (ticket) {
+    return (
+      <p className="m-0 text-[13px]">
+        <Badge tone="warn">draft</Badge> As <RefLink ref={`ticket:${ticket}`} /> proposes it; <Link to={nodePath(ref)}>the truth</Link> may differ.
+      </p>
+    );
+  }
+  if (!drafts || drafts.length === 0) return null;
+  return (
+    <p className="m-0 text-[13px] text-fg-dim">
+      {drafts.map((t) => (
+        <span key={t}>
+          <RefLink ref={t} /> proposes a change to this: <Link to={asProposed(ref, t)}>read it as proposed</Link>.{" "}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** The node's page, read through a ticket's proposal. */
+function asProposed(ref: Ref, ticket: Ref): string {
+  return `${nodePath(ref)}?ticket=${encodeURIComponent(idOf(ticket))}`;
 }
 
 function titleOf(n: AnyNode): string {
@@ -173,7 +205,7 @@ function Req({ n }: { n: ReqNode }) {
   );
 }
 
-function Ticket({ n }: { n: TicketNode }) {
+function Ticket({ n, proposal }: { n: TicketNode; proposal?: ProposalView }) {
   const ref = `ticket:${n.slug}`;
   const related = useQuery(() => api.relatedTickets(ref), [ref]);
   return (
@@ -189,6 +221,7 @@ function Ticket({ n }: { n: TicketNode }) {
           <TicketActions ticket={ref} status={n.status} />
         </div>
       )}
+      {n.status === "active" && <Proposed ticket={ref} proposal={proposal} />}
       <TicketGraph key={ref} ticket={ref} title={n.title} />
       <h2>Touches</h2>
       <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} />
@@ -205,6 +238,37 @@ function titlesOf(edges: { ref: Ref; title: string | null }[]): Record<string, s
   const m: Record<string, string> = {};
   for (const e of edges) if (e.title) m[e.ref] = e.title;
   return m;
+}
+
+/** An active ticket's proposal: what it would change in the truth, and how, each readable as proposed. */
+function Proposed({ ticket, proposal }: { ticket: Ref; proposal?: ProposalView }) {
+  const drafts: Draft[] = [...(proposal?.pages ?? []), ...(proposal?.requirements ?? [])];
+  const deleted = proposal?.deleted ?? [];
+  return (
+    <>
+      <h2>Proposed</h2>
+      {drafts.length + deleted.length === 0 ? (
+        <p className={empty}>Nothing yet. A write that changes intent under this ticket lands here, and reaches the truth when the ticket closes.</p>
+      ) : (
+        <ul className={list}>
+          {drafts.map((d) => (
+            <li key={d.ref} className={item}>
+              <RefLink ref={d.ref} title={d.title} />{" "}
+              <span className="text-fg-dim text-[13px]">{d.new ? "new" : `changes ${d.differs.join(", ")}`}</span>{" "}
+              <Link className="text-[13px]" to={asProposed(d.ref, ticket)}>
+                as proposed
+              </Link>
+            </li>
+          ))}
+          {deleted.map((r) => (
+            <li key={r} className={item}>
+              <RefLink ref={r} /> <Badge tone="warn">to be deleted</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
 }
 
 function RefList({ refs, empty: emptyText, titles = {} }: { refs: Ref[]; empty: string; titles?: Record<string, string> }) {

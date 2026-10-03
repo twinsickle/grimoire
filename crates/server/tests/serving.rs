@@ -43,7 +43,11 @@ fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> S
     std::fs::write(repo.join("src").join("lib.rs"), "pub fn s() {}\n").unwrap();
     let store = dir.join("store");
     let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
-    store_io::write_all(&store, &Store::new(config), false).unwrap();
+    // An active, current ticket, so a write that changes intent has a proposal to land in; reads of it name the ticket.
+    let mut s = Store::new(config);
+    s.tickets.insert("work".into(), grimoire_core::model::Ticket { slug: "work".into(), title: "Work".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+    s.current = Some("work".into());
+    store_io::write_all(&store, &s, false).unwrap();
     let daemon = Arc::new(Daemon::open(&store).unwrap().0);
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
@@ -99,7 +103,7 @@ fn the_api_mirrors_the_tools() {
     let (code, body) = request(s.port, "POST", "/api/put_page", Some(&json!({ "slug": "goal", "title": "Goal", "body": "b", "links": [] })));
     assert_eq!(code, 200);
     assert_eq!(json(&body)["node"]["ref"], "page:goal");
-    let (code, body) = request(s.port, "GET", "/api/get?ref=page:goal", None);
+    let (code, body) = request(s.port, "GET", "/api/get?ref=page:goal&ticket=work", None);
     assert_eq!((code, json(&body)["node"]["title"].clone()), (200, json!("Goal")), "GET works for reads");
     let (code, body) = request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:nope" })));
     assert_eq!((code, json(&body)["error"].clone()), (404, json!("not_found")), "the status matches the error code");
@@ -142,12 +146,12 @@ fn events_stream_to_a_listener() {
         if let Ok(n) = stream.read(&mut buf) {
             seen.push_str(&String::from_utf8_lossy(&buf[..n]));
         }
-        if seen.contains("page:goal") {
+        if seen.contains("ticket:work") {
             break;
         }
     }
     assert!(seen.contains("text/event-stream"), "{seen}");
-    assert!(seen.contains("data:") && seen.contains("page:goal"), "the write arrives as a server-sent event: {seen}");
+    assert!(seen.contains("data:") && seen.contains("ticket:work"), "the write arrives as a server-sent event: {seen}");
 }
 
 /// # Test contract
@@ -247,7 +251,7 @@ fn other_sites_are_refused_on_every_route() {
     let (code, _, body) = request_as(s.port, "POST", "/api/put_page", Some(&page), &own, "Origin: https://example.com\r\n");
     assert_eq!(code, 403, "{body}");
     assert_eq!(json(&body)["error"], "invalid");
-    let (code, _) = request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview" })));
+    let (code, _) = request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview", "ticket": "work" })));
     assert_eq!(code, 404, "the forged write wrote nothing");
     // MCP and the event stream are guarded too; so is a rebound name.
     let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} });
@@ -275,7 +279,7 @@ fn other_sites_are_refused_on_every_route() {
     let (code, head, _) = request_as(s.port, "POST", "/api/put_page", Some(&page), &own, &format!("Origin: http://{own}\r\nSec-Fetch-Site: same-origin\r\n"));
     assert_eq!(code, 200);
     assert!(!head.to_ascii_lowercase().contains("access-control-allow"), "no CORS headers on an answer either: {head}");
-    assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview" }))).0, 200);
+    assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview", "ticket": "work" }))).0, 200);
 }
 
 /// # Test contract
@@ -289,11 +293,11 @@ fn get_runs_reads_only() {
     let page = json!({ "slug": "overview", "title": "Overview", "body": "The root.", "links": [] });
     let (code, body) = request(s.port, "POST", "/api/put_page", Some(&page));
     assert_eq!(code, 200, "{body}");
-    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview", None).0, 200);
+    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview&ticket=work", None).0, 200);
     let (code, body) = request(s.port, "GET", "/api/delete_node?ref=page:overview", None);
     assert_eq!(code, 405, "{body}");
     assert_eq!(json(&body)["error"], "invalid");
-    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview", None).0, 200, "still there");
+    assert_eq!(request(s.port, "GET", "/api/get?ref=page:overview&ticket=work", None).0, 200, "still there");
 }
 
 /// # Test contract
@@ -384,7 +388,7 @@ fn a_refused_caller_reaches_no_tool() {
     for (method, path, body) in [
         ("GET", "/api/tools", None),
         ("GET", "/api/events", None),
-        ("GET", "/api/get?ref=page:goal", None),
+        ("GET", "/api/get?ref=page:goal&ticket=work", None),
         ("HEAD", "/api/get?ref=page:goal", None),
         ("OPTIONS", "/api/put_page", None),
         ("POST", "/api/put_page", Some(&page)),
@@ -401,7 +405,7 @@ fn a_refused_caller_reaches_no_tool() {
             assert_eq!(json(&body)["error"], "invalid", "{method} {path}: the error object");
         }
     }
-    assert!(s.daemon.call("get", json!({ "ref": "page:goal" })).is_err(), "nothing was written");
+    assert!(s.daemon.call("get", json!({ "ref": "page:goal", "ticket": "work" })).is_err(), "nothing was written");
     // The UI's files are not behind the step: a link to the UI from anywhere opens it.
     assert_eq!(request(s.port, "GET", "/", None).0, 200);
 }
@@ -416,9 +420,9 @@ fn a_reader_cannot_write() {
     let s = serve_as(http::Ui::None, Arc::new(Readers));
     s.daemon.call("put_page", json!({ "slug": "goal", "title": "Goal", "body": "b", "links": [] })).unwrap();
     // Reads answer, over the JSON API and MCP.
-    let (code, body) = request(s.port, "GET", "/api/get?ref=page:goal", None);
+    let (code, body) = request(s.port, "GET", "/api/get?ref=page:goal&ticket=work", None);
     assert_eq!((code, json(&body)["node"]["title"].clone()), (200, json!("Goal")));
-    let read = mcp_call(s.port, "get", json!({ "ref": "page:goal" }));
+    let read = mcp_call(s.port, "get", json!({ "ref": "page:goal", "ticket": "work" }));
     assert_eq!(read["result"]["isError"], json!(false), "{read}");
     // Writes are refused before they run, over both.
     let (code, body) = request(s.port, "POST", "/api/put_page", Some(&json!({ "slug": "goal", "title": "Changed", "body": "b", "links": [] })));
@@ -427,6 +431,6 @@ fn a_reader_cannot_write() {
     let write = mcp_call(s.port, "delete_node", json!({ "ref": "page:goal" }));
     assert_eq!(write["result"]["isError"], json!(true), "{write}");
     assert!(write["result"]["structuredContent"]["message"].as_str().unwrap().contains("may only read"), "{write}");
-    let after = s.daemon.call("get", json!({ "ref": "page:goal" })).unwrap();
+    let after = s.daemon.call("get", json!({ "ref": "page:goal", "ticket": "work" })).unwrap();
     assert_eq!(after["node"]["title"], "Goal", "neither write ran");
 }

@@ -123,7 +123,8 @@ fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
     match changed {
         Changed::Page(s) => vec![format!("page:{s}")],
         Changed::Requirement(s) => vec![format!("req:{s}")],
-        Changed::Ticket(s) | Changed::Started(s) | Changed::Closed(s) => vec![format!("ticket:{s}")],
+        Changed::Ticket(s) | Changed::Started(s) | Changed::Closed(s) | Changed::Proposed(s) => vec![format!("ticket:{s}")],
+        Changed::Current => vec!["current".to_string()],
         Changed::Deleted(r) => vec![r.to_string()],
         Changed::Baseline => vec!["baseline".to_string()],
         Changed::Config => vec!["config".to_string()],
@@ -303,7 +304,11 @@ mod tests {
             std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
             let store = dir.join("store");
             let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
-            store_io::write_all(&store, &Store::new(config), false).unwrap();
+            // An active, current ticket, so a write that changes intent has a proposal to land in.
+            let mut s = Store::new(config);
+            s.tickets.insert("work".into(), grimoire_core::model::Ticket { slug: "work".into(), title: "Work".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+            s.current = Some("work".into());
+            store_io::write_all(&store, &s, false).unwrap();
             Harness { repo, store, _tmp: tmp }
         }
 
@@ -345,7 +350,9 @@ mod tests {
         let h = Harness::new();
         let d = h.open();
         d.call("put_page", page("goal")).unwrap();
-        assert!(h.store.join("pages").join("goal.json").is_file(), "persisted before the answer came back");
+        assert!(h.store.join("proposals").join("work.json").is_file(), "the proposal it landed in is persisted before the answer came back");
+        d.call("close_ticket", json!({ "ref": "ticket:work", "decision": { "text": "Done." } })).unwrap();
+        assert!(h.store.join("pages").join("goal.json").is_file(), "applied to the truth and persisted before the close answered");
     }
 
     /// # Test contract
@@ -357,12 +364,12 @@ mod tests {
     fn a_failed_persist_leaves_memory_as_the_disk_is() {
         let h = Harness::new();
         let d = h.open();
-        // Make the pages directory unwritable by putting a file where it should be.
-        std::fs::remove_dir_all(h.store.join("pages")).unwrap();
-        std::fs::write(h.store.join("pages"), "not a directory").unwrap();
+        // Make the proposals directory unwritable by putting a file where it should be.
+        let _ = std::fs::remove_dir_all(h.store.join("proposals"));
+        std::fs::write(h.store.join("proposals"), "not a directory").unwrap();
         let e = d.call("put_page", page("goal")).unwrap_err();
         assert_eq!(serde_json::to_value(&e).unwrap()["error"], "store_unavailable");
-        let got = d.call("get", json!({ "ref": "page:goal" })).unwrap_err();
+        let got = d.call("get", json!({ "ref": "page:goal", "ticket": "work" })).unwrap_err();
         assert_eq!(serde_json::to_value(&got).unwrap()["error"], "not_found", "memory was reloaded from disk");
     }
 
@@ -378,7 +385,8 @@ mod tests {
         let mut rx = d.subscribe();
         d.call("put_page", page("goal")).unwrap();
         match rx.try_recv().unwrap() {
-            Event::Store { tool, changed } => assert_eq!((tool.as_str(), changed), ("put_page", vec!["page:goal".to_string()])),
+            // What changed is the ticket's proposal, not the truth's page.
+            Event::Store { tool, changed } => assert_eq!((tool.as_str(), changed), ("put_page", vec!["ticket:work".to_string()])),
             other => panic!("expected a store event, got {other:?}"),
         }
         std::fs::write(h.repo.join("src").join("b.rs"), "pub fn b2() {}\n").unwrap();
@@ -477,8 +485,8 @@ mod tests {
         d.mark_serving(4299).unwrap();
         let mut entries: Vec<String> = std::fs::read_dir(&h.store).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         entries.sort();
-        assert_eq!(entries, vec!["baseline.json", "grimoire.json", "pages", "requirements", "serve.json", "tickets"], "records, the baseline and the marker; no index or cache");
-        for dir in ["pages", "requirements", "tickets"] {
+        assert_eq!(entries, vec!["baseline.json", "current.json", "grimoire.json", "pages", "proposals", "requirements", "serve.json", "tickets"], "records, the baseline, the current ticket, its proposal and the marker; no index or cache");
+        for dir in ["pages", "requirements", "tickets", "proposals"] {
             for e in std::fs::read_dir(h.store.join(dir)).unwrap().flatten() {
                 assert!(e.file_name().to_string_lossy().ends_with(".json"), "{dir} holds only records");
             }
