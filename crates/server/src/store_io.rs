@@ -15,7 +15,7 @@ mod location;
 mod lock;
 pub mod tokens;
 
-pub use location::{find_project, refuse_inside, store_for_repo, stores_dir, write_project_file, PROJECT_FILE};
+pub use location::{copies_dir, copy_dir, credentials_file, find_home, find_project, refuse_inside, repository_string, server_address, slashed, store_for_repo, stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE};
 pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
 
 #[derive(Debug, thiserror::Error)]

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."}]}
 //! ```
 
 pub mod access;
@@ -9,6 +9,7 @@ pub mod client;
 pub mod daemon;
 pub mod http;
 pub mod mcp;
+pub mod remote;
 pub mod store_io;
 pub mod watch;
 
@@ -26,22 +27,42 @@ pub struct ServeOptions {
     pub shared: bool,
     /// Where a shared daemon listens; the loopback port when not given.
     pub listen: Option<SocketAddr>,
+    /// On a project that names a server: the server, and the checkout to join
+    /// its intent with. `store_dir` is then the checkout's copy.
+    pub server: Option<(remote::Server, PathBuf)>,
 }
 
 /// Open the store, start watching the repository and serve until the
 /// process is interrupted.
-pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
+pub async fn serve(mut opts: ServeOptions) -> anyhow::Result<()> {
     // The store's one writer from before it is opened, since opening prunes
     // the baseline, until serving has stopped; released when this returns.
     // A daemon that trusts every caller on this machine is never reachable from another.
     if opts.listen.is_some() && !opts.shared {
         anyhow::bail!("--listen needs --shared: a daemon that admits every local caller listens only on this machine");
     }
-    let _lock = store_io::lock(&opts.store_dir)?;
+    if opts.shared && opts.server.is_some() {
+        anyhow::bail!("--shared serves a store, and this project names a server: name the store to serve with --store");
+    }
+    let server = opts.server.take();
+    // A checkout's copy of a server's intent may not exist until the first sync makes it.
+    let _lock = match &server {
+        Some(_) => remote::lock_copy(&opts.store_dir)?,
+        None => store_io::lock(&opts.store_dir)?,
+    };
     if opts.shared {
         return serve_shared(opts).await;
     }
-    let (daemon, extract_errors) = Daemon::open(&opts.store_dir)?;
+    let follows = server.is_some();
+    let (daemon, extract_errors) = match server {
+        Some((server, repo)) => {
+            tracing::info!("this project's grimoire is the server's at {}; this checkout's copy is {}", server.address, opts.store_dir.display());
+            // Opening asks the server, which blocks: kept off the runtime's own threads.
+            let copy = opts.store_dir.clone();
+            tokio::task::spawn_blocking(move || Daemon::open_remote(&copy, &repo, server)).await??
+        }
+        None => Daemon::open(&opts.store_dir)?,
+    };
     for e in &extract_errors {
         tracing::warn!("{e}");
     }
@@ -59,6 +80,9 @@ pub async fn serve(opts: ServeOptions) -> anyhow::Result<()> {
     // The port the listener got, which is not the one asked for when it was left to the system.
     let addr = listener.local_addr()?;
     daemon.mark_serving(addr.port())?;
+    if follows {
+        remote::follow(&daemon);
+    }
     tracing::info!("listening on http://{addr}  (api: /api/<tool>, mcp: /mcp, events: /api/events)");
     let served = axum::serve(listener, app).with_graceful_shutdown(shutdown()).await;
     daemon.unmark_serving();

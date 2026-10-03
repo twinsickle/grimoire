@@ -211,6 +211,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 scope: config.scope,
                 baseline: state.store.baseline.as_ref().map(baseline_summary),
                 shared: state.without_code(),
+                server: state.server().cloned(),
             };
             answer(name, status, None)
         }

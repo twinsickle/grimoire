@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Say where a store lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."}]}
+//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -10,28 +10,147 @@ use super::StoreIoError;
 
 pub const PROJECT_FILE: &str = ".grimoire.toml";
 
-/// The platform data directory for stores: `<data>/grimoire/stores`.
+/// When set, the directory Grimoire keeps its stores, its copies and a
+/// person's tokens under, in place of the platform's data and configuration
+/// directories: for a pipeline, a container, or a test.
+pub const HOME_ENV: &str = "GRIMOIRE_HOME";
+
+fn home() -> Option<PathBuf> {
+    std::env::var_os(HOME_ENV).filter(|h| !h.is_empty()).map(PathBuf::from)
+}
+
+fn platform() -> Result<directories::ProjectDirs, StoreIoError> {
+    directories::ProjectDirs::from("", "", "grimoire").ok_or(StoreIoError::NoDataDir)
+}
+
+fn data_dir() -> Result<PathBuf, StoreIoError> {
+    match home() {
+        Some(home) => Ok(home),
+        None => Ok(platform()?.data_dir().to_path_buf()),
+    }
+}
+
+/// The directory for stores: `<data>/grimoire/stores`.
 pub fn stores_dir() -> Result<PathBuf, StoreIoError> {
-    let dirs = directories::ProjectDirs::from("", "", "grimoire").ok_or(StoreIoError::NoDataDir)?;
-    Ok(dirs.data_dir().join("stores"))
+    Ok(data_dir()?.join("stores"))
+}
+
+/// The directory for checkouts' copies of a server's intent: `<data>/grimoire/copies`.
+pub fn copies_dir() -> Result<PathBuf, StoreIoError> {
+    Ok(data_dir()?.join("copies"))
+}
+
+/// The file a person's tokens are kept in, outside any repository.
+pub fn credentials_file() -> Result<PathBuf, StoreIoError> {
+    match home() {
+        Some(home) => Ok(home.join("credentials.json")),
+        None => Ok(platform()?.config_dir().join("credentials.json")),
+    }
+}
+
+/// What a project's file names as the home of its grimoire.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Home {
+    /// A store on this machine, resolved.
+    Store(PathBuf),
+    /// A team's server, by address, and where this checkout's copy of its intent is kept.
+    Server { address: String, copy: PathBuf },
+}
+
+impl Home {
+    /// The store every command reads: the project's own, or its copy of the server's.
+    pub fn dir(&self) -> &Path {
+        match self {
+            Home::Store(dir) | Home::Server { copy: dir, .. } => dir,
+        }
+    }
+}
+
+/// A server's address as it is kept: `http://` or `https://` and a host,
+/// with no trailing slash. Anything else is refused, with why.
+pub fn server_address(given: &str) -> Result<String, String> {
+    let address = given.trim();
+    let (scheme, rest) = address.split_once("://").filter(|(scheme, _)| matches!(*scheme, "http" | "https")).ok_or_else(|| format!("`{given}` is not a server's address: it starts with http:// or https://"))?;
+    let rest = rest.trim_end_matches('/');
+    if rest.is_empty() || rest.starts_with('/') || rest.chars().any(char::is_whitespace) {
+        return Err(format!("`{given}` is not a server's address: it names no host"));
+    }
+    Ok(format!("{scheme}://{rest}"))
+}
+
+/// A canonical path as a store records it: `/`-separated, without the
+/// `\\?\` prefix Windows canonical paths carry, and a share, which comes back
+/// as `\\?\UNC\server\share`, as `//server/share`.
+pub fn slashed(canonical: &str) -> String {
+    let s = match canonical.strip_prefix(r"\\?\UNC\") {
+        Some(share) => format!(r"\\{share}"),
+        None => canonical.strip_prefix(r"\\?\").unwrap_or(canonical).to_string(),
+    };
+    s.replace('\\', "/")
+}
+
+/// The repository at `repo` as a store records it: its canonical path, slashed.
+pub fn repository_string(repo: &Path) -> Result<String, StoreIoError> {
+    let canonical = repo.canonicalize().map_err(|e| StoreIoError::Io(repo.to_path_buf(), e))?;
+    Ok(slashed(&canonical.to_string_lossy()))
+}
+
+/// Where the checkout at `repo` keeps its copy of the intent of the server
+/// at `address`: a folder named for both, so no two share one.
+pub fn copy_dir(address: &str, repo: &Path) -> Result<PathBuf, StoreIoError> {
+    use sha2::{Digest, Sha256};
+    let checkout = repository_string(repo)?;
+    let digest: String = Sha256::digest(format!("{address}\n{checkout}").as_bytes()).iter().take(8).map(|b| format!("{b:02x}")).collect();
+    let host: String = address.split_once("://").map_or(address, |(_, rest)| rest).chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).take(40).collect();
+    Ok(copies_dir()?.join(format!("{}-{digest}", host.trim_matches('-'))))
 }
 
 /// Walk up from `start` to the nearest `.grimoire.toml` and return the
-/// directory holding it and the store it names, resolved.
-pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
+/// directory holding it and what it names: a store, resolved, or a server
+/// with this checkout's copy of its intent.
+pub fn find_home(start: &Path) -> Result<(PathBuf, Home), StoreIoError> {
     let mut dir = Some(start.to_path_buf());
     while let Some(d) = dir {
         let f = d.join(PROJECT_FILE);
         if f.is_file() {
             let text = std::fs::read_to_string(&f).map_err(|e| StoreIoError::Io(f.clone(), e))?;
             let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| StoreIoError::BadProjectFile(f.clone(), e.to_string()))?;
-            let store = doc.get("store").and_then(|s| s.as_str()).ok_or_else(|| StoreIoError::BadProjectFile(f.clone(), "missing `store`".into()))?;
-            let resolved = store_for_repo(store, &d)?;
-            return Ok((d, resolved));
+            let bad = |why: String| StoreIoError::BadProjectFile(f.clone(), why);
+            let named = |key: &str| match doc.get(key) {
+                None => Ok(None),
+                Some(v) => v.as_str().map(Some).ok_or_else(|| bad(format!("`{key}` is not a string"))),
+            };
+            let home = match (named("store")?, named("server")?) {
+                (Some(store), None) => Home::Store(store_for_repo(store, &d)?),
+                (None, Some(server)) => {
+                    let address = server_address(server).map_err(bad)?;
+                    let copy = copy_dir(&address, &d)?;
+                    Home::Server { address, copy }
+                }
+                (Some(_), Some(_)) => return Err(bad("names both `store` and `server`: a project's grimoire is in one or the other".into())),
+                (None, None) => return Err(bad("names neither `store` nor `server`".into())),
+            };
+            return Ok((d, home));
         }
         dir = d.parent().map(Path::to_path_buf);
     }
     Err(StoreIoError::NoProjectFile(start.to_path_buf()))
+}
+
+/// Walk up from `start` to the nearest `.grimoire.toml` and return the
+/// directory holding it and the store its commands read: the store it names,
+/// resolved, or this checkout's copy of the intent of the server it names.
+pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
+    let (dir, home) = find_home(start)?;
+    Ok((dir, home.dir().to_path_buf()))
+}
+
+/// Write `.grimoire.toml` into a repository whose grimoire a team's server holds.
+pub fn write_project_file_for_server(repo: &Path, address: &str) -> Result<PathBuf, StoreIoError> {
+    let f = repo.join(PROJECT_FILE);
+    let text = format!("# Written once by `grimoire init`. Names the server that holds this project's grimoire.\nserver = {}\n", toml::Value::String(address.to_string()));
+    std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
+    Ok(f)
 }
 
 /// Write `.grimoire.toml` into a repository.
@@ -166,6 +285,52 @@ mod tests {
         write_project_file(dir, "./local-store").unwrap();
         let (_, store) = find_project(&nested).unwrap();
         assert_eq!(store, dir.join("./local-store"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-project-names-a-store-or-a-server", "checks": ["crates/server/src/store_io/location#store-or-server"]}
+    /// ```
+    #[test]
+    fn a_project_names_a_store_or_a_server() {
+        let tmp = temp();
+        let dir = tmp.path();
+        let nested = dir.join("a");
+        std::fs::create_dir_all(&nested).unwrap();
+        // A server, kept without its trailing slash, and found from anywhere below.
+        write_project_file_for_server(dir, &server_address("https://grimoire.example/").unwrap()).unwrap();
+        let (root, home) = find_home(&nested).unwrap();
+        let Home::Server { address, copy } = home.clone() else { panic!("{home:?}") };
+        assert_eq!((root.as_path(), address.as_str()), (dir, "https://grimoire.example"));
+        // Its store is this checkout's copy: under the copies, named for the server and the checkout.
+        assert_eq!(copy.parent().unwrap(), copies_dir().unwrap());
+        assert!(copy.file_name().unwrap().to_string_lossy().starts_with("grimoire-example-"), "{}", copy.display());
+        assert_eq!(find_project(&nested).unwrap(), (dir.to_path_buf(), copy.clone()));
+        assert_eq!(copy_dir(&address, dir).unwrap(), copy, "the same for the same checkout");
+        assert_ne!(copy_dir(&address, &nested).unwrap(), copy, "another checkout has its own");
+        assert_ne!(copy_dir("https://other.example", dir).unwrap(), copy, "and so has another server");
+        // What is refused, naming the file.
+        let refused = |text: &str| {
+            std::fs::write(dir.join(PROJECT_FILE), text).unwrap();
+            match find_home(dir) {
+                Err(StoreIoError::BadProjectFile(f, why)) => {
+                    assert_eq!(f, dir.join(PROJECT_FILE));
+                    why
+                }
+                other => panic!("{text}: {other:?}"),
+            }
+        };
+        assert!(refused("store = \"mine\"\nserver = \"https://grimoire.example\"\n").contains("both"));
+        assert!(refused("# nothing named\n").contains("neither"));
+        assert!(refused("server = \"grimoire.example\"\n").contains("http://"));
+        assert!(refused("server = \"https://\"\n").contains("no host"));
+        assert!(refused("server = 4242\n").contains("not a string"));
+        for (given, kept) in [("http://127.0.0.1:4242", "http://127.0.0.1:4242"), (" https://grimoire.example/team/ ", "https://grimoire.example/team")] {
+            assert_eq!(server_address(given).unwrap(), kept);
+        }
+        // A person's tokens are kept outside any repository.
+        assert!(!credentials_file().unwrap().starts_with(dir));
     }
 
     /// A link at `link` to the folder `target`: a junction on Windows, which

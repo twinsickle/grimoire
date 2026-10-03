@@ -7,10 +7,11 @@
 //! Layout: [`model`] defines the records and references; [`store`] holds and
 //! validates the stored ones; [`extraction`] joins per-file extraction into
 //! modules; [`graph`] joins store and extraction; [`query`] and [`lint`] read
-//! the graph; [`ops`] write the store; [`scaffold`] builds a store from
+//! the graph; [`ops`] write the store; [`export`] hands a store's intent to a machine; [`scaffold`] builds a store from
 //! contracts; [`tools`] dispatches all of it by name over JSON.
 
 pub mod answer;
+pub mod export;
 pub mod extraction;
 pub mod fingerprint;
 pub mod graph;

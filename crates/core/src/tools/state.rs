@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -40,6 +40,8 @@ pub struct State {
     pub(super) source: Option<std::sync::Arc<dyn SourceReader>>,
     /// Set by a daemon that holds no code: every graph is marked so, and the baseline is left alone.
     without_code: bool,
+    /// Set on a machine whose store is a copy of a team's server's intent.
+    server: Option<crate::answer::ServerCopy>,
 }
 
 /// Reads a repository file's text for the `source` tool. The core does no
@@ -66,7 +68,7 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false }
+        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None }
     }
     /// The store's current ticket, the one last started.
     pub fn current(&self) -> Option<String> {
@@ -100,8 +102,24 @@ impl State {
     /// code can show is then left out of every answer, never called missing.
     pub fn set_without_code(&mut self, without_code: bool) {
         self.without_code = without_code;
+        self.drop_shared_current();
         self.graph = None;
         self.view = None;
+    }
+    /// The current ticket and the starts are each checkout's own: a state serving a team keeps none.
+    fn drop_shared_current(&mut self) {
+        if self.without_code {
+            self.store.current = None;
+            self.store.starts.clear();
+        }
+    }
+    /// Say this state is a machine's copy of a server's intent, or no longer is.
+    /// The graph does not depend on it.
+    pub fn set_server(&mut self, server: Option<crate::answer::ServerCopy>) {
+        self.server = server;
+    }
+    pub fn server(&self) -> Option<&crate::answer::ServerCopy> {
+        self.server.as_ref()
     }
     pub fn without_code(&self) -> bool {
         self.without_code
@@ -134,6 +152,7 @@ impl State {
     pub fn set_store(&mut self, store: Store, malformed: Vec<Malformed>) {
         self.store = store;
         self.malformed = malformed;
+        self.drop_shared_current();
         self.graph = None;
         self.view = None;
     }
@@ -151,8 +170,9 @@ impl State {
     /// Drop from the baseline every finding no longer produced. Returns what
     /// changed when it shrank, so the owner of the store persists it.
     pub fn prune_baseline(&mut self) -> Option<Changed> {
-        // With no code held, a finding not produced here is not thereby fixed.
-        if self.without_code {
+        // With no code held, a finding not produced here is not thereby fixed;
+        // nor is one fixed on a machine's branch fixed on the main line.
+        if self.without_code || self.server.is_some() {
             return None;
         }
         self.graph();

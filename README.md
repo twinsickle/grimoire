@@ -54,6 +54,25 @@ the integration: `.grimoire.toml`, the agent skill, a marked section in
 `CLAUDE.md` and `AGENTS.md`, the `grimoire` entry in `.mcp.json` and a pre-commit
 hook. `uninstall` removes exactly that, leaving everything of yours as it was.
 
+### For a team
+
+One server holds the team's intent and no code; each person's daemon reads it
+with their own checkout's code and sends its writes there.
+
+```
+grimoire serve --shared --store <path> --listen <addr:port>   # on the host: intent only, callers sign in with a token
+grimoire token add <name> [--read-only] --store <path>        # on the host: a token, printed once
+grimoire init --server https://grimoire.example               # in the repository, once: the project file names the server; commit it
+grimoire login                                                # each person, once: the token is kept outside the repository
+grimoire serve                                                # each person: the daemon in their checkout, as for any project
+grimoire land <ticket>                                        # the pipeline, on the main line, with GRIMOIRE_TOKEN set
+```
+
+The server speaks plain HTTP: put a proxy in front for HTTPS. A write needs the
+server; offline, reads and `grimoire check` go on from the copy last fetched.
+`GRIMOIRE_HOME` names one directory for everything Grimoire keeps on a machine,
+in place of the platform's.
+
 ## Development loop
 
 Grimoire is developed pointed at itself: `.grimoire.toml` names the store

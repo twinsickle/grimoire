@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, and a configure that changes the languages extracts nothing."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -32,11 +32,13 @@ pub struct Daemon {
     pub repo: PathBuf,
     /// Serving a store for a team: no code is read, extracted or watched.
     pub shared: bool,
+    /// The team's server this daemon's store is a copy of, on a project that names one.
+    pub server: Option<Arc<crate::remote::Server>>,
     /// Rebuilt when `configure` changes the languages.
     pub extractor: RwLock<Extractor>,
-    files: Mutex<BTreeMap<String, FileExtraction>>,
-    state: Mutex<State>,
-    events: broadcast::Sender<Event>,
+    pub(crate) files: Mutex<BTreeMap<String, FileExtraction>>,
+    pub(crate) state: Mutex<State>,
+    pub(crate) events: broadcast::Sender<Event>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,6 +49,8 @@ pub enum OpenError {
     NoRepository(PathBuf),
     #[error(transparent)]
     Extract(#[from] grimoire_extract::ExtractError),
+    #[error(transparent)]
+    Server(#[from] crate::remote::RemoteError),
 }
 
 /// What loading produced, for the CLI as well as the daemon.
@@ -121,7 +125,7 @@ pub fn build() -> Build {
 }
 
 /// What a write changed, as references, for the event it announces.
-fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
+pub(crate) fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
     use grimoire_core::ops::Changed;
     match changed {
         Changed::Page(s) => vec![format!("page:{s}")],
@@ -143,6 +147,7 @@ impl Daemon {
             store_dir: store_dir.to_path_buf(),
             repo: loaded.repo,
             shared: false,
+            server: None,
             extractor: RwLock::new(loaded.extractor),
             files: Mutex::new(loaded.files),
             state: Mutex::new(loaded.state),
@@ -157,15 +162,26 @@ impl Daemon {
     /// the state says it holds no code, so nothing only code can show is said.
     pub fn open_shared(store_dir: &Path) -> Result<Daemon, OpenError> {
         let (store, malformed) = store_io::load(store_dir)?;
+        let arrived_with_current = store.current.is_some();
+        let arrived_with_starts: Vec<String> = store.starts.keys().cloned().collect();
         let none: Vec<FileExtraction> = Vec::new();
         let mut state = State::new(store, Extraction::from_files(&none), malformed);
         state.set_build(build());
         state.set_without_code(true);
+        // The current ticket and the starts are each checkout's own: those the store arrived with were its machine's, and go.
+        if arrived_with_current {
+            store_io::persist(store_dir, state.store(), &grimoire_core::ops::Changed::Current)?;
+        }
+        for slug in arrived_with_starts {
+            // The ticket's record is written as it is, and its start removed beside it.
+            store_io::persist(store_dir, state.store(), &grimoire_core::ops::Changed::Closed(slug))?;
+        }
         let (events, _) = broadcast::channel(256);
         Ok(Daemon {
             store_dir: store_dir.to_path_buf(),
             repo: PathBuf::new(),
             shared: true,
+            server: None,
             // With no language it extracts nothing; a shared daemon never asks it to.
             extractor: RwLock::new(Extractor::for_languages(store_dir, &Vec::<String>::new())),
             files: Mutex::new(BTreeMap::new()),
@@ -205,10 +221,36 @@ impl Daemon {
         self.events.subscribe()
     }
 
+    /// The store's whole intent, for a machine that keeps a copy of it.
+    pub fn exported(&self) -> grimoire_core::export::Exported {
+        grimoire_core::export::exported(self.state.lock().expect("state lock").store())
+    }
+
     /// Run one tool, persisting any write.
     pub fn call(&self, name: &str, input: Value) -> Result<Value, ToolError> {
+        self.call_as(name, input, None)
+    }
+
+    /// Run one tool for a caller that gave a token of its own: on a project that names a
+    /// server, its write is sent to the server signed in as that caller, not as the daemon.
+    pub fn call_as(&self, name: &str, input: Value, token: Option<String>) -> Result<Value, ToolError> {
+        // On a project that names a server, a write goes to the server.
+        if let Some(server) = self.server.as_ref().filter(|_| tools::is_write(name)) {
+            return match token {
+                Some(token) => self.call_through(&server.as_token(token), name, input),
+                None => self.call_through(server, name, input),
+            };
+        }
         let today = store_io::today();
+        // A token the server refused may have been replaced since, by the person signing in again: asked again first.
+        if self.state.lock().expect("state lock").server().is_some_and(|s| s.refused) {
+            let _ = self.sync_now();
+        }
         let mut state = self.state.lock().expect("state lock");
+        // A token the server refuses is not a server that is away: its copy is not read on in silence.
+        if let Some(refused) = state.server().filter(|s| s.refused && name != "status") {
+            return Err(ToolError::unavailable(format!("the server at {} refused this machine's token, so its intent is not read here: sign in with `grimoire login`", refused.address)));
+        }
         let languages = state.store().config.languages.clone();
         let outcome = tools::call(&mut state, name, input, &today)?;
         if let Some(changed) = &outcome.changed {
@@ -242,7 +284,7 @@ impl Daemon {
 
     /// Replace the extractor with one for `languages` and extract the whole
     /// repository again, as on opening.
-    fn reextract_all(&self, languages: &[String]) {
+    pub(crate) fn reextract_all(&self, languages: &[String]) {
         let extractor = Extractor::for_languages(&self.repo, languages);
         let extracted = match extractor.extract_all() {
             Ok((files, errors)) => {

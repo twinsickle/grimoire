@@ -6,7 +6,7 @@ import { ApiError, call } from "./api";
 import { decisionsInForce } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
-import { goneOf, idOf, kindOf, localId, type AnyNode } from "./types";
+import { goneOf, idOf, kindOf, localId, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -48,6 +48,24 @@ test("a closed ticket's untitled references are gone; an open ticket's and anoth
   expect(goneOf(ticket("landing")).size).toBe(0);
   // A page linking a requirement that does not exist is a dangling finding, not history.
   expect(goneOf({ ref: "page:readiness", in: [], out } as unknown as AnyNode).size).toBe(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-server-that-is-away-is-said-in-the-header", "checks": ["web/src/types#server-away"]}
+ * ```
+ */
+test("a machine whose server did not answer says so, with when its copy was fetched", () => {
+  const address = "https://grimoire.example";
+  expect(serverAway(null)).toBeNull();
+  expect(serverAway(undefined)).toBeNull();
+  expect(serverAway({ address, fetched: "2026-10-03T14:02:11Z", reachable: true, refused: false })).toBeNull();
+  expect(serverAway({ address, fetched: "2026-10-03T14:02:11Z", reachable: false, refused: false })).toBe("server unreachable, intent as of 2026-10-03 14:02 UTC");
+  expect(serverAway({ address, fetched: null, reachable: false, refused: false })).toBe("server unreachable");
+  // A token the server refuses is said as that, not as a server that is away.
+  expect(serverAway({ address, fetched: "2026-10-03T14:02:11Z", reachable: false, refused: true })).toBe("server refused this machine's token: run grimoire login");
 });
 
 /**

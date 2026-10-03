@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, or with when: landed the findings as its proposal leaves them and no such list, land_ticket answers whether a ticket landed, what its close answers when one did, and the tickets still landing, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the tickets still landing, and takes no ticket field."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, or with when: landed the findings as its proposal leaves them and no such list, land_ticket answers whether a ticket landed, what its close answers when one did, and the tickets still landing, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the tickets still landing, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, start_ticket on a ticket already active or landing makes it this checkout's current ticket and records its start, changing nothing of the ticket, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
 //! ```
 
 use serde::Deserialize;
@@ -156,13 +156,26 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
         }
         "start_ticket" => {
             let i: RefIn = parse(input)?;
-            ops::start_ticket(state.store_mut(), &i.r#ref)?;
-            // Every node, not only what touches lists now: nodes are often
-            // added to touches after they changed.
-            let fingerprints = crate::fingerprint::all(state.graph()).into_iter().map(|(r, fp)| (r.to_string(), fp)).collect();
-            state.store_mut().starts.insert(i.r#ref.id.clone(), Start { ticket: i.r#ref.id.clone(), fingerprints });
-            // The started ticket is now current, so writes that name none land in it.
-            let changed = Changed::Many(vec![Changed::Started(i.r#ref.id.clone()), Changed::Current]);
+            // On a machine's copy of a server's intent, a ticket already being worked is taken up
+            // in this checkout: it becomes current here and gets this checkout's start, and nothing of it changes.
+            let taken_up = state.server().is_some() && i.r#ref.kind == Kind::Ticket && state.store.tickets.get(&i.r#ref.id).is_some_and(|t| t.status.is_live());
+            if taken_up {
+                state.store_mut().current = Some(i.r#ref.id.clone());
+            } else {
+                ops::start_ticket(state.store_mut(), &i.r#ref)?;
+            }
+            let changed = if state.without_code() {
+                // A state serving a team keeps no current ticket and no start: both are each checkout's own.
+                state.store_mut().current = None;
+                Changed::Many(vec![Changed::Ticket(i.r#ref.id.clone()), Changed::Current])
+            } else {
+                // Every node, not only what touches lists now: nodes are often
+                // added to touches after they changed.
+                let fingerprints = crate::fingerprint::all(state.graph()).into_iter().map(|(r, fp)| (r.to_string(), fp)).collect();
+                state.store_mut().starts.insert(i.r#ref.id.clone(), Start { ticket: i.r#ref.id.clone(), fingerprints });
+                // The started ticket is now current, so writes that name none land in it.
+                Changed::Many(vec![Changed::Started(i.r#ref.id.clone()), Changed::Current])
+            };
             let g = state.graph();
             let node = query::view(g, &i.r#ref).expect("just written");
             let rests_on = query::rests_on(g, &i.r#ref, None);
@@ -225,12 +238,15 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             }
             let i: In = parse(input)?;
             // Named, the ticket must be landing; unnamed, the current ticket lands when it is, and otherwise nothing does.
+            // On a machine's copy of a server's intent an unnamed landing lands nothing: a commit there is not the main line.
+            let note = (i.r#ref.is_none() && state.server().is_some()).then(|| "this project names a server: a ticket lands on the main line, by name, once its change has merged".to_string());
             let target = match i.r#ref {
                 Some(r) => match state.store.tickets.get(&r.id) {
                     Some(t) if r.kind == Kind::Ticket && t.status == Status::Landing => Some(r),
                     Some(t) if r.kind == Kind::Ticket => return Err(ToolError::conflict(format!("{r} is {}, not landing: its decision is written with close_ticket and when: landed", t.status.name()))),
                     _ => return Err(ToolError::not_found(&r)),
                 },
+                None if note.is_some() => None,
                 None => state.store.current.as_ref().filter(|c| state.store.tickets.get(*c).is_some_and(|t| t.status == Status::Landing)).map(|c| Reference::ticket(c)),
             };
             let landed = match target {
@@ -243,8 +259,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             };
             let waiting: Vec<query::Summary> = state.store.tickets.values().filter(|t| t.status == Status::Landing).map(query::ticket_summary).collect();
             match landed {
-                None => answer(name, Landed { landed: false, node: None, findings: vec![], baselined: 0, untouched: None, waiting }, None),
-                Some((c, changed)) => answer(name, Landed { landed: true, node: Some(c.node), findings: c.findings, baselined: c.baselined, untouched: c.untouched, waiting }, Some(changed)),
+                None => answer(name, Landed { landed: false, node: None, findings: vec![], baselined: 0, untouched: None, waiting, note }, None),
+                Some((c, changed)) => answer(name, Landed { landed: true, node: Some(c.node), findings: c.findings, baselined: c.baselined, untouched: c.untouched, waiting, note: None }, Some(changed)),
             }
         }
         "rename_node" => {
@@ -293,13 +309,16 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             struct In {
                 #[serde(default)]
                 reason: String,
+                findings: Option<Vec<FindingKey>>,
             }
             let i: In = parse(input)?;
-            // Every present finding is what a baseline is, and a daemon with no code cannot see them all.
-            if state.without_code() {
-                return Err(ToolError::invalid("this daemon holds no code, so it cannot see every finding: adopt from a machine that has the code", vec![]));
-            }
-            let keys = lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect();
+            let keys = match i.findings {
+                // Supplied by a caller that holds the code, as a machine does for the server it writes through.
+                Some(keys) => keys,
+                // Every present finding is what a baseline is, and a daemon with no code cannot see them all.
+                None if state.without_code() => return Err(ToolError::invalid("this daemon holds no code, so it cannot see every finding: adopt from a machine that has the code, which supplies them", vec![FieldError::new("findings", "absent, and this daemon holds no code to find them")])),
+                None => lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect(),
+            };
             let (baseline, replaced, changed) = ops::adopt(state.store_mut(), keys, i.reason, today.to_string())?;
             answer(name, Adopted { baseline: baseline_summary(&baseline), replaced }, Some(changed))
         }
@@ -889,4 +908,113 @@ mod tests {
         assert_eq!(call(&mut s, "status", json!({}), "2026-10-03").unwrap().output["shared"], false);
         assert_eq!(call(&mut s, "lint", json!({}), "2026-10-03").unwrap().output["without_code"], false);
     }
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-state-serving-a-team-keeps-no-current-ticket", "checks": ["crates/core/src/tools/state#no-shared-current"]}
+    /// ```
+    #[test]
+    fn a_state_serving_a_team_keeps_no_current_ticket() {
+        // A store as it arrives on a host, its machine's current ticket with it.
+        let mut store = state().store().clone();
+        store.current = Some("later-1".into());
+        store.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default() });
+        let mut shared = State::new(store, crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()), vec![]);
+        shared.set_without_code(true);
+        assert_eq!(shared.current(), None, "dropped: it was one checkout's");
+        assert!(shared.store().starts.is_empty(), "and so was its start");
+        let page = |ticket: Option<&str>| {
+            let mut p = json!({ "slug": "aim", "title": "Aim", "body": "b", "links": [] });
+            if let Some(t) = ticket {
+                p["ticket"] = json!(t);
+            }
+            p
+        };
+        // A start sets none, so a write still has to name its ticket.
+        let started = call(&mut shared, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-03").unwrap();
+        assert_eq!(started.output["node"]["status"], "active");
+        assert_eq!((shared.current(), shared.store().current.clone()), (None, None));
+        assert!(shared.store().starts.is_empty(), "nor a start: the snapshot is the checkout's, with its code");
+        assert_eq!(started.changed, Some(Changed::Many(vec![Changed::Ticket("phase-62".into()), Changed::Current])));
+        let e = call(&mut shared, "put_page", page(None), "2026-10-03").unwrap_err();
+        assert_eq!((e.code(), serde_json::to_value(&e).unwrap()["details"][0]["field"].clone()), ("invalid", json!("ticket")));
+        assert!(call(&mut shared, "put_page", page(Some("phase-62")), "2026-10-03").is_ok());
+        // And an unnamed landing lands nothing there, having no current ticket to land.
+        call(&mut shared, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." }, "when": "landed" }), "2026-10-03").unwrap();
+        assert_eq!(call(&mut shared, "land_ticket", json!({}), "2026-10-03").unwrap().output["landed"], false);
+        assert_eq!(call(&mut shared, "land_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-03").unwrap().output["landed"], true);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-checkout-takes-up-a-ticket-and-lands-nothing-unnamed", "checks": ["crates/core/src/tools/write#takes-up", "crates/core/src/tools/state#server-copy"]}
+    /// ```
+    #[test]
+    fn a_checkout_takes_up_a_ticket_and_lands_nothing_unnamed() {
+        // On a store of one's own, a ticket already active is not started again, and status names no server.
+        let mut own = state();
+        assert_eq!(call(&mut own, "start_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03").unwrap_err().code(), "conflict");
+        assert_eq!(call(&mut own, "status", json!({}), "2026-10-03").unwrap().output["server"], json!(null));
+        // A machine's copy of a server's intent says so.
+        let mut s = state();
+        s.set_server(Some(crate::answer::ServerCopy { address: "https://grimoire.example".into(), fetched: Some("2026-10-03T14:02:00Z".into()), reachable: false, refused: false }));
+        let status = call(&mut s, "status", json!({}), "2026-10-03").unwrap().output;
+        assert_eq!(status["server"], json!({ "address": "https://grimoire.example", "fetched": "2026-10-03T14:02:00Z", "reachable": false, "refused": false }));
+        // later-1 is already active, started in another checkout: taken up here, it is current and has this checkout's start.
+        let before = s.store().tickets["later-1"].clone();
+        let out = call(&mut s, "start_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03").unwrap();
+        assert_eq!(out.changed, Some(Changed::Many(vec![Changed::Started("later-1".into()), Changed::Current])));
+        assert_eq!((s.store().tickets["later-1"].clone(), s.current().as_deref()), (before, Some("later-1")));
+        assert!(s.store().starts.contains_key("later-1") && out.output["rests_on"].is_array());
+        // An open ticket starts as anywhere, and a closed one is still refused.
+        assert_eq!(call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-03").unwrap().output["node"]["status"], "active");
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-10-03").unwrap();
+        assert_eq!(call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-03").unwrap_err().code(), "conflict");
+        // Its current ticket landing, an unnamed landing lands nothing and says where a ticket lands; named, it lands.
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03").unwrap();
+        call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." }, "when": "landed" }), "2026-10-03").unwrap();
+        let none = call(&mut s, "land_ticket", json!({}), "2026-10-03").unwrap();
+        assert_eq!((none.output["landed"].clone(), none.output["waiting"][0]["ref"].clone()), (json!(false), json!("ticket:later-1")));
+        assert!(none.changed.is_none() && none.output["note"].as_str().unwrap().contains("main line"));
+        let landed = call(&mut s, "land_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03").unwrap().output;
+        assert_eq!((landed["landed"].clone(), landed.get("note")), (json!(true), None));
+        // The baseline is the main line's: nothing here prunes it.
+        call(&mut s, "adopt", json!({ "reason": "inherited" }), "2026-10-03").unwrap();
+        s.set_extraction(crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()));
+        assert!(s.prune_baseline().is_none());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "adopt-records-the-findings-it-is-given", "checks": ["crates/core/src/tools/write#adopt-findings"]}
+    /// ```
+    #[test]
+    fn adopt_records_the_findings_it_is_given() {
+        // What a machine with the code sees.
+        let mut machine = state();
+        let seen = call(&mut machine, "lint", json!({}), "2026-10-03").unwrap().output["findings"].as_array().unwrap().clone();
+        let keys: Vec<Value> = seen.iter().map(|f| {
+            let mut k = json!({ "rule": f["rule"], "check": f["check"], "ref": f["ref"] });
+            if !f["edge"].is_null() {
+                k["edge"] = f["edge"].clone();
+            }
+            k
+        }).collect();
+        assert!(seen.iter().any(|f| f["check"] == "untested"), "among them what only code produces");
+        // A state with no code takes them as the baseline, and refuses to adopt without them.
+        let mut shared = State::new(machine.store().clone(), crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()), vec![]);
+        shared.set_without_code(true);
+        let e = call(&mut shared, "adopt", json!({ "reason": "inherited" }), "2026-10-03").unwrap_err();
+        assert_eq!((e.code(), serde_json::to_value(&e).unwrap()["details"][0]["field"].clone()), ("invalid", json!("findings")));
+        let out = call(&mut shared, "adopt", json!({ "reason": "inherited", "findings": keys }), "2026-10-03").unwrap().output;
+        assert_eq!(out["baseline"]["count"], seen.len());
+        // The same baseline the machine would have recorded for itself.
+        call(&mut machine, "adopt", json!({ "reason": "inherited" }), "2026-10-03").unwrap();
+        assert_eq!(shared.store().baseline, machine.store().baseline);
+        // A finding that is not one is refused.
+        assert_eq!(call(&mut shared, "adopt", json!({ "reason": "inherited", "findings": [{ "rule": "nonsense" }] }), "2026-10-03").unwrap_err().code(), "invalid");
+    }
+
 }

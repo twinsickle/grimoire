@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing, and localId gives what follows the last # of a criterion or test reference, which never holds one; nothing recovers a declaration's file from its reference."},{"id":"gone-references","statement":"goneOf names a closed ticket's references whose edge get gave no title, the nodes the graph no longer holds, and names none for a ticket that is not closed or a node of any other kind."}]}
+ * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing, and localId gives what follows the last # of a criterion or test reference, which never holds one; nothing recovers a declaration's file from its reference."},{"id":"gone-references","statement":"goneOf names a closed ticket's references whose edge get gave no title, the nodes the graph no longer holds, and names none for a ticket that is not closed or a node of any other kind."},{"id":"server-away","statement":"serverAway gives the header's warning for a machine whose intent is a copy of a server that did not answer, with when the copy was fetched when that is known, or that refused the machine's token, saying to sign in; and nothing when there is no server or it answered."}]}
  * ```
  */
 
@@ -57,4 +57,16 @@ export function nodePath(ref: G.Ref): string {
 export function goneOf(node: AnyNode): Set<G.Ref> {
   if (!("status" in node) || node.status !== "closed") return new Set();
   return new Set(node.out.filter((e) => e.title === null).map((e) => e.ref));
+}
+
+/**
+ * What the header says when this machine's intent is a copy of a team's
+ * server's and the server did not answer: the copy is read as it was last
+ * fetched, and a write waits. Null when there is no server or it answered.
+ */
+export function serverAway(server: G.ServerCopy | null | undefined): string | null {
+  if (!server || server.reachable) return null;
+  if (server.refused) return "server refused this machine's token: run grimoire login";
+  if (!server.fetched) return "server unreachable";
+  return `server unreachable, intent as of ${server.fetched.replace("T", " ").replace(/(:\d\d)?Z$/, " UTC")}`;
 }

@@ -124,6 +124,21 @@ pub struct StatusAnswer {
     pub baseline: Option<BaselineSummary>,
     // True on a daemon that serves a store for a team and holds no code.
     pub shared: bool,
+    // Set on a machine whose intent is a copy of a team's server's.
+    pub server: Option<ServerCopy>,
+}
+
+/// What a machine's intent is a copy of: the server's address, when the copy
+/// was last fetched (UTC, RFC 3339; none when it never was), whether the
+/// server answered the last time it was asked, and whether it then refused
+/// this machine's token, which is not the same as being away.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ServerCopy {
+    pub address: String,
+    pub fetched: Option<String>,
+    pub reachable: bool,
+    pub refused: bool,
 }
 
 /// Every write of a page, requirement or ticket: the node as it now is, the
@@ -167,6 +182,10 @@ pub struct Landed {
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
     pub waiting: Vec<Summary>,
+    // Why nothing landed, when the reason is not that no ticket was waiting.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub note: Option<String>,
 }
 
 /// A test block in the code that still names a renamed node.

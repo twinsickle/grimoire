@@ -78,7 +78,7 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
-export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, waiting: Array<Summary>, };
+export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, waiting: Array<Summary>, note?: string, };
 
 export type Linked = { ref: Ref, title: string | null, };
 
@@ -146,6 +146,8 @@ export type Scenario = { title: string, given: string, when: string, then: strin
 
 export type Scope = { include: Array<string>, exclude: Array<string>, };
 
+export type ServerCopy = { address: string, fetched: string | null, reachable: boolean, refused: boolean, };
+
 export type SourceAnswer = { file: Ref, language: string, text: string, focus: number, annotations: Array<Annotation>, };
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
@@ -158,7 +160,7 @@ export type StatusAnswer = { repository: string, roots: Array<string>, languages
 /**
  * How many nodes of each kind.
  */
-nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, };
+nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 

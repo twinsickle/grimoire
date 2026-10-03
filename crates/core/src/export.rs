@@ -1,0 +1,217 @@
+//! # Module contract
+//!
+//! ```json
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope and order, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has active or landing; a proposal whose ticket is neither is left out, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! ```
+
+use serde::{Deserialize, Serialize};
+
+use crate::model::*;
+use crate::ops::Changed;
+use crate::store::Store;
+
+/// A store's intent as one value: what a server hands a machine. Nothing of
+/// a machine is in it, so it reads the same wherever it is fetched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Exported {
+    pub version: u32,
+    pub roots: Vec<String>,
+    pub languages: Vec<String>,
+    #[serde(default)]
+    pub scope: Scope,
+    #[serde(default)]
+    pub order: Order,
+    pub pages: Vec<Page>,
+    pub requirements: Vec<Requirement>,
+    pub tickets: Vec<Ticket>,
+    pub proposals: Vec<Proposal>,
+    pub baseline: Option<Baseline>,
+}
+
+/// The intent `store` holds, with nothing of the machine it is on.
+pub fn exported(store: &Store) -> Exported {
+    Exported {
+        version: store.config.version,
+        roots: store.config.roots.clone(),
+        languages: store.config.languages.clone(),
+        scope: store.config.scope.clone(),
+        order: store.config.order.clone(),
+        pages: store.pages.values().cloned().collect(),
+        requirements: store.requirements.values().cloned().collect(),
+        tickets: store.tickets.values().cloned().collect(),
+        proposals: store.proposals.values().cloned().collect(),
+        baseline: store.baseline.clone(),
+    }
+}
+
+impl Exported {
+    /// The store a machine keeps: this intent, `repository` as the checkout
+    /// it is joined with, and what is the machine's own in `own`, its current
+    /// ticket and its starts, as far as the server still has those tickets
+    /// active or landing.
+    pub fn joined(self, own: &Store, repository: &str) -> Result<Store, String> {
+        if self.version > StoreConfig::CURRENT_VERSION {
+            return Err(format!("the server's store is version {}, and this build writes version {}: update grimoire on this machine", self.version, StoreConfig::CURRENT_VERSION));
+        }
+        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repository.to_string(), roots: self.roots, languages: self.languages, scope: self.scope, order: self.order };
+        let mut store = Store::new(config);
+        store.pages = self.pages.into_iter().map(|p| (p.slug.clone(), p)).collect();
+        store.requirements = self.requirements.into_iter().map(|r| (r.slug.clone(), r)).collect();
+        store.tickets = self.tickets.into_iter().map(|t| (t.slug.clone(), t)).collect();
+        let live = |slug: &str| store.tickets.get(slug).is_some_and(|t| t.status.is_live());
+        store.proposals = self.proposals.into_iter().filter(|p| live(&p.ticket)).map(|p| (p.ticket.clone(), p)).collect();
+        store.baseline = self.baseline;
+        store.current = own.current.clone().filter(|c| live(c));
+        store.starts = own.starts.iter().filter(|(slug, _)| live(slug)).map(|(slug, s)| (slug.clone(), s.clone())).collect();
+        Ok(store)
+    }
+}
+
+/// What differs between two stores, as the changes that, persisted over
+/// `old`, leave `new`. The order leaves a store that loads wherever a writer
+/// stops: what names a ticket as being worked, the current ticket and a
+/// proposal, goes before the ticket's record changes and comes after it, and
+/// deletions come before writes, so a slug that moved kind is free.
+pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
+    let mut out = Vec::new();
+    // No longer current, and proposals no longer held: before the tickets they name stop being worked.
+    if old.current != new.current && new.current.is_none() {
+        out.push(Changed::Current);
+    }
+    for slug in old.proposals.keys().filter(|s| !new.proposals.contains_key(*s) && new.tickets.contains_key(*s)) {
+        out.push(Changed::Proposed(slug.clone()));
+    }
+    for slug in old.pages.keys().filter(|s| !new.pages.contains_key(*s)) {
+        out.push(Changed::Deleted(Reference::page(slug)));
+    }
+    for slug in old.requirements.keys().filter(|s| !new.requirements.contains_key(*s)) {
+        out.push(Changed::Deleted(Reference::req(slug)));
+    }
+    // A deleted ticket takes its start and proposal with it.
+    for slug in old.tickets.keys().filter(|s| !new.tickets.contains_key(*s)) {
+        out.push(Changed::Deleted(Reference::ticket(slug)));
+    }
+    out.extend(new.pages.iter().filter(|(s, p)| old.pages.get(*s) != Some(p)).map(|(s, _)| Changed::Page(s.clone())));
+    out.extend(new.requirements.iter().filter(|(s, r)| old.requirements.get(*s) != Some(r)).map(|(s, _)| Changed::Requirement(s.clone())));
+    out.extend(new.tickets.iter().filter(|(s, t)| old.tickets.get(*s) != Some(t)).map(|(s, _)| Changed::Ticket(s.clone())));
+    // Proposals written or changed: after the tickets they belong to.
+    out.extend(new.proposals.iter().filter(|(s, p)| old.proposals.get(*s) != Some(p)).map(|(s, _)| Changed::Proposed(s.clone())));
+    let starts: std::collections::BTreeSet<&String> = old.starts.keys().chain(new.starts.keys()).collect();
+    for slug in starts {
+        if old.starts.get(slug) == new.starts.get(slug) || !new.tickets.contains_key(slug) {
+            continue;
+        }
+        // Written with its ticket's record, or removed beside it.
+        out.push(if new.starts.contains_key(slug) { Changed::Started(slug.clone()) } else { Changed::Closed(slug.clone()) });
+    }
+    if old.current != new.current && new.current.is_some() {
+        out.push(Changed::Current);
+    }
+    if old.baseline != new.baseline {
+        out.push(Changed::Baseline);
+    }
+    if old.config != new.config {
+        out.push(Changed::Config);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::fixtures::store;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-export-holds-the-intent-and-nothing-of-a-machine", "checks": ["crates/core/src/export#whole-intent"]}
+    /// ```
+    #[test]
+    fn an_export_holds_the_intent_and_nothing_of_a_machine() {
+        let mut s = store();
+        s.current = Some("later-1".into());
+        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default() });
+        s.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
+        let e = exported(&s);
+        assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
+        assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone()));
+        let text = serde_json::to_string(&e).unwrap();
+        assert!(!text.contains(&s.config.repository) && !text.contains("fingerprints") && !text.contains("\"current\""), "no repository, start or current ticket");
+        // It reads back as it was written, so a machine holds what the server does.
+        assert_eq!(serde_json::from_str::<Exported>(&text).unwrap(), e);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/export#joined"]}
+    /// ```
+    #[test]
+    fn a_machines_store_joins_the_intent_with_its_own() {
+        let server = store();
+        let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has an active ticket");
+        let other: String = server.tickets.values().find(|t| !t.status.is_live()).map(|t| t.slug.clone()).expect("and one that is not");
+        let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default() };
+        let mut own = Store { current: Some(live.clone()), ..Default::default() };
+        own.starts.insert(live.clone(), start(&live));
+        own.starts.insert(other.clone(), start(&other));
+        let joined = exported(&server).joined(&own, "C:/checkout").unwrap();
+        assert_eq!(joined.config.repository, "C:/checkout");
+        assert_eq!((&joined.pages, &joined.requirements, &joined.tickets, &joined.proposals), (&server.pages, &server.requirements, &server.tickets, &server.proposals));
+        assert_eq!(joined.current.as_deref(), Some(live.as_str()));
+        assert_eq!(joined.starts.keys().collect::<Vec<_>>(), vec![&live], "a start for a ticket no longer being worked is dropped");
+        // A current ticket the server has closed, or never had, is no longer current here.
+        own.current = Some(other);
+        assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
+        own.current = Some("never-filed".into());
+        assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
+        // A newer store than this build writes is refused, not half read.
+        let mut newer = exported(&server);
+        newer.version = StoreConfig::CURRENT_VERSION + 1;
+        assert!(newer.joined(&own, "C:/checkout").unwrap_err().contains("update grimoire"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-difference-is-what-changed-and-no-more", "checks": ["crates/core/src/export#difference"]}
+    /// ```
+    #[test]
+    fn the_difference_is_what_changed_and_no_more() {
+        let old = store();
+        assert!(difference(&old, &old).is_empty());
+        let mut new = old.clone();
+        let page = new.pages.keys().next().cloned().unwrap();
+        new.pages.get_mut(&page).unwrap().title = "Renamed".into();
+        let gone = new.requirements.keys().next().cloned().unwrap();
+        new.requirements.remove(&gone);
+        let live: String = new.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).unwrap();
+        new.current = Some(live.clone());
+        new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default() });
+        new.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
+        new.config.roots.push("extra".into());
+        let d = difference(&old, &new);
+        assert_eq!(d, vec![Changed::Deleted(Reference::req(&gone)), Changed::Page(page), Changed::Started(live.clone()), Changed::Current, Changed::Baseline, Changed::Config]);
+        // Back again: the start goes beside its ticket, and a deleted ticket takes its own with it.
+        assert!(difference(&new, &old).contains(&Changed::Closed(live.clone())));
+        let mut without = new.clone();
+        without.tickets.remove(&live);
+        without.starts.remove(&live);
+        without.proposals.remove(&live);
+        without.current = None;
+        let d = difference(&new, &without);
+        assert!(d.contains(&Changed::Deleted(Reference::ticket(&live))) && !d.iter().any(|c| matches!(c, Changed::Closed(_) | Changed::Proposed(_))), "{d:?}");
+        // A ticket closed elsewhere: it stops being current and loses its proposal before its record says closed,
+        // so a writer stopped anywhere between leaves a store that loads.
+        let mut worked = new.clone();
+        worked.proposals.insert(live.clone(), Proposal { ticket: live.clone(), pages: Default::default(), requirements: Default::default(), deleted: Default::default() });
+        let mut closed = worked.clone();
+        closed.tickets.get_mut(&live).unwrap().status = Status::Closed;
+        closed.proposals.remove(&live);
+        closed.starts.remove(&live);
+        closed.current = None;
+        assert_eq!(difference(&worked, &closed), vec![Changed::Current, Changed::Proposed(live.clone()), Changed::Ticket(live.clone()), Changed::Closed(live.clone())]);
+        // And taken up again: the record first, then what names it.
+        assert_eq!(difference(&closed, &worked), vec![Changed::Ticket(live.clone()), Changed::Proposed(live.clone()), Changed::Started(live.clone()), Changed::Current]);
+    }
+}

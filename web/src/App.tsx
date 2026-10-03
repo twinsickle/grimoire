@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, useQuery } from "./api";
 import { KindTag, mono } from "./components";
-import { idOf, kindOf, nodePath, type Summary } from "./types";
+import { idOf, kindOf, nodePath, serverAway, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
 import { NodeView } from "./views/Node";
@@ -99,6 +99,7 @@ function Top() {
   const fresh = lint.data?.new ?? 0;
   const inherited = (lint.data?.findings.length ?? 0) - fresh;
   const repo = status.data?.repository.split("/").pop();
+  const away = serverAway(status.data?.server);
   return (
     <header className="flex items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
       <nav className="flex gap-1 items-center">
@@ -116,6 +117,7 @@ function Top() {
         {status.error && <span className="text-bad">daemon unreachable</span>}
         {status.data && (
           <>
+            {away && <span className="text-bad font-semibold">{away} · </span>}
             {repo} · {status.data.nodes.page} pages · {status.data.nodes.req} reqs · {status.data.nodes.module} modules · {status.data.nodes.ticket} tickets ·{" "}
             {fresh > 0 && <span className="text-bad font-semibold">{fresh} new</span>}
             {fresh > 0 && inherited > 0 && " · "}

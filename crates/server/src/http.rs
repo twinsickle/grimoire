@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"shared-page","statement":"A router built for a shared daemon answers every path that is not the API, the event stream or MCP with a plain page saying it is a shared server with no interface of its own, whatever UI the build holds."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own or whose Sec-Fetch-Site is cross-site or same-site, under either policy, and under the local policy to one whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."}]}
+//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"shared-page","statement":"A router built for a shared daemon answers every path that is not the API, the event stream or MCP with a plain page saying it is a shared server with no interface of its own, whatever UI the build holds."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own or whose Sec-Fetch-Site is cross-site or same-site, under either policy, and under the local policy to one whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/export, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."},{"id":"export","statement":"GET /api/export answers the store's whole intent as one value, to any caller the trust step admits, a reader included; it is a route and not a tool, so it is not listed for an agent nor offered over MCP."},{"id":"passes-the-token","statement":"POST /api/<tool> hands the tool the bearer token its request carries, so a daemon whose intent is a server's sends that caller's write signed in as the caller; no other daemon makes any use of it past the trust step."}]}
 //! ```
 
 use std::convert::Infallible;
@@ -52,6 +52,7 @@ pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
     let mut app = Router::new()
         .route("/api/tools", get(list_tools))
         .route("/api/events", get(events))
+        .route("/api/export", get(export))
         .route("/api/{tool}", get(call_get).post(call_post))
         .with_state(daemon.clone())
         .nest_service("/mcp", crate::mcp::service(daemon))
@@ -135,14 +136,14 @@ fn error_response(e: ToolError) -> Response {
     (status, Json(serde_json::to_value(&e).unwrap_or_default())).into_response()
 }
 
-async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, tool: String, input: Value) -> Response {
+async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, tool: String, input: Value, token: Option<String>) -> Response {
     if !grimoire_core::tools::TOOL_NAMES.contains(&tool.as_str()) {
         return error_response(ToolError::invalid(format!("unknown tool `{tool}`"), vec![]));
     }
     if let Err(e) = access::may_call(caller.as_ref(), &tool) {
         return (StatusCode::FORBIDDEN, Json(serde_json::to_value(&e).unwrap_or_default())).into_response();
     }
-    let result = tokio::task::spawn_blocking(move || daemon.call(&tool, input)).await;
+    let result = tokio::task::spawn_blocking(move || daemon.call_as(&tool, input, token)).await;
     match result {
         Ok(Ok(v)) => Json(v).into_response(),
         Ok(Err(e)) => error_response(e),
@@ -166,7 +167,10 @@ async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<C
             Err(e) => return error_response(ToolError::invalid(format!("body is not JSON: {e}"), vec![])),
         }
     };
-    run(daemon, caller.map(|Extension(c)| c), tool, input).await
+    // The token the request carries: a command run with GRIMOIRE_TOKEN sends it, and on a project
+    // that names a server its write goes to the server signed in as that command, not as this daemon.
+    let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    run(daemon, caller.map(|Extension(c)| c), tool, input, token).await
 }
 
 /// GET form for convenience: each query value is parsed as JSON when it is,
@@ -183,7 +187,16 @@ async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Ca
         let parsed = serde_json::from_str::<Value>(&v).ok().filter(|p| !p.is_string()).unwrap_or(Value::String(v));
         input.insert(k, parsed);
     }
-    run(daemon, caller.map(|Extension(c)| c), tool, Value::Object(input)).await
+    run(daemon, caller.map(|Extension(c)| c), tool, Value::Object(input), None).await
+}
+
+/// The store's whole intent in one read, for a machine that keeps a copy of
+/// it. Not a tool: no agent has a use for a whole store in one answer.
+async fn export(State(daemon): State<Arc<Daemon>>) -> Response {
+    match tokio::task::spawn_blocking(move || daemon.exported()).await {
+        Ok(exported) => Json(exported).into_response(),
+        Err(e) => error_response(ToolError::unavailable(e.to_string())),
+    }
 }
 
 async fn events(State(daemon): State<Arc<Daemon>>) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {

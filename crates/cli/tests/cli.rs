@@ -997,3 +997,154 @@ fn the_marker_names_the_port_really_listened_on() {
     let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
 }
+
+/// One command in a checkout of a team's project: Grimoire's own files under
+/// `home`, and signed in only as `token` says, whatever this machine has set.
+fn team(cwd: &Path, home: &Path, token: Option<&str>, args: &[&str]) -> Output {
+    let mut c = Command::new(BIN);
+    c.args(args).current_dir(cwd).env("GRIMOIRE_HOME", home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::null());
+    if let Some(t) = token {
+        c.env("GRIMOIRE_TOKEN", t);
+    }
+    c.output().unwrap()
+}
+
+/// Wait for a daemon to mark `store` and return the port it listens on.
+fn marked_port(store: &Path) -> u16 {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !store.join("serve.json").is_file() {
+        assert!(Instant::now() < deadline, "the daemon never marked {}", store.display());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let marker: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store.join("serve.json")).unwrap()).unwrap();
+    marker["port"].as_u64().unwrap() as u16
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src#init-server", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#opens-the-copy", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
+/// ```
+#[test]
+fn a_checkout_works_against_a_teams_server() {
+    // The team's server: a store started on one machine, then served shared from a host, with a person's token and a pipeline's.
+    let (origin, _) = project();
+    let store = origin.store.to_string_lossy().to_string();
+    let host = origin.dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    let made = |name: &str| String::from_utf8_lossy(&run(&host, &["token", "add", name, "--store", &store]).stdout).trim().to_string();
+    let (ana, pipeline, again) = (made("ana"), made("pipeline"), made("ana-again"));
+    let mut server = Some(Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap()));
+    let port = marked_port(&origin.store);
+    let address = format!("http://127.0.0.1:{port}");
+    // A teammate's checkout of the same code, with Grimoire's own files kept apart from this machine's.
+    let p = uninitialised();
+    let home = p.dir.join("home");
+    // init for a team: an address that is not one, or a store as well, stops it before anything is written.
+    assert!(!team(&p.repo, &home, None, &["init", "--server", "grimoire.example"]).status.success());
+    assert!(!team(&p.repo, &home, None, &["init", "--server", &address, "--store", "mine"]).status.success());
+    assert!(!p.repo.join(".grimoire.toml").exists() && !p.repo.join(".claude").exists());
+    let init = team(&p.repo, &home, None, &["init", "--server", &format!("{address}/")]);
+    assert!(init.status.success() && text(&init).contains("grimoire login"), "{}", text(&init));
+    assert!(std::fs::read_to_string(p.repo.join(".grimoire.toml")).unwrap().contains(&format!("server = \"{address}\"")));
+    assert!(p.repo.join(".claude").join("skills").join("grimoire").join("SKILL.md").is_file() && !home.exists(), "the integration, and no store");
+    // Not signed in: the server refuses, and the command says how to sign in.
+    let refused = team(&p.repo, &home, None, &["check"]);
+    assert!(!refused.status.success() && text(&refused).contains("grimoire login"), "{}", text(&refused));
+    // A token the server does not hold is not kept; the person's own is, once, outside the repository.
+    let wrong = team(&p.repo, &home, None, &["login", "--token", "grm_not-held"]);
+    assert!(!wrong.status.success() && text(&wrong).contains("refused the token") && !home.join("credentials.json").exists(), "{}", text(&wrong));
+    let login = {
+        use std::io::Write;
+        let mut child = Command::new(BIN).arg("login").current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        writeln!(child.stdin.take().unwrap(), "{ana}").unwrap();
+        child.wait_with_output().unwrap()
+    };
+    assert!(login.status.success() && text(&login).contains("signed in"), "{}", text(&login));
+    let kept = std::fs::read_to_string(home.join("credentials.json")).unwrap();
+    assert!(kept.contains(&address) && kept.contains(&ana) && !files(&p.repo).iter().any(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains(&ana))), "kept under the server's address, and nowhere in the repository");
+    // The check runs with no daemon here: the server's intent, this checkout's code.
+    let check = team(&p.repo, &home, None, &["check"]);
+    assert!(check.status.success() && text(&check).contains("finding(s)"), "{}", text(&check));
+    let copy = std::fs::read_dir(home.join("copies")).unwrap().flatten().next().unwrap().path();
+    assert!(copy.join("grimoire.json").is_file() && copy.join("copy.json").is_file(), "the copy, laid out as a store, outside the repository");
+    // A write goes to the server; the ticket it starts is this checkout's current one.
+    let filed = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    let slug = ticket.trim_start_matches("ticket:").to_string();
+    assert!(team(&p.repo, &home, None, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    let put = team(&p.repo, &home, None, &["tool", "put_page", r#"{"slug":"aim","title":"Aim","body":"b","links":[]}"#]);
+    assert!(put.status.success(), "{}", text(&put));
+    let bearer = format!("Host: 127.0.0.1\r\nAuthorization: Bearer {ana}\r\n");
+    assert_eq!(status_of(port, "POST", "/api/get", &bearer, &format!(r#"{{"ref":"page:aim","ticket":"{slug}"}}"#)), 200, "in the ticket's proposal on the server");
+    assert_eq!(status_of(port, "POST", "/api/get", &bearer, r#"{"ref":"page:aim"}"#), 404, "and not in the truth");
+    // A commit on a team lands nothing: the hook's unnamed landing says where a ticket lands, and passes.
+    let decided = team(&p.repo, &home, None, &["tool", "close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)]);
+    assert!(decided.status.success(), "{}", text(&decided));
+    let hook = team(&p.repo, &home, None, &["land"]);
+    assert!(hook.status.success() && text(&hook).contains("nothing landed") && text(&hook).contains("main line") && text(&hook).contains(&ticket), "{}", text(&hook));
+    // The main line lands it, by name, signed in as a pipeline is: by the environment, with nothing kept.
+    let ci = p.dir.join("pipeline-home");
+    let landed = team(&p.repo, &ci, Some(&pipeline), &["land", &slug]);
+    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")), "{}", text(&landed));
+    assert!(!ci.join("credentials.json").exists());
+    assert_eq!(status_of(port, "POST", "/api/get", &bearer, r#"{"ref":"page:aim"}"#), 200, "applied to the server's truth");
+    // A daemon in the checkout serves its copy with its code, and a command beside it goes through it.
+    {
+        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+        let local = marked_port(&copy);
+        assert_eq!(status_of(local, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
+        let status = team(&p.repo, &home, None, &["tool", "status"]);
+        let status: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
+        assert_eq!((status["server"]["address"].as_str(), status["server"]["reachable"].as_bool(), status["shared"].as_bool()), (Some(address.as_str()), Some(true), Some(false)), "{status}");
+        assert!(status["nodes"]["module"].as_u64().unwrap() > 0, "the checkout's code is in its graph");
+        let through = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+        assert!(through.status.success(), "{}", text(&through));
+        // The person's token is revoked while the daemon serves. The next write finds out, and from then
+        // nothing is read on in silence, by the daemon or by a command beside it, until they sign in again.
+        assert!(run(&host, &["token", "revoke", "ana", "--store", &store]).status.success());
+        let refused = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+        assert!(!refused.status.success() && text(&refused).contains("store_unavailable") && text(&refused).contains("grimoire login"), "{}", text(&refused));
+        let check = team(&p.repo, &home, None, &["check"]);
+        assert!(!check.status.success() && text(&check).contains("refused this machine's token"), "{}", text(&check));
+        // Signed in again: the daemon takes up by itself, with no restart.
+        assert!(team(&p.repo, &home, None, &["login", "--token", &again]).status.success());
+        let check = team(&p.repo, &home, None, &["check"]);
+        assert!(text(&check).contains("finding(s)") && !text(&check).contains("refused"), "{}", text(&check));
+        assert!(team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]).status.success());
+        // A command run with a token of its own goes to the server as itself, though the daemon it goes through could write.
+        let reader = String::from_utf8_lossy(&run(&host, &["token", "add", "reader", "--read-only", "--store", &store]).stdout).trim().to_string();
+        let as_reader = team(&p.repo, &home, Some(&reader), &["tool", "file_ticket", A_TICKET]);
+        assert!(!as_reader.status.success() && text(&as_reader).contains("may only read"), "{}", text(&as_reader));
+    }
+    // What a team's project has no use for here says so, and changes nothing.
+    let shared = team(&p.repo, &home, None, &["serve", "--shared"]);
+    assert!(!shared.status.success() && text(&shared).contains("--store"), "{}", text(&shared));
+    let tokens = team(&p.repo, &home, None, &["token", "list"]);
+    assert!(!tokens.status.success() && text(&tokens).contains("on the host"), "{}", text(&tokens));
+    // The server goes away: the check still runs over the copy and says so; a write is refused.
+    server.take();
+    let offline = team(&p.repo, &home, None, &["check"]);
+    // It fails only as it would with the server there: on the page the landing left unlinked, a new finding.
+    assert!(text(&offline).contains("cannot be reached") && text(&offline).contains("as of") && text(&offline).contains("1 new") && text(&offline).contains("page:aim"), "{}", text(&offline));
+    let write = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+    assert!(!write.status.success() && text(&write).contains("store_unavailable"), "{}", text(&write));
+    // With the checkout's daemon running and holding the copy, a command asks it, and says the same.
+    let _ = std::fs::remove_file(copy.join("serve.json"));
+    {
+        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+        marked_port(&copy);
+        let beside = team(&p.repo, &home, None, &["check"]);
+        assert!(text(&beside).contains("cannot be reached") && text(&beside).contains("as of") && text(&beside).contains("finding(s)"), "{}", text(&beside));
+    }
+    // uninstall takes the integration out and keeps the copy; the store is the server's, so there is none to delete.
+    let delete = team(&p.repo, &home, None, &["uninstall", "--delete-store"]);
+    assert!(!delete.status.success() && text(&delete).contains("Nothing was removed") && p.repo.join(".grimoire.toml").is_file(), "{}", text(&delete));
+    let uninstall = team(&p.repo, &home, None, &["uninstall"]);
+    assert!(uninstall.status.success() && text(&uninstall).contains("this checkout's copy") && !p.repo.join(".grimoire.toml").exists() && copy.is_dir(), "{}", text(&uninstall));
+    // Signing out forgets the token, and says so when there is none.
+    let out = team(&p.repo, &home, None, &["logout", "--server", &address]);
+    assert!(out.status.success() && text(&out).contains("signed out") && !std::fs::read_to_string(home.join("credentials.json")).unwrap().contains(&again), "{}", text(&out));
+    assert!(text(&team(&p.repo, &home, None, &["logout", "--server", &address])).contains("no token was kept"));
+}

@@ -25,6 +25,14 @@ In order of preference:
 3. **CLI, no daemon**: `grimoire tool <name> '<json>'` in the repository.
    Reads and writes the store directly; use it when nothing is running.
 
+**On a team**, the project's `.grimoire.toml` names a `server` and the
+grimoire is kept there, shared by everyone. You reach the tools the same
+way: the daemon in this checkout reads the server's intent with this
+checkout's code and sends every write to the server. Signing in is the
+person's, once, with `grimoire login`. A write needs the server and is
+refused as `store_unavailable` without it; reads and `grimoire check` go on
+from the copy last fetched, and `status` says so under `server`.
+
 Every tool takes and returns JSON. Errors are `{ "error": code, "message" }`
 with codes `not_found`, `invalid` (with `details`), `conflict`,
 `store_unavailable`. A write never fails on a lint; it returns the findings
@@ -52,7 +60,8 @@ it created in `warnings`. Every warning is work to do now.
   truth: `put_page`, `patch_page`, `put_requirement`, `record_decision`,
   `supersede`, `retire_node` and `delete_node` of a page or requirement take
   `ticket` (a slug or `ticket:` reference); absent, they land in the store's
-  current ticket, the one last started; with neither they are refused.
+  current ticket, the one last started (on a team, last started in this
+  checkout); with neither they are refused.
   The truth changes when the ticket closes. A patch, decision,
   supersession, retirement or deletion builds on the proposal's copy of the
   record; when the truth moved under it, the write is refused as a
@@ -107,7 +116,9 @@ edges.
    `active` and returns the ticket, `rests_on` (everything below it, nearest
    first, with the decisions behind each requirement) and `related` (open gaps
    and questions touching what it touches). If the ticket is already active,
-   use `get`, `rests_on` and `related_tickets` instead.
+   use `get`, `rests_on` and `related_tickets` instead; on a team,
+   `start_ticket` on a ticket already active takes it up in this checkout:
+   it becomes the current ticket here and nothing of it changes.
 2. Read `rests_on` as a list of assumptions. For each requirement with
    decisions, and each closed ticket listed, ask whether the decision still
    holds given what this ticket changes. Name the ones you would challenge,
@@ -198,7 +209,10 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    (it leaves a hook of the project's own alone and installs none outside
    git, and says so), and a pipeline runs it as `grimoire land <ticket>`
    when the change reaches its main line. Where neither does, run it
-   yourself once the change has landed. So the truth moves when the code
+   yourself once the change has landed. On a team a commit on a machine
+   lands nothing, and `grimoire land` with no ticket says so: the ticket
+   lands by name on the main line, run by the pipeline or by a person once
+   the change has merged. So the truth moves when the code
    lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
    is refused and the ticket stays `landing`, reported as `landing-moved`:
    write the moved records again under the ticket and run
@@ -207,7 +221,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
 6. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
    `landing` ticket the commit closes it where the post-commit hook is
-   installed, and the hook prints what landed and any ticket still waiting;
+   installed and the store is the project's own (on a team the main line
+   lands it), and the hook prints what landed and any ticket still waiting;
    if nothing says it landed, run `grimoire land`.
 
 ## Sequence: file a ticket
