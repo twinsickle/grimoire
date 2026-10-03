@@ -42,7 +42,16 @@ repository only.
   Commit the file with the change.
 - Touched `web/`? In `web/`: `npm run shots` and look at them;
   `npm run visual` compares with the baselines; `npm run visual:update`
-  accepts a change you have seen.
+  accepts a change you have seen. All three build the UI and serve the
+  behaviour fixture themselves with the installed `grimoire`, so no dev
+  loop is needed and a baseline changes only when rendering does. The
+  routes they cover are `web/behaviour/routes.ts`, shared with the
+  behaviour specs.
+- `npm test` in `web/` runs the Vitest unit tests (logic and source rules);
+  `npm run behaviour` builds the UI and runs the Playwright behaviour specs
+  against a fixture store it serves itself with the installed `grimoire`
+  (`GRIMOIRE_BIN` to use another), so they can start and close tickets.
+  Reinstall after a Rust change first, or they test yesterday's daemon.
 - Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
   `npm run check` in `web/` (tsc and ESLint). Under bacon they are the
   `clippy` and `web` jobs. They gate a push, not a commit: install with
@@ -50,3 +59,12 @@ repository only.
   `grimoire check` alone; `init` owns it.
 - The skill and its `references/` are installed verbatim into other
   repositories. Nothing about this repository goes in them; it goes here.
+- Review before close: the rites' `review` page carries the rule; this is
+  how it is run here. Run Codex read-only,
+  `codex exec -s read-only -C <repo> -o <out.md> --json - < <prompt>`, with
+  a prompt naming the ticket, the goal page and the nodes it touched and
+  relied on, telling it to read the grimoire only through the read-only
+  tools over HTTP (never the store's files, never a write tool) and to
+  ignore the untracked `.codex/`. Check each finding against the code
+  before acting. Say what the review found and what was done in the
+  ticket's closing decision, and in the commit message when there is one.
