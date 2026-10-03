@@ -68,3 +68,15 @@ repository only.
   ignore the untracked `.codex/`. Check each finding against the code
   before acting. Say what the review found and what was done in the
   ticket's closing decision, and in the commit message when there is one.
+- Questions start from the goal: the rites' `questions` page carries the
+  rule; this is how it is run here. Before laying out options on a gap or
+  question, read the goal page and say what it needs whatever the tool, and
+  name the assumption the present design rests on. Tooling already in use
+  (git, a code host, a library) is machinery to weigh, never a requirement.
+  Then lay out the options: weigh what can be reused before anything is
+  built; hold one that needs adapters, plugins or a second product against
+  the goal's "what it is not" before recommending it; and weigh one that
+  bears on how people use the tool toward the fewest steps a person has to
+  do, the fewest ways it can fail and the least work it asks ahead of time,
+  for a team, some setup being accepted. Say what the question came down to
+  in its closing decision.
