@@ -3,7 +3,7 @@
 
 This project's grimoire (pages, requirements, the module contracts in the
 code) is the truth of what it is meant to do. Code and grimoire change in the
-same piece of work; the pre-commit hook checks they agree.
+same piece of work; the pre-commit hook finds what is left unconnected.
 
 - Orient first: `outline` at depth 2, then the pages each root links,
   in their order, then your area. `get` a module before opening its files.
