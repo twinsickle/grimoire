@@ -887,3 +887,113 @@ fn a_commit_lands_the_ticket_waiting_on_it() {
     let by_hand = run(&p.repo, &["land"]);
     assert!(by_hand.status.success() && text(&by_hand).contains(&format!("landed {second}")), "{}", text(&by_hand));
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-store-is-served-for-a-team-behind-tokens", "checks": ["crates/server/src#shared-serve", "crates/cli/src#token"]}
+/// ```
+#[test]
+fn a_store_is_served_for_a_team_behind_tokens() {
+    // A project started as today, then its store served as a team's from another working directory, as on a host.
+    let (p, _) = project();
+    let store = p.store.to_string_lossy().to_string();
+    let host = p.dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    // Tokens are made beside the store; the token is printed once and the file holds no token.
+    let add = run(&host, &["token", "add", "ana", "--store", &store]);
+    assert!(add.status.success(), "{}", text(&add));
+    let ana = String::from_utf8_lossy(&add.stdout).trim().to_string();
+    assert!(ana.starts_with("grm_"), "{ana}");
+    let check = String::from_utf8_lossy(&run(&host, &["token", "add", "pipeline-check", "--read-only", "--store", &store]).stdout).trim().to_string();
+    assert!(!std::fs::read_to_string(p.store.join("tokens.json")).unwrap().contains(&ana));
+    let listed = text(&run(&host, &["token", "list", "--store", &store]));
+    assert!(listed.contains("ana\tread and write") && listed.contains("pipeline-check\tread"), "{listed}");
+    // A daemon that trusts local callers is not opened to the network.
+    let open = run(&host, &["serve", "--store", &store, "--listen", "0.0.0.0:0"]);
+    assert!(!open.status.success() && text(&open).contains("--listen needs --shared"), "{}", text(&open));
+    // Served shared: the repository the store records plays no part.
+    std::fs::remove_dir_all(p.repo.join("src")).unwrap();
+    // The port is left to the system, and the marker records the one it got.
+    let _daemon = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !p.store.join("serve.json").is_file() {
+        assert!(Instant::now() < deadline, "the shared daemon never marked the store");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let marker: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p.store.join("serve.json")).unwrap()).unwrap();
+    let port = marker["port"].as_u64().unwrap() as u16;
+    assert_ne!(port, 0, "the port it is really listening on: {marker}");
+    let bearer = |t: &str| format!("Host: 127.0.0.1\r\nAuthorization: Bearer {t}\r\n");
+    assert_eq!(status_of(port, "POST", "/api/status", "Host: 127.0.0.1\r\n", "{}"), 403, "no token, though local");
+    assert_eq!(status_of(port, "POST", "/api/status", &bearer(&ana), "{}"), 200);
+    assert_eq!(status_of(port, "POST", "/api/file_ticket", &bearer(&ana), A_TICKET), 200);
+    assert_eq!(status_of(port, "POST", "/api/file_ticket", &bearer(&check), A_TICKET), 403, "read-only");
+    assert_eq!(status_of(port, "POST", "/api/board", &bearer(&check), "{}"), 200);
+    // A command beside the daemon sends its token and is answered by it; without one it is not let through.
+    let via = Command::new(BIN).args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env("GRIMOIRE_TOKEN", &ana).output().unwrap();
+    assert!(via.status.success(), "{}", text(&via));
+    let without = Command::new(BIN).args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
+    assert!(!without.status.success() && text(&without).contains("refused this command") && text(&without).contains("GRIMOIRE_TOKEN"), "{}", text(&without));
+    // A read without a token is refused the same way: it does not go round the daemon to a repository that is not there.
+    let read = Command::new(BIN).args(["tool", "--store", &store, "board"]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
+    assert!(!read.status.success() && text(&read).contains("refused this command"), "{}", text(&read));
+    // It holds the store's lock like any daemon: a second one is refused.
+    let second = run(&host, &["serve", "--shared", "--store", &store, "--port", "0"]);
+    assert!(!second.status.success() && text(&second).contains("in use"), "{}", text(&second));
+    // Revoked while it serves: refused at once, and revoking a name that is gone fails.
+    assert!(run(&host, &["token", "revoke", "ana", "--store", &store]).status.success());
+    assert_eq!(status_of(port, "POST", "/api/status", &bearer(&ana), "{}"), 403);
+    assert!(!run(&host, &["token", "revoke", "ana", "--store", &store]).status.success());
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src#uninstall-store", "crates/server/src/store_io/tokens#digests-only"]}
+/// ```
+#[test]
+fn a_store_with_tokens_is_deleted_under_their_lock() {
+    let p = bare_repo();
+    let store = p.store.to_string_lossy().to_string();
+    assert!(run(&p.repo, &["init", "--store", &store]).status.success());
+    assert!(run(&p.repo, &["token", "add", "ana"]).status.success());
+    assert!(p.store.join("tokens.json").is_file() && p.store.join("tokens.lock").is_file());
+    // While a token command holds the tokens' lock, the deletion waits for it and removes nothing.
+    let held = grimoire_server::store_io::tokens::lock(&p.store).unwrap();
+    let mut uninstall = Command::new(BIN).args(["uninstall", "--delete-store"]).current_dir(&p.repo).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    std::thread::sleep(Duration::from_millis(700));
+    assert!(uninstall.try_wait().unwrap().is_none(), "the deletion waits for the tokens' lock");
+    assert!(p.store.join("tokens.json").is_file() && p.store.join("grimoire.json").is_file());
+    drop(held);
+    let out = uninstall.wait_with_output().unwrap();
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists(), "the store is gone, tokens and their lock with it");
+    // A token command that comes after finds no store, and makes no file where it was.
+    let late = run(&p.dir, &["token", "add", "late", "--store", &store]);
+    assert!(!late.status.success() && !p.store.exists(), "{}", text(&late));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-marker-names-the-port-really-listened-on", "checks": ["crates/server/src/daemon#serving-marker"]}
+/// ```
+#[test]
+fn the_marker_names_the_port_really_listened_on() {
+    // A daemon on a person's machine, its port left to the system.
+    let (p, _) = project();
+    let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).spawn().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !p.store.join("serve.json").is_file() {
+        assert!(Instant::now() < deadline, "the daemon never marked the store");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let marker: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p.store.join("serve.json")).unwrap()).unwrap();
+    let port = marker["port"].as_u64().unwrap() as u16;
+    assert_ne!(port, 0, "{marker}");
+    assert_eq!(status_of(port, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
+    // So a command beside it finds it and is answered by it.
+    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    assert!(filed.status.success(), "{}", text(&filed));
+}

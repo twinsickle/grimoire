@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -38,6 +38,8 @@ pub struct State {
     /// The graph as one ticket's proposal would leave it, cached like the truth's.
     view: Option<(String, Graph)>,
     pub(super) source: Option<std::sync::Arc<dyn SourceReader>>,
+    /// Set by a daemon that holds no code: every graph is marked so, and the baseline is left alone.
+    without_code: bool,
 }
 
 /// Reads a repository file's text for the `source` tool. The core does no
@@ -64,7 +66,7 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false }
     }
     /// The store's current ticket, the one last started.
     pub fn current(&self) -> Option<String> {
@@ -83,6 +85,7 @@ impl State {
         if self.view.as_ref().is_none_or(|(t, _)| t != ticket) {
             let mut g = Graph::with_proposal(&self.store, ticket, &self.extraction, &self.malformed);
             self.flag_languages(&mut g);
+            g.without_code = self.without_code;
             self.view = Some((ticket.to_string(), g));
         }
         Ok(&self.view.as_ref().expect("just built").1)
@@ -90,7 +93,18 @@ impl State {
     fn build_graph(&self, store: &Store) -> Graph {
         let mut g = Graph::build(store, &self.extraction, &self.malformed);
         self.flag_languages(&mut g);
+        g.without_code = self.without_code;
         g
+    }
+    /// Say this state holds no code, as a shared daemon's does: what only
+    /// code can show is then left out of every answer, never called missing.
+    pub fn set_without_code(&mut self, without_code: bool) {
+        self.without_code = without_code;
+        self.graph = None;
+        self.view = None;
+    }
+    pub fn without_code(&self) -> bool {
+        self.without_code
     }
     /// An unknown build (tests, or a caller that never said) flags nothing.
     fn flag_languages(&self, g: &mut Graph) {
@@ -137,6 +151,10 @@ impl State {
     /// Drop from the baseline every finding no longer produced. Returns what
     /// changed when it shrank, so the owner of the store persists it.
     pub fn prune_baseline(&mut self) -> Option<Changed> {
+        // With no code held, a finding not produced here is not thereby fixed.
+        if self.without_code {
+            return None;
+        }
         self.graph();
         let g = self.graph.as_ref().expect("just built");
         let pruned = lint::pruned(g, self.store.baseline.as_ref())?;

@@ -93,6 +93,8 @@ pub struct LintAnswer {
     pub findings: Vec<Finding>,
     pub counts: BTreeMap<String, usize>,
     pub new: usize,
+    // True on a daemon that holds no code, where findings only code can show are left out.
+    pub without_code: bool,
 }
 
 /// A baseline as `status` and `adopt` show it; the entries stay in the store.
@@ -120,6 +122,8 @@ pub struct StatusAnswer {
     pub malformed: usize,
     pub scope: crate::model::Scope,
     pub baseline: Option<BaselineSummary>,
+    // True on a daemon that serves a store for a team and holds no code.
+    pub shared: bool,
 }
 
 /// Every write of a page, requirement or ticket: the node as it now is, the

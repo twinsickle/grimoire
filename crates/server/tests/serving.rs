@@ -434,3 +434,60 @@ fn a_reader_cannot_write() {
     let after = s.daemon.call("get", json!({ "ref": "page:goal", "ticket": "work" })).unwrap();
     assert_eq!(after["node"]["title"], "Goal", "neither write ran");
 }
+
+/// A store with no repository, served as a team's: no interface, callers admitted by token.
+fn serve_shared() -> (Served, String, String) {
+    let tmp = tempfile::Builder::new().prefix("grimoire-shared-").tempdir().unwrap();
+    let store = tmp.path().join("store");
+    let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout/on/another/machine".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+    store_io::write_all(&store, &Store::new(config), false).unwrap();
+    let writer = store_io::tokens::add(&store, "ana", true).unwrap();
+    let reader = store_io::tokens::add(&store, "pipeline-check", false).unwrap();
+    let daemon = Arc::new(Daemon::open_shared(&store).unwrap());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = http::router(daemon.clone(), http::Ui::Shared, Arc::new(grimoire_server::access::Tokens { store_dir: store }));
+    runtime.spawn(async move { axum::serve(listener, app).await });
+    (Served { port, daemon, _runtime: runtime, _tmp: tmp }, writer, reader)
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-shared-daemon-admits-by-token-and-serves-no-interface", "checks": ["crates/server/src/http#shared-page", "crates/server/src/access#token-policy", "crates/server/src/access#writes-need-write"]}
+/// ```
+#[test]
+fn a_shared_daemon_admits_by_token_and_serves_no_interface() {
+    let (s, writer, reader) = serve_shared();
+    let bearer = |t: &str| format!("Authorization: Bearer {t}\r\n");
+    let ticket = json!({ "title": "From the team", "kind": "gap", "priority": "later", "body": "b" });
+    // No token, or one it does not hold: refused before any tool, from this machine as from any other.
+    let (code, _, body) = request_as(s.port, "POST", "/api/board", Some(&json!({})), "127.0.0.1", "");
+    assert_eq!(code, 403, "{body}");
+    assert!(json(&body)["message"].as_str().unwrap().contains("no token"), "{body}");
+    assert_eq!(request_as(s.port, "POST", "/api/board", Some(&json!({})), "127.0.0.1", &bearer("grm_not-held")).0, 403);
+    assert_eq!(request_as(s.port, "GET", "/api/tools", None, "127.0.0.1", "").0, 403);
+    assert_eq!(request_as(s.port, "POST", "/mcp", Some(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} })), "127.0.0.1", "").0, 403);
+    // A token signs its caller in, whatever name the request was addressed to.
+    let (code, _, body) = request_as(s.port, "POST", "/api/file_ticket", Some(&ticket), "grimoire.team.example", &bearer(&writer));
+    assert_eq!(code, 200, "{body}");
+    let (code, _, body) = request_as(s.port, "POST", "/api/status", Some(&json!({})), "grimoire.team.example", &bearer(&reader));
+    assert_eq!((code, json(&body)["shared"].clone()), (200, json!(true)), "{body}");
+    // A read-only token reads and does not write.
+    let (code, _, body) = request_as(s.port, "POST", "/api/lint", Some(&json!({})), "127.0.0.1", &bearer(&reader));
+    assert_eq!((code, json(&body)["without_code"].clone()), (200, json!(true)), "{body}");
+    let (code, _, body) = request_as(s.port, "POST", "/api/file_ticket", Some(&ticket), "127.0.0.1", &bearer(&reader));
+    assert_eq!(code, 403, "{body}");
+    assert!(json(&body)["message"].as_str().unwrap().contains("may only read"), "{body}");
+    assert_eq!(s.daemon.call("board", json!({ "kinds": ["gap"] })).unwrap()["unattached"].as_array().unwrap().len(), 1, "one ticket was filed, by the writer");
+    // Revoked while serving: refused on its next call.
+    assert!(store_io::tokens::revoke(&s.daemon.store_dir, "ana").unwrap());
+    assert_eq!(request_as(s.port, "POST", "/api/board", Some(&json!({})), "127.0.0.1", &bearer(&writer)).0, 403);
+    // No interface: any other path is a page saying what this is, to anyone.
+    for path in ["/", "/board", "/n/page%3Aoverview"] {
+        let (code, _, body) = request_as(s.port, "GET", path, None, "grimoire.team.example", "");
+        assert_eq!(code, 200, "{path}");
+        assert!(body.contains("shared Grimoire server") && body.contains("no interface"), "{path}: {body}");
+    }
+}

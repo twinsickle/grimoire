@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own, whose Sec-Fetch-Site is cross-site or same-site, or whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."}]}
+//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"shared-page","statement":"A router built for a shared daemon answers every path that is not the API, the event stream or MCP with a plain page saying it is a shared server with no interface of its own, whatever UI the build holds."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own or whose Sec-Fetch-Site is cross-site or same-site, under either policy, and under the local policy to one whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."}]}
 //! ```
 
 use std::convert::Infallible;
@@ -36,6 +36,8 @@ pub enum Ui {
     Embedded,
     /// None: the API and MCP only, and a page saying so.
     None,
+    /// A shared daemon: no interface whatever the build holds, and a page saying what it is.
+    Shared,
 }
 
 /// The built UI, `web/dist`. A release build embeds it; a debug build reads
@@ -63,6 +65,7 @@ pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
         }
         Ui::Embedded => app = app.fallback(embedded),
         Ui::None => app = app.fallback(no_ui),
+        Ui::Shared => app = app.fallback(shared_page),
     }
     app
 }
@@ -97,6 +100,16 @@ fn asset(path: &str, get: impl Fn(&str) -> Option<(Vec<u8>, String)>) -> Respons
         return StatusCode::NOT_FOUND.into_response();
     }
     get("index.html").map_or_else(|| StatusCode::NOT_FOUND.into_response(), serve)
+}
+
+/// What a shared daemon answers in place of an interface.
+async fn shared_page() -> Response {
+    (
+        StatusCode::OK,
+        [("content-type", "text/html; charset=utf-8")],
+        "<!doctype html><title>grimoire</title><body style=\"background:#111;color:#ddd;font-family:system-ui;padding:2rem\"><h1>grimoire</h1><p>This is a shared Grimoire server. It holds a team's intent and has no interface of its own: point a project at it and read through your own daemon. The API is under <code>/api/</code> and MCP at <code>/mcp</code>, for callers who sign in with a token.</p></body>",
+    )
+        .into_response()
 }
 
 async fn no_ui() -> Response {

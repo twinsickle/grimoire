@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, or with when: landed the findings as its proposal leaves them and no such list, land_ticket answers whether a ticket landed, what its close answers when one did, and the tickets still landing, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the tickets still landing, and takes no ticket field."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones and the touched nodes that never changed, or with when: landed the findings as its proposal leaves them and no such list, land_ticket answers whether a ticket landed, what its close answers when one did, and the tickets still landing, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the tickets still landing, and takes no ticket field."}]}
 //! ```
 
 use serde::Deserialize;
@@ -295,6 +295,10 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 reason: String,
             }
             let i: In = parse(input)?;
+            // Every present finding is what a baseline is, and a daemon with no code cannot see them all.
+            if state.without_code() {
+                return Err(ToolError::invalid("this daemon holds no code, so it cannot see every finding: adopt from a machine that has the code", vec![]));
+            }
             let keys = lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect();
             let (baseline, replaced, changed) = ops::adopt(state.store_mut(), keys, i.reason, today.to_string())?;
             answer(name, Adopted { baseline: baseline_summary(&baseline), replaced }, Some(changed))
@@ -357,7 +361,8 @@ fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<
     let applied = ops::apply_proposal(state.store_mut(), &r.id);
     // Compared before the close, which changes the ticket's own record,
     // and after the proposal landed, so a proposed change counts as one.
-    let untouched = state.store.starts.get(&r.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph())));
+    // With no code held the comparison would cover intent alone and pass over every touched module in silence: unknown, so null.
+    let untouched = if state.without_code() { None } else { state.store.starts.get(&r.id).cloned().map(|start| crate::fingerprint::untouched(&touched, &start.fingerprints, &crate::fingerprint::all(state.graph()))) };
     ops::close_ticket(state.store_mut(), r, decision)?;
     state.store_mut().starts.remove(&r.id);
     let changed = Changed::Many(vec![applied, Changed::Closed(r.id.clone()), Changed::Current]);
@@ -847,5 +852,41 @@ mod tests {
         assert!(s.store().current.is_none() && s.store().tickets["phase-62"].status == Status::Closed);
         // land_ticket applies at once and takes no ticket.
         assert_eq!(code(call(&mut s, "land_ticket", json!({ "ticket": "later-1" }), "2026-10-06")), "invalid");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-state-with-no-code-says-so-and-leaves-the-baseline", "checks": ["crates/core/src/tools/state#without-code"]}
+    /// ```
+    #[test]
+    fn a_state_with_no_code_says_so_and_leaves_the_baseline() {
+        // The fixture's store with every finding adopted, then served by a daemon that holds no code.
+        let mut s = state();
+        call(&mut s, "adopt", json!({ "reason": "inherited" }), "2026-10-03").unwrap();
+        let adopted = s.store().baseline.clone().unwrap();
+        assert!(adopted.findings.iter().any(|f| f.check == "untested"), "the baseline holds what only code produces");
+        let mut shared = State::new(s.store().clone(), crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()), vec![]);
+        shared.set_without_code(true);
+        // Nothing is pruned: a finding it cannot produce is not thereby fixed.
+        assert!(shared.prune_baseline().is_none());
+        assert_eq!(shared.store().baseline.as_ref(), Some(&adopted));
+        // It says what it is, on the truth and through a ticket's proposal alike.
+        assert_eq!(call(&mut shared, "status", json!({}), "2026-10-03").unwrap().output["shared"], true);
+        for input in [json!({}), json!({ "ticket": "later-1" })] {
+            let lint = call(&mut shared, "lint", input, "2026-10-03").unwrap().output;
+            assert_eq!(lint["without_code"], true);
+            let checks: Vec<&str> = lint["findings"].as_array().unwrap().iter().map(|f| f["check"].as_str().unwrap()).collect();
+            assert!(!checks.contains(&"unheld") && !lint["findings"].as_array().unwrap().iter().any(|f| f["edge"]["to"].as_str().is_some_and(|t| t.starts_with("criterion:") || t.starts_with("module:"))), "{checks:?}");
+        }
+        // A close there cannot say which touched nodes never changed: the code is among them and it holds none.
+        let closed = call(&mut shared, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-10-03").unwrap().output;
+        assert_eq!((closed["node"]["status"].clone(), closed["untouched"].clone()), (json!("closed"), json!(null)));
+        // And it will not take what it sees for the whole baseline.
+        assert_eq!(call(&mut shared, "adopt", json!({ "reason": "again" }), "2026-10-03").unwrap_err().code(), "invalid");
+        assert_eq!(shared.store().baseline.as_ref(), Some(&adopted));
+        // A state with the code answers as before.
+        assert_eq!(call(&mut s, "status", json!({}), "2026-10-03").unwrap().output["shared"], false);
+        assert_eq!(call(&mut s, "lint", json!({}), "2026-10-03").unwrap().output["without_code"], false);
     }
 }

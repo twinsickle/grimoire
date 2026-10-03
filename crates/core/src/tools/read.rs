@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -18,6 +18,20 @@ use crate::query::{self, BoardFilter};
 /// graph as that ticket's proposal would leave it; absent, the truth, except
 /// that `lint` with none uses the store's current ticket, so the check on a
 /// branch judges the branch's code against the branch's own intent.
+/// What a daemon that holds no code answers when asked about the code: it
+/// is not missing, it is not held here.
+fn no_code(what: impl std::fmt::Display) -> ToolError {
+    ToolError::unavailable(format!("this daemon holds no code, so it cannot answer about {what}: ask a daemon that has the repository"))
+}
+
+/// Refuse a question about a node that comes from the code, on a state that holds none.
+fn no_code_for(state: &State, r: &Reference) -> Result<(), ToolError> {
+    if state.without_code() && r.kind.is_derived() {
+        return Err(no_code(r));
+    }
+    Ok(())
+}
+
 pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Outcome, ToolError> {
     let view = match super::take_ticket(&mut input)? {
         Some(t) => Some(t),
@@ -39,6 +53,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
         }
         "get" => {
             let i: RefIn = parse(input)?;
+            no_code_for(state, &i.r#ref)?;
             let (proposal, drafts) = drafts_of(state.store(), &i.r#ref);
             let g = state.graph_for(view)?;
             let node = query::view(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
@@ -68,6 +83,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 depth: Option<usize>,
             }
             let i: In = parse(input)?;
+            no_code_for(state, &i.r#ref)?;
             let g = state.graph_for(view)?;
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
@@ -76,6 +92,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
         }
         "rests_on_me" => {
             let i: RefIn = parse(input)?;
+            no_code_for(state, &i.r#ref)?;
             let g = state.graph_for(view)?;
             if !g.contains(&i.r#ref) {
                 return Err(ToolError::not_found(&i.r#ref));
@@ -84,6 +101,10 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
         }
         "coverage" => {
             let i: RefIn = parse(input)?;
+            // Coverage is what the code says of the intent; with no code there is no answer to give.
+            if state.without_code() {
+                return Err(no_code("coverage"));
+            }
             let g = state.graph_for(view)?;
             match (i.r#ref.kind, g.get(&i.r#ref)) {
                 (Kind::Criterion, Some(_)) => answer(name, CoverageAnswer::OfCriterion { requirements: query::requirements_covering(g, &i.r#ref), tests: query::tests_checking(g, &i.r#ref) }, None),
@@ -127,10 +148,14 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
             let findings = lint::lint(g, &rules);
             let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
-            answer(name, LintAnswer { findings, counts, new }, None)
+            let without_code = g.without_code;
+            answer(name, LintAnswer { findings, counts, new, without_code }, None)
         }
         "module_source" => {
             let i: RefIn = parse(input)?;
+            if state.without_code() {
+                return Err(no_code("where anything is in the source"));
+            }
             let g = state.graph_for(view)?;
             if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test) {
                 return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
@@ -140,6 +165,9 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
         }
         "source" => {
             let i: RefIn = parse(input)?;
+            if state.without_code() {
+                return Err(no_code("the source"));
+            }
             if !matches!(i.r#ref.kind, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test) {
                 return Err(ToolError::invalid(format!("{} is not a module, criterion, file, declaration or test", i.r#ref), vec![]));
             }
@@ -182,6 +210,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 malformed: g.malformed.len(),
                 scope: config.scope,
                 baseline: state.store.baseline.as_ref().map(baseline_summary),
+                shared: state.without_code(),
             };
             answer(name, status, None)
         }
@@ -426,5 +455,45 @@ mod tests {
             bad["ticket"] = json!("phase-62");
             assert_eq!(code(call(&mut s, name, bad, "2026-10-02")), "conflict", "{name}");
         }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "with-no-code-a-question-about-the-code-is-refused", "checks": ["crates/core/src/tools/read#without-code"]}
+    /// ```
+    #[test]
+    fn with_no_code_a_question_about_the_code_is_refused_not_answered_missing() {
+        use crate::tools::call;
+        use serde_json::json;
+        let truth = crate::tools::fixtures::state();
+        let mut s = State::new(truth.store().clone(), crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()), vec![]);
+        s.set_without_code(true);
+        let code = |r: Result<crate::tools::Outcome, ToolError>| r.unwrap_err();
+        // About a node from the code, or anything only the code answers: refused, saying why, never "does not exist".
+        for (tool, input) in [
+            ("get", json!({ "ref": "module:src/a/ready" })),
+            ("get", json!({ "ref": "criterion:src/a/ready#guarantee" })),
+            ("rests_on", json!({ "ref": "module:src/a/ready" })),
+            ("rests_on_me", json!({ "ref": "criterion:src/a/ready#guarantee" })),
+            ("coverage", json!({ "ref": "req:ready-only-with-commit" })),
+            ("module_source", json!({ "ref": "module:src/a/ready" })),
+            ("source", json!({ "ref": "file:src/a/ready.rs" })),
+        ] {
+            let e = code(call(&mut s, tool, input.clone(), "2026-10-03"));
+            assert_eq!(e.code(), "store_unavailable", "{tool} {input}");
+            assert!(serde_json::to_value(&e).unwrap()["message"].as_str().unwrap().contains("holds no code"), "{tool}");
+        }
+        // About intent: answered. A walk that reaches the code says it is not held here.
+        assert_eq!(call(&mut s, "get", json!({ "ref": "req:ready-only-with-commit" }), "2026-10-03").unwrap().output["node"]["slug"], "ready-only-with-commit");
+        let walk = call(&mut s, "rests_on", json!({ "ref": "req:ready-only-with-commit" }), "2026-10-03").unwrap().output;
+        let titles: Vec<&str> = walk["nodes"].as_array().unwrap().iter().map(|n| n["title"].as_str().unwrap()).collect();
+        assert!(titles.iter().any(|t| t.starts_with("(no code held) criterion:")) && !titles.iter().any(|t| t.starts_with("(missing)")), "{titles:?}");
+        assert_eq!(call(&mut s, "outline", json!({}), "2026-10-03").unwrap().output["without_code"], true);
+        // A state with the code answers them all, and a missing node there is missing.
+        let mut with = crate::tools::fixtures::state();
+        assert!(call(&mut with, "get", json!({ "ref": "module:src/a/ready" }), "2026-10-03").is_ok());
+        assert_eq!(code(call(&mut with, "get", json!({ "ref": "module:src/nope" }), "2026-10-03")).code(), "not_found");
+        assert_eq!(call(&mut with, "outline", json!({}), "2026-10-03").unwrap().output["without_code"], false);
     }
 }

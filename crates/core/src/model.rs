@@ -58,6 +58,11 @@ impl Kind {
         matches!(self, Kind::Page | Kind::Req | Kind::Ticket)
     }
 
+    /// Whether nodes of this kind come from the code and not the store.
+    pub fn is_derived(self) -> bool {
+        matches!(self, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test)
+    }
+
     pub const ALL: [Kind; 8] = [
         Kind::Page,
         Kind::Req,

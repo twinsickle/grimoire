@@ -57,6 +57,8 @@ pub struct Rollup {
 pub struct Outline {
     pub roots: Vec<Tree>,
     pub unplaced: Vec<Tree>,
+    // True on a daemon that holds no code: the trees are the intent alone, and their counts say nothing of the code.
+    pub without_code: bool,
 }
 
 /// The grimoire as trees from the roots (or `root`) to `depth`; with
@@ -82,7 +84,7 @@ pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>, pages_only: bo
         .filter(|(r, n)| matches!(n, Node::Module(m) if in_grimoire(m)) && g.inbound_with(r, Relation::Links).next().is_none())
         .map(|(r, _)| tree(g, r, 1, false, &on, &mut HashSet::new()))
         .collect();
-    Outline { roots: roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, pages_only, &on, &mut HashSet::new())).collect(), unplaced }
+    Outline { roots: roots.iter().filter(|r| g.contains(r)).map(|r| tree(g, r, depth, pages_only, &on, &mut HashSet::new())).collect(), unplaced, without_code: g.without_code }
 }
 
 /// A module is part of the grimoire when it is expected to carry a contract
@@ -102,7 +104,7 @@ struct Findings<'a> {
 /// alone, though every count still covers the whole subtree.
 fn tree(g: &Graph, r: &Reference, depth: usize, pages_only: bool, on: &Findings, path: &mut HashSet<Reference>) -> Tree {
     let node = g.get(r);
-    let title = node.map(Node::title).unwrap_or_else(|| format!("(missing) {r}"));
+    let title = node.map(Node::title).unwrap_or_else(|| crate::query::walks::absent_title(g, r));
     let mut children = Vec::new();
     if depth > 0 && path.insert(r.clone()) {
         for c in children_of(g, r).into_iter().filter(|c| !pages_only || c.kind == Kind::Page) {

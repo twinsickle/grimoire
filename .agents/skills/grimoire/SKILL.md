@@ -185,7 +185,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    ticket started. For each, the change was missed (make it, in a new
    ticket, since this one is closed) or the node did not need changing
    (say so in the decision, and next time remove it from `touches` before
-   closing). `null` means the ticket was started before snapshots existed.
+   closing). `null` means it cannot be said: the ticket was started before
+   snapshots existed, or the daemon that answered holds no code.
 
    When the change has code that has still to land, add `"when": "landed"`.
    The decision is written and the ticket becomes `landing`: nothing reaches

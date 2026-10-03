@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not closed or a test to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement that names no criterion and that no test checks by name is uncovered with the check unheld, wherever its page sits; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not closed whose relies_on leads back to itself through other tickets that are not closed is malformed with the check ticket-cycle, naming the loop."},{"id":"landing-moved","statement":"A landing ticket whose proposal rests on a truth that has since moved is malformed with the check landing-moved, on the ticket, naming the records that moved; an active ticket is not reported."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not closed or a test to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"unheld","statement":"A requirement that names no criterion and that no test checks by name is uncovered with the check unheld, wherever its page sits; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not closed whose relies_on leads back to itself through other tickets that are not closed is malformed with the check ticket-cycle, naming the loop."},{"id":"without-code","statement":"On a graph built with no code, an edge to a module, criterion, file, declaration or test is not reported as dangling and no requirement is reported as unheld, since neither can be known there; every finding that intent alone shows is reported as usual."},{"id":"landing-moved","statement":"A landing ticket whose proposal rests on a truth that has since moved is malformed with the check landing-moved, on the ticket, naming the records that moved; an active ticket is not reported."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -210,10 +210,16 @@ pub fn dangling_from(g: &Graph, r: &Reference) -> Vec<Finding> {
     if exempt {
         return Vec::new();
     }
-    let mut out: Vec<Finding> = g.out(r).filter(|e| !g.contains(&e.to)).map(Finding::dangling).collect();
+    let mut out: Vec<Finding> = g.out(r).filter(|e| !g.contains(&e.to) && !unknowable(g, &e.to)).map(Finding::dangling).collect();
     out.sort_by_key(Finding::sort_key);
     mark(g, &mut out);
     out
+}
+
+/// Whether `to` cannot be judged on this graph: a node that comes from the
+/// code, on a graph built with no code. It may well exist; nothing here can say.
+fn unknowable(g: &Graph, to: &Reference) -> bool {
+    g.without_code && to.kind.is_derived()
 }
 
 fn dangling(g: &Graph, out: &mut Vec<Finding>) {
@@ -225,7 +231,7 @@ fn dangling(g: &Graph, out: &mut Vec<Finding>) {
         }
     }
     for e in &g.edges {
-        if g.contains(&e.to) {
+        if g.contains(&e.to) || unknowable(g, &e.to) {
             continue;
         }
         if let Some(Node::Ticket(t)) = g.get(&e.from) {
@@ -273,7 +279,8 @@ fn uncovered(g: &Graph, out: &mut Vec<Finding>) {
                     out.push(Finding::node(Rule::Uncovered, "unlinked-requirement", r, "no page links to this requirement"));
                 }
                 // Intent connected to no code: no criterion named, no test naming it.
-                if q.covered_by.is_empty() && g.inbound_with(r, Relation::Checks).next().is_none() {
+                // With no code held, whether a test names it cannot be known.
+                if !g.without_code && q.covered_by.is_empty() && g.inbound_with(r, Relation::Checks).next().is_none() {
                     out.push(Finding::node(Rule::Uncovered, "unheld", r, "no criterion names this requirement's code and no test holds it"));
                 }
             }
@@ -693,5 +700,32 @@ mod tests {
         // With the truth as the proposal was written against, there is nothing to report.
         s.pages.get_mut("orphan").unwrap().body = page.body.clone();
         assert!(found(&s).is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "with-no-code-only-what-intent-shows-is-reported", "checks": ["crates/core/src/lint#without-code"]}
+    /// ```
+    #[test]
+    fn with_no_code_only_what_intent_shows_is_reported() {
+        use crate::extraction::Extraction;
+        let files: Vec<crate::extraction::FileExtraction> = Vec::new();
+        // The fixture's store, with a constraint a test would hold, over no extraction at all, as a daemon holding no code builds it.
+        let mut store = crate::graph::fixtures::store();
+        store.requirements.insert("no-io".into(), crate::graph::fixtures::req("no-io", &[], &[]));
+        let mut g = Graph::build(&store, &Extraction::from_files(&files), &[]);
+        let all = |g: &Graph| -> Vec<String> { lint(g, &Rule::ALL).iter().map(|f| format!("{} {}", f.check, f.edge.as_ref().map_or(f.r#ref.to_string(), |e| e.to.to_string()))).collect() };
+        // Judged as if the code were simply absent, every edge into it dangles and constraints look unheld.
+        let before = all(&g);
+        assert!(before.iter().any(|f| f.starts_with("dangling-edge criterion:") || f.starts_with("dangling-edge module:")), "{before:?}");
+        assert!(before.iter().any(|f| f.starts_with("unheld ")), "{before:?}");
+        // Told it holds no code, none of that is said; what intent alone shows still is.
+        g.without_code = true;
+        let after = all(&g);
+        assert!(!after.iter().any(|f| f.starts_with("dangling-edge criterion:") || f.starts_with("dangling-edge module:") || f.starts_with("unheld ")), "{after:?}");
+        let intent_only: Vec<&String> = before.iter().filter(|f| !(f.starts_with("dangling-edge criterion:") || f.starts_with("dangling-edge module:") || f.starts_with("dangling-edge test:") || f.starts_with("dangling-edge file:") || f.starts_with("dangling-edge decl:") || f.starts_with("unheld "))).collect();
+        assert_eq!(after.iter().collect::<Vec<_>>(), intent_only, "nothing else is left out");
+        assert!(dangling_from(&g, &Reference::req("ready-only-with-commit")).is_empty(), "a write's warnings leave it out too");
     }
 }

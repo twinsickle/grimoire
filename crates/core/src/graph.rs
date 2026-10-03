@@ -95,6 +95,9 @@ pub struct Graph {
     pub unresolved_imports: usize,
     /// The store's baseline, as identities to match findings against.
     pub baseline: HashSet<FindingKey>,
+    /// The graph was built by a daemon that holds no code: what only code can
+    /// show is unknown, not missing, and the lint leaves it out.
+    pub without_code: bool,
     /// Landing tickets the truth moved under, each with the records that moved, for the lint.
     pub landing_moved: BTreeMap<String, Vec<String>>,
     /// Configured languages the running build cannot extract, and the ones

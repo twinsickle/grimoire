@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store and one repository: load both, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"A configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"baseline-pruned","statement":"After every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's port and process; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"The daemon gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."}]}
+//! {"purpose":"Own the live state of one store, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, and a configure that changes the languages extracts nothing."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -28,7 +28,10 @@ pub enum Event {
 
 pub struct Daemon {
     pub store_dir: PathBuf,
+    /// The repository the store describes; empty for a shared daemon, which has none beside it.
     pub repo: PathBuf,
+    /// Serving a store for a team: no code is read, extracted or watched.
+    pub shared: bool,
     /// Rebuilt when `configure` changes the languages.
     pub extractor: RwLock<Extractor>,
     files: Mutex<BTreeMap<String, FileExtraction>>,
@@ -139,6 +142,7 @@ impl Daemon {
         let daemon = Daemon {
             store_dir: store_dir.to_path_buf(),
             repo: loaded.repo,
+            shared: false,
             extractor: RwLock::new(loaded.extractor),
             files: Mutex::new(loaded.files),
             state: Mutex::new(loaded.state),
@@ -148,10 +152,37 @@ impl Daemon {
         Ok((daemon, loaded.extract_errors))
     }
 
+    /// Open a store for a team, with no repository beside it: whatever path
+    /// the store records is not used, nothing is extracted or watched, and
+    /// the state says it holds no code, so nothing only code can show is said.
+    pub fn open_shared(store_dir: &Path) -> Result<Daemon, OpenError> {
+        let (store, malformed) = store_io::load(store_dir)?;
+        let none: Vec<FileExtraction> = Vec::new();
+        let mut state = State::new(store, Extraction::from_files(&none), malformed);
+        state.set_build(build());
+        state.set_without_code(true);
+        let (events, _) = broadcast::channel(256);
+        Ok(Daemon {
+            store_dir: store_dir.to_path_buf(),
+            repo: PathBuf::new(),
+            shared: true,
+            // With no language it extracts nothing; a shared daemon never asks it to.
+            extractor: RwLock::new(Extractor::for_languages(store_dir, &Vec::<String>::new())),
+            files: Mutex::new(BTreeMap::new()),
+            state: Mutex::new(state),
+            events,
+        })
+    }
+
     /// Say in the store that this process serves it on `port`, so a command
     /// run beside it sends its writes here.
     pub fn mark_serving(&self, port: u16) -> Result<(), StoreIoError> {
         store_io::write_serving(&self.store_dir, port)
+    }
+
+    /// The same, for a daemon listening at `addr`, so a command finds it where it listens.
+    pub fn mark_serving_at(&self, addr: std::net::SocketAddr) -> Result<(), StoreIoError> {
+        store_io::write_serving_at(&self.store_dir, addr)
     }
 
     pub fn unmark_serving(&self) {
@@ -191,7 +222,8 @@ impl Daemon {
             }
             let what = describe(changed);
             let _ = self.events.send(Event::Store { tool: name.to_string(), changed: what });
-            if state.store().config.languages != languages {
+            // A shared daemon holds no code, so a change of languages gives it nothing to extract.
+            if !self.shared && state.store().config.languages != languages {
                 let now = state.store().config.languages.clone();
                 drop(state);
                 self.reextract_all(&now);
@@ -547,5 +579,40 @@ mod tests {
         let before = std::fs::read_dir(repo.join("src")).unwrap().count();
         let _ = reader.read("src/lib.rs", big);
         assert_eq!(std::fs::read_dir(repo.join("src")).unwrap().count(), before, "reading writes nothing");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-shared-daemon-opens-a-store-with-no-repository", "checks": ["crates/server/src/daemon#shared"]}
+    /// ```
+    #[test]
+    fn a_shared_daemon_opens_a_store_with_no_repository() {
+        let h = Harness::new();
+        // The store as it arrives on a host: it records a checkout that is not there, and carries the baseline its machine adopted.
+        let local = Daemon::open(&h.store).unwrap().0;
+        local.call("put_requirement", json!({ "slug": "held-by-code", "title": "Held", "statement": "It SHALL hold.", "scenarios": [{"title": "t", "given": "g", "when": "w", "then": "t"}], "covered_by": ["criterion:src/a#says"] })).unwrap();
+        local.call("close_ticket", json!({ "ref": "ticket:work", "decision": { "text": "Done." } })).unwrap();
+        local.call("adopt", json!({ "reason": "inherited" })).unwrap();
+        drop(local);
+        let (mut store, _) = store_io::load(&h.store).unwrap();
+        let adopted = store.baseline.clone().unwrap();
+        assert!(!adopted.findings.is_empty(), "something only its machine could see was adopted");
+        store.config.repository = "C:/gone/elsewhere".into();
+        store_io::persist(&h.store, &store, &grimoire_core::ops::Changed::Config).unwrap();
+        assert!(matches!(Daemon::open(&h.store), Err(OpenError::NoRepository(_))), "a daemon that reads code needs the checkout");
+        let shared = Daemon::open_shared(&h.store).unwrap();
+        // It says what it is, and nothing only code can show.
+        assert_eq!(shared.call("status", json!({})).unwrap()["shared"], true);
+        let lint = shared.call("lint", json!({})).unwrap();
+        assert_eq!(lint["without_code"], true);
+        assert!(!lint["findings"].as_array().unwrap().iter().any(|f| f["edge"]["to"].as_str().is_some_and(|t| t.starts_with("criterion:"))), "{lint}");
+        // A write is taken and persisted, and the baseline is as it arrived.
+        shared.call("file_ticket", json!({ "title": "From the team", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+        assert_eq!(store_io::load(&h.store).unwrap().0.baseline, Some(adopted));
+        assert_eq!(shared.call("adopt", json!({ "reason": "again" })).unwrap_err().code(), "invalid");
+        // A change of languages extracts nothing and reads no repository.
+        shared.call("configure", json!({ "languages": ["rust", "typescript"] })).unwrap();
+        assert_eq!(shared.call("status", json!({})).unwrap()["nodes"]["module"], 0);
     }
 }

@@ -82,7 +82,7 @@ export type Landed = { landed: boolean, node: NodeView | null, findings: Array<F
 
 export type Linked = { ref: Ref, title: string | null, };
 
-export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, };
+export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, without_code: boolean, };
 
 export type Module = { id: string, files: Array<string>, purpose: string | null, criteria: Array<Criterion>, imports: Array<string>, 
 /**
@@ -109,7 +109,7 @@ export type NodesAnswer = { nodes: Array<Summary>, };
 
 export type Order = { next?: Array<string>, high?: Array<string>, later?: Array<string>, };
 
-export type Outline = { roots: Array<Tree>, unplaced: Array<Tree>, };
+export type Outline = { roots: Array<Tree>, unplaced: Array<Tree>, without_code: boolean, };
 
 export type Page = { slug: string, title: string, body: string, links: Array<Ref>, };
 
@@ -158,7 +158,7 @@ export type StatusAnswer = { repository: string, roots: Array<string>, languages
 /**
  * How many nodes of each kind.
  */
-nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, };
+nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the current ticket while there is one, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal or current that does not parse, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, current ticket and baseline, and those given are written."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the current ticket while there is one, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal or current that does not parse, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, current ticket and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -13,6 +13,7 @@ use grimoire_core::{Malformed, Store};
 
 mod location;
 mod lock;
+pub mod tokens;
 
 pub use location::{find_project, refuse_inside, store_for_repo, stores_dir, write_project_file, PROJECT_FILE};
 pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
@@ -35,6 +36,8 @@ pub enum StoreIoError {
     Exists(PathBuf),
     #[error("{0} would not load back, so nothing was written: {1}")]
     Invalid(String, String),
+    #[error("{0} is invalid: {1}")]
+    BadTokens(PathBuf, String),
     #[error("store {0} is in use by {1}; it has one writer at a time")]
     Locked(PathBuf, String),
     #[error("store {0} is inside the repository {1}; a store lives outside the repository it describes")]
@@ -54,11 +57,36 @@ pub const CURRENT_FILE: &str = "current.json";
 pub struct Serving {
     pub port: u16,
     pub pid: u32,
+    /// Where a command on this machine reaches it, when that is not 127.0.0.1: the
+    /// address it bound, or `::1` when it listens on every IPv6 address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
 }
 
-/// Record that this process serves the store on `port`.
+impl Serving {
+    /// Where a command on this machine reaches the daemon: the address it
+    /// bound, or the loopback when it listens there or on every address.
+    pub fn addr(&self) -> std::net::SocketAddr {
+        let ip = self.host.as_deref().and_then(|h| h.parse().ok()).unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+        std::net::SocketAddr::new(ip, self.port)
+    }
+}
+
+/// Record that this process serves the store on `port` of this machine's loopback.
 pub fn write_serving(store_dir: &Path, port: u16) -> Result<(), StoreIoError> {
-    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port, pid: std::process::id() }))
+    write_serving_at(store_dir, std::net::SocketAddr::from(([127, 0, 0, 1], port)))
+}
+
+/// Record that this process serves the store at `addr`.
+pub fn write_serving_at(store_dir: &Path, addr: std::net::SocketAddr) -> Result<(), StoreIoError> {
+    let ip = addr.ip();
+    let host = if ip.is_unspecified() {
+        // Every address: reached on this machine by the loopback of the same family.
+        ip.is_ipv6().then(|| std::net::Ipv6Addr::LOCALHOST.to_string())
+    } else {
+        (ip != std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)).then(|| ip.to_string())
+    };
+    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port: addr.port(), pid: std::process::id(), host }))
 }
 
 /// Remove the marker, if it is still this process's.
@@ -589,9 +617,12 @@ mod tests {
         let back = load(&dir.join("store")).unwrap().0;
         assert!(back.starts.contains_key("0001") && back.baseline.is_some());
         assert_eq!((back.proposals.get("0001"), back.current.as_deref()), (full.proposals.get("0001"), Some("0001")));
+        // Who may sign in is not what the store says: a replacement leaves the tokens as they are.
+        let token = tokens::add(&dir.join("store"), "ana", true).unwrap();
         write_all(&dir.join("store"), &good, true).unwrap();
         let back = load(&dir.join("store")).unwrap().0;
         assert!(back.starts.is_empty() && back.baseline.is_none() && back.proposals.is_empty() && back.current.is_none(), "replaced whole");
+        assert_eq!(tokens::lookup(&dir.join("store"), &token).unwrap().map(|t| t.name), Some("ana".to_string()));
     }
 
     /// A rename's writes persisted only up to each point, as a failure there
@@ -792,7 +823,7 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         write_serving(dir, 4242).unwrap();
-        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id() }));
+        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id(), host: None }));
         remove_serving(dir);
         assert!(read_serving(dir).is_none());
         std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();

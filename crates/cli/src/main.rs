@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, names the tickets still landing, and exits non-zero when a landing was refused, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check: under it the records go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock file, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock file and empty record folders, a rerun removes and finishes."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check to the store's removal; refused, it writes nothing. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists, or the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, token, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, names the tickets still landing, and exits non-zero when a landing was refused, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."},{"id":"token","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked; token revoke removes one by name and fails when there is none; token list prints each name and what it may do; each finds its store as every command does and takes the tokens' own lock, never the store's, so it works while a daemon serves; a command run with GRIMOIRE_TOKEN set sends it to the daemon it calls, and one the daemon refuses says so and does not go round it."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check, and the tokens' lock while it removes: under them the records and the tokens go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock files, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock files and empty record folders, a rerun removes and finishes."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check to the store's removal; refused, it writes nothing. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists, or the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."}]}
 //! ```
 
 mod init;
@@ -36,6 +36,14 @@ enum Command {
         /// Directory holding the built web UI. Without it, only the API and MCP serve.
         #[arg(long)]
         ui_dir: Option<PathBuf>,
+        /// Serve the store for a team: intent only, with no repository beside it,
+        /// no web UI, and callers admitted by a token (see `grimoire token`).
+        #[arg(long)]
+        shared: bool,
+        /// The address and port a shared daemon listens on, such as 0.0.0.0:4242.
+        /// Plain HTTP: put a proxy in front for HTTPS. Without it, the loopback --port.
+        #[arg(long)]
+        listen: Option<std::net::SocketAddr>,
     },
     /// Run the lints without a daemon. Exits 1 when there are findings.
     Check {
@@ -105,6 +113,11 @@ enum Command {
         /// The ticket to land, a slug or a ticket: reference. Defaults to the current ticket.
         ticket: Option<String>,
     },
+    /// The tokens a shared daemon admits: add one, revoke one, or list them.
+    Token {
+        #[command(subcommand)]
+        command: TokenCommand,
+    },
     /// Run one tool against the store and print its output: on the daemon
     /// serving the store when there is one, directly otherwise.
     Tool {
@@ -114,6 +127,62 @@ enum Command {
         /// JSON input, default {}.
         input: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum TokenCommand {
+    /// Make a token and print it, once. Only its digest is kept.
+    Add {
+        /// Who or what it is for: a slug, used once.
+        name: String,
+        /// May read and not write, as for a pipeline's check.
+        #[arg(long)]
+        read_only: bool,
+        #[arg(long)]
+        store: Option<String>,
+    },
+    /// Remove a token; it is refused from then on, with no restart.
+    Revoke {
+        name: String,
+        #[arg(long)]
+        store: Option<String>,
+    },
+    /// Print each token's name and what it may do.
+    List {
+        #[arg(long)]
+        store: Option<String>,
+    },
+}
+
+/// Manage the tokens file beside a store. It is not a store record: it is
+/// changed under a lock of its own, never the store's, so tokens are added
+/// and revoked while a daemon serves the store.
+fn token(command: TokenCommand) -> anyhow::Result<()> {
+    use store_io::tokens;
+    match command {
+        TokenCommand::Add { name, read_only, store } => {
+            let dir = store_dir(store.as_deref())?;
+            let made = tokens::add(&dir, &name, !read_only)?;
+            println!("{made}");
+            eprintln!("token `{name}` may {}; this is the only time it is shown, and the store keeps its digest", if read_only { "read" } else { "read and write" });
+            Ok(())
+        }
+        TokenCommand::Revoke { name, store } => {
+            let dir = store_dir(store.as_deref())?;
+            if !tokens::revoke(&dir, &name)? {
+                bail!("no token named `{name}` in {}", dir.display());
+            }
+            println!("revoked `{name}`");
+            Ok(())
+        }
+        TokenCommand::List { store } => {
+            let dir = store_dir(store.as_deref())?;
+            for t in tokens::list(&dir)? {
+                println!("{}\t{}", t.name, if t.write { "read and write" } else { "read" });
+            }
+            Ok(())
+        }
+    }
 }
 
 fn cwd() -> anyhow::Result<PathBuf> {
@@ -142,9 +211,14 @@ fn store_dir(arg: Option<&str>) -> anyhow::Result<PathBuf> {
 /// The inner error is the tool's error object.
 fn run_tool(store_dir: &Path, name: &str, input: Value, held: Option<&store_io::StoreLock>) -> anyhow::Result<Result<Value, Value>> {
     let (store, _) = store_io::load(store_dir)?;
-    if let Some(port) = client::serving(store_dir, &store.config.repository) {
-        let (ok, v) = client::call(port, name, &input)?;
-        return Ok(if ok { Ok(v) } else { Err(v) });
+    match client::probe(store_dir, &store.config.repository) {
+        client::Probe::Serving(addr) => {
+            let (ok, v) = client::call_at(addr, name, &input)?;
+            return Ok(if ok { Ok(v) } else { Err(v) });
+        }
+        // A daemon serves the store and will not let this command in: say so, and never go round it.
+        client::Probe::Refused(addr, why) => bail!("a daemon serves this store at {addr} and refused this command: {why}. Set {} to a token it holds", client::TOKEN_ENV),
+        client::Probe::None => {}
     }
     // No daemon answers, so this command is the writer, and holds the lock for
     // its run; a daemon still starting holds it already and refuses this one.
@@ -278,7 +352,7 @@ const RECORD_DIRS: [&str; 4] = ["pages", "requirements", "tickets", store_io::ST
 
 /// What a store directory may hold. Anything else means the path is not
 /// only a store, and deleting it would take something else with it.
-const STORE_ENTRIES: [&str; 8] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::STARTS_DIR, store_io::LOCK_FILE, "pages", "requirements", "tickets"];
+const STORE_ENTRIES: [&str; 10] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::STARTS_DIR, store_io::tokens::TOKENS_FILE, store_io::tokens::TOKENS_LOCK, store_io::LOCK_FILE, "pages", "requirements", "tickets"];
 
 /// Why `store` may not be deleted on behalf of `repo`, if it may not: it is
 /// the repository, holds it, is a root, holds anything a store does not,
@@ -341,7 +415,7 @@ fn deletion_leftover(store: &Path) -> anyhow::Result<bool> {
         let e = e?;
         let name = e.file_name().to_string_lossy().to_string();
         let empty_records = RECORD_DIRS.contains(&name.as_str()) && e.path().is_dir() && std::fs::read_dir(e.path())?.next().is_none();
-        if name != store_io::LOCK_FILE && !empty_records {
+        if name != store_io::LOCK_FILE && name != store_io::tokens::TOKENS_LOCK && !empty_records {
             return Ok(false);
         }
     }
@@ -356,7 +430,15 @@ fn deletion_leftover(store: &Path) -> anyhow::Result<bool> {
 /// open. A daemon starting after the records are gone finds no grimoire.json
 /// and takes no lock.
 fn delete_store_dir(store: &Path, lock: Option<store_io::StoreLock>) -> anyhow::Result<()> {
-    let keep_for_last = [store_io::CONFIG_FILE, store_io::LOCK_FILE];
+    // The tokens' lock too, after the store's: a token command waits, and then finds no store.
+    // There is none to take when a deletion stopped after grimoire.json went, which leaves no
+    // tokens to change; any other failure to take it stops the deletion before anything is removed.
+    let tokens_lock = match store_io::tokens::lock(store) {
+        Ok(held) => Some(held),
+        Err(store_io::StoreIoError::NotAStore(_)) => None,
+        Err(e) => return Err(e.into()),
+    };
+    let keep_for_last = [store_io::CONFIG_FILE, store_io::LOCK_FILE, store_io::tokens::TOKENS_LOCK];
     for e in std::fs::read_dir(store)? {
         let path = e?.path();
         if path.file_name().is_some_and(|n| keep_for_last.iter().any(|k| n == *k)) {
@@ -369,6 +451,12 @@ fn delete_store_dir(store: &Path, lock: Option<store_io::StoreLock>) -> anyhow::
         }
     }
     std::fs::remove_file(store.join(store_io::CONFIG_FILE))?;
+    // Released before its file goes, since a process cannot remove a file it holds open and locked.
+    drop(tokens_lock);
+    let tokens_lock_file = store.join(store_io::tokens::TOKENS_LOCK);
+    if tokens_lock_file.exists() {
+        std::fs::remove_file(&tokens_lock_file)?;
+    }
     let lock_file = store.join(store_io::LOCK_FILE);
     if lock_file.exists() {
         std::fs::remove_file(&lock_file)?;
@@ -461,11 +549,12 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())).with_target(false).init();
 
     match cli.command {
-        Command::Serve { store, port, ui_dir } => {
+        Command::Serve { store, port, ui_dir, shared, listen } => {
             let store_dir = store_dir(store.as_deref())?;
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir, port, ui_dir }))
+            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir, port, ui_dir, shared, listen }))
         }
+        Command::Token { command } => token(command),
         Command::Check { store, rules, json } => {
             let store_dir = store_dir(store.as_deref())?;
             // The baseline is pruned here only by the store's writer: with the lock
@@ -495,7 +584,7 @@ fn main() -> anyhow::Result<()> {
             let findings = lint::lint(g, &rules);
             let new = lint::new_count(&findings);
             if json {
-                println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::lint::counts(&findings), "new": new }))?);
+                println!("{}", serde_json::to_string_pretty(&json!({ "findings": findings, "counts": grimoire_core::lint::counts(&findings), "new": new, "without_code": false }))?);
             } else {
                 // A build that cannot read part of the project explains the rest,
                 // so it comes first. Then the new findings; inherited ones are

@@ -40,6 +40,16 @@ fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
     }
 }
 
+/// What stands in for the title of a node the graph does not hold: missing,
+/// or, for a node from the code on a graph built with none, not held here.
+pub fn absent_title(g: &Graph, r: &Reference) -> String {
+    if g.without_code && r.kind.is_derived() {
+        format!("(no code held) {r}")
+    } else {
+        format!("(missing) {r}")
+    }
+}
+
 /// The decisions a reached node contributes: a requirement's, newest first,
 /// or a closed ticket's.
 fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
@@ -75,7 +85,7 @@ pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<Rests
             let mut path = via.clone();
             path.push(r.clone());
             let decisions = decisions_of(g, &next);
-            let title = g.get(&next).map(Node::title).unwrap_or_else(|| format!("(missing) {next}"));
+            let title = g.get(&next).map(Node::title).unwrap_or_else(|| absent_title(g, &next));
             out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions }));
             queue.push_back((next, path));
         }
