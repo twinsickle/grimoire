@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the server the project names or the one given with --server, asks that server with it before keeping it, and keeps it in the person's credentials file under the server's address; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"opens-the-copy","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first; when the server does not answer and the checkout holds a copy it reads the copy, saying on standard error that the server was not reached and when the copy was fetched; with no copy, or a token the server refuses, it fails; when the daemon serving the checkout holds the lock, the command asks that daemon what it knows of the server and says the same, failing when the server refused the token; it never prunes the baseline."},{"id":"through-the-server","statement":"tool, adopt and land on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
+//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the server the project names or the one given with --server, asks that server with it before keeping it, and keeps it in the person's credentials file under the server's address; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"opens-the-copy","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first; when the server does not answer and the checkout holds a copy it reads the copy, saying on standard error that the server was not reached and when the copy was fetched, except a check that names a ticket, which fails rather than read a copy it could not fetch now, or one a daemon beside it cannot say is current; with no copy, or a token the server refuses, it fails; when the daemon serving the checkout holds the lock, the command asks that daemon what it knows of the server and says the same, failing when the server refused the token; it never prunes the baseline."},{"id":"through-the-server","statement":"tool, adopt and land on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
 //! ```
 
 use std::io::BufRead;
@@ -96,8 +96,9 @@ pub struct Opened {
 
 /// Open the checkout's copy of the server's intent for a command with no
 /// daemon beside it: synced first when this command can take the copy's lock
-/// and the server answers; read as it is when the server does not answer.
-pub fn open(team: &Team, server: &Server) -> anyhow::Result<Opened> {
+/// and the server answers; read as it is when the server does not answer,
+/// unless `fresh`, when only the server's intent as it is now will do.
+pub fn open(team: &Team, server: &Server, fresh: bool) -> anyhow::Result<Opened> {
     let held = team.copy.join(store_io::CONFIG_FILE).is_file();
     store_io::refuse_inside(&team.copy, &team.repo)?;
     let lock = match remote::lock_copy(&team.copy) {
@@ -112,9 +113,11 @@ pub fn open(team: &Team, server: &Server) -> anyhow::Result<Opened> {
         let fetched = remote::copy_note(&team.copy).map_or("at a time it does not record".to_string(), |n| format!("as of {}", n.fetched));
         eprintln!("warning: {why}; reading this checkout's copy of its intent, {fetched}");
     };
+    let stale = |why: String| anyhow::anyhow!("{why}, and a check that names a ticket is judged only against the server's intent as it is now, never a copy fetched before");
     if lock.is_some() {
         match remote::sync(server, &team.copy, &repository, None) {
             Ok(_) => {}
+            Err(e @ RemoteError::Unreachable(..)) if fresh => return Err(stale(e.to_string())),
             Err(e @ RemoteError::Unreachable(..)) if held => {
                 reachable = false;
                 away(e.to_string());
@@ -125,15 +128,24 @@ pub fn open(team: &Team, server: &Server) -> anyhow::Result<Opened> {
     } else if let client::Probe::Serving(addr) = client::probe(&team.copy, &repository) {
         // The daemon serving this checkout holds the copy and keeps it synced: what it knows of the
         // server is what this command says, never a server taken to be there because nobody asked.
-        if let Ok((true, status)) = client::call_at(addr, "status", &json!({})) {
+        let answered = client::call_at(addr, "status", &json!({}));
+        if fresh && !matches!(&answered, Ok((true, s)) if s["server"]["reachable"] == true) && !matches!(&answered, Ok((true, s)) if s["server"]["refused"] == true) {
+            return Err(stale(format!("the daemon serving this checkout at {addr} cannot say the server at {} is reachable", team.address)));
+        }
+        if let Ok((true, status)) = answered {
             if status["server"]["refused"] == true {
                 bail!("the server at {} refused this machine's token, so its intent is not read here: sign in with `grimoire login`", team.address);
             }
             if status["server"]["reachable"] == false {
+                if fresh {
+                    return Err(stale(format!("the server at {} cannot be reached, as the daemon serving this checkout says", team.address)));
+                }
                 reachable = false;
                 away(format!("the server at {} cannot be reached, as the daemon serving this checkout says", team.address));
             }
         }
+    } else if fresh {
+        return Err(stale(format!("another process holds this checkout's copy at {}, so it could not be fetched", team.copy.display())));
     }
     let mut loaded = grimoire_server::load(&team.copy)?;
     loaded.state.set_server(Some(ServerCopy { address: team.address.clone(), fetched: remote::copy_note(&team.copy).map(|n| n.fetched), reachable, refused: false }));
@@ -155,7 +167,7 @@ pub fn run_tool(team: &Team, name: &str, input: Value) -> anyhow::Result<Result<
         }
     }
     let server = team.server()?;
-    let mut opened = open(team, &server)?;
+    let mut opened = open(team, &server, false)?;
     let today = store_io::today();
     let result = if grimoire_core::tools::is_write(name) {
         if opened.lock.is_none() {

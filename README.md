@@ -65,11 +65,16 @@ grimoire token add <name> [--read-only] --store <path>        # on the host: a t
 grimoire init --server https://grimoire.example               # in the repository, once: the project file names the server; commit it
 grimoire login                                                # each person, once: the token is kept outside the repository
 grimoire serve                                                # each person: the daemon in their checkout, as for any project
+grimoire check --ticket <ticket>                              # the pipeline, before a change merges: its code against the ticket's proposal
 grimoire land <ticket>                                        # the pipeline, on the main line, with GRIMOIRE_TOKEN set
 ```
 
-The server speaks plain HTTP: put a proxy in front for HTTPS. A write needs the
-server; offline, reads and `grimoire check` go on from the copy last fetched.
+A pipeline signs in by `GRIMOIRE_TOKEN`, a read-only token being enough for
+the check, and names the same ticket to both commands; a change that names
+none is checked against the truth. The server speaks plain HTTP: put a proxy in front for HTTPS. A write needs the
+server; offline, reads and `grimoire check` go on from the copy last fetched,
+except a check that names a ticket, which fails rather than judge a change
+against an old copy.
 `GRIMOIRE_HOME` names one directory for everything Grimoire keeps on a machine,
 in place of the platform's.
 

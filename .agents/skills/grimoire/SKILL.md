@@ -31,7 +31,9 @@ way: the daemon in this checkout reads the server's intent with this
 checkout's code and sends every write to the server. Signing in is the
 person's, once, with `grimoire login`. A write needs the server and is
 refused as `store_unavailable` without it; reads and `grimoire check` go on
-from the copy last fetched, and `status` says so under `server`.
+from the copy last fetched, and `status` says so under `server`. A check
+that names a ticket, as a pipeline's does, fails instead: it is judged only
+against the server's intent as it is now.
 
 Every tool takes and returns JSON. Errors are `{ "error": code, "message" }`
 with codes `not_found`, `invalid` (with `details`), `conflict`,
@@ -211,7 +213,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    when the change reaches its main line. Where neither does, run it
    yourself once the change has landed. On a team a commit on a machine
    lands nothing, and `grimoire land` with no ticket says so: the ticket
-   lands by name on the main line, run by the pipeline or by a person once
+   lands by name on the main line, run by the pipeline (which checks the
+   change first with `grimoire check --ticket <ticket>`) or by a person once
    the change has merged. So the truth moves when the code
    lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
    is refused and the ticket stays `landing`, reported as `landing-moved`:

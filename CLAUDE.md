@@ -40,7 +40,8 @@ repository only.
   nothing: after it, run `grimoire land <ticket>`. A change to the server's
   side takes effect after `cargo install --path crates/cli` and a restart of
   the loop. With the server away, reads and `grimoire check` go on from the
-  copy last fetched and every write is refused; to go back to a store of
+  copy last fetched (`check --ticket` fails instead) and every write is
+  refused; to go back to a store of
   its own, `.grimoire.toml` names `store = "grimoire"` again, and the loop
   then starts no server.
 - A release binary carries the built UI: `sh scripts/release` builds `web/`,

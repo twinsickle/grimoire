@@ -1148,3 +1148,90 @@ fn a_checkout_works_against_a_teams_server() {
     assert!(out.status.success() && text(&out).contains("signed out") && !std::fs::read_to_string(home.join("credentials.json")).unwrap().contains(&again), "{}", text(&out));
     assert!(text(&team(&p.repo, &home, None, &["logout", "--server", &address])).contains("no token was kept"));
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src#check-names-a-ticket", "crates/cli/src/team#opens-the-copy"]}
+/// ```
+#[test]
+fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
+    // A team's server, a person's checkout that proposes intent under a ticket, and a pipeline's fresh checkout of the same code.
+    let (origin, _) = project();
+    let store = origin.store.to_string_lossy().to_string();
+    let host = origin.dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    let ana = String::from_utf8_lossy(&run(&host, &["token", "add", "ana", "--store", &store]).stdout).trim().to_string();
+    let pipeline = String::from_utf8_lossy(&run(&host, &["token", "add", "pipeline", "--read-only", "--store", &store]).stdout).trim().to_string();
+    let _server = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let address = format!("http://127.0.0.1:{}", marked_port(&origin.store));
+    let p = uninitialised();
+    let home = p.dir.join("home");
+    assert!(team(&p.repo, &home, None, &["init", "--server", &address]).status.success());
+    let tool = |name: &str, input: &str| -> serde_json::Value {
+        let o = team(&p.repo, &home, Some(&ana), &["tool", name, input]);
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    let ticket = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    let slug = ticket.trim_start_matches("ticket:").to_string();
+    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    // The proposal names a criterion this code does not have yet.
+    tool("put_requirement", r#"{"slug":"proposed","title":"Proposed","statement":"It SHALL offer b.","scenarios":[{"title":"t","given":"g","when":"w","then":"t"}],"covered_by":["criterion:src/b#exports-b"]}"#);
+    let open = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    // The pipeline: signed in by the environment with a read-only token, nothing kept, no current ticket.
+    let ci = p.dir.join("pipeline-home");
+    let check = |args: &[&str]| team(&p.repo, &ci, Some(&pipeline), &[&["check"][..], args].concat());
+    let truth = check(&[]);
+    assert!(truth.status.success() && !text(&truth).contains("req:proposed"), "no ticket named is judged against the truth: {}", text(&truth));
+    for named in [slug.as_str(), ticket.as_str()] {
+        let judged = check(&["--ticket", named]);
+        assert!(!judged.status.success() && text(&judged).contains("req:proposed") && text(&judged).contains("criterion:src/b#exports-b"), "judged against the proposal: {}", text(&judged));
+    }
+    assert!(!ci.join("credentials.json").exists());
+    // A ticket with no proposal to read, and one that does not exist, are said and fail.
+    let not_live = check(&["--ticket", &open]);
+    assert!(!not_live.status.success() && text(&not_live).contains("neither active nor landing"), "{}", text(&not_live));
+    let missing = check(&["--ticket", "no-such-ticket"]);
+    assert!(!missing.status.success() && text(&missing).contains("cannot check against ticket:no-such-ticket"), "{}", text(&missing));
+    // The person's checkout has the ticket as its current one: with none named, its proposal is the intent; a ticket named overrides it.
+    let mine = team(&p.repo, &home, Some(&ana), &["check"]);
+    assert!(!mine.status.success() && text(&mine).contains("req:proposed"), "the current ticket's proposal: {}", text(&mine));
+    let overridden = team(&p.repo, &home, Some(&ana), &["check", "--ticket", &open]);
+    assert!(!overridden.status.success() && text(&overridden).contains("neither active nor landing"), "{}", text(&overridden));
+    // A landing ticket keeps its proposal, so the pipeline still judges against it, the same in JSON.
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
+    let landing = check(&["--ticket", &slug, "--json"]);
+    let found: serde_json::Value = serde_json::from_slice(&landing.stdout).unwrap();
+    assert!(!landing.status.success() && found["new"].as_u64().unwrap() > 0 && found["findings"].as_array().unwrap().iter().any(|f| f["ref"] == "req:proposed"), "{}", text(&landing));
+    // Another process holds the runner's copy, so it cannot be fetched now: a named ticket refuses to read it, though the server is there.
+    let ci_copy = std::fs::read_dir(ci.join("copies")).unwrap().flatten().next().unwrap().path();
+    {
+        let _held = grimoire_server::remote::lock_copy(&ci_copy).unwrap();
+        let held = check(&["--ticket", &slug]);
+        assert!(!held.status.success() && text(&held).contains("another process holds") && !text(&held).contains("req:proposed"), "{}", text(&held));
+    }
+    // A daemon serving the runner's checkout keeps the copy current: while it says the server answers, a named check reads it.
+    let ci_daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &pipeline).spawn().unwrap());
+    marked_port(&ci_copy);
+    let beside = check(&["--ticket", &slug]);
+    assert!(!beside.status.success() && text(&beside).contains("req:proposed"), "{}", text(&beside));
+    // The server goes away. Once the daemon knows it, a named check beside it fails rather than read the copy.
+    drop(_server);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let stale = loop {
+        let o = check(&["--ticket", &slug]);
+        if !text(&o).contains("req:proposed") || Instant::now() > deadline {
+            break o;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    assert!(!stale.status.success() && text(&stale).contains("never a copy fetched before") && !text(&stale).contains("req:proposed"), "{}", text(&stale));
+    drop(ci_daemon);
+    let _ = std::fs::remove_file(ci_copy.join("serve.json"));
+    // With no daemon, the runner's own fetch fails, and a named ticket refuses the copy it holds.
+    let away = check(&["--ticket", &slug]);
+    assert!(!away.status.success() && text(&away).contains("cannot be reached") && text(&away).contains("never a copy fetched before") && !text(&away).contains("req:proposed"), "{}", text(&away));
+    let plain = check(&[]);
+    assert!(plain.status.success() && text(&plain).contains("as of"), "with no ticket named the copy is read, as for a person offline: {}", text(&plain));
+}
