@@ -38,6 +38,7 @@ ureq.workspace = true
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
 rust-embed = { version = "8", features = ["mime-guess"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 
 [dev-dependencies]
 tempfile.workspace = true

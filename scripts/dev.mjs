@@ -13,7 +13,8 @@
 // the loop runs works: a running program cannot be replaced on Windows. The
 // loop watches the installed build, and when an install replaces it, copies
 // it again and restarts the server alone, the daemon and the UI running on;
-// the store is on disk, so nothing is lost. Its address is the one `.grimoire.toml` names; a project
+// the store is on disk, so nothing is lost. The server also serves the
+// project's site, how it is meant to be used, on the port after its own. Its address is the one `.grimoire.toml` names; a project
 // file naming a server that is not this machine, or naming a store, starts
 // none, and the loop is then the daemon and the UI alone. Whoever runs the
 // loop is signed in to the server if the server says they are not, with a
@@ -60,7 +61,9 @@ if (local) {
   copyFileSync(installed, serverBin);
 }
 
-const server = { name: "server", command: serverBin, args: ["serve", "--shared", "--store", store, "--port", address?.port || "80"], cwd: root, colour: 33 };
+// Beside it, the project's site, how it is meant to be used, as someone outside the project reads it: one port up.
+const sitePort = Number(address?.port || 80) + 1;
+const server = { name: "server", command: serverBin, args: ["serve", "--shared", "--store", store, "--port", address?.port || "80", "--site", `127.0.0.1:${sitePort}`], cwd: root, colour: 33 };
 const processes = [
   { name: "daemon", command: "bacon", args: ["serve", "--headless"], cwd: root, colour: 36 },
   // Vite's own entry point, run with this Node: no shell, which on Windows

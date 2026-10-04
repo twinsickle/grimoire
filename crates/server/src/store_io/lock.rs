@@ -90,7 +90,7 @@ mod tests {
         assert!(matches!(lock(&store_dir), Err(StoreIoError::NotAStore(_))));
         assert!(!store_dir.join(LOCK_FILE).exists(), "no lock file in what is not a store");
         drop(lock_new(&store_dir).unwrap());
-        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
         write_all(&store_dir, &Store::new(config), false).unwrap();
         let held = lock(&store_dir).unwrap();
         // A second holder, here another handle, is refused and told who holds it.
@@ -109,7 +109,7 @@ mod tests {
         assert!(matches!(lock(&dir.join("missing")), Err(StoreIoError::NotAStore(_))), "no store, no lock file made");
         // A store that names a repository holding it is refused before a lock file is made.
         let inside = repo.join("store");
-        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
         write_all(&inside, &Store::new(config), false).unwrap();
         assert!(matches!(lock(&inside), Err(StoreIoError::InsideRepository(..))));
         assert!(!inside.join(LOCK_FILE).exists());

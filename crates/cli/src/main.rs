@@ -45,6 +45,11 @@ enum Command {
         /// Plain HTTP: put a proxy in front for HTTPS. Without it, the loopback --port.
         #[arg(long)]
         listen: Option<std::net::SocketAddr>,
+        /// Also serve the project's site, how it is meant to be used, on this address, such as
+        /// 0.0.0.0:8080: the pages `configure` names in `site`, with no sign-in. Who may reach it
+        /// is for the deployment to decide.
+        #[arg(long)]
+        site: Option<std::net::SocketAddr>,
     },
     /// Run the lints without a daemon. Exits 1 when there are findings.
     Check {
@@ -609,7 +614,7 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())).with_target(false).init();
 
     match cli.command {
-        Command::Serve { store, port, ui_dir, shared, listen } => {
+        Command::Serve { store, port, ui_dir, shared, listen, site } => {
             let target = target(store.as_deref())?;
             // On a project that names a server, the daemon serves this checkout's copy of the server's intent.
             let server = match target.team {
@@ -617,7 +622,7 @@ fn main() -> anyhow::Result<()> {
                 None => None,
             };
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir: target.store_dir, port, ui_dir, shared, listen, server }))
+            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir: target.store_dir, port, ui_dir, shared, listen, server, site }))
         }
         Command::Token { command } => token(command),
         Command::Login { server, token } => team::login(server.as_deref(), token),
@@ -786,7 +791,7 @@ fn main() -> anyhow::Result<()> {
             // a daemon serves it, which then takes init's one write, the adopt, itself.
             let created = !store_dir.join(store_io::CONFIG_FILE).exists();
             let held = if created {
-                let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
+                let empty = grimoire_core::Store::new(grimoire_core::StoreConfig { site: vec![],
                     version: grimoire_core::StoreConfig::CURRENT_VERSION,
                     repository: repo_str.clone(),
                     roots: vec![scaffold::ROOT_SLUG.to_string()],

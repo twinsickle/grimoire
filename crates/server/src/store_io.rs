@@ -552,12 +552,12 @@ mod tests {
     fn a_whole_store_that_would_not_load_is_not_written() {
         let tmp = temp();
         let dir = tmp.path();
-        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into()], languages: vec!["rust ".into()], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into()], languages: vec!["rust ".into()], scope: Scope::default(), order: Default::default() };
         let store = Store::new(config);
         assert!(matches!(write_all(&dir.join("store"), &store, false), Err(StoreIoError::Invalid(..))));
         assert!(!dir.join("store").exists(), "nothing written");
         // Nor is an existing store replaced by one that would not load.
-        let mut good = Store::new(StoreConfig { languages: vec!["rust".into()], ..store.config.clone() });
+        let mut good = Store::new(StoreConfig { site: vec![], languages: vec!["rust".into()], ..store.config.clone() });
         good.pages.insert("goal".into(), Page { slug: "goal".into(), title: "Goal".into(), body: "b".into(), links: vec![] });
         write_all(&dir.join("store"), &good, false).unwrap();
         let mut bad = good.clone();
@@ -636,7 +636,7 @@ mod tests {
     #[test]
     fn a_rename_stopped_anywhere_is_valid_and_completes() {
         let page = |slug: &str, links: &[&str]| Page { slug: slug.into(), title: slug.into(), body: "b".into(), links: links.iter().map(|l| l.parse().unwrap()).collect() };
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into(), "vision".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into(), "vision".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         // vision links itself, so the rename moves a link inside the record it moves.
         for p in [page("goal", &["page:vision"]), page("vision", &["page:vision", "page:goal"]), page("plan", &["page:goal", "page:vision"])] {
             store.pages.insert(p.slug.clone(), p);
@@ -727,7 +727,7 @@ mod tests {
     fn round_trip_and_malformed() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
         write_all(dir, &store, false).unwrap();
         assert!(matches!(write_all(dir, &store, false), Err(StoreIoError::Exists(_))));
@@ -780,7 +780,7 @@ mod tests {
     fn tolerates_a_byte_order_mark() {
         let tmp = temp();
         let dir = tmp.path();
-        let store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
+        let store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&cfg).unwrap();
@@ -797,7 +797,7 @@ mod tests {
     fn baseline_round_trips_and_a_broken_one_is_collected() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
             reason: "adopted at init".into(),
@@ -835,7 +835,7 @@ mod tests {
     fn config_persists_its_scope() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(dir, &store, false).unwrap();
         let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
         assert!(!text.contains("scope"), "an empty scope is not written");
@@ -854,7 +854,7 @@ mod tests {
     fn writes_leave_no_partial_file() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         write_all(dir, &store, false).unwrap();
         let path = dir.join("pages").join("big.json");
         let reader = {
@@ -893,7 +893,7 @@ mod tests {
     fn a_start_is_written_and_removed() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() });
         store.tickets.insert("0040".into(), Ticket { slug: "0040".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
         store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
         write_all(dir, &store, false).unwrap();

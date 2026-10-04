@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."},{"id":"site-listener","statement":"serve, shared or not, given a site address binds it beside the daemon's own and serves the site's router alone there for as long as the daemon serves, refusing to start when the address cannot be bound; given none, it opens no further address."}]}
 //! ```
 
 pub mod access;
@@ -10,6 +10,7 @@ pub mod daemon;
 pub mod http;
 pub mod mcp;
 pub mod remote;
+pub mod site;
 pub mod store_io;
 pub mod watch;
 
@@ -30,6 +31,22 @@ pub struct ServeOptions {
     /// On a project that names a server: the server, and the checkout to join
     /// its intent with. `store_dir` is then the checkout's copy.
     pub server: Option<(remote::Server, PathBuf)>,
+    /// Where the project's site is served, on an address of its own; no site when not given.
+    pub site: Option<SocketAddr>,
+}
+
+/// Serve the project's site on its own address beside the daemon, until the process stops.
+async fn serve_site(daemon: Arc<Daemon>, addr: SocketAddr) -> anyhow::Result<SocketAddr> {
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr = listener.local_addr()?;
+    tracing::info!("site on http://{addr}: how the project is meant to be used, with no sign-in; who may reach it is the deployment's to decide");
+    let app = site::router(daemon);
+    tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, app).with_graceful_shutdown(shutdown()).await {
+            tracing::warn!("the site stopped: {e}");
+        }
+    });
+    Ok(addr)
 }
 
 /// Open the store, start watching the repository and serve until the
@@ -72,6 +89,9 @@ pub async fn serve(mut opts: ServeOptions) -> anyhow::Result<()> {
     tracing::info!("graph: {}", serde_json::to_string(&status["nodes"]).unwrap_or_default());
 
     let _watcher = watch::start(daemon.clone())?;
+    if let Some(at) = opts.site {
+        serve_site(daemon.clone(), at).await?;
+    }
     let ui = opts.ui_dir.clone().map_or(http::Ui::Embedded, http::Ui::Dir);
     // The local policy: callers on this machine may read and write.
     let app = http::router(daemon.clone(), ui, Arc::new(access::Local));
@@ -99,6 +119,9 @@ async fn serve_shared(opts: ServeOptions) -> anyhow::Result<()> {
     tracing::info!("graph: {}", serde_json::to_string(&status["nodes"]).unwrap_or_default());
     if store_io::tokens::list(&opts.store_dir)?.is_empty() {
         tracing::warn!("the store holds no tokens, so nobody can sign in: make one with `grimoire token add <name> --store {}`", opts.store_dir.display());
+    }
+    if let Some(at) = opts.site {
+        serve_site(daemon.clone(), at).await?;
     }
     let policy = Arc::new(access::Tokens { store_dir: opts.store_dir.clone() });
     let app = http::router(daemon.clone(), http::Ui::Shared, policy);

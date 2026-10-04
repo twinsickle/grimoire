@@ -164,7 +164,7 @@ nodes: { [key in string]: number }, edges: number, unresolved_imports: number, m
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 
-export type StoreConfig = { version: number, repository: string, roots: Array<string>, languages: Array<string>, scope?: Scope, order?: Order, };
+export type StoreConfig = { version: number, repository: string, roots: Array<string>, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, };
 
 export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 

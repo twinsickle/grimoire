@@ -67,6 +67,7 @@ impl Default for StoreConfig {
             scope: Scope::default(),
             order: Order::default(),
             languages: Vec::new(),
+            site: Vec::new(),
         }
     }
 }
@@ -375,6 +376,9 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     for r in &c.roots {
         check_slug(&mut e, "roots", r);
     }
+    for p in &c.site {
+        check_slug(&mut e, "site", p);
+    }
     for (band, slugs) in [("order.next", &c.order.next), ("order.high", &c.order.high), ("order.later", &c.order.later)] {
         for s in slugs {
             check_slug(&mut e, band, s);
@@ -472,13 +476,13 @@ mod tests {
     /// ```
     #[test]
     fn config_rules() {
-        let config = |version: u32, roots: Vec<String>| StoreConfig { version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = |version: u32, roots: Vec<String>| StoreConfig { site: vec![], version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default(), order: Default::default() };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
         assert!(validate_config(&config(StoreConfig::TRIMMED_ON_READ, vec!["overview".into()])).is_empty(), "version 1 is read, to be migrated");
         assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![]))[0].field, "roots");
         // The repository is absolute by its spelling, the same on every platform.
-        let at = |repository: &str| StoreConfig { repository: repository.into(), ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
+        let at = |repository: &str| StoreConfig { site: vec![], repository: repository.into(), ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
         for absolute in ["C:/repo", r"c:\repo", "/home/me/repo", r"\\server\share\repo", r"\\server\share", "//server/share/repo"] {
             assert!(validate_config(&at(absolute)).is_empty(), "{absolute}");
         }
@@ -486,7 +490,7 @@ mod tests {
             let errors = validate_config(&at(relative));
             assert!(errors.iter().any(|e| e.field == "repository" && e.reason.contains("not an absolute path")), "{relative}: {errors:?}");
         }
-        let languages = StoreConfig { languages: vec![" rust".into()], ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
+        let languages = StoreConfig { site: vec![], languages: vec![" rust".into()], ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
         assert_eq!(validate_config(&languages)[0].field, "languages");
     }
 
@@ -610,7 +614,7 @@ mod tests {
         assert!(validate_page(&linking("page:goal ")).iter().any(|e| e.field == "links"));
         assert!(validate_page(&linking("module:src/a")).is_empty());
         assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
-        let order = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
+        let order = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
         assert_eq!(validate_config(&order)[0].field, "order.next");
         // A baseline finding's check, and a start's ticket and fingerprints.
         let baseline: Baseline = serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();

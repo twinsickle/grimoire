@@ -28,7 +28,8 @@ repository only.
 
 - Dev loop: `node scripts/dev.mjs` (or `npm run dev:all` in `web/`) runs
   all three in one console, output prefixed, stopped together by Ctrl+C:
-  the shared server on 4243, `bacon serve --headless`, the daemon on 4242,
+  the shared server on 4243 with the project's site on 4244,
+  `bacon serve --headless`, the daemon on 4242,
   and `npm run dev`, the UI on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
 - Team setup: the rites' `setup` page carries the rule; this is how it is
