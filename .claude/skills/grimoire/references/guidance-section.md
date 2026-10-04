@@ -7,6 +7,10 @@ same piece of work; the pre-commit hook finds what is left unconnected.
 
 - Orient first: `outline` at depth 2, then the pages each root links,
   in their order, then your area. `get` a module before opening its files.
+- How the work is done here is in the rites, the grimoire's second root:
+  read them before working, and follow them. A rule of work belongs there,
+  changed through a ticket, never in this file: this section is Grimoire's,
+  and the rest of the file is the project's own.
 - Every module in the contract scope carries a `# Module contract`. New
   module, new contract; changed guarantee, changed criterion; new criterion, a
   requirement covering it.

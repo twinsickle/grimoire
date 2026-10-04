@@ -188,8 +188,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    changed but whose body did not is the failure this step exists to catch.
    Fix it, or remove the reference from `touches` with `update_ticket` and
    say why it did not need changing.
-4. If the project documents a review step (in its `CLAUDE.md` or
-   `AGENTS.md`, a skill, or a hook), run it now, before closing: a finding
+4. If the project documents a review step (in its rites, or a skill or
+   a hook), run it now, before closing: a finding
    that holds is fixed now or filed as its own ticket, and the decision
    below says what the review found. Grimoire has no opinion on what the
    review is.
