@@ -407,11 +407,20 @@ fn canonical(p: &Path) -> anyhow::Result<String> {
 }
 
 /// The folders of a store that hold one file per record.
-const RECORD_DIRS: [&str; 4] = ["pages", "requirements", "tickets", store_io::STARTS_DIR];
+const RECORD_DIRS: [&str; 5] = ["pages", "requirements", "tickets", store_io::STARTS_DIR, store_io::PROPOSALS_DIR];
 
-/// What a store directory may hold. Anything else means the path is not
-/// only a store, and deleting it would take something else with it.
-const STORE_ENTRIES: [&str; 10] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::STARTS_DIR, store_io::tokens::TOKENS_FILE, store_io::tokens::TOKENS_LOCK, store_io::LOCK_FILE, "pages", "requirements", "tickets"];
+/// The files a store directory may hold beside its record folders. Anything
+/// else, or one of these of the wrong type, means the path is not only a
+/// store, and deleting it would take something else with it.
+const STORE_FILES: [&str; 7] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::CURRENT_FILE, store_io::tokens::TOKENS_FILE, store_io::tokens::TOKENS_LOCK, store_io::LOCK_FILE];
+
+/// Whether a name in a record folder is one store_io writes: `<slug>.json`,
+/// or the `.<slug>.json.tmp-<pid>` a write left behind.
+fn is_record_file_name(name: &str) -> bool {
+    let record = |n: &str| n.strip_suffix(".json").is_some_and(grimoire_core::store::is_slug);
+    record(name)
+        || name.strip_prefix('.').and_then(|n| n.rsplit_once(".tmp-")).is_some_and(|(r, pid)| record(r) && !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
+}
 
 /// Why `store` may not be deleted on behalf of `repo`, if it may not: it is
 /// the repository, holds it, is a root, holds anything a store does not,
@@ -425,9 +434,12 @@ fn refuse_store_deletion(store: &Path, repo: &Path) -> anyhow::Result<Option<Str
     if here.starts_with(&real) {
         return Ok(Some(format!("{} is the repository or holds it", real.display())));
     }
+    // Each entry by its own type, a link never followed: a folder where a file belongs, or the reverse, is not the store's.
     for e in std::fs::read_dir(&real)? {
-        let name = e?.file_name().to_string_lossy().to_string();
-        if !STORE_ENTRIES.contains(&name.as_str()) {
+        let e = e?;
+        let (name, kind) = (e.file_name().to_string_lossy().to_string(), e.file_type()?);
+        let ours = if kind.is_dir() { RECORD_DIRS.contains(&name.as_str()) } else { kind.is_file() && STORE_FILES.contains(&name.as_str()) };
+        if !ours {
             return Ok(Some(format!("{} holds `{name}`, which is not part of a store", real.display())));
         }
     }
@@ -437,7 +449,7 @@ fn refuse_store_deletion(store: &Path, repo: &Path) -> anyhow::Result<Option<Str
         for e in entries {
             let e = e?;
             let name = e.file_name().to_string_lossy().to_string();
-            if !e.path().is_file() || !(name.ends_with(".json") || (name.starts_with('.') && name.contains(".tmp-"))) {
+            if !e.file_type()?.is_file() || !is_record_file_name(&name) {
                 return Ok(Some(format!("{} holds `{dir}/{name}`, which is not part of a store", real.display())));
             }
         }

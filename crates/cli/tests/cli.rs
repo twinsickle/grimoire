@@ -362,6 +362,16 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
     assert!(out.status.success(), "{}", text(&out));
     assert!(!p.store.exists(), "{}", text(&out));
     assert_eq!(files(&p.repo), before);
+    // A store in the middle of a ticket holds a proposal and a current ticket, both a store's own.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    assert!(run(&p.repo, &["tool", "file_ticket", A_TICKET]).status.success());
+    assert!(run(&p.repo, &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
+    assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
+    assert!(p.store.join("proposals").join("0001.json").is_file() && p.store.join("current.json").is_file());
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
 }
 
 /// # Test contract
@@ -444,6 +454,24 @@ fn uninstall_never_deletes_more_than_a_store() {
     assert!(!out.status.success());
     assert!(text(&out).contains("which is not part of a store"), "{}", text(&out));
     assert!(q.store.join("notes.txt").is_file() && q.repo.join(".grimoire.toml").is_file());
+
+    // A store's name with the wrong type, or a file in a record folder no write makes: refused too.
+    std::fs::remove_file(q.store.join("notes.txt")).unwrap();
+    type Make = fn(&Path);
+    let odd: [(&str, Make); 3] = [
+        ("current.json", |p| std::fs::create_dir_all(p.join("mine")).unwrap()),
+        ("proposals", |p| std::fs::write(p, "mine").unwrap()),
+        ("pages/.personal.tmp-copy", |p| std::fs::write(p, "mine").unwrap()),
+    ];
+    for (name, make) in odd {
+        let path = q.store.join(name);
+        make(&path);
+        let out = run(&q.repo, &["uninstall", "--delete-store"]);
+        assert!(!out.status.success(), "{name}: {}", text(&out));
+        assert!(text(&out).contains("which is not part of a store"), "{name}: {}", text(&out));
+        assert!(path.exists() && q.store.join("grimoire.json").is_file(), "{name}: nothing removed");
+        if path.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) }.unwrap();
+    }
 }
 
 #[test]
