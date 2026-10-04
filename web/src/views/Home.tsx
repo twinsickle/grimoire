@@ -9,6 +9,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
+import { useTabTitle } from "../title";
 import { DraftNotice } from "./Node";
 import { idOf, kindOf, localId, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
@@ -24,11 +25,13 @@ export function HomeView({ at }: { at: At }) {
   // ?ticket= reads a page as that ticket's proposal would leave it; the rail stays the truth's.
   const [params] = useSearchParams();
   const ticket = params.get("ticket") ?? undefined;
-  if (error) return <ErrorBox error={error} />;
-  if (!data) return <p className="text-fg-dim">Loading…</p>;
+  // One component names the tab at a time: a page's pane, which reads the page as the ticket would leave it, else this view.
+  const named = "unplaced" in at ? "Unplaced" : "page" in at ? idOf(at.page) : null;
+  if (error) return <><TabTitle subject={named} /><ErrorBox error={error} /></>;
+  if (!data) return <><TabTitle subject={named} /><p className="text-fg-dim">Loading…</p></>;
   // The first root is the grimoire's root, at /; a later one is read by selecting it.
   const first = data.roots[0];
-  if (!first) return <p className={empty}>No root page. The store's `roots` names none that exist.</p>;
+  if (!first) return <><TabTitle subject={named} /><p className={empty}>No root page. The store's `roots` names none that exist.</p></>;
   const path = "page" in at ? pathIn(data.roots, at.page) : null;
   // The rail marks the one entry the pane shows: the path to it, since a page linked twice appears twice.
   const selected = "unplaced" in at ? "unplaced" : "root" in at ? trailOf([first]) : path ? trailOf(path) : "";
@@ -37,9 +40,9 @@ export function HomeView({ at }: { at: At }) {
       <Rail roots={data.roots} unplaced={data.unplaced} selected={selected} />
       <div className="min-w-0">
         {"root" in at && <PagePane at={first.ref} above={[]} home={first.ref} />}
-        {"unplaced" in at && <UnplacedPane modules={data.unplaced} />}
+        {"unplaced" in at && <><TabTitle subject={named} /><UnplacedPane modules={data.unplaced} /></>}
         {/* A page the proposal adds has no place in the truth's outline yet; read through the ticket it opens with no breadcrumb. */}
-        {"page" in at && (path || ticket ? <PagePane at={at.page} above={path ? path.slice(0, -1) : []} home={first.ref} ticket={ticket} /> : <p className={empty}>{at.page} is not in the outline: no page above it links it.</p>)}
+        {"page" in at && (path || ticket ? <PagePane at={at.page} above={path ? path.slice(0, -1) : []} home={first.ref} ticket={ticket} named /> : <><TabTitle subject={named} /><p className={empty}>{at.page} is not in the outline: no page above it links it.</p></>)}
       </div>
     </div>
   );
@@ -221,9 +224,18 @@ function AreaCard({ tree }: { tree: Tree }) {
 // A page
 // ---------------------------------------------------------------------------
 
+/** Names the tab while it is rendered, for the branch of a view that shows no pane naming it. */
+function TabTitle({ subject }: { subject: string | null }) {
+  useTabTitle(subject);
+  return null;
+}
+
 /** A page beside the rail, from the outline rooted at it: its pages, and its modules with their criteria. */
-function PagePane({ at, above, home, ticket }: { at: Ref; above: Tree[]; home: Ref; ticket?: string }) {
+function PagePane({ at, above, home, ticket, named }: { at: Ref; above: Tree[]; home: Ref; ticket?: string; named?: boolean }) {
   const { data, error } = useQuery(() => api.outline(ticket ? { root: at, depth: 2, ticket } : { root: at, depth: 2 }), [at, ticket]);
+  // A page is named by its title as the ticket would leave it, its id until that is read; the root names nothing.
+  const read = data?.roots[0];
+  useTabTitle(named ? (read && read.ref === at ? read.title : idOf(at)) : null);
   if (error) return <ErrorBox error={error} />;
   // The hook keeps the last answer while the next loads; another page's is not this one's.
   const tree = data?.roots[0];

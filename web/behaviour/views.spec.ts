@@ -1326,3 +1326,36 @@ test("a landing ticket shows its decision as waiting to land, on its page and on
   const landed = await tool<{ landed: boolean; node: { status: string; decision: { text: string } } }>(page, "land_ticket", { ref });
   expect([landed.landed, landed.node.status, landed.node.decision.text]).toEqual([true, "closed", "Decided, and waiting."]);
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-tab-names-what-is-open", "checks": ["web/src/title#tab-title"]}
+ * ```
+ */
+test("the tab names what is open, then Grimoire, and carries the book", async ({ page, request }) => {
+  const named: [string, string][] = [
+    ["/", "Grimoire"],
+    ["/board", "Board · Grimoire"],
+    ["/unplaced", "Unplaced · Grimoire"],
+    ["/n/page%3Areadiness", "Readiness · Grimoire"],
+    ["/n/ticket%3A0006", "Report readiness per workspace · Grimoire"],
+    // A module has no title: its id.
+    ["/n/module%3Asrc%2Fready", "src/ready · Grimoire"],
+    // A page a proposal adds, read through it, by its proposed title; outside the outline without it, by its id.
+    ["/n/page%3Adetached?ticket=0001", "Detached heads · Grimoire"],
+    ["/n/page%3Adetached", "detached · Grimoire"],
+    // Back at the root, nothing of the last page is left.
+    ["/", "Grimoire"],
+  ];
+  for (const [path, title] of named) {
+    await page.goto(path);
+    await expect(page, path).toHaveTitle(title);
+  }
+  // The icon is the UI's own file, an SVG.
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  const icon = await request.get("/favicon.svg");
+  expect(icon.ok()).toBe(true);
+  expect(await icon.text()).toContain("<svg");
+});

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type DragEvent, type FocusEvent, type Keyb
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { ErrorBox, Folded, GoneRef, Markdown, RefLink, StatusTag, TicketActions, empty, errorBox, mono } from "../components";
+import { useTabTitle } from "../title";
 import { goneOf, idOf, nodePath, type Board, type BoardTicket, type Priority, type Ref, type Summary, type TicketKind, type TicketNode } from "../types";
 
 const BANDS: Priority[] = ["next", "high", "later"];
@@ -88,6 +89,7 @@ function WaitLines({ waits }: { waits: Summary[] }) {
 
 /** What can be worked on: changes by priority with their readiness, the unsettled gaps and questions, and the recently closed. */
 export function BoardView() {
+  useTabTitle("Board");
   const [show, setShow] = useState<Show>({ ready: true, refine: true, unattached: true, closed: false });
   const [closedCount, setClosedCount] = useState(CLOSED_FIRST);
   const [open, setOpen] = useState<Set<Ref>>(new Set());

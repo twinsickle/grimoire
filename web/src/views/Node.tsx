@@ -34,6 +34,7 @@ import {
   list,
   rel,
 } from "../components";
+import { nodeName, useTabTitle } from "../title";
 import {
   goneOf,
   idOf,
@@ -64,6 +65,7 @@ export function NodeView() {
   const [params] = useSearchParams();
   const ticket = params.get("ticket") ?? undefined;
   const { data, error } = useQuery(() => api.get(ref, ticket), [ref, ticket]);
+  useTabTitle(data && data.node.ref === ref ? nodeName(data.node) : idOf(ref));
   if (error) return <ErrorBox error={error} />;
   // Between two node pages the query keeps the last answer while the next loads; a node of another kind is not this page's.
   if (!data || data.node.ref !== ref) return <p className="text-fg-dim">Loading…</p>;
