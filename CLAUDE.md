@@ -41,8 +41,9 @@ repository only.
   made, since it also prunes the server's baseline from this checkout's
   code; `grimoire check --main-line` prunes it the same way with no ticket
   to land. A change to the server's
-  side takes effect after `cargo install --path crates/cli` and a restart of
-  the loop. With the server away, reads and `grimoire check` go on from the
+  side takes effect after `cargo install --path crates/cli`: the loop
+  watches the installed build and restarts the server alone on it, the
+  daemon and the UI running on. With the server away, reads and `grimoire check` go on from the
   copy last fetched (`check --ticket` fails instead) and every write is
   refused; to go back to a store of
   its own, `.grimoire.toml` names `store = "grimoire"` again, and the loop

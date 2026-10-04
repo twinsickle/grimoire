@@ -10,9 +10,10 @@
 //
 // The server is the build last installed (`cargo install --path crates/cli`),
 // as a host runs a release, and is run from a copy, so installing again while
-// the loop runs works: a running program cannot be replaced on Windows. A
-// change to the server's side takes effect when the loop is next started
-// after an install. Its address is the one `.grimoire.toml` names; a project
+// the loop runs works: a running program cannot be replaced on Windows. The
+// loop watches the installed build, and when an install replaces it, copies
+// it again and restarts the server alone, the daemon and the UI running on;
+// the store is on disk, so nothing is lost. Its address is the one `.grimoire.toml` names; a project
 // file naming a server that is not this machine, or naming a store, starts
 // none, and the loop is then the daemon and the UI alone. Whoever runs the
 // loop is signed in to the server if the server says they are not, with a
@@ -23,7 +24,7 @@
 // they check that a daemon answers before deferring to it.
 
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, watchFile } from "node:fs";
 import { constants, homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,7 +155,8 @@ function start(p) {
     stopAll(1);
   });
   child.on("exit", (code, signal) => {
-    if (reason !== null) return;
+    // A restart stops the process on purpose: the loop goes on.
+    if (reason !== null || p.restarting) return;
     // Only 0 to 255 means anything as an exit status; a process killed outright
     // on Windows reports -1 (4294967295), which the shell would misread.
     const own = code === null ? 1 : code >= 0 && code <= 255 ? code : 1;
@@ -238,3 +240,78 @@ if (local) {
   if (reason === null && !signIn()) stopAll(1);
 }
 if (reason === null) processes.forEach(start);
+
+/** Wait until the server answers again, or the loop is stopping; false at the deadline. */
+async function untilAnswering(seconds) {
+  const deadline = Date.now() + seconds * 1000;
+  while (reason === null && !(await answering())) {
+    if (Date.now() > deadline) return false;
+    await new Promise((wait) => setTimeout(wait, 200));
+  }
+  return reason === null;
+}
+
+/**
+ * Restart the server alone on the build just installed: stop it, copy the new
+ * build over its copy (retried, since an install may still hold the file a
+ * moment), start it, and wait for it to answer. Bacon and the UI run on; the
+ * daemon reconnects to the server by itself.
+ */
+async function restartServer(child) {
+  server.restarting = true;
+  write(server, process.stdout, "a new build was installed: restarting the server on it");
+  stopTree(child, "SIGTERM");
+  await new Promise((done) => (child.exitCode !== null || child.signalCode !== null ? done() : child.once("exit", done)));
+  for (let tries = 0; ; tries++) {
+    try {
+      copyFileSync(installed, serverBin);
+      break;
+    } catch (e) {
+      if (tries >= 20) {
+        write(server, process.stderr, `could not copy the new build: ${e.message}; stopping`);
+        stopAll(1);
+        return null;
+      }
+      await new Promise((wait) => setTimeout(wait, 500));
+    }
+  }
+  server.restarting = false;
+  if (reason !== null) return null;
+  const next = start(server);
+  if (await untilAnswering(30)) write(server, process.stdout, `restarted, answering at ${address.origin}`);
+  else if (reason === null) {
+    write(server, process.stderr, `no answer at ${address.origin} after 30 seconds; stopping`);
+    stopAll(1);
+  }
+  return next;
+}
+
+// Watch the installed build: an install replaces it, and the server follows once the file has settled.
+if (local && reason === null) {
+  let running = children[0];
+  let settle = null;
+  let restarting = Promise.resolve();
+  const stamp = () => {
+    try {
+      const s = statSync(installed);
+      return `${s.mtimeMs}:${s.size}`;
+    } catch {
+      return null;
+    }
+  };
+  let seen = stamp();
+  watchFile(installed, { interval: 1000 }, () => {
+    if (reason !== null) return;
+    clearTimeout(settle);
+    // Two seconds with no further change: the install has finished writing it.
+    settle = setTimeout(() => {
+      const now = stamp();
+      if (now === null || now === seen) return;
+      seen = now;
+      restarting = restarting.then(async () => {
+        const next = await restartServer(running);
+        if (next) running = next;
+      });
+    }, 2000);
+  }).unref();
+}
