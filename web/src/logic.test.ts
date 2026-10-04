@@ -6,6 +6,7 @@ import { ApiError, call } from "./api";
 import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
+import { handoff } from "./handoff";
 import { goneOf, idOf, kindOf, localId, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
@@ -154,4 +155,23 @@ test("a requirement is described while its decisions in force are all adoptions"
   // A plain adoption restated with the mark, superseding it.
   expect(isDescribed([d("read off, in words"), d("read off", true, [1])])).toBe(true);
   expect(isDescribed([d("read off", true), d("chosen", false, [1])])).toBe(false);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/handoff#handoff"]}
+ * ```
+ */
+test("a ticket's next step is a line for the agent, and an answer waiting or a closed ticket has none", () => {
+  const t = (kind: "change" | "gap" | "question", status: "open" | "active" | "landing" | "closed") => handoff({ ref: "ticket:0137", title: "Fix uninstall", kind, status });
+  expect(t("change", "open")).toBe('Start ticket 0137 ("Fix uninstall") with the grimoire skill.');
+  expect(t("change", "active")).toBe('Continue ticket 0137 ("Fix uninstall") with the grimoire skill.');
+  expect(t("change", "landing")).toBe('Ticket 0137 ("Fix uninstall") is waiting to land: land it with the grimoire skill once its change is on the main line.');
+  expect(t("question", "open")).toBe('Resolve the question 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
+  expect(t("gap", "active")).toBe('Resolve the gap 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
+  for (const kind of ["change", "gap", "question"] as const) expect(t(kind, "closed")).toBeNull();
+  expect(t("question", "landing")).toBeNull();
+  expect(t("gap", "landing")).toBeNull();
 });

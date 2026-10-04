@@ -42,8 +42,6 @@ export const api = {
   lint: () => call("lint"),
   moduleSource: (ref: Ref) => call("module_source", { ref }),
   source: (ref: Ref) => call("source", { ref }),
-  startTicket: (ref: Ref) => call("start_ticket", { ref }),
-  closeTicket: (ref: Ref, text: string) => call("close_ticket", { ref, decision: { text } }),
 };
 
 // One event stream for the whole page. Browsers allow about six connections

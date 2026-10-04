@@ -405,10 +405,10 @@ test("a line under a change says whether what it relies on is open, answered or 
  * # Test contract
  *
  * ```json
- * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place"]}
+ * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place", "web/src/components#handoff-copy"]}
  * ```
  */
-test("a board row opens into the whole ticket, with what it waits on and its actions", async ({ page }) => {
+test("a board row opens into the whole ticket, with what it waits on and its next step for an agent", async ({ page }) => {
   await page.goto("/cauldron");
   await page.getByRole("button", { name: "Show Report readiness per workspace" }).click();
   const opened = row(page, "ticket:0006");
@@ -421,14 +421,30 @@ test("a board row opens into the whole ticket, with what it waits on and its act
   await expect(panel).toContainText("open");
   await expect(opened).toContainText("Needs refinement: it waits on whether submodules count.");
   await expect(opened.locator("a[href='/n/module%3Asrc%2Fready']").first()).toBeVisible();
-  await expect(opened.getByRole("button", { name: "Start" })).toBeVisible();
+  // Its next step is a line for the agent, never a start or a close.
+  await expect(opened.locator("[data-handoff]")).toHaveText('Start ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
+  await expect(opened.getByRole("button", { name: "Start", exact: true })).toHaveCount(0);
   await expect(opened.getByRole("link", { name: "Open the ticket's page" })).toHaveAttribute("href", "/n/ticket%3A0006");
-  // A gap opens the same way, and can be closed from there.
+  // A gap opens the same way, its line asking for the options to be laid out, and nothing closes it from here.
   await page.getByRole("button", { name: "Show Readiness ignores submodules" }).click();
   const gap = row(page, "ticket:0003");
   await expect(gap).toContainText("A gap, off the first screen.");
-  await gap.getByLabel("Decision").fill("Submodules are out of scope for readiness.");
-  await gap.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(gap.locator("[data-handoff]")).toHaveText('Resolve the gap 0003 ("Readiness ignores submodules") with the grimoire skill: lay out the options for me to choose from.');
+  await expect(gap.getByLabel("Decision")).toHaveCount(0);
+  await expect(gap.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
+  // Copied from the row as from the page; and where the browser refuses, it says to copy it by hand.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await opened.getByRole("button", { name: /^Copy: Start ticket 0006/ }).click();
+  await expect(opened.getByRole("button", { name: /^Copy: / })).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Start ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new Error("refused"));
+  });
+  await gap.getByRole("button", { name: /^Copy: Resolve the gap 0003/ }).click();
+  await expect(gap.getByRole("alert")).toHaveText("The browser would not copy it: select the line and copy it by hand.");
+  await expect(gap.getByRole("button", { name: /^Copy: / })).toHaveText("Copy");
+  // Closed where it is decided, through the tools, the row leaves the unsettled at once; the specs after this one rely on it closed.
+  await tool(page, "close_ticket", { ref: "ticket:0003", decision: { text: "Submodules are out of scope for readiness." } });
   await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toHaveCount(0);
   expect((await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0003" })).node.status).toBe("closed");
   // A closed ticket opens the same way: what it touched that still exists is a link, what no longer exists is marked and is none.
@@ -824,21 +840,40 @@ test("every node kind has a page", async ({ page }) => {
  * # Test contract
  *
  * ```json
- * {"test": "tickets-start-and-close-from-their-page", "checks": ["web/src/views/Node#ticket-actions"]}
+ * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/views/Node#ticket-actions", "web/src/components#handoff-copy"]}
  * ```
  */
-test("an open ticket is started and closed from its page; a closed one offers neither", async ({ page }) => {
+test("a ticket's page hands its next step to an agent, and starts and closes nothing itself", async ({ page }) => {
+  const status = async () => (await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0002" })).node.status;
+  const line = page.locator("main [data-handoff]");
   await page.goto("/n/ticket%3A0002");
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect.poll(async () => (await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0002" })).node.status).toBe("active");
-  await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
-  await page.getByPlaceholder("Decision: what was chosen and why. Closing discards the body.").fill("Explained in the area page.");
-  await page.getByRole("button", { name: "Close" }).click();
-  await expect.poll(async () => (await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0002" })).node.status).toBe("closed");
+  await expect(page.getByRole("heading", { name: "Next step" })).toBeVisible();
+  await expect(line).toHaveText('Start ticket 0002 ("Explain readiness") with the grimoire skill.');
+  for (const name of ["Start", "Close"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Decision")).toHaveCount(0);
+
+  // Copy puts the line on the clipboard, says so, and writes nothing.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: /^Copy: Start ticket 0002/ }).click();
+  await expect(page.getByRole("button", { name: /^Copy: / })).toHaveText("Copied");
+  await expect(page.locator("main [role=status]")).toHaveText("Copied to the clipboard.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Start ticket 0002 ("Explain readiness") with the grimoire skill.');
+  expect(await status()).toBe("open");
+
+  // Started and closed where the work is done, through the tools: the page follows, with the next step for each.
+  await tool(page, "start_ticket", { ref: "ticket:0002" });
+  await expect(line).toHaveText('Continue ticket 0002 ("Explain readiness") with the grimoire skill.');
+  // A new line has not been copied: the button says Copy again.
+  await expect(page.getByRole("button", { name: /^Copy: Continue ticket 0002/ })).toHaveText("Copy");
+  await tool(page, "close_ticket", { ref: "ticket:0002", decision: { text: "Explained in the area page." } });
+  await expect.poll(status).toBe("closed");
+  await expect(page.getByRole("heading", { name: "Next step" })).toHaveCount(0);
+  await expect(line).toHaveCount(0);
+
+  // A closed ticket has no next step.
   await page.goto("/n/ticket%3A0004");
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Close" })).toHaveCount(0);
+  await expect(line).toHaveCount(0);
 });
 
 /**
@@ -1319,11 +1354,11 @@ test("a landing ticket shows its decision as waiting to land, on its page and on
   await expect(main).toContainText("landing");
   await expect(main).toContainText("Decided, and waiting.");
   await expect(main).toContainText("written, waiting for its change to land");
-  // Not closed yet: its body and proposal are kept, and it can still be closed from its page.
+  // Not closed yet: its body and proposal are kept, and its next step is the landing, handed to the agent.
   await expect(main).toContainText("Its decision is written before its change lands.");
   await expect(page.getByRole("heading", { name: "Proposed" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
+  await expect(main.locator("[data-handoff]")).toHaveText(`Ticket ${ref.slice("ticket:".length)} ("Wait to land") is waiting to land: land it with the grimoire skill once its change is on the main line.`);
+  for (const name of ["Start", "Close"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   // On the board it is listed with the changes, marked as waiting to land.
   await page.goto("/cauldron");
   await expect(row(page, ref)).toContainText("waiting to land");

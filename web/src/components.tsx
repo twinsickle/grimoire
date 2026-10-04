@@ -2,14 +2,14 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, the ticket actions, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."}]}
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
  * ```
  */
 
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "./api";
+import { handoff } from "./handoff";
 import { Link } from "react-router-dom";
 import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary, type TicketKind } from "./types";
 
@@ -213,43 +213,44 @@ export function Folded({ text }: { text: string }) {
 }
 
 /**
- * Start an open ticket, or close one that is not yet closed with a decision,
- * through the start_ticket and close_ticket tools.
+ * A ticket's next step, handed to the person's agent: the line to give it, and a Copy button. The UI starts and closes
+ * nothing; an answer waiting for its change says when it closes, and a closed ticket shows nothing.
  */
-export function TicketActions({ ticket, status, kind }: { ticket: Ref; status: Status; kind?: TicketKind }) {
-  const [decisionText, setDecision] = useState("");
-  const [failed, setFailed] = useState<string | null>(null);
-  async function run(act: () => Promise<unknown>) {
-    setFailed(null);
+export function Handoff({ ticket }: { ticket: { ref: Ref; title: string; kind: TicketKind; status: Status } }) {
+  // What the last press did, to the line it copied: a line that has since changed is not the one copied.
+  const [copied, setCopied] = useState<{ line: string; ok: boolean } | null>(null);
+  const line = handoff(ticket);
+  if (ticket.status === "closed") return null;
+  if (!line) return <p className="m-0 text-fg-dim text-[13px]">Answered: closes when the change applying it lands.</p>;
+  const said = copied?.line === line ? copied : null;
+  async function copy(text: string) {
     try {
-      await act();
-    } catch (e) {
-      setFailed((e as Error).message);
+      await navigator.clipboard.writeText(text);
+      setCopied({ line: text, ok: true });
+    } catch {
+      setCopied({ line: text, ok: false });
     }
   }
-  async function close() {
-    await api.closeTicket(ticket, decisionText);
-    setDecision("");
-  }
-  if (status === "closed") return null;
-  // An answer waiting for its change closes when that change lands, never from here.
-  if (status === "landing" && kind && kind !== "change") return <p className="m-0 text-fg-dim text-[13px]">Answered: closes when the change applying it lands.</p>;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2 items-center flex-wrap">
-        {status === "open" && <button onClick={() => run(() => api.startTicket(ticket))}>Start</button>}
-        <textarea
-          className="flex-1 min-w-60 min-h-[60px]"
-          aria-label="Decision"
-          placeholder="Decision: what was chosen and why. Closing discards the body."
-          value={decisionText}
-          onChange={(e) => setDecision(e.target.value)}
-        />
-        <button disabled={!decisionText.trim()} onClick={() => run(close)}>
-          Close
+    <div className="flex flex-col gap-1.5">
+      <p className="m-0 text-fg-dim text-[13px]">Hand this to your agent:</p>
+      <div className="flex gap-2 items-start">
+        <code data-handoff className="flex-1 min-w-0 whitespace-pre-wrap break-words bg-bg-2 border border-line rounded px-2.5 py-1.5 text-[13px] text-fg">
+          {line}
+        </code>
+        <button onClick={() => copy(line)} aria-label={`Copy: ${line}`}>
+          {said?.ok ? "Copied" : "Copy"}
         </button>
       </div>
-      {failed && <p className={errorBox}>{failed}</p>}
+      {/* Said aloud as well as shown: the button's own name stays what it does. */}
+      <p role="status" className="sr-only">
+        {said?.ok ? "Copied to the clipboard." : ""}
+      </p>
+      {said && !said.ok && (
+        <p role="alert" className={errorBox}>
+          The browser would not copy it: select the line and copy it by hand.
+        </p>
+      )}
     </div>
   );
 }
