@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -95,6 +95,31 @@ fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
         Some(Node::Ticket(t)) if t.status == Status::Closed => t.decision.iter().cloned().collect(),
         _ => Vec::new(),
     }
+}
+
+/// What rests on each node a ticket's work reached without naming it, as
+/// rests_on lists a node: each with its decisions in force and `says`, and a
+/// module followed by the requirements that name its criteria, reached
+/// through it. A node removed since carries its reference alone. Each node
+/// is listed once: a requirement on two of the modules, or among the nodes
+/// given, appears only where it is first met.
+pub fn intent_of(g: &Graph, nodes: &[Reference]) -> Vec<RestsOn> {
+    let mut out = Vec::new();
+    let mut listed: HashSet<Reference> = nodes.iter().cloned().collect();
+    for r in nodes {
+        let title = g.get(r).map(Node::title).unwrap_or_else(|| absent_title(g, r));
+        out.push(RestsOn { r#ref: r.clone(), title, via: vec![], decisions: decisions_of(g, r), says: says_of(g, r) });
+        if let Some(Node::Module(m)) = g.get(r) {
+            let mut reqs: Vec<Reference> = m.criteria.iter().flat_map(|c| g.inbound_with(&Reference::criterion(&m.id, &c.id), Relation::CoveredBy).map(|e| e.from.clone()).collect::<Vec<_>>()).collect();
+            reqs.sort();
+            reqs.dedup();
+            for q in reqs.into_iter().filter(|q| listed.insert(q.clone())) {
+                let title = g.get(&q).map(Node::title).unwrap_or_default();
+                out.push(RestsOn { r#ref: q.clone(), title, via: vec![r.clone()], decisions: decisions_of(g, &q), says: says_of(g, &q) });
+            }
+        }
+    }
+    out
 }
 
 pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<RestsOn> {

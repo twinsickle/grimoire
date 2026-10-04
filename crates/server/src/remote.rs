@@ -444,7 +444,11 @@ pub fn write_through(server: &Server, copy_dir: &Path, state: &mut State, name: 
     // Whether a ticket is already being worked is the server's to say: asked first, so a start is not sent twice.
     // And a token the server refused is asked about again: the person may have signed in since, and until
     // the server takes it nothing is read or written here.
-    if name == "start_ticket" || state.server().is_some_and(|s| s.refused) {
+    // A close and a landing are compared with this checkout's start over its code: brought up to date first, so
+    // what others changed since the start is in the comparison.
+    // A landing that names no ticket lands nothing on a team and is answered here, server or not.
+    let names_one = input.get("ref").is_some_and(|r| !r.is_null());
+    if matches!(name, "start_ticket" | "close_ticket") || (name == "land_ticket" && names_one) || state.server().is_some_and(|s| s.refused) {
         sync_state(server, copy_dir, state).map_err(unavailable)?;
     }
     // What is each checkout's own is answered here and never sent: taking up a ticket
@@ -497,6 +501,17 @@ pub fn write_through(server: &Server, copy_dir: &Path, state: &mut State, name: 
         // its copy was behind, and the server's answer is the true one.
         Ok(followed) => match here {
             Ok(out) if !followed.behind => Ok((out.output, followed.changed)),
+            // Behind: the server's answer is the true one, but the comparison with the start is only this
+            // checkout's to make, over its code, so its own is kept in it.
+            Ok(out) if matches!(name, "close_ticket" | "land_ticket") => {
+                let mut taken = taken;
+                for key in ["untouched", "unnamed"] {
+                    if let (Some(fields), Some(mine)) = (taken.as_object_mut(), out.output.get(key)) {
+                        fields.insert(key.to_string(), mine.clone());
+                    }
+                }
+                Ok((taken, followed.changed))
+            }
             _ => Ok((taken, followed.changed)),
         },
         // The server took the write and the copy could not follow. The write was made, so it is answered,

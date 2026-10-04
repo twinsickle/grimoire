@@ -19,7 +19,7 @@ export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, c
 
 export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 
-export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, settled: Array<Summary>, };
+export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, };
 
 export type Configured = { config: StoreConfig, new: number, };
 
@@ -78,7 +78,7 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
-export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
+export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
 export type Linked = { ref: Ref, title: string | null, };
 

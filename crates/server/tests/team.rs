@@ -228,7 +228,7 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     assert_eq!(d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap()["node"]["status"], "landing");
     let landed = d.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     assert_eq!((landed["landed"].clone(), landed["node"]["status"].clone()), (json!(true), json!("closed")));
-    assert!(landed["untouched"].is_array(), "the machine holds the start and the code: {landed}");
+    assert!(landed["untouched"].is_array() && landed["unnamed"].is_array(), "the machine holds the start and the code: {landed}");
     assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "closed");
     assert!(h.daemon.call("get", json!({ "ref": "req:says-b" })).is_ok(), "applied to the server's truth");
     assert!(!m.holds("current.json") && !m.holds("starts/0001.json") && !m.holds("proposals/0001.json"));

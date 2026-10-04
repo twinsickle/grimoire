@@ -198,6 +198,11 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    findings on the nodes the ticket touched; if any are present, fix them and
    re-run `lint`. Closing is allowed with findings; leaving them is not.
    `baselined` counts the inherited ones there; they are not this ticket's.
+   `unnamed` lists what changed since the ticket started that `touches`
+   never named, each with what it says and the requirements resting on it:
+   read them as you read `rests_on` at the start, since the work reached
+   them; one that belonged to the ticket goes into `touches` next time, and
+   one whose intent the work broke is a gap to file.
    `untouched` lists the nodes in `touches` that never changed since the
    ticket started. For each, the change was missed (make it, in a new
    ticket, since this one is closed) or the node did not need changing

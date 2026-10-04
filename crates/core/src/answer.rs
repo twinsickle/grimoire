@@ -172,7 +172,8 @@ pub struct Started {
 }
 
 /// `close_ticket`: the closed ticket, new findings on what it touched, the
-/// touched nodes that never changed (null when it was never started), and
+/// touched nodes that never changed and what changed that it never touched
+/// with the intent resting on it (each null when it was never started), and
 /// the gaps and questions whose answers closed with it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -181,6 +182,7 @@ pub struct Closed {
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
+    pub unnamed: Option<Vec<RestsOn>>,
     pub settled: Vec<Summary>,
 }
 
@@ -194,6 +196,7 @@ pub struct Landed {
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
+    pub unnamed: Option<Vec<RestsOn>>,
     pub settled: Vec<Summary>,
     pub waiting: Vec<Summary>,
     // Why nothing landed, when the reason is not that no ticket was waiting.

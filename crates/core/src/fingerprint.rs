@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, and a module from its files' fingerprints together."}]}
+//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, and a module from its files' fingerprints together."},{"id":"unnamed","statement":"unnamed gives, in reference order, every page, requirement and module whose fingerprint differs between the start and now, one present at only one end among them, that the given touches do not list; a page or requirement renamed since the start is named by its new slug alone, since a rename moves the start's entry with it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -70,6 +70,22 @@ pub fn all(g: &Graph) -> BTreeMap<Reference, String> {
 /// to the dangling lint.
 pub fn untouched(touches: &[Reference], start: &BTreeMap<String, String>, now: &BTreeMap<Reference, String>) -> Vec<Reference> {
     touches.iter().filter(|r| matches!((start.get(&r.to_string()), now.get(*r)), (Some(a), Some(b)) if a == b)).cloned().collect()
+}
+
+/// The pages, requirements and modules whose fingerprint differs now from
+/// the start, created and removed ones among them, that `touches` does not
+/// list: what a ticket's work reached without naming it.
+pub fn unnamed(touches: &[Reference], start: &BTreeMap<String, String>, now: &BTreeMap<Reference, String>) -> Vec<Reference> {
+    let at_start: BTreeMap<Reference, &String> = start.iter().filter_map(|(k, v)| k.parse::<Reference>().ok().map(|r| (r, v))).collect();
+    let mut all: Vec<&Reference> = at_start.keys().chain(now.keys()).collect();
+    all.sort();
+    all.dedup();
+    all.into_iter()
+        .filter(|r| matches!(r.kind, Kind::Page | Kind::Req | Kind::Module))
+        .filter(|r| !touches.contains(r))
+        .filter(|r| at_start.get(*r).copied() != now.get(*r))
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
