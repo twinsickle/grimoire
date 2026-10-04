@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."},{"id":"focus-follows","statement":"After a move from the keyboard, once the board has drawn the change in its new place, focus is on that change's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
+ * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the unsettled gaps and questions, which no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on the count of its unanswered gaps and questions, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unsettled gaps and questions, those no change relies on; under each change's row, open or not, a line for each gap or question it relies on gives its kind, id, title and own priority under the row's columns and its status, open, answered while it waits for its change, or closed and muted, and no gap or question is listed in a band; filters show or hide ready changes, changes needing refinement, unsettled gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, announcing the gaps and questions moved with it, or, when the priority rule raised it back, calls no reorder and says it stays, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."},{"id":"focus-follows","statement":"After a move from the keyboard, once the board has drawn the change in its new place, focus is on that change's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
  * ```
  */
 
@@ -47,20 +47,46 @@ function openWaits(t: BoardTicket): Summary[] {
   return (t.waits_on ?? []).filter((w) => w.status === "open" || w.status === "active");
 }
 
-/** "2 questions · 1 gap · 1 answered": what a change relies on, at a glance. */
-function waitCount(t: BoardTicket): string {
-  const open = openWaits(t);
-  const questions = open.filter((w) => w.kind === "question").length;
-  const gaps = open.length - questions;
-  const answered = (t.waits_on?.length ?? 0) - open.length;
-  const parts: string[] = [];
-  if (questions) parts.push(`${questions} question${questions === 1 ? "" : "s"}`);
-  if (gaps) parts.push(`${gaps} gap${gaps === 1 ? "" : "s"}`);
-  if (answered) parts.push(`${answered} answered`);
-  return parts.join(" · ");
+/** A row's columns, shared by the lines under it so each line's kind, id, title, priority and status sit under the row's own. */
+const ROW_COLUMNS = "grid grid-cols-[20px_28px_76px_minmax(120px,22ch)_minmax(0,1fr)_auto_56px] gap-x-2.5 items-center";
+
+/** What a gap or question's status says under the change relying on it. */
+function waitStatus(w: Summary): { text: string; className: string; title: string } {
+  if (w.status === "closed") return { text: "closed", className: "text-fg-dim", title: "Answered and closed." };
+  if (w.status === "landing") return { text: "answered", className: "text-ok", title: "Answered: it closes when the change applying it lands." };
+  return { text: "open", className: "text-warn", title: "Not yet answered: the change waits on it." };
 }
 
-/** What can be worked on: changes by priority with their readiness, the unattached gaps and questions, and the recently closed. */
+/** One line under a change's row for each gap or question it relies on, lined up with the row: kind, id, title, its own priority and its status. */
+function WaitLines({ waits }: { waits: Summary[] }) {
+  return (
+    <ul aria-label="Relies on" className="list-none m-0 px-2.5 pt-1 pb-1.5 border-t border-line/60 flex flex-col gap-0.5">
+      {waits.map((w) => {
+        const st = waitStatus(w);
+        const closed = w.status === "closed";
+        return (
+          <li key={w.ref} data-wait={w.ref} className={`${ROW_COLUMNS} min-h-6`}>
+            <span />
+            <span aria-hidden="true" className="justify-self-center w-2 h-3.5 -mt-3 ml-1.5 border-l border-b border-fg-faint rounded-bl-[3px]" />
+            <span className={`justify-self-start font-mono text-[11px] border rounded px-1.5 ${KIND_CHIP[w.kind ?? "gap"]}`}>{w.kind}</span>
+            <Link to={nodePath(w.ref)} className={`${mono} text-fg-dim text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>
+              {idOf(w.ref)}
+            </Link>
+            <Link to={nodePath(w.ref)} className={`text-[13px] overflow-hidden text-ellipsis whitespace-nowrap ${closed ? "text-fg-dim" : "text-fg"}`}>
+              {w.title}
+            </Link>
+            <span className={`justify-self-end text-xs ${closed ? "text-fg-dim" : BAND_COLOR[w.priority ?? "later"]}`}>{w.priority}</span>
+            <span title={st.title} className={`justify-self-end text-xs ${st.className}`}>
+              {st.text}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** What can be worked on: changes by priority with their readiness, the unsettled gaps and questions, and the recently closed. */
 export function BoardView() {
   const [show, setShow] = useState<Show>({ ready: true, refine: true, unattached: true, closed: false });
   const [closedCount, setClosedCount] = useState(CLOSED_FIRST);
@@ -129,10 +155,23 @@ export function BoardView() {
     const order = next[target];
     const at = before ? order.indexOf(before) : -1;
     order.splice(at < 0 ? order.length : at, 0, ref);
-    if (from !== target) await api.updateTicket(ref, { priority: target });
+    let also = "";
+    if (from !== target) {
+      const out = await api.updateTicket(ref, { priority: target });
+      const moved = out.reprioritised ?? [];
+      // Raised back: another change holds what it relies on above the band asked for, so it stays where the tool put it.
+      const kept = moved.find((t) => t.ref === ref);
+      if (kept && kept.priority !== target) {
+        writtenRef.current = null;
+        setSaid(`${titleOf(ref)} stays in ${kept.priority}: a gap or question it relies on is held there by another change.`);
+        return;
+      }
+      const others = moved.filter((t) => t.ref !== ref);
+      if (others.length) also = ` Moved with it: ${others.map((t) => `${t.title} to ${t.priority}`).join(", ")}.`;
+    }
     await api.reorder(target, order);
     writtenRef.current = { bands: next, at: stamp() };
-    setSaid(`${titleOf(ref)} moved to position ${order.indexOf(ref) + 1} of ${order.length} in ${target}.`);
+    setSaid(`${titleOf(ref)} moved to position ${order.indexOf(ref) + 1} of ${order.length} in ${target}.${also}`);
   }
 
   /** One place up or down; past the edge of a band, into the end of the band above or the start of the band below. */
@@ -246,7 +285,7 @@ export function BoardView() {
         <h1 className="m-0 mr-3">Board</h1>
         {chip("ready", "Ready", ready, "bg-ok")}
         {chip("refine", "Needs refinement", refine, "bg-warn")}
-        {chip("unattached", "Not yet attached", data.unattached.length, "bg-req")}
+        {chip("unattached", "Unsettled", data.unattached.length, "bg-req")}
         {chip("closed", "Closed", null, "bg-fg-dim")}
       </div>
       <p aria-live="polite" className="sr-only">
@@ -292,9 +331,9 @@ export function BoardView() {
         );
       })}
       {show.unattached && (
-        <section id="unattached" aria-label="Not yet attached" className="flex flex-col gap-1">
+        <section id="unattached" aria-label="Unsettled" className="flex flex-col gap-1">
           <h2 className="m-0 text-[11.5px] uppercase tracking-[0.06em] font-semibold text-req">
-            Not yet attached <span className="normal-case tracking-normal font-normal text-fg-dim">· gaps and questions no change relies on</span>
+            Unsettled <span className="normal-case tracking-normal font-normal text-fg-dim">· gaps and questions not yet answered, with no change relying on them</span>
           </h2>
           {data.unattached.length === 0 && <p className={empty}>Every open gap and question is attached to a change.</p>}
           <ul className="list-none m-0 p-0 flex flex-col gap-1">
@@ -349,7 +388,7 @@ function Row({ t, open, onToggle, change }: { t: BoardTicket; open: boolean; onT
         change?.dropBefore ? "shadow-[0_-2px_0_var(--color-accent)]" : ""
       }`}
     >
-      <div className="grid grid-cols-[20px_28px_76px_minmax(120px,22ch)_minmax(0,1fr)_auto_56px] gap-x-2.5 items-center px-2.5 py-1.5">
+      <div className={`${ROW_COLUMNS} px-2.5 py-1.5`}>
         {change ? (
           <button
             draggable
@@ -396,10 +435,11 @@ function Row({ t, open, onToggle, change }: { t: BoardTicket; open: boolean; onT
               <span className="sr-only">: no change relies on this answer; it needed no work, or its work was never filed.</span>
             </span>
           )}
-          {isChange ? <span className="text-fg-dim">{waitCount(t)}</span> : <span className={BAND_COLOR[t.priority ?? "later"]}>{t.priority}</span>}
+          {!isChange && <span className={BAND_COLOR[t.priority ?? "later"]}>{t.priority}</span>}
         </span>
         <span className="justify-self-end">{t.status && <StatusTag s={t.status} />}</span>
       </div>
+      {isChange && (t.waits_on?.length ?? 0) > 0 && <WaitLines waits={t.waits_on ?? []} />}
       {open && <Ticket t={t} />}
     </li>
   );

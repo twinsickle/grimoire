@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed and settled, the gaps and questions that closed with it, or with when: landed the findings as its proposal leaves them, no such list and settled empty, land_ticket answers whether a ticket landed, what its close answers when one did, and the changes still landing, update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"settles","statement":"A change closed by close_ticket or land_ticket settles the answers it relies on as closed; a change deleted, or one whose relies_on update_ticket shortens, settles the answers it relied on and no longer does as gone, with why; each persists what the settle changed after the write's own changes."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, file_ticket and update_ticket add reprioritised, the tickets whose priority the write moved beyond the one asked, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed and settled, the gaps and questions that closed with it, or with when: landed the findings as its proposal leaves them, no such list and settled empty, land_ticket answers whether a ticket landed, what its close answers when one did, and the changes still landing, update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged, or null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"settles","statement":"A change closed by close_ticket or land_ticket settles the answers it relies on as closed; a change deleted, or one whose relies_on update_ticket shortens, settles the answers it relied on and no longer does as gone, with why; each persists what the settle changed after the write's own changes."},{"id":"reprioritised","statement":"file_ticket keeps pace for the ticket it filed and update_ticket for the ticket it edited, from the priority it had, after settling any answers the edit dropped; each answers the tickets keep_pace moved as reprioritised, with their priorities as they now are, and persists them after the write's own changes."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
 //! ```
 
 use serde::Deserialize;
@@ -116,7 +116,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             let g = state.graph_for(Some(&t))?;
             let node = query::view(g, &i.r#ref).expect("just written");
             let (warnings, baselined) = split_new(lint::lint_touching(g, &named));
-            answer(name, Written { node, warnings, baselined, settled: None, reopened: None }, Some(changed))
+            answer(name, Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: None }, Some(changed))
         }
         "file_ticket" => {
             #[derive(Deserialize)]
@@ -136,7 +136,14 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             let t = ops::NewTicket { title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
             let (node, changed) = ops::file_ticket(state.store_mut(), t)?;
             let r = Reference::ticket(&node.slug);
-            written(name, state, None, &r, changed)
+            // A change filed relying on something more urgent is filed at that priority.
+            let (moved, more) = ops::keep_pace(state.store_mut(), &node.slug, None);
+            let reprioritised = tickets(state, &moved);
+            let changed = if moved.is_empty() { changed } else { Changed::Many(vec![changed, more]) };
+            let g = state.graph();
+            let node = query::view(g, &r).expect("just written");
+            let (warnings, baselined) = split_new(lint::written(g, &r));
+            answer(name, Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised) }, Some(changed))
         }
         "update_ticket" => {
             #[derive(Deserialize)]
@@ -151,20 +158,34 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             }
             let i: In = parse(input)?;
             let before = applies(state, &i.r#ref);
+            let was = state.store.tickets.get(&i.r#ref.id).map(|t| t.priority);
             let patch = ops::TicketPatch { title: i.title, priority: i.priority, touches: i.touches, relies_on: i.relies_on, body: i.body };
             let (_, changed) = ops::update_ticket(state.store_mut(), &i.r#ref, patch)?;
-            let Some(before) = before else { return written(name, state, None, &i.r#ref, changed) };
+            let mut changes = vec![changed];
             // An answer this change no longer relies on may be left with no change to apply it.
-            let now = state.store.tickets.get(&i.r#ref.id).map(|t| t.relies_on.clone()).unwrap_or_default();
-            let dropped: Vec<Reference> = before.into_iter().filter(|r| !now.contains(r)).collect();
-            let why = format!("change {} stopped relying on it", i.r#ref.id);
-            let (done, more) = ops::settle(state.store_mut(), &dropped, ops::Settling::Gone(&why));
-            let (settled, reopened) = summaries(state, &done);
+            let (mut settled, mut reopened) = (None, None);
+            if let Some(before) = before {
+                let now = state.store.tickets.get(&i.r#ref.id).map(|t| t.relies_on.clone()).unwrap_or_default();
+                let dropped: Vec<Reference> = before.into_iter().filter(|r| !now.contains(r)).collect();
+                let why = format!("change {} stopped relying on it", i.r#ref.id);
+                let (done, more) = ops::settle(state.store_mut(), &dropped, ops::Settling::Gone(&why));
+                if !done.is_empty() {
+                    changes.push(more);
+                }
+                let (s, r) = summaries(state, &done);
+                (settled, reopened) = (Some(s), Some(r));
+            }
+            // The priorities it relates keep pace with it.
+            let (moved, more) = ops::keep_pace(state.store_mut(), &i.r#ref.id, was);
+            if !moved.is_empty() {
+                changes.push(more);
+            }
+            let reprioritised = Some(tickets(state, &moved));
+            let changed = if changes.len() == 1 { changes.remove(0) } else { Changed::Many(changes) };
             let g = state.graph();
             let node = query::view(g, &i.r#ref).expect("just written");
             let (warnings, baselined) = split_new(lint::written(g, &i.r#ref));
-            let changed = if done.is_empty() { changed } else { Changed::Many(vec![changed, more]) };
-            answer(name, Written { node, warnings, baselined, settled: Some(settled), reopened: Some(reopened) }, Some(changed))
+            answer(name, Written { node, warnings, baselined, settled, reopened, reprioritised }, Some(changed))
         }
         "start_ticket" => {
             let i: RefIn = parse(input)?;
@@ -386,7 +407,7 @@ fn written(name: &str, state: &mut State, view: Option<&str>, r: &Reference, cha
     let g = state.graph_for(view)?;
     let node = query::view(g, r).expect("just written");
     let (warnings, baselined) = split_new(lint::written(g, r));
-    answer(name, Written { node, warnings, baselined, settled: None, reopened: None }, Some(changed))
+    answer(name, Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: None }, Some(changed))
 }
 
 /// What a change relies on, which includes the answers it applies; none for
@@ -395,10 +416,14 @@ fn applies(state: &State, r: &Reference) -> Option<Vec<Reference>> {
     state.store.tickets.get(&r.id).filter(|t| r.kind == Kind::Ticket && t.kind == TicketKind::Change).map(|t| t.relies_on.clone())
 }
 
+/// Tickets by slug, as summaries.
+fn tickets(state: &State, slugs: &[String]) -> Vec<query::Summary> {
+    slugs.iter().filter_map(|s| state.store.tickets.get(s)).map(query::ticket_summary).collect()
+}
+
 /// A settle's closed and reopened answers, as summaries.
 fn summaries(state: &State, settled: &ops::Settled) -> (Vec<query::Summary>, Vec<query::Summary>) {
-    let of = |slugs: &[String]| slugs.iter().filter_map(|s| state.store.tickets.get(s)).map(query::ticket_summary).collect();
-    (of(&settled.closed), of(&settled.reopened))
+    (tickets(state, &settled.closed), tickets(state, &settled.reopened))
 }
 
 /// The new findings, which are the caller's to act on, and how many
@@ -996,6 +1021,75 @@ mod tests {
         let out = call(&mut s, "land_ticket", json!({}), "2026-10-07").unwrap();
         assert_eq!(refs(&out.output["settled"]), vec![q.clone()]);
         assert_eq!(s.store().tickets[q.trim_start_matches("ticket:")].status, Status::Closed);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-change-keeps-pace-with-what-it-relies-on", "checks": ["crates/core/src/ops#priority-follows", "crates/core/src/tools/write#reprioritised", "crates/core/src/tools/write#write-responses"]}
+    /// ```
+    #[test]
+    fn a_change_keeps_pace_with_what_it_relies_on() {
+        let mut s = state();
+        let day = "2026-10-04";
+        let file = |s: &mut State, kind: &str, priority: &str, relies_on: &[&str]| {
+            let out = call(s, "file_ticket", json!({ "title": "T", "kind": kind, "priority": priority, "relies_on": relies_on, "body": "b" }), day).unwrap();
+            (out.output["node"]["ref"].as_str().unwrap().to_string(), out.output["reprioritised"].clone())
+        };
+        let priority = |s: &State, r: &str| s.store().tickets[r.trim_start_matches("ticket:")].priority;
+        let moved = |v: &Value| v.as_array().unwrap().iter().map(|x| (x["ref"].as_str().unwrap().to_string(), x["priority"].as_str().unwrap().to_string())).collect::<Vec<_>>();
+        // Filed relying on something more urgent: filed at that priority, and said so.
+        let (q, none) = file(&mut s, "question", "next", &[]);
+        assert_eq!(none, json!([]));
+        let (c, out) = file(&mut s, "change", "later", &[&q]);
+        assert_eq!((priority(&s, &c), moved(&out)), (Priority::Next, vec![(c.clone(), "next".to_string())]));
+        // Coming to rely on something more urgent raises a change.
+        let (g, _) = file(&mut s, "gap", "high", &[]);
+        let (d, _) = file(&mut s, "change", "later", &[]);
+        let out = call(&mut s, "update_ticket", json!({ "ref": d, "relies_on": [g] }), day).unwrap();
+        assert_eq!(moved(&out.output["reprioritised"]), vec![(d.clone(), "high".to_string())]);
+        // Each ticket moved is persisted after the write's own change.
+        let id = |r: &str| r.trim_start_matches("ticket:").to_string();
+        assert_eq!(out.changed, Some(Changed::Many(vec![Changed::Ticket(id(&d)), Changed::Many(vec![Changed::Ticket(id(&d))])])));
+        // Raising a gap raises the open changes relying on it, and not a closed one.
+        call(&mut s, "update_ticket", json!({ "ref": d, "priority": "later" }), day).unwrap();
+        assert_eq!((priority(&s, &d), priority(&s, &g)), (Priority::Later, Priority::Later), "lowering a change lowers what it relies on");
+        let (done, _) = file(&mut s, "change", "later", &[&g]);
+        call(&mut s, "close_ticket", json!({ "ref": done, "decision": { "text": "Done." } }), day).unwrap();
+        let out = call(&mut s, "update_ticket", json!({ "ref": g, "priority": "high" }), day).unwrap();
+        assert_eq!(moved(&out.output["reprioritised"]), vec![(d.clone(), "high".to_string())]);
+        assert_eq!(priority(&s, &done), Priority::Later, "a closed change is never moved");
+        // Lowering a gap, or raising a change, moves nothing else.
+        assert_eq!(call(&mut s, "update_ticket", json!({ "ref": g, "priority": "later" }), day).unwrap().output["reprioritised"], json!([]));
+        assert_eq!(priority(&s, &d), Priority::High);
+        assert_eq!(call(&mut s, "update_ticket", json!({ "ref": d, "priority": "next" }), day).unwrap().output["reprioritised"], json!([]));
+        // Another change holds the question up: the one lowered is raised back to it, and the question stays.
+        let out = call(&mut s, "update_ticket", json!({ "ref": c, "relies_on": [q, g] }), day).unwrap();
+        assert_eq!(out.output["reprioritised"], json!([]));
+        call(&mut s, "update_ticket", json!({ "ref": d, "relies_on": [g, q] }), day).unwrap();
+        let out = call(&mut s, "update_ticket", json!({ "ref": d, "priority": "later" }), day).unwrap();
+        assert_eq!(moved(&out.output["reprioritised"]), vec![(d.clone(), "next".to_string())], "q stays next, held there by c, so d is raised back to it");
+        assert_eq!((priority(&s, &q), priority(&s, &d)), (Priority::Next, Priority::Next));
+        // A lowered change takes its answer down with it, but only as far as another change relying on it allows.
+        let (a, _) = file(&mut s, "gap", "next", &[]);
+        let (lone, _) = file(&mut s, "change", "next", &[&a]);
+        let out = call(&mut s, "update_ticket", json!({ "ref": lone, "priority": "later" }), day).unwrap();
+        assert_eq!(moved(&out.output["reprioritised"]), vec![(a.clone(), "later".to_string())]);
+        call(&mut s, "update_ticket", json!({ "ref": a, "priority": "next" }), day).unwrap();
+        let (other, _) = file(&mut s, "change", "high", &[&a]);
+        assert_eq!((priority(&s, &lone), priority(&s, &other)), (Priority::Next, Priority::Next));
+        call(&mut s, "update_ticket", json!({ "ref": other, "priority": "high" }), day).unwrap();
+        assert_eq!((priority(&s, &a), priority(&s, &other)), (Priority::Next, Priority::Next), "lone still holds it at next, so other is raised back");
+        // A gap filed under a name a change already relies on raises that change, as one raised does.
+        // The change takes the next id, so the gap it names is the one after.
+        let next_id = format!("ticket:{:04}", ops::next_ticket_id(s.store()).parse::<u64>().unwrap() + 1);
+        let (waiting, _) = file(&mut s, "change", "later", &[&next_id]);
+        let (filed, out) = file(&mut s, "gap", "next", &[]);
+        assert_eq!(filed, next_id);
+        assert_eq!(moved(&out), vec![(waiting.clone(), "next".to_string())]);
+        // An edit that moves nothing else answers no list beyond its own.
+        let out = call(&mut s, "update_ticket", json!({ "ref": c, "title": "Renamed" }), day).unwrap();
+        assert_eq!(out.output["reprioritised"], json!([]));
     }
 
     /// # Test contract

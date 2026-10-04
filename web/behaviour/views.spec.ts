@@ -334,8 +334,18 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
   await page.goto("/board");
   // The per-workspace report waits on the submodules question; Explain readiness waits on nothing.
   await expect(row(page, "ticket:0006")).toContainText("waits on 1");
-  await expect(row(page, "ticket:0006")).toContainText("1 question");
+  // What it waits on shows under its row without opening it: kind, title, own priority and status, and in no band of its own.
+  const line = row(page, "ticket:0006").locator("[data-wait='ticket:0005']");
+  await expect(line).toBeVisible();
+  await expect(line).toContainText("question");
+  await expect(line).toContainText("0005");
+  await expect(line.getByRole("link", { name: "Should readiness count submodules?" })).toHaveAttribute("href", "/n/ticket%3A0005");
+  await expect(line).toContainText("later");
+  await expect(line).toContainText("open");
+  await expect(row(page, "ticket:0006").getByRole("button", { name: /^Hide/ })).toHaveCount(0);
+  await expect(page.locator("li[data-ticket='ticket:0005']")).toHaveCount(0);
   await expect(row(page, "ticket:0002")).toContainText("ready");
+  await expect(row(page, "ticket:0002").locator("[data-wait]")).toHaveCount(0);
   // The gap no change relies on is unattached; the question a change relies on is not.
   await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toBeVisible();
   await expect(page.locator("#unattached li[data-ticket='ticket:0005']")).toHaveCount(0);
@@ -359,6 +369,35 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
  * # Test contract
  *
  * ```json
+ * {"test": "a-line-says-whether-what-a-change-relies-on-is-answered", "checks": ["web/src/views/Board#first-screen"]}
+ * ```
+ */
+test("a line under a change says whether what it relies on is open, answered or closed, with its priority", async ({ page }) => {
+  // The tool's own answer, with question 0005 set to each status in turn: the store the other specs share is not touched.
+  for (const [status, said, ready] of [
+    ["landing", "answered", true],
+    ["closed", "closed", true],
+    ["open", "open", false],
+  ] as const) {
+    await page.unroute("**/api/board");
+    await page.route("**/api/board", async (route) => {
+      const response = await route.fetch();
+      const board = (await response.json()) as BoardAnswer;
+      for (const t of board.tickets) for (const w of t.waits_on ?? []) if (w.ref === "ticket:0005") w.status = status;
+      await route.fulfill({ response, json: board });
+    });
+    await page.goto("/board");
+    const line = row(page, "ticket:0006").locator("[data-wait='ticket:0005']");
+    await expect(line, status).toContainText(said);
+    await expect(line, status).toContainText("later");
+    await expect(row(page, "ticket:0006"), status).toContainText(ready ? "ready" : "waits on 1");
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place"]}
  * ```
  */
@@ -368,10 +407,11 @@ test("a board row opens into the whole ticket, with what it waits on and its act
   const opened = row(page, "ticket:0006");
   // The panel's heading, by role: the row's badge reads "waits on 1" before the panel has loaded at all.
   await expect(opened.getByRole("heading", { name: "Waits on" })).toBeVisible();
-  const question = opened.getByRole("link", { name: "Should readiness count submodules?" });
-  await expect(question).toBeVisible();
+  // The panel's own list, past the line under the row that names the question too.
+  const panel = opened.locator("li:not([data-wait])", { has: page.getByRole("link", { name: "Should readiness count submodules?" }) });
+  await expect(panel.getByRole("link", { name: "Should readiness count submodules?" })).toBeVisible();
   // The question's own line says it is open.
-  await expect(opened.locator("li", { has: page.getByRole("link", { name: "Should readiness count submodules?" }) })).toContainText("open");
+  await expect(panel).toContainText("open");
   await expect(opened).toContainText("Needs refinement: it waits on whether submodules count.");
   await expect(opened.locator("a[href='/n/module%3Asrc%2Fready']").first()).toBeVisible();
   await expect(opened.getByRole("button", { name: "Start" })).toBeVisible();
@@ -459,6 +499,33 @@ test("the board keeps the tool's order, and a change is moved by dragging or fro
   await expect.poll(() => inBand("high")).toEqual(["ticket:0007", "ticket:0002"]);
   await expect.poll(() => bandRefs(page, "high")).toEqual(["ticket:0007", "ticket:0002"]);
   expect(await inBand("later")).toEqual(["ticket:0006"]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-drop-the-rule-raises-back-stays", "checks": ["web/src/views/Board#order-from-tool"]}
+ * ```
+ */
+test("a change the priority rule raises back stays where the tool put it, and the board says why", async ({ page }) => {
+  await page.goto("/board");
+  const grip = (ref: string) => row(page, ref).getByRole("button", { name: /^Move / });
+  // update_ticket answers as the rule would when another change holds what 0002 relies on at high: 0002 raised back.
+  const reorders: unknown[] = [];
+  await page.route("**/api/update_ticket", async (route) => {
+    const node = (await tool<{ node: unknown }>(page, "get", { ref: "ticket:0002" })).node;
+    await route.fulfill({ json: { node, warnings: [], baselined: 0, reprioritised: [{ ref: "ticket:0002", title: "Explain readiness", kind: "change", priority: "high", status: "open" }] } });
+  });
+  await page.route("**/api/reorder", async (route) => {
+    reorders.push(route.request().postDataJSON());
+    await route.continue();
+  });
+  await grip("ticket:0002").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator("[aria-live]")).toContainText("Explain readiness stays in high: a gap or question it relies on is held there by another change.");
+  expect(reorders).toEqual([]);
+  expect((await tool<BoardAnswer>(page, "board")).tickets.find((x) => x.ref === "ticket:0002")?.priority).toBe("high");
 });
 
 /**

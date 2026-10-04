@@ -143,7 +143,8 @@ pub struct ServerCopy {
 
 /// Every write of a page, requirement or ticket: the node as it now is, the
 /// new findings it created, and how many inherited ones sit on it. An edit of
-/// a change's relies_on adds the waiting answers it closed and reopened.
+/// a change's relies_on adds the waiting answers it closed and reopened, and
+/// filing or editing a ticket the tickets whose priority it moved besides.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Written {
@@ -156,6 +157,9 @@ pub struct Written {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub reopened: Option<Vec<Summary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub reprioritised: Option<Vec<Summary>>,
 }
 
 /// `start_ticket`: the ticket, what it rests on, and the gaps and questions near it.

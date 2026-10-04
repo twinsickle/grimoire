@@ -199,7 +199,7 @@ checks: Array<string>,
  */
 tests: number, rollup: Rollup, children: Array<Tree>, };
 
-export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, };
+export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
 
 /** Each tool's answer, by tool name. */
 export type ToolAnswers = {
