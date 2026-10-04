@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a requirement's decisions: append one, link the earlier decisions one supersedes, and retire a requirement that no longer holds, removing and rewriting nothing.","criteria":[{"id":"decisions-append-only","statement":"No write removes a decision or changes its text or date: put_requirement preserves the existing decisions, record_decision appends, and supersede only adds to a decision's supersedes list."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, with the positions of the earlier decisions it supersedes; a position that is not earlier, or a retired requirement, is invalid, and a missing requirement not_found."},{"id":"supersede","statement":"supersede adds to one decision of a requirement the positions of earlier decisions it supersedes, keeping those it had and every text and date; a position not earlier than it, or a retired requirement, is invalid, and a missing requirement or decision not_found."},{"id":"retire","statement":"retire_node records on a requirement a last decision superseding every earlier one, marks it retired and removes it from every page's links, persisting the pages first and the requirement last so a failure part way leaves it live and a retry completes; a ticket, an already retired requirement or any other kind is invalid, a missing requirement not_found, and a retired requirement refuses put_requirement, record_decision and supersede."}]}
+//! {"purpose":"Keep a requirement's decisions: append one, link the earlier decisions one supersedes, and retire a requirement that no longer holds, removing and rewriting nothing.","criteria":[{"id":"decisions-append-only","statement":"No write removes a decision or changes its text or date: put_requirement preserves the existing decisions, record_decision appends, and supersede only adds to a decision's supersedes list."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, with the positions of the earlier decisions it supersedes and whether it is an adoption, the mark set only here; a position that is not earlier, or a retired requirement, is invalid, and a missing requirement not_found."},{"id":"supersede","statement":"supersede adds to one decision of a requirement the positions of earlier decisions it supersedes, keeping those it had and every text and date; a position not earlier than it, or a retired requirement, is invalid, and a missing requirement or decision not_found."},{"id":"retire","statement":"retire_node records on a requirement a last decision superseding every earlier one, marks it retired and removes it from every page's links, persisting the pages first and the requirement last so a failure part way leaves it live and a retry completes; a ticket, an already retired requirement or any other kind is invalid, a missing requirement not_found, and a retired requirement refuses put_requirement, record_decision and supersede."}]}
 //! ```
 
 use super::{invalid_if, Changed, ToolError};
@@ -27,9 +27,9 @@ fn store_it(store: &mut Store, req: Requirement) -> Result<(Requirement, Changed
     Ok((req.clone(), Changed::Requirement(req.slug)))
 }
 
-pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: String, supersedes: Vec<u32>) -> Result<(Requirement, Changed), ToolError> {
+pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: String, supersedes: Vec<u32>, adopted: bool) -> Result<(Requirement, Changed), ToolError> {
     let mut req = live(store, r)?.clone();
-    req.decisions.push(Decision { supersedes, ..Decision::new(date, text) });
+    req.decisions.push(Decision { supersedes, adopted, ..Decision::new(date, text) });
     store_it(store, req)
 }
 
@@ -85,17 +85,17 @@ mod tests {
     fn record_decision_appends_and_validates() {
         let mut s = store();
         let r = Reference::req("ready-only-with-commit");
-        let (out, _) = record_decision(&mut s, &r, "Because.".into(), "2026-09-27".into(), vec![]).unwrap();
+        let (out, _) = record_decision(&mut s, &r, "Because.".into(), "2026-09-27".into(), vec![], false).unwrap();
         assert_eq!(out.decisions.len(), 2);
-        let e = record_decision(&mut s, &r, "x".into(), "not-a-date".into(), vec![]).unwrap_err();
+        let e = record_decision(&mut s, &r, "x".into(), "not-a-date".into(), vec![], false).unwrap_err();
         assert_eq!(e.code(), "invalid");
         assert_eq!(s.requirements["ready-only-with-commit"].decisions.len(), 2);
-        assert_eq!(record_decision(&mut s, &Reference::req("nope"), "x".into(), "2026-01-01".into(), vec![]).unwrap_err().code(), "not_found");
+        assert_eq!(record_decision(&mut s, &Reference::req("nope"), "x".into(), "2026-01-01".into(), vec![], false).unwrap_err().code(), "not_found");
         // A new decision supersedes earlier ones by position, never itself or a later one.
-        let (out, _) = record_decision(&mut s, &r, "Instead.".into(), "2026-09-28".into(), vec![1]).unwrap();
+        let (out, _) = record_decision(&mut s, &r, "Instead.".into(), "2026-09-28".into(), vec![1], false).unwrap();
         assert_eq!(out.decisions[2].supersedes, vec![1]);
         assert_eq!(out.in_force().iter().map(|(n, _)| *n).collect::<Vec<_>>(), vec![2, 3]);
-        assert_eq!(record_decision(&mut s, &r, "x".into(), "2026-09-28".into(), vec![4]).unwrap_err().code(), "invalid");
+        assert_eq!(record_decision(&mut s, &r, "x".into(), "2026-09-28".into(), vec![4], false).unwrap_err().code(), "invalid");
         assert_eq!(s.requirements["ready-only-with-commit"].decisions.len(), 3, "nothing written");
     }
 
@@ -108,7 +108,7 @@ mod tests {
     fn supersede_links_without_rewriting() {
         let mut s = store();
         let r = Reference::req("ready-only-with-commit");
-        record_decision(&mut s, &r, "Then this.".into(), "2026-09-28".into(), vec![]).unwrap();
+        record_decision(&mut s, &r, "Then this.".into(), "2026-09-28".into(), vec![], false).unwrap();
         let before = s.requirements["ready-only-with-commit"].decisions.clone();
         let (out, _) = supersede(&mut s, &r, 2, &[1]).unwrap();
         assert_eq!(out.decisions[1].supersedes, vec![1]);
@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(order.last(), Some(&Changed::Requirement("ready-only-with-commit".into())), "the requirement last, so a partial write can be retried");
         // A retired requirement takes nothing more.
         assert_eq!(retire_node(&mut s, &r, "Again.".into(), "2026-09-29".into()).unwrap_err().code(), "invalid");
-        assert_eq!(record_decision(&mut s, &r, "x".into(), "2026-09-29".into(), vec![]).unwrap_err().code(), "invalid");
+        assert_eq!(record_decision(&mut s, &r, "x".into(), "2026-09-29".into(), vec![], false).unwrap_err().code(), "invalid");
         assert_eq!(supersede(&mut s, &r, 2, &[1]).unwrap_err().code(), "invalid");
         assert_eq!(put_requirement(&mut s, out.clone()).unwrap_err().code(), "invalid");
         // No page links it again.
@@ -152,5 +152,39 @@ mod tests {
         assert!(!s.pages["git-readiness"].links.contains(&r));
         assert_eq!(retire_node(&mut s, &Reference::ticket("phase-62"), "x".into(), "2026-09-29".into()).unwrap_err().code(), "invalid");
         assert_eq!(retire_node(&mut s, &Reference::req("nope"), "x".into(), "2026-09-29".into()).unwrap_err().code(), "not_found");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-adoption-is-described-until-decided", "checks": ["crates/core/src/model#requirement-record", "crates/core/src/ops/decisions#record-decision", "crates/core/src/query/outline#outline"]}
+    /// ```
+    #[test]
+    fn an_adoption_is_described_until_decided() {
+        let mut s = store();
+        let r = Reference::req("ready-only-with-commit");
+        let q = |s: &Store| s.requirements["ready-only-with-commit"].clone();
+        let described = |s: &Store| {
+            let g = crate::graph::Graph::build(s, &crate::extraction::fixtures::extraction(), &[]);
+            crate::query::outline(&g, 4, None, false).roots[0].rollup.described
+        };
+        assert!(!q(&s).described(), "its decision is a plain one");
+        assert_eq!(described(&s), 0);
+        // Restated as an adoption, superseding the text-only one: described, the old decision kept.
+        let (out, _) = record_decision(&mut s, &r, "Read off the code at adoption.".into(), "2026-10-04".into(), vec![1], true).unwrap();
+        assert!(out.decisions[1].adopted && !out.decisions[0].adopted && out.decisions.len() == 2);
+        assert!(q(&s).described());
+        assert_eq!(described(&s), 1, "the outline counts it");
+        // The mark is stored with the decision and read back with it.
+        let json = serde_json::to_value(&q(&s).decisions).unwrap();
+        assert_eq!((json[0].get("adopted"), json[1]["adopted"].clone()), (None, serde_json::json!(true)));
+        // A real decision clears it, and the adoption keeps its mark.
+        record_decision(&mut s, &r, "Chosen.".into(), "2026-10-05".into(), vec![], false).unwrap();
+        assert!(!q(&s).described() && q(&s).decisions[1].adopted);
+        assert_eq!(described(&s), 0);
+        // A requirement with no decision is not described.
+        let mut none = q(&s);
+        none.decisions.clear();
+        assert!(!none.described());
     }
 }

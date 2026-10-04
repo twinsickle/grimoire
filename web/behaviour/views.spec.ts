@@ -505,6 +505,58 @@ test("the board keeps the tool's order, and a change is moved by dragging or fro
  * # Test contract
  *
  * ```json
+ * {"test": "an-adopted-requirement-reads-as-described", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Node#rests-on", "web/src/views/Home#marks"]}
+ * ```
+ */
+test("an adopted requirement reads as described, on its page and where a page lists it", async ({ page }) => {
+  // The tools' own answers, with ready-needs-commit adopted: the store the other specs share is not touched.
+  const adoption = { date: "2026-10-04", text: "Read off the code at adoption.", adopted: true };
+  await page.route("**/api/get", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (body.node?.ref === "req:ready-needs-commit") body.node.decisions = [adoption];
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/api/outline", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const walk = (t: { ref: string; rollup: { described: number; requirements: number }; children?: unknown[] }, under: boolean): number => {
+      const own = t.ref === "req:ready-needs-commit" ? 1 : 0;
+      const below = (t.children ?? []).reduce((n: number, c) => n + walk(c as never, under), 0);
+      t.rollup.described = own + below;
+      return t.rollup.described;
+    };
+    for (const root of body.roots) walk(root, false);
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/n/req%3Aready-needs-commit");
+  await expect(page.locator("[data-described]")).toContainText("described");
+  await expect(page.locator("main")).toContainText("#1 · adoption");
+  await page.goto("/n/page%3Areadiness");
+  const req = (slug: string) => page.locator("main li", { has: page.locator(`a[href='/n/req%3A${slug}']`) });
+  await expect(req("ready-needs-commit")).toContainText("described");
+  await expect(req("not-built")).not.toContainText("described");
+  // Decided is the outline's count: none of the fixture's requirements has a decision of its own, so none is decided.
+  const decided = page.getByRole("meter", { name: "Requirements decided" }).first();
+  await expect(decided).toBeVisible();
+  await expect(decided).toHaveAttribute("aria-valuenow", "0");
+  // What rests on it says so too: ticket 0002 touches the page that holds the requirement.
+  await page.route("**/api/rests_on", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const n of body.nodes) if (n.ref === "req:ready-needs-commit") n.decisions = [adoption];
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/n/ticket%3A0002");
+  const item = page.getByRole("list", { name: "Rests on" }).locator("li", { has: page.locator("a[href='/n/req%3Aready-needs-commit']") });
+  await expect(item).toContainText("described");
+  await expect(item).toContainText("adoption");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-drop-the-rule-raises-back-stays", "checks": ["web/src/views/Board#order-from-tool"]}
  * ```
  */

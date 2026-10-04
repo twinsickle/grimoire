@@ -121,7 +121,11 @@ edges.
    use `get`, `rests_on` and `related_tickets` instead; on a team,
    `start_ticket` on a ticket already active takes it up in this checkout:
    it becomes the current ticket here and nothing of it changes.
-2. Read `rests_on` as a list of assumptions. For each requirement with
+2. Read `rests_on` as a list of assumptions. Each node the ticket names
+   itself carries `says`, its text (a page's body, a requirement's statement
+   and scenarios, a module's contract, an answer waiting for this change):
+   that is what the ticket rests on, so read it there rather than from
+   memory. For each requirement with
    decisions, and each closed ticket listed, ask whether the decision still
    holds given what this ticket changes. Name the ones you would challenge,
    with why, before planning. This is the moment the question is asked;
@@ -194,6 +198,11 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    findings on the nodes the ticket touched; if any are present, fix them and
    re-run `lint`. Closing is allowed with findings; leaving them is not.
    `baselined` counts the inherited ones there; they are not this ticket's.
+   `unnamed` lists what changed since the ticket started that `touches`
+   never named, each with what it says and the requirements resting on it:
+   read them as you read `rests_on` at the start, since the work reached
+   them; one that belonged to the ticket goes into `touches` next time, and
+   one whose intent the work broke is a gap to file.
    `untouched` lists the nodes in `touches` that never changed since the
    ticket started. For each, the change was missed (make it, in a new
    ticket, since this one is closed) or the node did not need changing
@@ -221,8 +230,10 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
    is refused and the ticket stays `landing`, reported as `landing-moved`:
    write the moved records again under the ticket and run
-   `grimoire land <ticket>`. A change with nothing to land, a gap and a
-   question close at once, without `when`.
+   `grimoire land <ticket>`. A change with nothing to land, and a gap or
+   question whose answer needs no work, close at once, without `when`. A
+   gap or question whose answer needs work takes `when: landed` and closes
+   when the changes relying on it land (see the resolve sequence).
 6. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
    `landing` ticket the commit closes it where the post-commit hook is
@@ -252,12 +263,17 @@ A gap or question closes on the person's decision, never on yours.
    each rules out, and which you would pick and why. Write nothing yet.
 3. The person chooses, amends or adds one. Their choice, in their terms, is
    the decision; your reasoning is its why.
-4. `close_ticket` with that decision, opening "Decided by the user". If the
-   answer implies work, `file_ticket` the change with `relies_on` naming the
-   gap or question, and put what the person said (scope, what to avoid,
-   priority) in its body. A question is never edited into a change: the
-   record that it was asked, and how it was answered, is what the change
-   rests on.
+4. If the answer needs no work, `close_ticket` with that decision, opening
+   "Decided by the user". If it implies work, first `file_ticket` the change
+   that applies it, with `relies_on` naming the gap or question and what the
+   person said (scope, what to avoid, priority) in its body; then
+   `close_ticket` the gap or question with the decision and
+   `when: landed`. It waits, `landing`, and closes when every change
+   relying on it has landed; the change counts it as answered and is ready.
+   Nothing closes a waiting answer by hand: if its last change is deleted or
+   stops relying on it, it reopens with the answer in its body, to be
+   examined again. A question is never edited into a change: the record
+   that it was asked, and how it was answered, is what the change rests on.
 5. With no person to ask (an autonomous run), do not resolve. Add the
    options to the ticket's body with `update_ticket` and leave it open.
 
@@ -299,9 +315,10 @@ what the batch covered is something missed.
    `put_page` it once approved, linked from the page above it with
    `patch_page`. `put_requirement` each requirement, then `patch_page` the
    area page with `add_links` for the module and its requirements. On each
-   requirement, `record_decision`: read off the code at adoption and
-   approved by the user, stating what the code did then rather than what it
-   was meant to do.
+   requirement, `record_decision` with `adopted: true`: read off the code at
+   adoption and approved by the user, stating what the code did then rather
+   than what it was meant to do. The flag marks the requirement as
+   described, not decided, until someone records a decision of their own.
 6. `lint`. The batch's `no-contract` and `unlinked-module` findings are gone
    and pruned from the baseline, and nothing new appears. Anything new is
    this batch's to fix before the next.

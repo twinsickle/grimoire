@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements and how many are held; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -48,6 +48,8 @@ pub struct Rollup {
     pub tested: usize,
     pub requirements: usize,
     pub held: usize,
+    pub described: usize,
+    pub decided: usize,
 }
 
 /// The outline's answer: the trees from the roots, and the modules of the
@@ -159,6 +161,8 @@ fn rollup(g: &Graph, r: &Reference) -> Rollup {
             Some(Node::Req(q)) => {
                 out.requirements += 1;
                 out.held += usize::from(!q.covered_by.is_empty() || g.inbound_with(&x, Relation::Checks).next().is_some());
+                out.described += usize::from(q.described());
+                out.decided += usize::from(!q.in_force().is_empty() && !q.described());
             }
             _ => {}
         }
@@ -255,7 +259,7 @@ mod tests {
         let inherited = lint(&plain, &Rule::ALL).into_iter().find(|f| f.check == "untested" && f.r#ref == Reference::criterion("src/a/ready", "reads-only")).expect("fixture has it");
         s.baseline = Some(Baseline { date: "2026-09-28".into(), reason: "Adopted.".into(), findings: vec![inherited.key()] });
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
-        let expected = Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2 };
+        let expected = Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2, described: 0, decided: 1 };
         for depth in [0, 1, 4] {
             let o = outline(&g, depth, None, false);
             assert_eq!(o.roots[0].rollup, expected, "the rollup is the whole subtree's at depth {depth}");
@@ -284,7 +288,7 @@ mod tests {
         s.pages.get_mut("overview").expect("fixture").links.push("page:again".parse().expect("reference"));
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let o = outline(&g, 2, None, false);
-        assert_eq!(o.roots[0].rollup, Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2 });
+        assert_eq!(o.roots[0].rollup, Rollup { modules: 1, contracted: 1, criteria: 2, tested: 1, requirements: 2, held: 2, described: 0, decided: 1 });
     }
 
     /// # Test contract

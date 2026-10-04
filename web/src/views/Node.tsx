@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open, active or landing ticket closed with a decision from its page, through the start_ticket and close_ticket tools, but for a gap or question waiting, landing, for the change that applies its answer, which offers no close and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; the references of a ticket that is not closed are links as before, since the check reports those."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and the ticket actions.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"An open ticket can be started and an open, active or landing ticket closed with a decision from its page, through the start_ticket and close_ticket tools, but for a gap or question waiting, landing, for the change that applies its answer, which offers no close and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count, a decision recorded as an adoption marked so and a requirement whose decisions there are all adoptions marked described; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; the references of a ticket that is not closed are links as before, since the check reports those."}]}
  * ```
  */
 
@@ -11,7 +11,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router-dom"
 import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
 import { TicketGraph } from "./TicketGraph";
-import { decisionsInForce } from "../decisions";
+import { decisionsInForce, isDescribed } from "../decisions";
 import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
 import {
   Badge,
@@ -151,7 +151,7 @@ function Decisions({ n }: { n: ReqNode }) {
       <h2>Decisions</h2>
       {n.decisions.length === 0 && <p className={empty}>None recorded. `record_decision` adds one.</p>}
       {inForce.map(({ n: at, d }) => (
-        <Decision key={at} label={`#${at}`} date={d.date} text={d.text} />
+        <Decision key={at} label={`#${at}${d.adopted ? " · adoption" : ""}`} date={d.date} text={d.text} />
       ))}
       {superseded.length > 0 && (
         <details className="mt-2">
@@ -159,7 +159,7 @@ function Decisions({ n }: { n: ReqNode }) {
             {superseded.length} superseded
           </summary>
           {superseded.map(({ n: at, d, by }) => (
-            <Decision key={at} label={`#${at} · superseded by #${by}`} date={d.date} text={d.text} />
+            <Decision key={at} label={`#${at}${d.adopted ? " · adoption" : ""} · superseded by #${by}`} date={d.date} text={d.text} />
           ))}
         </details>
       )}
@@ -174,6 +174,11 @@ function Req({ n }: { n: ReqNode }) {
       {n.retired && (
         <p>
           <Badge tone="warn">retired</Badge> <span className="text-fg-dim">It no longer holds: no page links it and it covers no criterion. Its last decision says why.</span>
+        </p>
+      )}
+      {!n.retired && isDescribed(n.decisions) && (
+        <p data-described>
+          <Badge tone="warn">described</Badge> <span className="text-fg-dim">Read off the code at adoption: it says what the code did, not what anyone chose, until a decision is recorded on it.</span>
         </p>
       )}
       <p>{n.statement}</p>
@@ -522,16 +527,21 @@ function TestView({ n }: { n: TestNode }) {
 function RestsOnItem({ r, gone }: { r: RestsOnNode; gone: boolean }) {
   const [open, setOpen] = useState(false);
   const [newest, ...earlier] = r.decisions;
+  // The decisions here are those in force: all of them adoptions leaves the requirement described.
+  const described = r.ref.startsWith("req:") && r.decisions.length > 0 && r.decisions.every((d) => d.adopted === true);
   return (
-    <li className="flex flex-col items-stretch">
-      {gone ? <GoneRef ref={r.ref} /> : <RefLink ref={r.ref} title={r.title} />}
-      {newest && <Decision date={newest.date} text={newest.text} />}
+    <li className="flex flex-col items-stretch" data-described={described || undefined}>
+      <span className="flex gap-2 items-baseline">
+        {gone ? <GoneRef ref={r.ref} /> : <RefLink ref={r.ref} title={r.title} />}
+        {described && <Badge tone="warn">described</Badge>}
+      </span>
+      {newest && <Decision label={newest.adopted ? "adoption" : undefined} date={newest.date} text={newest.text} />}
       {earlier.length > 0 && (
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="self-start text-[12.5px] text-accent bg-transparent border-none p-0 hover:underline">
           {open ? "Hide earlier decisions" : `${earlier.length} earlier decision${earlier.length === 1 ? "" : "s"}`}
         </button>
       )}
-      {open && earlier.map((d, i) => <Decision key={i} date={d.date} text={d.text} />)}
+      {open && earlier.map((d, i) => <Decision key={i} label={d.adopted ? "adoption" : undefined} date={d.date} text={d.text} />)}
     </li>
   );
 }

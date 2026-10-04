@@ -440,6 +440,9 @@ mod tests {
         assert!(adopt.contains("### Tests") && adopt.contains("`untested`") && adopt.contains("req:<slug>"), "adopt covers tests and constraints");
         let resolve = &SKILL_MD[SKILL_MD.find("## Sequence: resolve a gap or question").unwrap_or(0)..];
         assert!(resolve.contains("do not resolve") && resolve.contains("relies_on"), "resolve leaves the decision to the person and files the change after it");
+        // An adoption is recorded with the flag that marks its requirement described, not decided.
+        let adopt = SKILL_MD.split("## Sequence: adopt existing code").nth(1).expect("an adopt sequence");
+        assert!(adopt.contains("`record_decision` with `adopted: true`"), "the adopt sequence sets the flag");
     }
 
     /// # Test contract

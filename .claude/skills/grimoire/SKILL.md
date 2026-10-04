@@ -315,9 +315,10 @@ what the batch covered is something missed.
    `put_page` it once approved, linked from the page above it with
    `patch_page`. `put_requirement` each requirement, then `patch_page` the
    area page with `add_links` for the module and its requirements. On each
-   requirement, `record_decision`: read off the code at adoption and
-   approved by the user, stating what the code did then rather than what it
-   was meant to do.
+   requirement, `record_decision` with `adopted: true`: read off the code at
+   adoption and approved by the user, stating what the code did then rather
+   than what it was meant to do. The flag marks the requirement as
+   described, not decided, until someone records a decision of their own.
 6. `lint`. The batch's `no-contract` and `unlinked-module` findings are gone
    and pruned from the baseline, and nothing new appears. Anything new is
    this batch's to fix before the next.

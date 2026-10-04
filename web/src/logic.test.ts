@@ -3,7 +3,7 @@
 
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, call } from "./api";
-import { decisionsInForce } from "./decisions";
+import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { goneOf, idOf, kindOf, localId, serverAway, type AnyNode } from "./types";
@@ -137,4 +137,21 @@ test("decisions sort into those in force, newest first, and those superseded, wi
     [1, 4],
   ]);
   expect(decisionsInForce([]).inForce).toEqual([]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "described-until-decided", "checks": ["web/src/decisions#described"]}
+ * ```
+ */
+test("a requirement is described while its decisions in force are all adoptions", () => {
+  const d = (text: string, adopted = false, supersedes: number[] = []) => ({ date: "2026-10-04", text, adopted, supersedes });
+  expect(isDescribed([])).toBe(false);
+  expect(isDescribed([d("read off", true)])).toBe(true);
+  expect(isDescribed([d("read off", true), d("chosen")])).toBe(false);
+  // A plain adoption restated with the mark, superseding it.
+  expect(isDescribed([d("read off, in words"), d("read off", true, [1])])).toBe(true);
+  expect(isDescribed([d("read off", true), d("chosen", false, [1])])).toBe(false);
 });

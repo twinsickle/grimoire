@@ -75,11 +75,13 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 date: Option<String>,
                 #[serde(default)]
                 supersedes: Vec<u32>,
+                #[serde(default)]
+                adopted: bool,
             }
             let i: In = parse(input)?;
             let t = ops::target_ticket(state.store(), ticket.as_deref())?;
             let date = i.date.unwrap_or_else(|| today.to_string());
-            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::record_decision(s, &i.r#ref, i.text, date, i.supersedes))?;
+            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::record_decision(s, &i.r#ref, i.text, date, i.supersedes, i.adopted))?;
             let r = Reference::req(&node.slug);
             let node = query::view(state.graph_for(Some(&t))?, &r).expect("just written");
             answer(name, NodeAnswer { node, proposal: None, drafts: None }, Some(changed))

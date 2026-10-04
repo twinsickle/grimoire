@@ -37,7 +37,7 @@ export type Decision = { date: string, text: string,
  * record this one replaces. A position never changes, since decisions
  * are only appended, so it is the decision's id.
  */
-supersedes?: Array<number>, };
+supersedes?: Array<number>, adopted?: boolean, };
 
 export type Decl = { path: string, kind: string, line: number, 
 /**
@@ -138,7 +138,7 @@ export type RestsOnAnswer = { nodes: Array<RestsOn>, };
 
 export type RestsOnMe = { nodes: Array<Affected>, tickets: Array<Summary>, };
 
-export type Rollup = { modules: number, contracted: number, criteria: number, tested: number, requirements: number, held: number, };
+export type Rollup = { modules: number, contracted: number, criteria: number, tested: number, requirements: number, held: number, described: number, decided: number, };
 
 export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
 
