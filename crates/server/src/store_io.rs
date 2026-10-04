@@ -234,9 +234,9 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
     Ok((store, malformed))
 }
 
-/// Whether the store holds `ticket` as an active or landing ticket: what a proposal and the current ticket must name.
+/// Whether the store holds `ticket` as a ticket being worked, active or a change waiting to land: what a proposal and the current ticket must name.
 fn active(store: &Store, ticket: &str) -> bool {
-    store.tickets.get(ticket).is_some_and(|t| t.status.is_live())
+    store.tickets.get(ticket).is_some_and(Ticket::is_worked)
 }
 
 /// Rewrite a version 1 store as version 2, for its first writer, which holds

@@ -343,6 +343,16 @@ pub struct Ticket {
     pub decision: Option<Decision>,
 }
 
+impl Ticket {
+    /// Whether the ticket is being worked: active, or a change waiting to
+    /// land. Only such a ticket holds a proposal, a start and the current
+    /// pointer; a gap or question waiting, landing, for the change that
+    /// applies its answer is not worked itself.
+    pub fn is_worked(&self) -> bool {
+        self.status == Status::Active || (self.status == Status::Landing && self.kind == TicketKind::Change)
+    }
+}
+
 /// A lint rule. Stored in a baseline, reported in every finding.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

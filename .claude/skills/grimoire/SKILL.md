@@ -221,8 +221,10 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
    is refused and the ticket stays `landing`, reported as `landing-moved`:
    write the moved records again under the ticket and run
-   `grimoire land <ticket>`. A change with nothing to land, a gap and a
-   question close at once, without `when`.
+   `grimoire land <ticket>`. A change with nothing to land, and a gap or
+   question whose answer needs no work, close at once, without `when`. A
+   gap or question whose answer needs work takes `when: landed` and closes
+   when the changes relying on it land (see the resolve sequence).
 6. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
    `landing` ticket the commit closes it where the post-commit hook is
@@ -252,12 +254,17 @@ A gap or question closes on the person's decision, never on yours.
    each rules out, and which you would pick and why. Write nothing yet.
 3. The person chooses, amends or adds one. Their choice, in their terms, is
    the decision; your reasoning is its why.
-4. `close_ticket` with that decision, opening "Decided by the user". If the
-   answer implies work, `file_ticket` the change with `relies_on` naming the
-   gap or question, and put what the person said (scope, what to avoid,
-   priority) in its body. A question is never edited into a change: the
-   record that it was asked, and how it was answered, is what the change
-   rests on.
+4. If the answer needs no work, `close_ticket` with that decision, opening
+   "Decided by the user". If it implies work, first `file_ticket` the change
+   that applies it, with `relies_on` naming the gap or question and what the
+   person said (scope, what to avoid, priority) in its body; then
+   `close_ticket` the gap or question with the decision and
+   `when: landed`. It waits, `landing`, and closes when every change
+   relying on it has landed; the change counts it as answered and is ready.
+   Nothing closes a waiting answer by hand: if its last change is deleted or
+   stops relying on it, it reopens with the answer in its body, to be
+   examined again. A question is never edited into a change: the record
+   that it was asked, and how it was answered, is what the change rests on.
 5. With no person to ask (an autonomous run), do not resolve. Add the
    options to the ticket's body with `update_ticket` and leave it open.
 

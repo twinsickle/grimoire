@@ -11,7 +11,7 @@ import { marked } from "marked";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { Link } from "react-router-dom";
-import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary } from "./types";
+import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary, type TicketKind } from "./types";
 
 /** Class sets several views share. Colours are always theme tokens. */
 export const card = "bg-bg-1 border border-line rounded-md px-3 py-2.5 mb-3";
@@ -216,7 +216,7 @@ export function Folded({ text }: { text: string }) {
  * Start an open ticket, or close one that is not yet closed with a decision,
  * through the start_ticket and close_ticket tools.
  */
-export function TicketActions({ ticket, status }: { ticket: Ref; status: Status }) {
+export function TicketActions({ ticket, status, kind }: { ticket: Ref; status: Status; kind?: TicketKind }) {
   const [decisionText, setDecision] = useState("");
   const [failed, setFailed] = useState<string | null>(null);
   async function run(act: () => Promise<unknown>) {
@@ -232,6 +232,8 @@ export function TicketActions({ ticket, status }: { ticket: Ref; status: Status 
     setDecision("");
   }
   if (status === "closed") return null;
+  // An answer waiting for its change closes when that change lands, never from here.
+  if (status === "landing" && kind && kind !== "change") return <p className="m-0 text-fg-dim text-[13px]">Answered: closes when the change applying it lands.</p>;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-2 items-center flex-wrap">

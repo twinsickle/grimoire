@@ -51,7 +51,7 @@ impl ServerHandler for McpServer {
                  Orient first: `outline` at depth 2, then the pages each root links, in their order; `get` a module before opening its files. \
                  Work is a ticket: `start_ticket` returns what it rests on and the decisions to challenge; write the grimoire before the code, under the ticket: a write that changes intent names its `ticket` or lands in the one last started, and reaches the truth when the ticket closes; `lint`, fix what you created, `close_ticket`, with `when: landed` when its code has still to land: `grimoire land` then closes it, run by the post-commit hook where `init` installed one, else by a pipeline or by you once the change has landed, and on a project that names a server only by name, on the main line. \
                  Every module in the contract scope carries a `# Module contract`; a new criterion gets a requirement. `find` before writing any reference. Never write the store's files. \
-                 A gap or question closes on the person's answer to options you lay out, never on your own decision. \
+                 A gap or question closes on the person's answer to options you lay out, never on your own decision; when that answer needs work, file the change first, relying on it, then close it with `when: landed`, so it closes when that change lands. \
                  `lint` is `grimoire check`; `status` shows the build's version and languages beside the store's.",
             )
     }

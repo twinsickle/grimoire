@@ -449,7 +449,7 @@ pub fn write_through(server: &Server, copy_dir: &Path, state: &mut State, name: 
     }
     // What is each checkout's own is answered here and never sent: taking up a ticket
     // already active, and a landing that names no ticket, which lands nothing on a team.
-    let live = |slug: &str| state.store().tickets.get(slug).is_some_and(|t| t.status.is_live());
+    let live = |slug: &str| state.store().tickets.get(slug).is_some_and(grimoire_core::model::Ticket::is_worked);
     let own = match name {
         "start_ticket" => ticket_of(&input).is_some_and(live),
         "land_ticket" => input.get("ref").is_none_or(Value::is_null),

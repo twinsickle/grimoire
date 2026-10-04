@@ -42,9 +42,9 @@ function stamp(): number {
   return Date.now();
 }
 
-/** The gaps and questions a change still waits on. */
+/** The gaps and questions a change still waits on: those not yet answered. A landing one is answered and waits for the change. */
 function openWaits(t: BoardTicket): Summary[] {
-  return (t.waits_on ?? []).filter((w) => w.status !== "closed");
+  return (t.waits_on ?? []).filter((w) => w.status === "open" || w.status === "active");
 }
 
 /** "2 questions · 1 gap · 1 answered": what a change relies on, at a glance. */
@@ -431,7 +431,7 @@ function Ticket({ t }: { t: BoardTicket }) {
                     {w.title}
                   </Link>
                   <span className={`${mono} text-fg-dim text-xs`}>{idOf(w.ref)}</span>
-                  <span className={`ml-auto text-xs ${w.status === "closed" ? "text-ok" : "text-warn"}`}>{w.status === "closed" ? "answered" : "open"}</span>
+                  <span className={`ml-auto text-xs ${w.status === "closed" || w.status === "landing" ? "text-ok" : "text-warn"}`}>{w.status === "closed" ? "answered" : w.status === "landing" ? "answered, waits to land" : "open"}</span>
                 </li>
               ))}
             </ul>
@@ -452,7 +452,7 @@ function Ticket({ t }: { t: BoardTicket }) {
         )}
       </div>
       <aside className="flex flex-col gap-3 min-w-0">
-        {n.status !== "closed" && <TicketActions ticket={t.ref} status={n.status} />}
+        {n.status !== "closed" && <TicketActions ticket={t.ref} status={n.status} kind={n.kind} />}
         <div>
           <h3 className={label}>Touches</h3>
           {n.touches.length === 0 && <p className={empty}>Nothing.</p>}

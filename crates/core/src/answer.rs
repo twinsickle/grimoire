@@ -142,13 +142,20 @@ pub struct ServerCopy {
 }
 
 /// Every write of a page, requirement or ticket: the node as it now is, the
-/// new findings it created, and how many inherited ones sit on it.
+/// new findings it created, and how many inherited ones sit on it. An edit of
+/// a change's relies_on adds the waiting answers it closed and reopened.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Written {
     pub node: NodeView,
     pub warnings: Vec<Finding>,
     pub baselined: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub settled: Option<Vec<Summary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub reopened: Option<Vec<Summary>>,
 }
 
 /// `start_ticket`: the ticket, what it rests on, and the gaps and questions near it.
@@ -160,8 +167,9 @@ pub struct Started {
     pub related: Vec<Summary>,
 }
 
-/// `close_ticket`: the closed ticket, new findings on what it touched, and the
-/// touched nodes that never changed (null when it was never started).
+/// `close_ticket`: the closed ticket, new findings on what it touched, the
+/// touched nodes that never changed (null when it was never started), and
+/// the gaps and questions whose answers closed with it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Closed {
@@ -169,10 +177,11 @@ pub struct Closed {
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
+    pub settled: Vec<Summary>,
 }
 
 /// `land_ticket`: whether a ticket landed, and when one did what its close
-/// answers; then the tickets still waiting to land.
+/// answers; then the changes still waiting to land.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Landed {
@@ -181,6 +190,7 @@ pub struct Landed {
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
+    pub settled: Vec<Summary>,
     pub waiting: Vec<Summary>,
     // Why nothing landed, when the reason is not that no ticket was waiting.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -229,13 +239,20 @@ pub struct Adopted {
     pub replaced: Option<usize>,
 }
 
-/// `delete_node`: what was deleted, and the edges it left dangling.
+/// `delete_node`: what was deleted, and the edges it left dangling; a
+/// deleted change adds the waiting answers it closed and reopened.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Deleted {
     pub deleted: Reference,
     pub warnings: Vec<Finding>,
     pub baselined: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub settled: Option<Vec<Summary>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub reopened: Option<Vec<Summary>>,
 }
 
 /// `source`: a node's file, its text, the node's line, and what the graph attaches to the file.

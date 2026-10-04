@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope and order, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has active or landing; a proposal whose ticket is neither is left out, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope and order, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ impl Exported {
         store.pages = self.pages.into_iter().map(|p| (p.slug.clone(), p)).collect();
         store.requirements = self.requirements.into_iter().map(|r| (r.slug.clone(), r)).collect();
         store.tickets = self.tickets.into_iter().map(|t| (t.slug.clone(), t)).collect();
-        let live = |slug: &str| store.tickets.get(slug).is_some_and(|t| t.status.is_live());
+        let live = |slug: &str| store.tickets.get(slug).is_some_and(Ticket::is_worked);
         store.proposals = self.proposals.into_iter().filter(|p| live(&p.ticket)).map(|p| (p.ticket.clone(), p)).collect();
         store.baseline = self.baseline;
         store.current = own.current.clone().filter(|c| live(c));
@@ -165,6 +165,15 @@ mod tests {
         assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
         own.current = Some("never-filed".into());
         assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
+        // An answer waiting, landing, for the change that applies it is no one's current ticket, and keeps no start.
+        let mut answered = server.clone();
+        let gap = answered.tickets.values_mut().find(|t| t.kind != TicketKind::Change).expect("the fixture has a gap");
+        (gap.status, gap.decision) = (Status::Landing, Some(Decision::new("2026-10-04", "Fix it.")));
+        let gap = gap.slug.clone();
+        own.current = Some(gap.clone());
+        own.starts.insert(gap.clone(), start(&gap));
+        let joined = exported(&answered).joined(&own, "C:/checkout").unwrap();
+        assert_eq!((joined.current, joined.starts.contains_key(&gap)), (None, false));
         // A newer store than this build writes is refused, not half read.
         let mut newer = exported(&server);
         newer.version = StoreConfig::CURRENT_VERSION + 1;

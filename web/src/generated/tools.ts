@@ -19,7 +19,7 @@ export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, c
 
 export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 
-export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, };
+export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, settled: Array<Summary>, };
 
 export type Configured = { config: StoreConfig, new: number, };
 
@@ -46,7 +46,7 @@ export type Decl = { path: string, kind: string, line: number,
  */
 file: string, };
 
-export type Deleted = { deleted: Ref, warnings: Array<Finding>, baselined: number, };
+export type Deleted = { deleted: Ref, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, };
 
 export type Draft = { ref: Ref, title: string, new: boolean, differs: Array<string>, };
 
@@ -78,7 +78,7 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
-export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, waiting: Array<Summary>, note?: string, };
+export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
 export type Linked = { ref: Ref, title: string | null, };
 
@@ -199,7 +199,7 @@ checks: Array<string>,
  */
 tests: number, rollup: Rollup, children: Array<Tree>, };
 
-export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, };
+export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, };
 
 /** Each tool's answer, by tool name. */
 export type ToolAnswers = {

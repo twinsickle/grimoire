@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status; unattached lists the gaps and questions not closed that no change not closed relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a landing one being answered and waiting for the change; unattached lists the gaps and questions not closed that no change not closed relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -216,10 +216,12 @@ mod tests {
         let mut s = crate::graph::fixtures::store();
         s.tickets.clear();
         for t in [
-            ticket("work", TicketKind::Change, Priority::High, Status::Open, &[], &["ticket:q", "ticket:g-done", "ticket:other", "req:ready-only-with-commit"]),
+            ticket("work", TicketKind::Change, Priority::High, Status::Open, &[], &["ticket:q", "ticket:g-done", "ticket:g-waits", "ticket:other", "req:ready-only-with-commit"]),
             ticket("other", TicketKind::Change, Priority::High, Status::Open, &[], &[]),
             ticket("q", TicketKind::Question, Priority::High, Status::Open, &[], &[]),
             ticket("g-done", TicketKind::Gap, Priority::Later, Status::Closed, &[], &[]),
+            // Answered, and waiting for the change that applies it: not unattached, and not holding the change back.
+            ticket("g-waits", TicketKind::Gap, Priority::Later, Status::Landing, &[], &[]),
             ticket("loose", TicketKind::Gap, Priority::Later, Status::Open, &[], &[]),
             // A question only a closed change relied on is unattached again.
             ticket("orphaned", TicketKind::Question, Priority::Later, Status::Open, &[], &[]),
@@ -231,7 +233,10 @@ mod tests {
         let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 0 });
         let work = b.tickets.iter().find(|t| t.summary.r#ref.id == "work").expect("listed");
         let waits: Vec<(String, Option<Status>)> = work.waits_on.as_ref().expect("a change").iter().map(|w| (w.r#ref.id.clone(), w.status)).collect();
-        assert_eq!(waits, vec![("q".to_string(), Some(Status::Open)), ("g-done".to_string(), Some(Status::Closed))], "gaps and questions only, in relies_on order");
+        assert_eq!(waits, vec![("q".to_string(), Some(Status::Open)), ("g-done".to_string(), Some(Status::Closed)), ("g-waits".to_string(), Some(Status::Landing))], "gaps and questions only, in relies_on order");
+        // Only q still holds it back: a landing answer is answered, waiting for this change.
+        let unanswered: Vec<&str> = work.waits_on.as_ref().expect("a change").iter().filter(|w| matches!(w.status, Some(Status::Open | Status::Active))).map(|w| w.r#ref.id.as_str()).collect();
+        assert_eq!(unanswered, vec!["q"]);
         let other = b.tickets.iter().find(|t| t.summary.r#ref.id == "other").expect("listed");
         assert_eq!(other.waits_on.as_deref(), Some(&[][..]), "a ready change waits on nothing");
         let unattached: Vec<&str> = b.unattached.iter().map(|t| t.r#ref.id.as_str()).collect();
