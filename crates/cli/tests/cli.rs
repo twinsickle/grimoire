@@ -308,6 +308,28 @@ fn writes_go_through_a_serving_daemon() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "the-cli-answers-as-the-api-does", "checks": ["req:tools-same-answer"]}
+/// ```
+#[test]
+fn the_cli_answers_as_the_api_does() {
+    let (p, _) = project();
+    // The fixture's contracted module, read from the code on every call.
+    let get = r#"{"ref":"module:src/a"}"#;
+    let answer = |o: Output| -> serde_json::Value { serde_json::from_slice(&o.stdout).unwrap() };
+    // The CLI on its own, the JSON API, and the CLI handing the call to the daemon: one answer.
+    let alone = answer(run(&p.repo, &["tool", "get", get]));
+    let (_daemon, port) = serve(&p);
+    let (ok, over_http) = grimoire_server::client::call(port, "get", &serde_json::from_str(get).unwrap()).unwrap();
+    assert!(ok, "{over_http}");
+    let through = answer(run(&p.repo, &["tool", "get", get]));
+    assert_eq!(alone["node"]["ref"], "module:src/a", "{alone}");
+    assert_eq!(over_http, alone, "the JSON API answers as the CLI does on its own");
+    assert_eq!(through, alone, "and so does the CLI beside a daemon");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "check-and-lint-agree", "checks": ["req:lint-same-check"]}
 /// ```
 #[test]

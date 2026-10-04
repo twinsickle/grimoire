@@ -82,6 +82,11 @@ pub fn is_write(name: &str) -> bool {
     matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "land_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
 }
 
+/// The writes that cannot be taken back by another write: a deletion, and a close or landing, which applies a proposal and discards the ticket's body.
+pub fn is_destructive(name: &str) -> bool {
+    matches!(name, "delete_node" | "close_ticket" | "land_ticket")
+}
+
 /// Run one tool. `today` is the ISO date used when a decision has none.
 pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
     if is_write(name) {

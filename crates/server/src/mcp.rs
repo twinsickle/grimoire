@@ -36,7 +36,7 @@ fn tool_defs() -> Vec<Tool> {
             };
             let mut t = Tool::new(d.name, d.description, schema);
             let read_only = !grimoire_core::tools::is_write(d.name);
-            t.annotations = Some(ToolAnnotations::new().read_only(read_only).destructive(d.name == "delete_node" || d.name == "close_ticket" || d.name == "land_ticket").open_world(false));
+            t.annotations = Some(ToolAnnotations::new().read_only(read_only).destructive(grimoire_core::tools::is_destructive(d.name)).open_world(false));
             t
         })
         .collect()

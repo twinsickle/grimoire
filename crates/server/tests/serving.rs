@@ -219,7 +219,7 @@ fn mcp_instructions_carry_the_rules() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "one-answer-whichever-transport", "checks": ["req:tools-one-dispatcher"]}
+/// {"test": "one-answer-whichever-transport", "checks": ["req:tools-same-answer"]}
 /// ```
 #[test]
 fn one_answer_whichever_transport() {
