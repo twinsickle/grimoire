@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"renders","statement":"Each page of the site renders as one self-contained HTML document with no script: a list of every page of the site in order, indented by depth, linking each at /<slug>, then the page's title, its body as Markdown with raw HTML shown as escaped text, a link kept only to a page of the site and any other link or image shown as its text, and each requirement it links by title, statement and scenarios; every text from the store is escaped, and an empty site renders a page saying the project shows nothing yet."},{"id":"only-the-site","statement":"The site's router answers GET (and so HEAD) / with the first page of the site and /<slug> with that page when it is in the site, and every other path and method with 404, so nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."}]}
+//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"renders","statement":"Each page of the site renders as one self-contained HTML document with no script: the site's name, linking /, above a list of every page of the site in order, indented by depth, linking each at /<slug>, then the page's title, its body as Markdown with raw HTML shown as escaped text, a link kept only to a page of the site and any other link or image shown as its text, and each requirement it links by title, statement and scenarios; its browser title is the page's title then the site's name; every text from the store is escaped, and an empty site renders a page saying the project shows nothing yet."},{"id":"only-the-site","statement":"The site's router answers GET (and so HEAD) / with the first page of the site and /<slug> with that page when it is in the site, and every other path and method with 404, so nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."}]}
 //! ```
 
 use std::sync::Arc;
@@ -18,14 +18,14 @@ use crate::daemon::Daemon;
 
 /// The site's router: its pages and nothing else.
 pub fn router(daemon: Arc<Daemon>) -> Router {
-    Router::new().route("/", get(first)).route("/{slug}", get(page)).fallback(not_found).method_not_allowed_fallback(not_found).with_state(daemon)
+    Router::new().route("/", get(first)).route("/{slug}", get(page)).fallback(elsewhere).method_not_allowed_fallback(elsewhere).with_state(daemon)
 }
 
 async fn first(State(daemon): State<Arc<Daemon>>) -> Response {
     let site = daemon.site(None);
     match &site.shown {
         Some(p) => html_page(render(&site, p)),
-        None => html_page(empty()),
+        None => html_page(empty(site.name.as_deref())),
     }
 }
 
@@ -33,12 +33,18 @@ async fn page(State(daemon): State<Arc<Daemon>>, Path(slug): Path<String>) -> Re
     let site = daemon.site(Some(&slug));
     match &site.shown {
         Some(p) => html_page(render(&site, p)),
-        None => not_found().await,
+        None => not_found(site.name.as_deref()),
     }
 }
 
-async fn not_found() -> Response {
-    (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html; charset=utf-8")], document("Not found", "<main><h1>Not found</h1><p>This page is not part of the site. <a href=\"/\">Start at the beginning.</a></p></main>")).into_response()
+/// Any other path or method: not found, under the site's name.
+async fn elsewhere(State(daemon): State<Arc<Daemon>>) -> Response {
+    // An empty slug names no page, so only the list and the name are gathered.
+    not_found(daemon.site(Some("")).name.as_deref())
+}
+
+fn not_found(name: Option<&str>) -> Response {
+    (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html; charset=utf-8")], document("Not found", name, "<main><h1>Not found</h1><p>This page is not part of the site. <a href=\"/\">Start at the beginning.</a></p></main>")).into_response()
 }
 
 fn html_page(body: String) -> Response {
@@ -84,7 +90,11 @@ fn markdown(body: &str, pages: &[SiteEntry]) -> String {
 }
 
 fn render(site: &Site, current: &SitePage) -> String {
-    let mut nav = String::from("<nav aria-label=\"Pages\"><ul>");
+    let mut nav = String::from("<nav aria-label=\"Pages\">");
+    if let Some(name) = &site.name {
+        nav.push_str(&format!("<p class=\"name\"><a href=\"/\">{}</a></p>", escape(name)));
+    }
+    nav.push_str("<ul>");
     for p in &site.pages {
         let here = if p.slug == current.slug { " aria-current=\"page\"" } else { "" };
         nav.push_str(&format!("<li style=\"margin-left:{}em\"><a href=\"/{}\"{here}>{}</a></li>", p.depth, escape(&p.slug), escape(&p.title)));
@@ -105,18 +115,23 @@ fn render(site: &Site, current: &SitePage) -> String {
         main.push_str("</section>");
     }
     main.push_str("</main>");
-    document(&current.title, &format!("<div class=\"layout\">{nav}{main}</div>"))
+    document(&current.title, site.name.as_deref(), &format!("<div class=\"layout\">{nav}{main}</div>"))
 }
 
-fn empty() -> String {
-    document("Nothing yet", "<main><h1>Nothing yet</h1><p>This project shows nothing here yet.</p></main>")
+fn empty(name: Option<&str>) -> String {
+    document("Nothing yet", name, "<main><h1>Nothing yet</h1><p>This project shows nothing here yet.</p></main>")
 }
 
-/// A whole document in the builder's UI's colours, styled inline: nothing is fetched.
-fn document(title: &str, content: &str) -> String {
+/// A whole document in the builder's UI's colours, styled inline: nothing is fetched. Its browser
+/// title is the page's, then the site's name.
+fn document(title: &str, name: Option<&str>, content: &str) -> String {
+    let title = match name {
+        Some(name) => format!("{title} · {name}"),
+        None => title.to_string(),
+    };
     format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{}</title><style>{STYLE}</style></head><body>{content}</body></html>",
-        escape(title)
+        escape(&title)
     )
 }
 
@@ -125,7 +140,7 @@ const STYLE: &str = "\
 body{margin:0;background:#0f1115;color:#d7dbe3;font:15px/1.6 system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif}\
 a{color:#7aa2f7}\
 .layout{display:flex;flex-wrap:wrap;gap:32px;max-width:1100px;margin:0 auto;padding:32px 16px}\
-nav{flex:0 1 220px}nav ul{list-style:none;margin:0;padding:0}nav li{padding:2px 0}nav a{text-decoration:none}nav a[aria-current]{color:#d7dbe3;font-weight:600}\
+nav{flex:0 1 220px}nav .name{margin:0 0 12px;font-size:18px;font-weight:600}nav .name a{color:#d7dbe3}nav ul{list-style:none;margin:0;padding:0}nav li{padding:2px 0}nav a{text-decoration:none}nav a[aria-current]{color:#d7dbe3;font-weight:600}\
 main{flex:999 1 560px;min-width:0;max-width:760px}\
 h1{font-size:26px;margin:0 0 16px}h2{font-size:17px;margin:0 0 6px;color:#c3a6ff}\
 .body code,.req code{background:#1e232c;padding:1px 5px;border-radius:3px;font-family:ui-monospace,\"Cascadia Code\",Consolas,monospace}\
@@ -146,6 +161,7 @@ mod tests {
         let body = "**What it is.** <script>alert(1)</script> See [tickets](/tickets), [the board](board), [elsewhere](https://example.com), <https://example.com/auto>, [run](javascript:alert(1)) and ![a picture](https://example.com/p.png).";
         let pages = [SitePage { slug: "goal".into(), title: "Goal".into(), body: body.into(), requirements: vec![] }, SitePage { slug: "tickets".into(), title: "Tickets".into(), body: "A ticket.".into(), requirements: vec![req] }];
         Site {
+            name: Some("Grim & co".into()),
             pages: vec![SiteEntry { slug: "goal".into(), title: "Goal".into(), depth: 0 }, SiteEntry { slug: "tickets".into(), title: "Tickets".into(), depth: 1 }],
             shown: Some(pages[shown].clone()),
         }
@@ -171,7 +187,10 @@ mod tests {
         let s = site(1);
         let tickets = render(&s, s.shown.as_ref().unwrap());
         assert!(tickets.contains("It SHALL &lt;list&gt;.") && tickets.contains("<b>Given</b> g"), "a requirement's statement and scenarios, escaped: {tickets}");
-        assert!(empty().contains("shows nothing here yet"));
+        // Named by the root, above the list and in the browser title, escaped.
+        assert!(tickets.contains("<title>Tickets · Grim &amp; co</title>") && tickets.contains("<p class=\"name\"><a href=\"/\">Grim &amp; co</a></p><ul>"), "{tickets}");
+        assert!(empty(Some("Grim")).contains("shows nothing here yet") && empty(Some("Grim")).contains("<title>Nothing yet · Grim</title>"));
+        assert!(empty(None).contains("<title>Nothing yet</title>"), "no root, no name");
     }
 
     /// # Test contract
@@ -210,13 +229,16 @@ mod tests {
         assert_eq!(status, 200);
         let order: Vec<usize> = ["/goal\"", "/guarantees\"", "/tickets\""].iter().map(|l| first.find(l).unwrap_or_else(|| panic!("{l} listed: {first}"))).collect();
         assert!(order.windows(2).all(|w| w[0] < w[1]) && first.contains("The goal page."), "the first page, and every page in order");
+        assert!(first.contains("<title>GOAL · OVERVIEW</title>") && !first.contains("The overview page."), "named by the root, and nothing else of it: {first}");
         let (status, tickets) = get("/tickets").await.unwrap();
         assert_eq!(status, 200);
         assert!(tickets.contains("It SHALL list.") && tickets.contains("<b>Given</b> g"), "{tickets}");
         assert!(!tickets.contains("A reason nobody outside reads.") && !tickets.contains("src/ops"), "no decision and no module: {tickets}");
         // Nothing deeper, and nothing but the site.
         for path in ["/architecture", "/overview", "/api/status", "/api/tools", "/mcp", "/api/events", "/board"] {
-            assert_eq!(get(path).await.unwrap().0, 404, "{path} is not served on the site's address");
+            let (status, body) = get(path).await.unwrap();
+            assert_eq!(status, 404, "{path} is not served on the site's address");
+            assert!(body.contains("<title>Not found · OVERVIEW</title>"), "under the site's name: {body}");
         }
         for path in ["/api/status", "/goal", "/"] {
             let post = tokio::task::spawn_blocking(move || {

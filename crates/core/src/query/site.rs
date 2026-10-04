@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."}]}
+//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's first root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -11,9 +11,11 @@ use serde::Serialize;
 use crate::graph::{Graph, Node};
 use crate::model::*;
 
-/// The project's site: every page in reading order, and the one page asked for in full.
+/// The project's site: its name, every page in reading order, and the one page asked for in full.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Site {
+    /// The title of the store's first root page, when there is one.
+    pub name: Option<String>,
     pub pages: Vec<SiteEntry>,
     pub shown: Option<SitePage>,
 }
@@ -99,7 +101,8 @@ pub fn site(g: &Graph, config: &StoreConfig, show: Option<&str>) -> Site {
             })
             .collect(),
     });
-    Site { pages, shown }
+    let name = config.roots.first().and_then(|r| page(g, r)).map(|p| p.title.clone());
+    Site { name, pages, shown }
 }
 
 #[cfg(test)]
@@ -123,6 +126,8 @@ mod tests {
         let mut config = s.config.clone();
         config.site = vec!["extra".into(), "nope".into(), "git-readiness".into()];
         let site = site(&g, &config, None);
+        // Named by the first root's title, and nothing else of the root.
+        assert_eq!(site.name.as_deref(), Some(g.get(&Reference::page(&s.config.roots[0])).map(|n| match n { Node::Page(p) => p.title.clone(), _ => unreachable!() }).unwrap().as_str()));
         let shown: Vec<(&str, usize)> = site.pages.iter().map(|p| (p.slug.as_str(), p.depth)).collect();
         assert_eq!(shown, vec![("git-readiness", 0), ("extra", 0)], "git-readiness is linked from the root, so first; once, though extra links it too");
         // The first page in full when none is asked for.
@@ -152,7 +157,10 @@ mod tests {
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         config.site = vec!["git-readiness".into()];
         assert!(!super::site(&g, &config, None).shown.unwrap().requirements.iter().any(|r| r.slug == "ready-only-with-commit"));
-        // Nothing named, nothing shown.
-        assert_eq!(super::site(&g, &s.config, None), Site::default());
+        // Nothing named, nothing shown, the name still given.
+        let none = super::site(&g, &s.config, None);
+        assert!(none.pages.is_empty() && none.shown.is_none() && none.name.is_some());
+        assert_eq!(super::site(&g, &StoreConfig { roots: vec![], ..s.config.clone() }, None).name, None, "no root, no name");
+        assert_eq!(super::site(&g, &StoreConfig { roots: vec!["missing".into(), s.config.roots[0].clone()], ..s.config.clone() }, None).name, None, "a first root that names no page gives no name, not the next root's");
     }
 }
