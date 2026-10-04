@@ -132,7 +132,7 @@ export type Requirement = { slug: string, title: string, statement: string, scen
  */
 retired?: boolean, };
 
-export type RestsOn = { ref: Ref, title: string, via: Array<Ref>, decisions: Array<Decision>, };
+export type RestsOn = { ref: Ref, title: string, via: Array<Ref>, decisions: Array<Decision>, says?: string, };
 
 export type RestsOnAnswer = { nodes: Array<RestsOn>, };
 

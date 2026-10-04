@@ -121,7 +121,11 @@ edges.
    use `get`, `rests_on` and `related_tickets` instead; on a team,
    `start_ticket` on a ticket already active takes it up in this checkout:
    it becomes the current ticket here and nothing of it changes.
-2. Read `rests_on` as a list of assumptions. For each requirement with
+2. Read `rests_on` as a list of assumptions. Each node the ticket names
+   itself carries `says`, its text (a page's body, a requirement's statement
+   and scenarios, a module's contract, an answer waiting for this change):
+   that is what the ticket rests on, so read it there rather than from
+   memory. For each requirement with
    decisions, and each closed ticket listed, ask whether the decision still
    holds given what this ticket changes. Name the ones you would challenge,
    with why, before planning. This is the moment the question is asked;

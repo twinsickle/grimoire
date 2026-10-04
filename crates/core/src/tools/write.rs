@@ -209,7 +209,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 // The started ticket is now current, so writes that name none land in it.
                 Changed::Many(vec![Changed::Started(i.r#ref.id.clone()), Changed::Current])
             };
-            let g = state.graph();
+            // As the ticket's own proposal leaves the graph: one taken up already carries its spec.
+            let g = state.graph_for(Some(&i.r#ref.id))?;
             let node = query::view(g, &i.r#ref).expect("just written");
             let rests_on = query::rests_on(g, &i.r#ref, None);
             let related = match g.get(&i.r#ref) {
@@ -1199,7 +1200,11 @@ mod tests {
         assert_eq!(status["server"], json!({ "address": "https://grimoire.example", "fetched": "2026-10-03T14:02:00Z", "reachable": false, "refused": false }));
         // later-1 is already active, started in another checkout: taken up here, it is current and has this checkout's start.
         let before = s.store().tickets["later-1"].clone();
+        // Its spec so far is a proposal, and the start answers with it.
+        call(&mut s, "put_page", json!({ "slug": "orphan", "title": "Orphan", "body": "as proposed", "links": [], "ticket": "later-1" }), "2026-10-03").unwrap();
         let out = call(&mut s, "start_ticket", json!({ "ref": "ticket:later-1" }), "2026-10-03").unwrap();
+        let orphan = out.output["rests_on"].as_array().unwrap().iter().find(|x| x["ref"] == "page:orphan").cloned().expect("it touches the page");
+        assert_eq!(orphan["says"], "as proposed");
         assert_eq!(out.changed, Some(Changed::Many(vec![Changed::Started("later-1".into()), Changed::Current])));
         assert_eq!((s.store().tickets["later-1"].clone(), s.current().as_deref()), (before, Some("later-1")));
         assert!(s.store().starts.contains_key("later-1") && out.output["rests_on"].is_array());

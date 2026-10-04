@@ -447,6 +447,13 @@ mod tests {
         assert_eq!(dangling(&mut s, json!({ "ticket": "later-1" })), before + 1);
         s.store_mut().current = Some("later-1".into());
         assert_eq!(dangling(&mut s, json!({})), before + 1);
+        // rests_on with it says what the proposal says, without it what the truth does.
+        let orphan_says = |s: &mut State, input: serde_json::Value| {
+            let out = call(s, "rests_on", input, "2026-10-02").unwrap().output;
+            out["nodes"].as_array().cloned().unwrap_or_default().into_iter().find(|x| x["ref"] == "page:orphan").map(|x| x["says"].clone())
+        };
+        assert_eq!(orphan_says(&mut s, json!({ "ref": "ticket:later-1", "ticket": "later-1" })), Some(json!("proposed")));
+        assert_ne!(orphan_says(&mut s, json!({ "ref": "ticket:later-1" })), Some(json!("proposed")));
         // Every read takes it: a few of the rest.
         for (name, input) in [("find", json!({ "query": "orphan" })), ("outline", json!({ "depth": 1 })), ("rests_on", json!({ "ref": "page:orphan" })), ("coverage", json!({ "ref": "module:src/a/ready" }))] {
             let mut with = input.clone();

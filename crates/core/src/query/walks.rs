@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -19,6 +19,36 @@ pub struct RestsOn {
     pub title: String,
     pub via: Vec<Reference>,
     pub decisions: Vec<Decision>,
+    // What the node says, for a node the start names directly; none further away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub says: Option<String>,
+}
+
+/// What a node says, as text: a page's body; a requirement's statement and
+/// its scenarios; a module's purpose and its criteria; and a gap or question
+/// answered and waiting for its change, its answer, which is what that change
+/// applies. Anything else says nothing beyond its title and decisions.
+fn says_of(g: &Graph, r: &Reference) -> Option<String> {
+    match g.get(r)? {
+        Node::Page(p) => Some(p.body.clone()),
+        Node::Req(q) => {
+            let mut out = q.statement.clone();
+            for c in &q.scenarios {
+                out.push_str(&format!("\n\nScenario: {}. Given {}; when {}; then {}.", c.title, c.given, c.when, c.then));
+            }
+            Some(out)
+        }
+        Node::Module(m) => {
+            let mut out = m.purpose.clone()?;
+            for c in &m.criteria {
+                out.push_str(&format!("\n- {}: {}", c.id, c.statement));
+            }
+            Some(out)
+        }
+        Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Landing => t.decision.as_ref().map(|d| format!("Answered {}, waiting for the change that applies it: {}", d.date, d.text)),
+        _ => None,
+    }
 }
 
 /// The downward relations each kind is followed through. `is_start` is the
@@ -86,7 +116,9 @@ pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<Rests
             path.push(r.clone());
             let decisions = decisions_of(g, &next);
             let title = g.get(&next).map(Node::title).unwrap_or_else(|| absent_title(g, &next));
-            out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions }));
+            // What the start names directly comes with what it says; nothing further away does.
+            let says = if dist == 0 { says_of(g, &next) } else { None };
+            out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions, says }));
             queue.push_back((next, path));
         }
     }
@@ -276,6 +308,57 @@ mod tests {
         let r = rests_on(&g, &Reference::ticket("new"), None);
         let decisions = |slug: &str| r.iter().find(|x| x.r#ref == Reference::ticket(slug)).unwrap().decisions.len();
         assert_eq!((decisions("waits"), decisions("old")), (0, 1), "a decision written is not one in force until the change lands");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "what-the-start-names-says-what-it-says", "checks": ["crates/core/src/query/walks#says-direct"]}
+    /// ```
+    #[test]
+    fn what_the_start_names_says_what_it_says() {
+        let mut store = crate::graph::fixtures::store();
+        // A gap answered and waiting for the change relying on it, and one still open.
+        let mut answered = crate::graph::fixtures::ticket("answered", TicketKind::Gap, Priority::Next, Status::Landing, &[], &[]);
+        answered.decision = Some(Decision::new("2026-10-04", "Fix it so."));
+        store.tickets.insert(answered.slug.clone(), answered);
+        store.tickets.insert("unanswered".into(), crate::graph::fixtures::ticket("unanswered", TicketKind::Gap, Priority::Next, Status::Open, &[], &[]));
+        let t = crate::graph::fixtures::ticket("work", TicketKind::Change, Priority::Next, Status::Open, &["req:ready-only-with-commit", "page:git-readiness", "module:src/a/ready"], &["ticket:answered", "ticket:unanswered", "ticket:old"]);
+        store.tickets.insert(t.slug.clone(), t);
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+        let r = rests_on(&g, &Reference::ticket("work"), None);
+        let says = |r_: &Reference| r.iter().find(|x| &x.r#ref == r_).unwrap_or_else(|| panic!("{r_} reached")).says.clone();
+        let Some(Node::Page(page)) = g.get(&Reference::page("git-readiness")) else { panic!("fixture page") };
+        assert_eq!(says(&Reference::page("git-readiness")), Some(page.body.clone()));
+        let Some(Node::Req(req)) = g.get(&Reference::req("ready-only-with-commit")) else { panic!("fixture req") };
+        let req_says = says(&Reference::req("ready-only-with-commit")).expect("a requirement says its statement");
+        assert!(req_says.starts_with(&req.statement), "{req_says}");
+        for c in &req.scenarios {
+            assert!(req_says.contains(&format!("Scenario: {}. Given {}; when {}; then {}.", c.title, c.given, c.when, c.then)), "{req_says}");
+        }
+        let Some(Node::Module(module)) = g.get(&Reference::module("src/a/ready")) else { panic!("fixture module") };
+        let module_says = says(&Reference::module("src/a/ready")).expect("a module says its contract");
+        assert!(module_says.starts_with(module.purpose.as_deref().unwrap()), "{module_says}");
+        for c in &module.criteria {
+            assert!(module_says.contains(&format!("- {}: {}", c.id, c.statement)), "{module_says}");
+        }
+        // The answer a change applies, though not yet in force; nothing for an open gap or a closed ticket, whose decision is listed already.
+        assert_eq!(says(&Reference::ticket("answered")), Some("Answered 2026-10-04, waiting for the change that applies it: Fix it so.".to_string()));
+        assert_eq!(r.iter().find(|x| x.r#ref == Reference::ticket("answered")).unwrap().decisions.len(), 0);
+        assert_eq!((says(&Reference::ticket("unanswered")), says(&Reference::ticket("old"))), (None, None));
+        // Further away, nothing: the module imported by one named directly.
+        assert_eq!(says(&Reference::module("src/a/layout")), None);
+        // Named directly but saying nothing of its own: a criterion, whose statement is its title, and a node that does not exist.
+        let mut named = store.clone();
+        let t = crate::graph::fixtures::ticket("odd", TicketKind::Change, Priority::Next, Status::Open, &["criterion:src/a/ready#guarantee", "page:nowhere"], &[]);
+        named.tickets.insert(t.slug.clone(), t);
+        let g2 = Graph::build(&named, &crate::extraction::fixtures::extraction(), &[]);
+        let r2 = rests_on(&g2, &Reference::ticket("odd"), None);
+        assert!(r2.iter().any(|x| x.r#ref == Reference::page("nowhere")) && r2.iter().any(|x| x.r#ref.kind == Kind::Criterion));
+        assert!(r2.iter().all(|x| x.says.is_none()), "{:?}", r2.iter().map(|x| (&x.r#ref, &x.says)).collect::<Vec<_>>());
+        // From a page, its own direct links say what they say too.
+        let from_page = rests_on(&g, &Reference::page("git-readiness"), None);
+        assert!(from_page.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).and_then(|x| x.says.clone()).is_some());
     }
 
     /// # Test contract
