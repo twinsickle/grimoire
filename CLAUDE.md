@@ -90,6 +90,18 @@ repository only.
   ignore the untracked `.codex/`. Check each finding against the code
   before acting. Say what the review found and what was done in the
   ticket's closing decision, and in the commit message when there is one.
+- Large files are examined for their seams: the rites' `seams` page
+  carries the practice, the size a guide that calls for a look and never
+  by itself for a split; this is how it is run here. Count a source
+  file's lines with its tests aside (a Rust file's `#[cfg(test)]` module;
+  a `.test.ts` or `.spec.ts` file is all test), and examine a generated
+  file, such as `web/src/generated/tools.ts`, at its generator. A change
+  that touches one of 600 lines or more names its seams to the user, an
+  "and" in the module's purpose being the usual one, or says it has none
+  worth splitting; at about 1,000, how to refactor it. A split is a ticket of
+  its own, filed only on the user's yes, that moves code and changes no
+  behaviour. Say what the examination found in the ticket's closing
+  decision.
 - Questions start from the goal: the rites' `questions` page carries the
   rule; this is how it is run here. Before laying out options on a gap or
   question, read the goal page and say what it needs whatever the tool, and

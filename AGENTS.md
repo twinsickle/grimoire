@@ -28,7 +28,8 @@ repository only.
 
 - Dev loop: `node scripts/dev.mjs` (or `npm run dev:all` in `web/`) runs
   all three in one console, output prefixed, stopped together by Ctrl+C:
-  the shared server on 4243, `bacon serve --headless`, the daemon on 4242,
+  the shared server on 4243 with the project's site on 4244,
+  `bacon serve --headless`, the daemon on 4242,
   and `npm run dev`, the UI on 5173. The pre-commit hook runs the installed
   binary: after an adapter or schema change, `cargo install --path crates/cli`.
 - Team setup: the rites' `setup` page carries the rule; this is how it is
@@ -41,8 +42,9 @@ repository only.
   made, since it also prunes the server's baseline from this checkout's
   code; `grimoire check --main-line` prunes it the same way with no ticket
   to land. A change to the server's
-  side takes effect after `cargo install --path crates/cli` and a restart of
-  the loop. With the server away, reads and `grimoire check` go on from the
+  side takes effect after `cargo install --path crates/cli`: the loop
+  watches the installed build and restarts the server alone on it, the
+  daemon and the UI running on. With the server away, reads and `grimoire check` go on from the
   copy last fetched (`check --ticket` fails instead) and every write is
   refused; to go back to a store of
   its own, `.grimoire.toml` names `store = "grimoire"` again, and the loop
@@ -67,6 +69,10 @@ repository only.
   `npm run behaviour` builds the UI and runs the Playwright behaviour specs
   against a fixture store it serves itself with the installed `grimoire`
   (`GRIMOIRE_BIN` to use another), so they can start and close tickets.
+  Every spec runs twice, as the `team` project (a shared server and the
+  fixture checkout's daemon signed in to it) and as `solo` (one person's
+  daemon over its own store); `--project team` runs one. The visual test
+  and the shots serve the team's.
   Reinstall after a Rust change first, or they test yesterday's daemon.
 - Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
   `npm run check` in `web/` (tsc and ESLint). Under bacon they are the
@@ -84,6 +90,18 @@ repository only.
   ignore the untracked `.codex/`. Check each finding against the code
   before acting. Say what the review found and what was done in the
   ticket's closing decision, and in the commit message when there is one.
+- Large files are examined for their seams: the rites' `seams` page
+  carries the practice, the size a guide that calls for a look and never
+  by itself for a split; this is how it is run here. Count a source
+  file's lines with its tests aside (a Rust file's `#[cfg(test)]` module;
+  a `.test.ts` or `.spec.ts` file is all test), and examine a generated
+  file, such as `web/src/generated/tools.ts`, at its generator. A change
+  that touches one of 600 lines or more names its seams to the user, an
+  "and" in the module's purpose being the usual one, or says it has none
+  worth splitting; at about 1,000, how to refactor it. A split is a ticket of
+  its own, filed only on the user's yes, that moves code and changes no
+  behaviour. Say what the examination found in the ticket's closing
+  decision.
 - Questions start from the goal: the rites' `questions` page carries the
   rule; this is how it is run here. Before laying out options on a gap or
   question, read the goal page and say what it needs whatever the tool, and

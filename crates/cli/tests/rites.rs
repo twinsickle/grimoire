@@ -63,6 +63,43 @@ fn the_question_rule_is_installed_where_every_session_reads_it() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "the-seams-rule-is-installed-where-every-session-reads-it", "checks": ["req:large-file-examined-for-seams"]}
+/// ```
+#[test]
+fn the_seams_rule_is_installed_where_every_session_reads_it() {
+    // Held by people, as review and questions are: a test cannot see a file examined, only that the
+    // procedure is where every session reads it. It names the rites' seams page as the practice, the size as a
+    // guide, a generated file examined at its generator, a file with no seam said to have none, the size
+    // that calls for it with the tests set aside, the split as a ticket of its own on the person's
+    // agreement, and the closing decision as where the examination is said.
+    for file in ["CLAUDE.md", "AGENTS.md"] {
+        let own = own_guidance(file);
+        let bullet = own.split("
+- ").find(|b| b.starts_with("Large files are examined for their seams")).unwrap_or_else(|| panic!("{file} carries a Large files are examined bullet below init's marker"));
+        let bullet = bullet.split_whitespace().collect::<Vec<_>>().join(" ");
+        for phrase in [
+            "`seams` page carries the practice",
+            "never by itself for a split",
+            "tests aside",
+            "at its generator",
+            "600 lines or more",
+            "1,000",
+            "\"and\"",
+            "none worth splitting",
+            "ticket of its own",
+            "user's yes",
+            "moves code and changes no behaviour",
+            "closing decision",
+        ] {
+            assert!(bullet.contains(phrase), "{file}: the seams procedure says {phrase:?}:
+{bullet}");
+        }
+    }
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "this-repository-is-worked-on-in-the-setup-a-team-uses", "checks": ["req:built-in-the-setup-it-is-used-in"]}
 /// ```
 #[test]
