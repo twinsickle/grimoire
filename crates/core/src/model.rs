@@ -484,8 +484,8 @@ pub struct Current {
     pub ticket: String,
 }
 
-/// A store's two roots: the grimoire, the root page of the requirements the code carries, and the
-/// rites, the root page of the requirements on how the code is developed. Either may be missing, which
+/// A store's two roots: the grimoire, the root page of what the project is and must do, whose
+/// requirements the code carries, and the rites, the root page of how its people work on it. Either may be missing, which
 /// the check reports; a config holding a list of slugs, as stores did before, reads its first as the
 /// grimoire and its second as the rites.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

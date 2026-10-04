@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture, constraints and conventions pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture; and the rites root, a page rites linked from nothing, says what the rites are for and that a rule of work is put there, with both roots named in the config."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture and constraints pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture; and the rites root, a page rites linked from nothing, says what the rites are for, that the grimoire is what the project is and must do and the rites how its people work on it, and that a rule of work is put there, and links a conventions page whose prompt says it holds how things are written, naming, pages and decisions, contracts, commits and code style, that a convention a tool checks stays there, and that a rule about what the code must do or how it is built belongs in the grimoire, under constraints when it holds whichever part is changed, with both roots named in the config."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,19 +14,21 @@ pub const ROOT_SLUG: &str = "overview";
 pub const ARCHITECTURE_SLUG: &str = "architecture";
 /// The rites root, the second of the two roots every grimoire has, and what it says until someone writes it.
 pub const RITES_SLUG: &str = "rites";
-pub const RITES_PROMPT: &str = "How this project's code is developed: the practices its work follows the same way every time, so that each piece of it can be judged before it lands. A requirement here is held by the work, which each ticket's closing decision shows, not by the code; put a rule of work here, through a ticket, rather than in an agent's own guidance file.";
+pub const RITES_PROMPT: &str = "How this project's code is developed: the practices its work follows the same way every time, so that each piece of it can be judged before it lands. The grimoire beside it says what the project is and must do; this says how its people work on it. A requirement here is held by the work, which each ticket's closing decision shows, not by the code; put a rule of work here, through a ticket, rather than in an agent's own guidance file.";
+/// The first page under the rites, and what it says until someone writes it.
+pub const CONVENTIONS: (&str, &str, &str) = ("conventions", "Conventions", "How things are written here: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong. A convention a tool checks stays here, held by its gate; a rule about what the code must do or how it is built belongs in the grimoire, under constraints when it holds whichever part is changed.");
 
 /// The story pages every grimoire starts with, in reading order, with the
 /// prompt each carries until someone writes it. The convention: what this
-/// is, what it promises, the words it uses, how it is built, what must hold
-/// and how things are done. The first three read without the last three.
-pub const STORY: [(&str, &str, &str); 6] = [
+/// is, what it promises, the words it uses, how it is built and what must
+/// hold. The first three read without the last two. How things are done is
+/// the rites', not the story's.
+pub const STORY: [(&str, &str, &str); 5] = [
     ("goal", "Goal", "What this project is and what it is not, for the people who use it, as short statements a reader can check against the code. This is the shallowest depth: how it is built belongs to the architecture, what it promises to the guarantees. No motivation, no history, no milestones. This is the first page a person or agent reads."),
     ("guarantees", "Guarantees", "What this project promises the people who use it: one page per guarantee beneath this one, each linking the requirements that make the promise. A guarantee is intent the code is held to; it may be unheld, and then it says so."),
     ("glossary", "Glossary", "The words this project uses with a specific meaning, one line each. It defines the words the pages after it use; the goal and the guarantees read without it."),
     (ARCHITECTURE_SLUG, "Architecture", "A high-level inventory of what exists and why: one line saying what the system is; the pipeline, how data moves through the parts; the layers with their responsibilities and what each is built from; the design principles behind them; and the physical layout. Every line checkable against the repository. The pages below are its areas, one per module group, seeded from the module contracts."),
     (crate::lint::CONSTRAINTS_PAGE, "Constraints", "What must always or never hold, whichever part is being changed. Link the cross-cutting requirements here so a planner sees them together."),
-    ("conventions", "Conventions", "How things are done here, as opposed to what must hold: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong; a convention a lint could check belongs under constraints as a requirement instead."),
 ];
 
 /// Turn any path-ish text into a slug, or `node` if nothing survives.
@@ -115,7 +117,7 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
         site: Vec::new(),
     });
 
-    let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string(), RITES_SLUG.to_string()]));
+    let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string(), RITES_SLUG.to_string(), CONVENTIONS.0.to_string()]));
     for (slug, _, _) in STORY {
         page_slugs.0.insert(slug.to_string());
     }
@@ -159,8 +161,10 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
         body: format!("Skeleton for `{repository}`. No module contracts were found; the story pages below say what belongs in each."),
         links: Vec::new(),
     });
-    // The rites, a root of its own beside the story: nothing links it.
-    pages.insert("rites:".to_string(), Page { slug: RITES_SLUG.to_string(), title: "Rites".to_string(), body: RITES_PROMPT.to_string(), links: Vec::new() });
+    // The rites, a root of its own beside the story: nothing links it, and it links the conventions.
+    let (conventions, title, prompt) = CONVENTIONS;
+    pages.insert("rites:".to_string(), Page { slug: RITES_SLUG.to_string(), title: "Rites".to_string(), body: RITES_PROMPT.to_string(), links: vec![Reference::page(conventions)] });
+    pages.insert(format!("rites:{conventions}"), Page { slug: conventions.to_string(), title: title.to_string(), body: prompt.to_string(), links: Vec::new() });
     for (slug, title, prompt) in STORY {
         let key = format!("story:{slug}");
         pages.insert(key, Page { slug: slug.to_string(), title: title.to_string(), body: prompt.to_string(), links: Vec::new() });
@@ -287,13 +291,22 @@ mod tests {
         assert!(s.pages.contains_key("overview"));
         // The second root, beside the story and linked from none of it, named with the first.
         assert_eq!(s.config.roots, Roots::new("overview", "rites"));
-        assert!(s.pages["rites"].body.contains("held by the work") && s.pages["rites"].links.is_empty());
+        let rites = &s.pages["rites"].body;
+        for clause in ["held by the work", "what the project is and must do", "how its people work on it", "put a rule of work here"] {
+            assert!(rites.contains(clause), "the rites' prompt says {clause:?}: {rites}");
+        }
+        // The conventions are the rites' first page: how things are written is work.
+        assert_eq!(s.pages["rites"].links, vec![Reference::page("conventions")]);
+        let conventions = &s.pages["conventions"].body;
+        for clause in ["naming", "pages and decisions", "contracts", "commits", "code style", "A convention a tool checks stays here", "what the code must do or how it is built belongs in the grimoire", "under constraints"] {
+            assert!(conventions.contains(clause), "the conventions' prompt says {clause:?}: {conventions}");
+        }
         assert!(!s.pages.values().any(|p| p.links.contains(&Reference::page("rites"))), "a root, linked from nothing");
         assert_eq!(s.requirements.len(), 3);
-        // The story outline: root links the six story pages in order, and
+        // The story outline: root links the five story pages in order, and
         // the top-level group hangs under architecture.
         let root_links: Vec<String> = s.pages["overview"].links.iter().map(|r| r.to_string()).collect();
-        assert_eq!(root_links, vec!["page:goal", "page:guarantees", "page:glossary", "page:architecture", "page:constraints", "page:conventions"]);
+        assert_eq!(root_links, vec!["page:goal", "page:guarantees", "page:glossary", "page:architecture", "page:constraints"]);
         assert!(s.pages["architecture"].links.iter().any(|r| r.kind == Kind::Page && r.id == "src-a"), "{:?}", s.pages["architecture"].links);
         assert!(s.pages["overview"].links.iter().all(|r| r.id != "src-a"));
         // The prompts name the depths: the goal is for the people who use the

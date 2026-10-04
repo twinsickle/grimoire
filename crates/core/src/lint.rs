@@ -97,7 +97,7 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
             }
         }
         // Every grimoire has two roots; one the config does not name, or names a page that is not there, is said.
-        for (which, named, what) in [("grimoire", &g.named_roots.grimoire, "the requirements the code carries"), ("rites", &g.named_roots.rites, "how the code is developed")] {
+        for (which, named, what) in [("grimoire", &g.named_roots.grimoire, "what the project is and must do"), ("rites", &g.named_roots.rites, "how its people work on it")] {
             let reason = match named {
                 None => format!("no {which} root is named: put the page of {what} and name it with `configure {{\"roots\": {{\"{which}\": <slug>}}}}`"),
                 Some(slug) if !g.contains(&Reference::page(slug)) => format!("the {which} root `{slug}` is not a page: put it, or name another with `configure`"),
