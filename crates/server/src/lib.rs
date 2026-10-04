@@ -17,7 +17,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use daemon::{load, Daemon, Loaded};
+pub use daemon::{load, load_store, Daemon, Loaded};
 
 pub struct ServeOptions {
     pub store_dir: PathBuf,

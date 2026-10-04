@@ -37,7 +37,10 @@ repository only.
   time with a token of your own, named `dev-…`, and revoking none. The daemon on 4242 reads the server's
   intent with this checkout's code and sends every write there; the tools,
   the HTTP API and the review are reached on 4242 as before. A commit lands
-  nothing: after it, run `grimoire land <ticket>`. A change to the server's
+  nothing: after it, run `grimoire land <ticket>`, on master with the commit
+  made, since it also prunes the server's baseline from this checkout's
+  code; `grimoire check --main-line` prunes it the same way with no ticket
+  to land. A change to the server's
   side takes effect after `cargo install --path crates/cli` and a restart of
   the loop. With the server away, reads and `grimoire check` go on from the
   copy last fetched (`check --ticket` fails instead) and every write is

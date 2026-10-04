@@ -385,8 +385,11 @@ fn a_refused_caller_reaches_no_tool() {
     let mcp_write = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "put_page", "arguments": page } });
     let initialize = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2026-07-28", "capabilities": {}, "clientInfo": { "name": "t", "version": "1" } } });
     let list = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} });
+    let prune = json!({ "present": [], "intent": "x" });
     for (method, path, body) in [
         ("GET", "/api/tools", None),
+        ("GET", "/api/export", None),
+        ("POST", "/api/prune", Some(&prune)),
         ("GET", "/api/events", None),
         ("GET", "/api/get?ref=page:goal&ticket=work", None),
         ("HEAD", "/api/get?ref=page:goal", None),

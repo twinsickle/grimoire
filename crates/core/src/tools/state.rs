@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -180,6 +180,16 @@ impl State {
         let pruned = lint::pruned(g, self.store.baseline.as_ref())?;
         self.store_mut().baseline = Some(pruned);
         Some(Changed::Baseline)
+    }
+    /// Drop from the baseline every entry `present` lacks, as the main line
+    /// tells a store that holds no code; never adds. Returns what changed and
+    /// how many entries went, when any did.
+    pub fn prune_baseline_to(&mut self, present: &std::collections::HashSet<crate::model::FindingKey>) -> Option<(Changed, usize)> {
+        let before = self.store.baseline.as_ref()?.findings.len();
+        let pruned = lint::pruned_to(self.store.baseline.as_ref(), present)?;
+        let went = before - pruned.findings.len();
+        self.store_mut().baseline = Some(pruned);
+        Some((Changed::Baseline, went))
     }
     pub(super) fn store_mut(&mut self) -> &mut Store {
         self.graph = None;

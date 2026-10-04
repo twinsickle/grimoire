@@ -214,7 +214,9 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    yourself once the change has landed. On a team a commit on a machine
    lands nothing, and `grimoire land` with no ticket says so: the ticket
    lands by name on the main line, run by the pipeline (which checks the
-   change first with `grimoire check --ticket <ticket>`) or by a person once
+   change first with `grimoire check --ticket <ticket>`, and prunes the
+   team's baseline on the main line with `grimoire check --main-line`;
+   never run either of the latter from a branch) or by a person once
    the change has merged. So the truth moves when the code
    lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
    is refused and the ticket stays `landing`, reported as `landing-moved`:

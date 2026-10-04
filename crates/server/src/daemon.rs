@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -70,6 +70,16 @@ pub fn load(store_dir: &Path) -> Result<Loaded, OpenError> {
         return Err(OpenError::NoRepository(repo));
     }
     store_io::refuse_inside(store_dir, &repo)?;
+    load_store(store, malformed)
+}
+
+/// The same for a store held only in memory, as a server's intent fetched
+/// for the main line is: its repository extracted once, nothing written.
+pub fn load_store(store: grimoire_core::Store, malformed: Vec<grimoire_core::Malformed>) -> Result<Loaded, OpenError> {
+    let repo = PathBuf::from(&store.config.repository);
+    if !repo.is_dir() {
+        return Err(OpenError::NoRepository(repo));
+    }
     let extractor = Extractor::for_languages(&repo, &store.config.languages);
     let (extracted, extract_errors) = extractor.extract_all()?;
     let files: BTreeMap<String, FileExtraction> = extracted.into_iter().map(|f| (f.path.clone(), f)).collect();
@@ -215,6 +225,40 @@ impl Daemon {
                 Err(e) => tracing::error!("the pruned baseline could not be written: {e}"),
             }
         }
+    }
+
+    /// Prune the baseline to the findings the main line saw, for a shared
+    /// daemon, which holds no code to see them itself. Answers how many
+    /// entries went and how many are left.
+    pub fn prune_to(&self, present: Vec<grimoire_core::model::FindingKey>, intent: &str) -> Result<Value, ToolError> {
+        if !self.shared {
+            return Err(ToolError::conflict("only a shared daemon takes a prune from the main line: this one holds code and prunes its own baseline"));
+        }
+        let mut present: std::collections::HashSet<_> = present.into_iter().collect();
+        let mut state = self.state.lock().expect("state lock");
+        // What this daemon sees itself is present whatever the main line sent: a store file that does not
+        // load is in no export, so the main line cannot see it, and it is not thereby fixed.
+        present.extend(lint::lint(state.graph(), &lint::Rule::ALL).iter().map(lint::Finding::key));
+        // Judged against intent that has since moved, a write or an adopt among them: refused, under the
+        // same lock every write takes, so nothing lands between this comparison and the prune.
+        if crate::remote::intent_digest(&grimoire_core::export::exported(state.store())) != intent {
+            return Err(ToolError::conflict("the intent moved since the main line read it: read it again and send the prune again"));
+        }
+        let went = match state.prune_baseline_to(&present) {
+            None => 0,
+            Some((changed, went)) => {
+                if let Err(e) = store_io::persist(&self.store_dir, state.store(), &changed) {
+                    if let Ok((store, malformed)) = store_io::load(&self.store_dir) {
+                        state.set_store(store, malformed);
+                    }
+                    return Err(ToolError::unavailable(format!("the pruned baseline could not be written: {e}")));
+                }
+                let _ = self.events.send(Event::Store { tool: "prune".to_string(), changed: describe(&changed) });
+                went
+            }
+        };
+        let left = state.store().baseline.as_ref().map_or(0, |b| b.findings.len());
+        Ok(serde_json::json!({ "pruned": went, "left": left }))
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -656,5 +700,61 @@ mod tests {
         // A change of languages extracts nothing and reads no repository.
         shared.call("configure", json!({ "languages": ["rust", "typescript"] })).unwrap();
         assert_eq!(shared.call("status", json!({})).unwrap()["nodes"]["module"], 0);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-shared-daemon-prunes-to-what-the-main-line-saw", "checks": ["crates/server/src/daemon#prune-from-main-line", "crates/server/src/remote#intent-digest", "crates/core/src/tools/state#prune-to"]}
+    /// ```
+    #[test]
+    fn a_shared_daemon_prunes_to_what_the_main_line_saw() {
+        let h = Harness::new();
+        let local = Daemon::open(&h.store).unwrap().0;
+        local.call("adopt", json!({ "reason": "inherited" })).unwrap();
+        // A daemon that holds code prunes its own baseline, and refuses to be told.
+        assert_eq!(local.prune_to(Vec::new(), "").unwrap_err().code(), "conflict");
+        drop(local);
+        let adopted = store_io::load(&h.store).unwrap().0.baseline.unwrap();
+        assert!(adopted.findings.len() >= 2, "{adopted:?}");
+        let shared = Daemon::open_shared(&h.store).unwrap();
+        let mut events = shared.subscribe();
+        // The main line still sees all but the first, and one the baseline never held.
+        let mut seen: Vec<_> = adopted.findings[1..].to_vec();
+        seen.push(grimoire_core::model::FindingKey { rule: grimoire_core::lint::Rule::Unspecified, check: "no-scenario".into(), r#ref: grimoire_core::model::Reference::req("never-held"), edge: None });
+        // Judged against intent that has since moved: refused, and nothing goes.
+        let read = crate::remote::intent_digest(&shared.exported());
+        shared.call("file_ticket", json!({ "title": "Meanwhile", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+        let _ = events.try_recv();
+        assert_eq!(shared.prune_to(seen.clone(), &read).unwrap_err().code(), "conflict");
+        assert_eq!(store_io::load(&h.store).unwrap().0.baseline.unwrap(), adopted);
+        // Judged against the intent as it is: taken.
+        let now = crate::remote::intent_digest(&shared.exported());
+        let answer = shared.prune_to(seen.clone(), &now).unwrap();
+        assert_eq!(answer, json!({ "pruned": 1, "left": adopted.findings.len() - 1 }));
+        let stored = store_io::load(&h.store).unwrap().0.baseline.unwrap();
+        assert_eq!(stored.findings, adopted.findings[1..].to_vec(), "persisted, and nothing added");
+        assert!(matches!(events.try_recv(), Ok(Event::Store { tool, changed }) if tool == "prune" && changed == vec!["baseline".to_string()]));
+        // Told the same again, nothing goes and nothing is announced; the prune itself moved the intent.
+        let after = crate::remote::intent_digest(&shared.exported());
+        assert_ne!(after, now);
+        assert_eq!(shared.prune_to(seen, &after).unwrap()["pruned"], 0);
+        assert!(events.try_recv().is_err());
+        drop(shared);
+        // A store file that does not load is in no export: the main line cannot see it, and its finding is kept.
+        std::fs::write(h.store.join("pages").join("broken.json"), "{ not a page").unwrap();
+        let shared = Daemon::open_shared(&h.store).unwrap();
+        let broken = lint::lint(shared.state.lock().unwrap().graph(), &lint::Rule::ALL).into_iter().find(|f| f.check == "malformed-file").expect("the broken file is a finding").key();
+        let mut store = store_io::load(&h.store).unwrap().0;
+        let mut baseline = store.baseline.clone().unwrap();
+        baseline.findings.push(broken.clone());
+        store.baseline = Some(baseline);
+        store_io::persist(&h.store, &store, &grimoire_core::ops::Changed::Baseline).unwrap();
+        let shared = { drop(shared); Daemon::open_shared(&h.store).unwrap() };
+        let intent = crate::remote::intent_digest(&shared.exported());
+        shared.prune_to(Vec::new(), &intent).unwrap();
+        let own: std::collections::HashSet<_> = lint::lint(shared.state.lock().unwrap().graph(), &lint::Rule::ALL).iter().map(lint::Finding::key).collect();
+        let left = store_io::load(&h.store).unwrap().0.baseline.unwrap().findings;
+        assert!(left.contains(&broken) && left.iter().all(|k| own.contains(k)), "told of nothing, all goes but what it sees itself: {left:?}");
     }
 }

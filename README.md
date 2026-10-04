@@ -67,11 +67,15 @@ grimoire login                                                # each person, onc
 grimoire serve                                                # each person: the daemon in their checkout, as for any project
 grimoire check --ticket <ticket>                              # the pipeline, before a change merges: its code against the ticket's proposal
 grimoire land <ticket>                                        # the pipeline, on the main line, with GRIMOIRE_TOKEN set
+grimoire check --main-line                                    # the pipeline, on every main-line build: prunes the team's baseline of what is fixed
 ```
 
 A pipeline signs in by `GRIMOIRE_TOKEN`, a read-only token being enough for
 the check, and names the same ticket to both commands; a change that names
-none is checked against the truth. The server speaks plain HTTP: put a proxy in front for HTTPS. A write needs the
+none is checked against the truth. The main line's runs need a write token:
+`grimoire land` and `grimoire check --main-line` tell the server which
+inherited findings the main line has fixed, and it drops them from the
+baseline. Run them only on the main line. The server speaks plain HTTP: put a proxy in front for HTTPS. A write needs the
 server; offline, reads and `grimoire check` go on from the copy last fetched,
 except a check that names a ticket, which fails rather than judge a change
 against an old copy.

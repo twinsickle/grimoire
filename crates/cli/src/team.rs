@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the server the project names or the one given with --server, asks that server with it before keeping it, and keeps it in the person's credentials file under the server's address; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"opens-the-copy","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first; when the server does not answer and the checkout holds a copy it reads the copy, saying on standard error that the server was not reached and when the copy was fetched, except a check that names a ticket, which fails rather than read a copy it could not fetch now, or one a daemon beside it cannot say is current; with no copy, or a token the server refuses, it fails; when the daemon serving the checkout holds the lock, the command asks that daemon what it knows of the server and says the same, failing when the server refused the token; it never prunes the baseline."},{"id":"through-the-server","statement":"tool, adopt and land on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
+//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the server the project names or the one given with --server, asks that server with it before keeping it, and keeps it in the person's credentials file under the server's address; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"opens-the-copy","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first; when the server does not answer and the checkout holds a copy it reads the copy, saying on standard error that the server was not reached and when the copy was fetched, except a check that names a ticket, which fails rather than read a copy it could not fetch now, or one a daemon beside it cannot say is current; with no copy, or a token the server refuses, it fails; when the daemon serving the checkout holds the lock, the command asks that daemon what it knows of the server and says the same, failing when the server refused the token; it never prunes the baseline."},{"id":"read-now","statement":"read_now fetches the server's intent into memory and joins it with the checkout's code, reading and writing nothing of the checkout's copy, and answers it with the digest that names the intent it read; it fails when the server cannot be reached or refuses the token."},{"id":"prunes-from-the-main-line","statement":"prune_from_main_line lints the checkout against the server's truth as read_now gives it and sends the server every finding it produced with the digest of that intent, over POST /api/prune; when the server answers that the intent moved since, and only then, it reads it again and sends again, up to three tries, failing after the third; it answers the intent and code it last judged, the one the prune was sent against, with how many baseline entries went or why the prune failed: sending nothing when a configured language is one the build cannot read, or the server refusing it otherwise or not answering; it fails outright only when the intent cannot be read."},{"id":"through-the-server","statement":"tool, adopt and land on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
 //! ```
 
 use std::io::BufRead;
@@ -183,6 +183,80 @@ pub fn run_tool(team: &Team, name: &str, input: Value) -> anyhow::Result<Result<
     }
 }
 
+/// The server's intent as it is now, fetched into memory and joined with this
+/// checkout's code, never the checkout's copy, which a daemon beside it may
+/// not have synced yet; with the digest that names the intent read.
+pub fn read_now(team: &Team, server: &Server) -> anyhow::Result<(Loaded, String)> {
+    let exported = server.export()?;
+    let digest = remote::intent_digest(&exported);
+    let repository = store_io::repository_string(&team.repo)?;
+    let store = exported.joined(&grimoire_core::Store::default(), &repository).map_err(anyhow::Error::msg)?;
+    let mut loaded = grimoire_server::load_store(store, Vec::new())?;
+    loaded.state.set_server(Some(ServerCopy { address: team.address.clone(), fetched: None, reachable: true, refused: false }));
+    Ok((loaded, digest))
+}
+
+/// How many times the main line reads the intent again when it moved under a prune.
+const PRUNE_TRIES: u32 = 3;
+
+/// What the main line did: the intent and code it judged, the one its prune
+/// was sent against, so the check reports what was pruned from; and whether
+/// the prune was taken, with how many entries went.
+pub struct MainLine {
+    pub loaded: Loaded,
+    pub pruned: anyhow::Result<u64>,
+}
+
+/// One try at a prune: done, or refused because the intent moved under it.
+enum Attempt<T> {
+    Done(T),
+    Moved,
+}
+
+/// Try `attempt` until it is done, at most `tries` times, trying again only
+/// when the intent moved under it; any error ends it at once.
+fn retrying<T>(tries: u32, pause: std::time::Duration, mut attempt: impl FnMut() -> anyhow::Result<Attempt<T>>) -> anyhow::Result<T> {
+    for n in 1..=tries {
+        match attempt()? {
+            Attempt::Done(t) => return Ok(t),
+            Attempt::Moved if n < tries => std::thread::sleep(pause),
+            Attempt::Moved => {}
+        }
+    }
+    bail!("the baseline was not pruned: the intent moved under it {tries} times running; run it again")
+}
+
+/// Prune the server's baseline to what this checkout's code produces against
+/// the server's truth as it is now: the main line telling a server that holds
+/// no code what is fixed. The prune names the intent it was judged against
+/// and the server refuses it when that intent has moved, so it is read and
+/// sent again, a few times. Refused, sending nothing, by a build that cannot
+/// read one of the project's languages, since every finding in it would look
+/// fixed. Fails outright only when the intent cannot be read at all.
+pub fn prune_from_main_line(team: &Team, server: &Server) -> anyhow::Result<MainLine> {
+    retrying(PRUNE_TRIES, std::time::Duration::from_millis(300), || {
+        let (mut loaded, intent) = read_now(team, server).map_err(|e| anyhow::anyhow!("the baseline was not pruned: {e}"))?;
+        let findings = grimoire_core::lint::lint(loaded.state.graph(), &grimoire_core::lint::Rule::ALL);
+        if let Some(f) = findings.iter().find(|f| f.check == "unsupported-language") {
+            let refused = anyhow::anyhow!("the baseline was not pruned: {}, so every finding in that language would look fixed. Run this with a build that reads it", f.reason);
+            return Ok(Attempt::Done(MainLine { loaded, pruned: Err(refused) }));
+        }
+        let present: Vec<_> = findings.iter().map(grimoire_core::lint::Finding::key).collect();
+        let pruned = match server.call("prune", &json!({ "present": present, "intent": intent })) {
+            Ok(Ok(answer)) => Ok(answer["pruned"].as_u64().unwrap_or(0)),
+            Ok(Err(refused)) if moved(&refused) => return Ok(Attempt::Moved),
+            Ok(Err(refused)) => Err(anyhow::anyhow!("the server at {} refused the prune: {}", team.address, refused["message"].as_str().unwrap_or("no reason given"))),
+            Err(e) => Err(anyhow::anyhow!("the baseline was not pruned: {e}")),
+        };
+        Ok(Attempt::Done(MainLine { loaded, pruned }))
+    })
+}
+
+/// Whether a server refused a prune because its intent moved since it was read.
+fn moved(refused: &Value) -> bool {
+    refused["error"] == "conflict" && refused["message"].as_str().is_some_and(|m| m.contains("intent moved"))
+}
+
 /// The checkout a path is in, for messages.
 pub fn says(team: &Team) -> String {
     format!("this project's grimoire is the server's at {}", team.address)
@@ -191,4 +265,45 @@ pub fn says(team: &Team) -> String {
 /// Whether the project at `repo` names a server.
 pub fn names_a_server(repo: &Path) -> bool {
     matches!(store_io::find_home(repo), Ok((_, Home::Server { .. })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-prune-is-tried-again-only-when-the-intent-moved", "checks": ["crates/cli/src/team#prunes-from-the-main-line"]}
+    /// ```
+    #[test]
+    fn a_prune_is_tried_again_only_when_the_intent_moved() {
+        let none = std::time::Duration::ZERO;
+        // Moved twice, then taken: three tries, and the answer of the last.
+        let mut calls = 0;
+        let taken = retrying(3, none, || {
+            calls += 1;
+            Ok(if calls < 3 { Attempt::Moved } else { Attempt::Done(calls) })
+        });
+        assert_eq!((taken.unwrap(), calls), (3, 3));
+        // Moved every time: it stops at the limit and says so.
+        let mut calls = 0;
+        let gave_up = retrying::<()>(3, none, || {
+            calls += 1;
+            Ok(Attempt::Moved)
+        });
+        assert!(gave_up.unwrap_err().to_string().contains("moved under it 3 times"));
+        assert_eq!(calls, 3);
+        // Any other failure ends it at once.
+        let mut calls = 0;
+        let failed = retrying::<()>(3, none, || {
+            calls += 1;
+            bail!("unreachable")
+        });
+        assert!(failed.is_err() && calls == 1);
+        // Only the server's own word that the intent moved counts as moved.
+        assert!(moved(&json!({ "error": "conflict", "message": "the intent moved since the main line read it: read it again and send the prune again" })));
+        assert!(!moved(&json!({ "error": "conflict", "message": "only a shared daemon takes a prune from the main line" })));
+        assert!(!moved(&json!({ "error": "invalid", "message": "the intent moved" })));
+    }
 }

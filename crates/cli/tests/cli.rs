@@ -1149,6 +1149,170 @@ fn a_checkout_works_against_a_teams_server() {
     assert!(text(&team(&p.repo, &home, None, &["logout", "--server", &address])).contains("no token was kept"));
 }
 
+/// A team's server on a store started as today, with a write token and a
+/// read-only one, and a checkout of the same code that names it.
+struct TeamFixture {
+    origin: Project,
+    checkout: Project,
+    writer: String,
+    reader: String,
+    port: u16,
+    _server: Serving,
+}
+
+fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
+    let (origin, _) = project();
+    if let Some(languages) = languages {
+        let path = origin.store.join("grimoire.json");
+        let mut config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        config["languages"] = serde_json::json!(languages);
+        std::fs::write(&path, config.to_string()).unwrap();
+    }
+    let store = origin.store.to_string_lossy().to_string();
+    let host = origin.dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    let writer = String::from_utf8_lossy(&run(&host, &["token", "add", "pipeline", "--store", &store]).stdout).trim().to_string();
+    let reader = String::from_utf8_lossy(&run(&host, &["token", "add", "reader", "--read-only", "--store", &store]).stdout).trim().to_string();
+    let server = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let port = marked_port(&origin.store);
+    let checkout = uninitialised();
+    let home = checkout.dir.join("home");
+    assert!(team(&checkout.repo, &home, None, &["init", "--server", &format!("http://127.0.0.1:{port}")]).status.success());
+    TeamFixture { origin, checkout, writer, reader, port, _server: server }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src#check-main-line", "crates/cli/src#land", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
+/// ```
+#[test]
+fn the_main_line_prunes_a_teams_baseline() {
+    let t = team_fixture(None);
+    let repo = &t.checkout.repo;
+    let (home, ci) = (t.checkout.dir.join("home"), t.checkout.dir.join("pipeline-home"));
+    let adopted = baseline_count(&t.origin.store);
+    // A branch fixes the inherited findings on src/a: its check passes, and the team's baseline is left alone.
+    std::fs::remove_file(repo.join("src").join("a.rs")).unwrap();
+    assert!(team(repo, &home, Some(&t.writer), &["check"]).status.success());
+    assert_eq!(baseline_count(&t.origin.store), adopted, "a branch prunes nothing");
+    // The main line, with a token that may only read: refused, and nothing changes.
+    let refused = team(repo, &ci, Some(&t.reader), &["check", "--main-line"]);
+    assert!(!refused.status.success() && text(&refused).contains("refused the prune") && text(&refused).contains("may only read"), "{}", text(&refused));
+    assert_eq!(baseline_count(&t.origin.store), adopted);
+    assert!(!team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--ticket", "x"]).status.success(), "the main line is judged against the truth");
+    // With a write token: the check as usual, then the server's baseline loses what the main line no longer produces.
+    let pruned = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert!(pruned.status.success() && text(&pruned).contains("pruned 2 baselined finding(s)"), "{}", text(&pruned));
+    assert_eq!(baseline_count(&t.origin.store), adopted - 2);
+    // So breaking it again is new, and fails.
+    std::fs::write(repo.join("src").join("a.rs"), "pub fn a() {}\n").unwrap();
+    let again = team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--json"]);
+    let answer: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert!(!again.status.success() && answer["new"].as_u64() == Some(2) && text(&again).contains("pruned 0"), "standard output is the findings alone: {}", text(&again));
+    assert_eq!(baseline_count(&t.origin.store), adopted - 2, "what the main line saw and the baseline lacks is never added");
+    // A landing on a team prunes against the truth with the ticket applied: src's missing contract is fixed on the main line.
+    let tool = |name: &str, input: &str| assert!(team(repo, &home, Some(&t.writer), &["tool", name, input]).status.success(), "{name}");
+    let filed = team(repo, &home, Some(&t.writer), &["tool", "file_ticket", A_TICKET]);
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
+    std::fs::write(repo.join("src").join("lib.rs"), CONTRACTED).unwrap();
+    let landed = team(repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
+    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")) && text(&landed).contains("pruned 1 baselined finding(s)"), "{}", text(&landed));
+    assert_eq!(baseline_count(&t.origin.store), adopted - 3);
+    // With a daemon serving the pipeline's checkout, the main line still reads the server, never that daemon's copy.
+    let copy = {
+        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &t.writer).spawn().unwrap());
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let copy = loop {
+            if let Some(c) = std::fs::read_dir(ci.join("copies")).ok().and_then(|mut d| d.next()).and_then(Result::ok) {
+                break c.path();
+            }
+            assert!(Instant::now() < deadline, "the daemon never made its copy");
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        marked_port(&copy);
+        let beside = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+        assert!(text(&beside).contains("pruned 0 baselined finding(s)"), "{}", text(&beside));
+        copy
+    };
+    // A copy that says what the server does not: the main line neither reads it nor reports it.
+    std::fs::write(copy.join("pages").join("planted.json"), r#"{"slug":"planted","title":"Planted","body":"b","links":["req:nowhere"]}"#).unwrap();
+    let planted = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert!(!text(&planted).contains("page:planted") && text(&planted).contains("pruned 0"), "{}", text(&planted));
+    // The route itself: it never adds, it needs a writer, a JSON body naming the intent it read, and nothing else.
+    let bearer = |token: &str| format!("Host: 127.0.0.1\r\nAuthorization: Bearer {token}\r\n");
+    let digest = |port: u16| {
+        let (_, body) = http(port, &format!("GET /api/export HTTP/1.0\r\n{}\r\n", bearer(&t.reader)));
+        grimoire_server::remote::intent_digest(&serde_json::from_str(&body).unwrap())
+    };
+    let stranger = |intent: &str| format!(r#"{{"present":[{{"rule":"unspecified","check":"no-scenario","ref":"req:never-held"}}],"intent":"{intent}"}}"#);
+    assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.reader), &stranger(&digest(t.port))), 403);
+    assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), r#"{"present":[],"intent":"x","more":1}"#), 400);
+    assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), &stranger("an intent that is not this one")), 409, "judged against intent that moved");
+    assert_eq!(baseline_count(&t.origin.store), adopted - 3);
+    assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), &stranger(&digest(t.port))), 200);
+    assert_eq!(baseline_count(&t.origin.store), 0, "told only of a finding it never held, every entry goes and none is added");
+    let (status, _) = http(t.port, &format!("POST /api/prune HTTP/1.0\r\n{}Content-Type: text/plain\r\nContent-Length: 2\r\n\r\n{{}}", bearer(&t.writer)));
+    assert_eq!(status, 415);
+    // An agent is never offered it.
+    let (_, tools) = http(t.port, &format!("GET /api/tools HTTP/1.0\r\n{}\r\n", bearer(&t.reader)));
+    assert!(!tools.contains("prune"), "{tools}");
+    // A daemon that holds code prunes its own baseline, and refuses to be told.
+    let (own, _) = project();
+    let (_daemon, local) = serve(&own);
+    assert_eq!(status_of(local, "POST", "/api/prune", "Host: 127.0.0.1\r\n", &stranger("x")), 409);
+    drop(_daemon);
+    // On a store of the project's own the flag is the check: it prunes as the check always does, and sends nothing.
+    let mine = run(&own.repo, &["check", "--main-line"]);
+    assert!(mine.status.success() && !text(&mine).contains("pruned"), "{}", text(&mine));
+    // The server goes away: the main line reads nothing stale, prunes nothing, and fails.
+    drop(t._server);
+    let away = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert!(!away.status.success() && text(&away).contains("cannot be reached"), "{}", text(&away));
+}
+
+/// One raw HTTP exchange with a daemon: the status and the body.
+fn http(port: u16, request: &str) -> (u16, String) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.write_all(request.as_bytes()).unwrap();
+    let mut answer = String::new();
+    s.read_to_string(&mut answer).unwrap();
+    let status = answer.split_whitespace().nth(1).unwrap().parse().unwrap();
+    (status, answer.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default())
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src#land"]}
+/// ```
+#[test]
+fn a_build_that_cannot_read_a_language_does_not_prune() {
+    let t = team_fixture(Some(&["rust", "cobol"]));
+    let adopted = baseline_count(&t.origin.store);
+    let ci = t.checkout.dir.join("pipeline-home");
+    // Every finding fixed, as far as this build can tell.
+    std::fs::remove_dir_all(t.checkout.repo.join("src")).unwrap();
+    let check = team(&t.checkout.repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert!(!check.status.success() && text(&check).contains("the baseline was not pruned") && text(&check).contains("cobol"), "{}", text(&check));
+    assert_eq!(baseline_count(&t.origin.store), adopted, "nothing was sent");
+    // A landing is taken, then its prune is refused the same way: the command says the ticket landed, and fails.
+    let home = t.checkout.dir.join("home");
+    let tool = |name: &str, input: &str| team(&t.checkout.repo, &home, Some(&t.writer), &["tool", name, input]);
+    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("file_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
+    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)).status.success());
+    let landed = team(&t.checkout.repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
+    assert!(!landed.status.success() && text(&landed).contains(&format!("landed {ticket}")) && text(&landed).contains("the ticket landed, but the baseline was not pruned"), "{}", text(&landed));
+    let status = serde_json::from_slice::<serde_json::Value>(&tool("get", &format!(r#"{{"ref":"{ticket}"}}"#)).stdout).unwrap();
+    assert_eq!(status["node"]["status"], "closed");
+    assert_eq!(baseline_count(&t.origin.store), adopted);
+}
+
 /// # Test contract
 ///
 /// ```json
