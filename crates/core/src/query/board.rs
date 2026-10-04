@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a landing one being answered and waiting for the change; unattached lists the gaps and questions not closed that no change not closed relies on; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a landing one being answered and waiting for the change; unattached lists the gaps and questions not closed that no change not closed relies on, ordered as the changes are, by band and then by the band's order list; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -242,6 +242,12 @@ mod tests {
         let unattached: Vec<&str> = b.unattached.iter().map(|t| t.r#ref.id.as_str()).collect();
         assert_eq!(unattached, vec!["loose", "orphaned"]);
         assert!(b.closed.is_empty(), "closed only when asked for");
+        // Ranked as the changes are: the band's order list first, whichever list a ticket is in.
+        s.config.order.later = vec!["orphaned".into(), "other".into(), "loose".into()];
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 0 });
+        let unattached: Vec<&str> = b.unattached.iter().map(|t| t.r#ref.id.as_str()).collect();
+        assert_eq!(unattached, vec!["orphaned", "loose"], "the order list ranks the unsettled too");
     }
 
     /// # Test contract

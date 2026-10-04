@@ -1366,3 +1366,87 @@ test("the tab names what is open, then Grimoire, and carries the book", async ({
   expect(icon.ok()).toBe(true);
   expect(await icon.text()).toContain("<svg");
 });
+
+/** The unsettled gaps and questions drawn under a band, in document order. */
+async function unsettledRefs(page: Page, band: string): Promise<string[]> {
+  return page.locator(`#unsettled-${band} li[data-ticket]`).evaluateAll((ls) => ls.map((l) => l.getAttribute("data-ticket") ?? ""));
+}
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "unsettled-gaps-and-questions-are-ranked", "checks": ["web/src/views/Board#first-screen", "web/src/views/Board#order-from-tool", "web/src/views/Board#focus-follows"]}
+ * ```
+ */
+test("the unsettled gaps and questions are ranked by band, apart from the changes", async ({ page }) => {
+  // Two questions and two changes of the test's own in later, deleted at the end, so it holds whatever the specs before it moved.
+  const file = async (title: string, kind: string) => (await tool<{ node: { ref: string } }>(page, "file_ticket", { title, kind, priority: "later", touches: [], body: "Ranked by a spec." })).node.ref;
+  const a = await file("Rank me A", "question");
+  const b = await file("Rank me B", "question");
+  // An earlier spec may leave a question of its own unsettled in later; this spec looks only at its own.
+  const c = await file("Rank change C", "change");
+  const d = await file("Rank change D", "change");
+  try {
+    const answer = async () => tool<BoardAnswer & { unattached: { ref: string; priority: string }[] }>(page, "board");
+    const ours = [a, b];
+    const mine = (refs: string[]) => refs.filter((r) => ours.includes(r));
+    const unsettledIn = async (band: string) => mine((await answer()).unattached.filter((x) => x.priority === band).map((x) => x.ref));
+    const drawn = async (band: string) => mine(await unsettledRefs(page, band));
+    const changesIn = async (band: string) => (await answer()).tickets.filter((x) => x.priority === band).map((x) => x.ref);
+    const grip = (ref: string) => row(page, ref).getByRole("button", { name: /^Move / });
+    // A real pointer drag, the target measured once the drag has begun: an empty band appears then, and moves the rows.
+    const dragOnto = async (ref: string, onto: string) => {
+      const from = (await grip(ref).boundingBox())!;
+      await page.mouse.move(from.x + 5, from.y + 5);
+      await page.mouse.down();
+      await page.mouse.move(from.x + 10, from.y + 10, { steps: 3 });
+      await page.waitForTimeout(100);
+      const to = (await row(page, onto).boundingBox())!;
+      await page.mouse.move(to.x + 40, to.y + 4, { steps: 10 });
+      await page.mouse.up();
+    };
+    await page.goto("/cauldron");
+
+    // Grouped by priority, in the tool's order: with none set, by title.
+    await expect.poll(() => drawn("later")).toEqual([a, b]);
+
+    // Dragged within its band: the band's order is set, and drawn so; the changes' order in the band is written with it, unchanged.
+    const changesBefore = await changesIn("later");
+    await dragOnto(b, a);
+    await expect.poll(() => unsettledIn("later")).toEqual([b, a]);
+    expect(await changesIn("later")).toEqual(changesBefore);
+    await expect.poll(() => drawn("later")).toEqual([b, a]);
+
+    // A change's move writes the band's whole order: the questions' ranking in it stays, though by title A would come first.
+    const changes = await changesIn("later");
+    expect(changes).toEqual(expect.arrayContaining([c, d]));
+    await grip(changes[0]).focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect.poll(() => changesIn("later")).toEqual([changes[1], changes[0], ...changes.slice(2)]);
+    expect(await unsettledIn("later")).toEqual([b, a]);
+
+    // From the keyboard, past the edge: the end of high, its priority changed, its handle still focused.
+    // Up to the top of later first, past any question an earlier spec left above it, one press a place.
+    const above = (await answer()).unattached.filter((x) => x.priority === "later").map((x) => x.ref).indexOf(b);
+    await grip(b).focus();
+    for (let i = 0; i <= above; i++) {
+      await page.keyboard.press("Alt+ArrowUp");
+      if (i < above) await expect.poll(async () => (await answer()).unattached.filter((x) => x.priority === "later").map((x) => x.ref).indexOf(b)).toBe(above - i - 1);
+    }
+    await expect.poll(() => unsettledIn("high")).toEqual([b]);
+    await expect(page.locator("[aria-live]")).toContainText(/moved to position \d+ of \d+ in high/);
+    await expect.poll(() => drawn("high")).toEqual([b]);
+    await expect(grip(b)).toBeFocused();
+
+    // Never among the other list: a question dropped on a change's row changes nothing.
+    const before = await answer();
+    await dragOnto(a, c);
+    await page.waitForTimeout(300);
+    const after = await answer();
+    expect(after.unattached.map((x) => x.ref)).toEqual(before.unattached.map((x) => x.ref));
+    expect(after.tickets.map((x) => x.ref)).toEqual(before.tickets.map((x) => x.ref));
+  } finally {
+    for (const ref of [a, b, c, d]) await tool(page, "delete_node", { ref });
+  }
+});

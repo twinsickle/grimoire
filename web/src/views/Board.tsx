@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The cauldron: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the unsettled gaps and questions, which no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on the count of its unanswered gaps and questions, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unsettled gaps and questions, those no change relies on; under each change's row, open or not, a line for each gap or question it relies on gives its kind, id, title and own priority under the row's columns and its status, open, answered while it waits for its change, or closed and muted, and no gap or question is listed in a band; filters show or hide ready changes, changes needing refinement, unsettled gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, announcing the gaps and questions moved with it, or, when the priority rule raised it back, calls no reorder and says it stays, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."},{"id":"focus-follows","statement":"After a move from the keyboard, once the cauldron has drawn the change in its new place, focus is on that change's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
+ * {"purpose":"The cauldron: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the unsettled gaps and questions, which no change relies on, then on request the recently closed; any row opens into the whole ticket, and the changes, and apart from them the unsettled gaps and questions, are ranked by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on the count of its unanswered gaps and questions, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unsettled gaps and questions, those no change relies on, under their priority in the board tool's order; under each change's row, open or not, a line for each gap or question it relies on gives its kind, id, title and own priority under the row's columns and its status, open, answered while it waits for its change, or closed and muted, and no gap or question is listed in a band; filters show or hide ready changes, changes needing refinement, unsettled gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; a change, and apart from the changes an unsettled gap or question, is moved only among the tickets of its own list: dragging one within its band calls reorder with the band's whole order, both lists in it so a move in one never loses the other's, dropping it in another band calls update_ticket for its priority and then reorder, announcing the gaps and questions moved with it, or, when the priority rule raised it back, calls no reorder and says it stays, and Alt+Up or Alt+Down on its handle moves it one place in its list, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the ticket's own row, or among the other list's, does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."},{"id":"focus-follows","statement":"After a move from the keyboard, once the cauldron has drawn the moved ticket in its new place, focus is on that ticket's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
  * ```
  */
 
@@ -21,15 +21,31 @@ const KIND_CHIP: Record<TicketKind, string> = {
   question: "text-req border-req/40",
 };
 const CLOSED_FIRST = 5;
+/** Where a dragged row would land: which list, which band, and before which row (null for the end). */
+type Over = { group: Group; band: Priority; before: Ref | null };
 const CLOSED_MORE = 10;
 
 type Show = { ready: boolean; refine: boolean; unattached: boolean; closed: boolean };
 type Bands = Record<Priority, Ref[]>;
+/** The two lists a person ranks: the changes, and the unsettled gaps and questions. Neither is dropped among the other. */
+type Group = "changes" | "unsettled";
+type Order = Record<Group, Bands>;
+const GROUPS: Group[] = ["changes", "unsettled"];
 
-/** Each band's changes, in the tool's order. */
-function bandsOf(board: Board | null): Bands {
-  const of = (p: Priority) => (board?.tickets ?? []).filter((t) => t.priority === p).map((t) => t.ref);
+/** Each band's tickets, in the tool's order. */
+function bandsOf(list: { ref: Ref; priority?: Priority | null }[]): Bands {
+  const of = (p: Priority) => list.filter((t) => (t.priority ?? "later") === p).map((t) => t.ref);
   return { next: of("next"), high: of("high"), later: of("later") };
+}
+
+/** Both lists, by band, as the tool answered them. */
+function orderOf(board: Board | null): Order {
+  return { changes: bandsOf(board?.tickets ?? []), unsettled: bandsOf(board?.unattached ?? []) };
+}
+
+/** Which list a ticket is ranked in, if either. */
+function groupOf(order: Order, ref: Ref): Group | undefined {
+  return GROUPS.find((g) => BANDS.some((p) => order[g][p].includes(ref)));
 }
 
 /** How long an order this view wrote stands in for the tool's, until the refetch after it arrives. */
@@ -94,16 +110,16 @@ export function BoardView() {
   const [closedCount, setClosedCount] = useState(CLOSED_FIRST);
   const [open, setOpen] = useState<Set<Ref>>(new Set());
   const [dragging, setDragging] = useState<Ref | null>(null);
-  const [over, setOver] = useState<{ band: Priority; before: Ref | null } | null>(null);
+  const [over, setOver] = useState<Over | null>(null);
   const [said, setSaid] = useState("");
   const [failed, setFailed] = useState<string | null>(null);
   // Drag events arrive faster than renders: the handlers read these, the rows draw the state.
   const draggingRef = useRef<Ref | null>(null);
-  const overRef = useRef<{ band: Priority; before: Ref | null } | null>(null);
+  const overRef = useRef<Over | null>(null);
   // Moves run one at a time, each from the order the one before it wrote, so a
   // second quick move never works from an answer that predates the first.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const writtenRef = useRef<{ bands: Bands; at: number } | null>(null);
+  const writtenRef = useRef<{ order: Order; at: number } | null>(null);
   const { data, error } = useQuery(() => api.board({ closed: show.closed ? closedCount : 0 }), [show.closed, closedCount]);
   const dataRef = useRef<Board | null>(null);
   // The change being moved from the keyboard, and until when a redraw is still that move's:
@@ -133,30 +149,39 @@ export function BoardView() {
   const refine = changes.length - ready - landing;
   const toggle = (ref: Ref) => setOpen((s) => new Set(s.has(ref) ? [...s].filter((r) => r !== ref) : [...s, ref]));
 
-  const titleOf = (ref: Ref) => dataRef.current?.tickets.find((c) => c.ref === ref)?.title ?? idOf(ref);
+  const titleOf = (ref: Ref) => [...(dataRef.current?.tickets ?? []), ...(dataRef.current?.unattached ?? [])].find((c) => c.ref === ref)?.title ?? idOf(ref);
+  const unsettled = (p: Priority) => data.unattached.filter((t) => (t.priority ?? "later") === p);
+  const draggingGroup = dragging ? groupOf(orderOf(data), dragging) : undefined;
 
   /** Run a move after the ones before it, on the latest order: the one just written, or the tool's. */
-  function enqueue(job: (bands: Bands) => Promise<void>) {
+  function enqueue(job: (order: Order) => Promise<void>) {
     queueRef.current = queueRef.current.then(async () => {
       const written = writtenRef.current;
-      const bands = written && stamp() - written.at < WRITTEN_FRESH_MS ? written.bands : bandsOf(dataRef.current);
+      const order = written && stamp() - written.at < WRITTEN_FRESH_MS ? written.order : orderOf(dataRef.current);
       setFailed(null);
       try {
-        await job(bands);
+        await job(order);
       } catch (e) {
         setFailed((e as Error).message);
       }
     });
   }
 
-  /** Put `ref` in `target` before `before` (or last): the priority first when it changes, then the band's order. */
-  async function place(bands: Bands, ref: Ref, target: Priority, before: Ref | null) {
+  /**
+   * Put `ref` in `target` before `before` (or last), among the tickets of its own list: the priority first when it
+   * changes, then the band's order. The band's stored order holds both lists, so the other list's order is written
+   * with it, unchanged, and a move in one never loses the other's.
+   */
+  async function place(order: Order, ref: Ref, target: Priority, before: Ref | null) {
+    const group = groupOf(order, ref);
+    if (!group) return;
+    const bands = order[group];
     const from = BANDS.find((p) => bands[p].includes(ref));
     if (!from) return;
     const next: Bands = { next: bands.next.filter((r) => r !== ref), high: bands.high.filter((r) => r !== ref), later: bands.later.filter((r) => r !== ref) };
-    const order = next[target];
-    const at = before ? order.indexOf(before) : -1;
-    order.splice(at < 0 ? order.length : at, 0, ref);
+    const placed = next[target];
+    const at = before ? placed.indexOf(before) : -1;
+    placed.splice(at < 0 ? placed.length : at, 0, ref);
     let also = "";
     if (from !== target) {
       const out = await api.updateTicket(ref, { priority: target });
@@ -171,25 +196,29 @@ export function BoardView() {
       const others = moved.filter((t) => t.ref !== ref);
       if (others.length) also = ` Moved with it: ${others.map((t) => `${t.title} to ${t.priority}`).join(", ")}.`;
     }
-    await api.reorder(target, order);
-    writtenRef.current = { bands: next, at: stamp() };
-    setSaid(`${titleOf(ref)} moved to position ${order.indexOf(ref) + 1} of ${order.length} in ${target}.${also}`);
+    const other = order[group === "changes" ? "unsettled" : "changes"][target];
+    await api.reorder(target, [...placed, ...other]);
+    writtenRef.current = { order: { ...order, [group]: next }, at: stamp() };
+    setSaid(`${titleOf(ref)} moved to position ${placed.indexOf(ref) + 1} of ${placed.length} in ${target}.${also}`);
   }
 
-  /** One place up or down; past the edge of a band, into the end of the band above or the start of the band below. */
-  async function step(bands: Bands, ref: Ref, up: boolean) {
+  /** One place up or down within its list; past the edge of a band, into the end of the band above or the start of the band below. */
+  async function step(order: Order, ref: Ref, up: boolean) {
+    const group = groupOf(order, ref);
+    if (!group) return;
+    const bands = order[group];
     const p = BANDS.find((b) => bands[b].includes(ref));
     if (!p) return;
     const list = bands[p];
     const i = list.indexOf(ref);
     const neighbour = BANDS[BANDS.indexOf(p) + (up ? -1 : 1)];
-    if (up && i > 0) return place(bands, ref, p, list[i - 1]);
-    if (!up && i < list.length - 1) return place(bands, ref, p, list[i + 2] ?? null);
+    if (up && i > 0) return place(order, ref, p, list[i - 1]);
+    if (!up && i < list.length - 1) return place(order, ref, p, list[i + 2] ?? null);
     if (!neighbour) {
       setSaid(`${titleOf(ref)} is already ${up ? "first" : "last"}.`);
       return;
     }
-    return place(bands, ref, neighbour, up ? null : (bands[neighbour][0] ?? null));
+    return place(order, ref, neighbour, up ? null : (bands[neighbour][0] ?? null));
   }
 
   function onKey(e: KeyboardEvent, t: BoardTicket) {
@@ -224,9 +253,10 @@ export function BoardView() {
         if (draggingRef.current === ref) setDragging(ref);
       }, 0);
     },
-    over: (e: DragEvent, target: Priority, rowRef: Ref | null) => {
+    over: (e: DragEvent, group: Group, target: Priority, rowRef: Ref | null) => {
       const dragged = draggingRef.current;
-      if (!dragged) return;
+      // Only among its own list: a change is never dropped among the gaps and questions, nor one of them among the changes.
+      if (!dragged || groupOf(orderOf(data), dragged) !== group) return;
       e.preventDefault();
       // Over itself: dropping there changes nothing.
       if (rowRef === dragged) {
@@ -241,15 +271,13 @@ export function BoardView() {
         // The lower half of a row drops after it.
         const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
         if (e.clientY > box.top + box.height / 2) {
-          const refs = band(target)
-            .map((c) => c.ref)
-            .filter((r) => r !== dragged);
+          const refs = (group === "changes" ? band(target) : unsettled(target)).map((c) => c.ref).filter((r) => r !== dragged);
           before = refs[refs.indexOf(rowRef) + 1] ?? null;
         }
       }
       const was = overRef.current;
-      if (was?.band !== target || was.before !== before) {
-        overRef.current = { band: target, before };
+      if (was?.group !== group || was.band !== target || was.before !== before) {
+        overRef.current = { group, band: target, before };
         setOver(overRef.current);
       }
     },
@@ -266,6 +294,41 @@ export function BoardView() {
       setDragging(null);
       setOver(null);
     },
+  };
+
+  /** A band's rows in one list, each with its handle, taking drops of its own list's tickets only. A plain function, so a redraw keeps the rows and the focus on them. */
+  const movableList = (group: Group, p: Priority, rows: BoardTicket[]) => {
+    const here = over?.group === group && over.band === p;
+    return (
+      <ul className="list-none m-0 p-0 flex flex-col gap-1" onDragOver={(e) => drag.over(e, group, p, null)} onDrop={drag.drop}>
+        {rows.map((t) => (
+          <Row
+            key={t.ref}
+            t={t}
+            open={open.has(t.ref)}
+            onToggle={() => toggle(t.ref)}
+            move={{
+              dragging: dragging === t.ref,
+              dropBefore: here && over?.before === t.ref && dragging !== t.ref,
+              onDragStart: (e) => drag.start(e, t.ref),
+              onDragOver: (e) => {
+                e.stopPropagation();
+                drag.over(e, group, p, t.ref);
+              },
+              onDrop: drag.drop,
+              onDragEnd: drag.end,
+              onKey: (e) => onKey(e, t),
+              // Left by the person, not taken away by a redraw: a handle removed from the page is no longer connected.
+              onBlur: (e) => {
+                if (e.currentTarget.isConnected && movedRef.current?.ref === t.ref) movedRef.current = null;
+              },
+            }}
+          />
+        ))}
+        {dragging && here && over?.before === null && <li aria-hidden className="h-0.5 bg-accent rounded" />}
+        {rows.length === 0 && <li className="border border-dashed border-line rounded-md px-3 py-2 text-fg-dim text-[13px]">Drop here to make it {p}</li>}
+      </ul>
+    );
   };
 
   const chip = (key: keyof Show, label: string, n: number | null, dot: string) => (
@@ -296,53 +359,32 @@ export function BoardView() {
       {failed && <p className={errorBox}>{failed}</p>}
       {BANDS.map((p) => {
         const rows = band(p).filter((t) => t.status === "landing" || (openWaits(t).length ? show.refine : show.ready));
-        // An empty band shows only while dragging, as somewhere to drop.
-        if (rows.length === 0 && !dragging) return null;
+        // An empty band shows only while a change is dragged, as somewhere to drop it.
+        if (rows.length === 0 && draggingGroup !== "changes") return null;
         return (
           <section key={p} id={`band-${p}`} aria-label={`${p} priority`} className="flex flex-col gap-1">
             <h2 className={`m-0 text-[11.5px] uppercase tracking-[0.06em] font-semibold ${BAND_COLOR[p]}`}>{p}</h2>
-            <ul className="list-none m-0 p-0 flex flex-col gap-1" onDragOver={(e) => drag.over(e, p, null)} onDrop={drag.drop}>
-              {rows.map((t) => (
-                <Row
-                  key={t.ref}
-                  t={t}
-                  open={open.has(t.ref)}
-                  onToggle={() => toggle(t.ref)}
-                  change={{
-                    dragging: dragging === t.ref,
-                    dropBefore: over?.band === p && over.before === t.ref && dragging !== t.ref,
-                    onDragStart: (e) => drag.start(e, t.ref),
-                    onDragOver: (e) => {
-                      e.stopPropagation();
-                      drag.over(e, p, t.ref);
-                    },
-                    onDrop: drag.drop,
-                    onDragEnd: drag.end,
-                    onKey: (e) => onKey(e, t),
-                    // Left by the person, not taken away by a redraw: a handle removed from the page is no longer connected.
-                    onBlur: (e) => {
-                      if (e.currentTarget.isConnected && movedRef.current?.ref === t.ref) movedRef.current = null;
-                    },
-                  }}
-                />
-              ))}
-              {dragging && over?.band === p && over.before === null && <li aria-hidden className="h-0.5 bg-accent rounded" />}
-              {rows.length === 0 && <li className="border border-dashed border-line rounded-md px-3 py-2 text-fg-dim text-[13px]">Drop here to make it {p}</li>}
-            </ul>
+            {movableList("changes", p, rows)}
           </section>
         );
       })}
       {show.unattached && (
-        <section id="unattached" aria-label="Unsettled" className="flex flex-col gap-1">
+        <section id="unattached" aria-label="Unsettled" className="flex flex-col gap-2">
           <h2 className="m-0 text-[11.5px] uppercase tracking-[0.06em] font-semibold text-req">
             Unsettled <span className="normal-case tracking-normal font-normal text-fg-dim">· gaps and questions not yet answered, with no change relying on them</span>
           </h2>
           {data.unattached.length === 0 && <p className={empty}>Every open gap and question is attached to a change.</p>}
-          <ul className="list-none m-0 p-0 flex flex-col gap-1">
-            {data.unattached.map((t) => (
-              <Row key={t.ref} t={t} open={open.has(t.ref)} onToggle={() => toggle(t.ref)} />
-            ))}
-          </ul>
+          {BANDS.map((p) => {
+            const rows = unsettled(p);
+            // As for the changes: an empty band shows only while one of these is dragged.
+            if (rows.length === 0 && draggingGroup !== "unsettled") return null;
+            return (
+              <div key={p} id={`unsettled-${p}`} role="group" aria-label={`${p} priority, unsettled`} className="flex flex-col gap-1 pl-3 border-l border-line">
+                <h3 className={`m-0 text-[11px] uppercase tracking-[0.06em] font-semibold ${BAND_COLOR[p]}`}>{p}</h3>
+                {movableList("unsettled", p, rows)}
+              </div>
+            );
+          })}
         </section>
       )}
       {show.closed && (
@@ -366,7 +408,7 @@ export function BoardView() {
   );
 }
 
-type ChangeRow = {
+type MoveRow = {
   dragging: boolean;
   dropBefore: boolean;
   onDragStart: (e: DragEvent) => void;
@@ -377,27 +419,27 @@ type ChangeRow = {
   onBlur: (e: FocusEvent<HTMLButtonElement>) => void;
 };
 
-/** One ticket: a line to scan, opening into the whole ticket. A change also carries its readiness and a drag handle. */
-function Row({ t, open, onToggle, change }: { t: BoardTicket; open: boolean; onToggle: () => void; change?: ChangeRow }) {
+/** One ticket: a line to scan, opening into the whole ticket. A change also carries its readiness; a ticket that is ranked, a drag handle. */
+function Row({ t, open, onToggle, move }: { t: BoardTicket; open: boolean; onToggle: () => void; move?: MoveRow }) {
   const waiting = openWaits(t).length;
   const isChange = t.kind === "change";
   return (
     <li
       data-ticket={t.ref}
-      onDragOver={change?.onDragOver}
-      onDrop={change?.onDrop}
-      className={`bg-bg-1 border rounded-md ${open ? "border-accent-dim" : waiting ? "border-warn/40" : "border-line"} ${change?.dragging ? "opacity-45" : ""} ${
-        change?.dropBefore ? "shadow-[0_-2px_0_var(--color-accent)]" : ""
+      onDragOver={move?.onDragOver}
+      onDrop={move?.onDrop}
+      className={`bg-bg-1 border rounded-md ${open ? "border-accent-dim" : waiting ? "border-warn/40" : "border-line"} ${move?.dragging ? "opacity-45" : ""} ${
+        move?.dropBefore ? "shadow-[0_-2px_0_var(--color-accent)]" : ""
       }`}
     >
       <div className={`${ROW_COLUMNS} px-2.5 py-1.5`}>
-        {change ? (
+        {move ? (
           <button
             draggable
-            onDragStart={change.onDragStart}
-            onDragEnd={change.onDragEnd}
-            onKeyDown={change.onKey}
-            onBlur={change.onBlur}
+            onDragStart={move.onDragStart}
+            onDragEnd={move.onDragEnd}
+            onKeyDown={move.onKey}
+            onBlur={move.onBlur}
             data-grip={t.ref}
             aria-label={`Move ${t.title}: drag, or Alt+Up and Alt+Down, which cross into the next priority at an edge`}
             className="p-0 w-5 h-7 bg-transparent border-none text-fg-dim cursor-grab flex items-center justify-center hover:bg-transparent"
