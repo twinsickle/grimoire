@@ -9,6 +9,13 @@
  * added after it, so the views have inherited and new findings to tell apart.
  * Every reference is a link to /n/<ref>, so a view's structure can be read
  * back from its links and compared with the tool answer it was drawn from.
+ *
+ * A page is not finished when its heading shows: each panel loads by its own
+ * query, in no fixed order. So a check here names the element it means, by
+ * role, by exact text or by the list it sits in, never the first of several
+ * that different panels draw; what is read from the page once is read after
+ * something from the same query is there, or polled; and an absence is
+ * checked only once the query that would have drawn the thing has answered.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { ROUTES } from "./routes";
@@ -64,6 +71,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
   }
   // A requirement's node page has no rail; a page's is the grimoire view.
   await page.goto("/n/req%3Aready-needs-commit");
+  await expect(page.locator("main h1")).toBeVisible();
   await expect(page.locator(rail)).toHaveCount(0);
   await page.goto("/map");
   await expect(page).toHaveURL(/\/$/);
@@ -273,17 +281,20 @@ test("a page holds one event stream however many queries it mounts", async ({ pa
  */
 test("a reference is a link to its node, tagged with its kind", async ({ page }) => {
   await page.goto("/n/ticket%3A0001");
-  const link = page.locator('main a[href="/n/module%3Asrc%2Fready"]').first();
+  // Under Touches, not in the graph, which draws the same node when its own query answers.
+  const under = (heading: string) => page.locator("main h2", { hasText: heading }).locator("xpath=following-sibling::ul[1]");
+  const link = under("Touches").locator('a[href="/n/module%3Asrc%2Fready"]');
   await expect(link).toBeVisible();
   await expect(link.locator("xpath=..")).toContainText("module");
   await link.click();
   await expect(page).toHaveURL("/n/module%3Asrc%2Fready");
   // The one exception: a closed ticket's reference to a node that no longer exists keeps its kind tag and is text, marked.
   await page.goto("/n/ticket%3A0004");
-  const gone = page.locator("main [data-gone='req:ready-old-name']").first();
+  const gone = under("Touches").locator("[data-gone='req:ready-old-name']");
   await expect(gone).toHaveText("reqready-old-nameno longer exists");
   await expect(gone.locator("a")).toHaveCount(0);
-  await expect(page.locator("main a[href='/n/req%3Aready-old-name']")).toHaveCount(0);
+  // In the list this spec reads: the graph, drawn by a query of its own, is the spec's further down.
+  await expect(under("Touches").locator("a[href='/n/req%3Aready-old-name']")).toHaveCount(0);
 });
 
 /**
@@ -355,9 +366,12 @@ test("a board row opens into the whole ticket, with what it waits on and its act
   await page.goto("/board");
   await page.getByRole("button", { name: "Show Report readiness per workspace" }).click();
   const opened = row(page, "ticket:0006");
-  await expect(opened.getByText("Waits on")).toBeVisible();
-  await expect(opened.getByRole("link", { name: "Should readiness count submodules?" })).toBeVisible();
-  await expect(opened).toContainText("open");
+  // The panel's heading, by role: the row's badge reads "waits on 1" before the panel has loaded at all.
+  await expect(opened.getByRole("heading", { name: "Waits on" })).toBeVisible();
+  const question = opened.getByRole("link", { name: "Should readiness count submodules?" });
+  await expect(question).toBeVisible();
+  // The question's own line says it is open.
+  await expect(opened.locator("li", { has: page.getByRole("link", { name: "Should readiness count submodules?" }) })).toContainText("open");
   await expect(opened).toContainText("Needs refinement: it waits on whether submodules count.");
   await expect(opened.locator("a[href='/n/module%3Asrc%2Fready']").first()).toBeVisible();
   await expect(opened.getByRole("button", { name: "Start" })).toBeVisible();
@@ -390,7 +404,7 @@ test("a board row opens into the whole ticket, with what it waits on and its act
  * # Test contract
  *
  * ```json
- * {"test": "board-keeps-the-tools-order", "checks": ["web/src/views/Board#order-from-tool"]}
+ * {"test": "board-keeps-the-tools-order", "checks": ["web/src/views/Board#order-from-tool", "web/src/views/Board#focus-follows"]}
  * ```
  */
 test("the board keeps the tool's order, and a change is moved by dragging or from the keyboard", async ({ page }) => {
@@ -418,19 +432,26 @@ test("the board keeps the tool's order, and a change is moved by dragging or fro
   await page.keyboard.press("Alt+ArrowDown");
   await expect.poll(() => inBand("later")).toEqual(["ticket:0007", "ticket:0006"]);
   await expect(page.locator("[aria-live]")).toContainText("moved to position 2 of 2 in later");
+  // Drawn in its new place, its handle has focus still.
+  await expect.poll(() => bandRefs(page, "later")).toEqual(["ticket:0007", "ticket:0006"]);
+  await expect(grip("ticket:0006")).toBeFocused();
 
   // Two quick presses move it two places, the second from where the first left it:
-  // up within later, then past the edge into the end of high.
-  await grip("ticket:0006").focus();
+  // up within later, then past the edge into the end of high. No handle is focused anew from here on.
   await page.keyboard.press("Alt+ArrowUp");
   await page.keyboard.press("Alt+ArrowUp");
   await expect.poll(async () => (await answer()).tickets.find((x) => x.ref === "ticket:0006")?.priority).toBe("high");
   await expect.poll(() => inBand("high")).toEqual(["ticket:0002", "ticket:0006"]);
   expect(await inBand("later")).toEqual(["ticket:0007"]);
+  // Drawn again in another band, where its row is a new one: focus is on its handle there,
+  // so the next press moves it without the handle being found again.
+  await expect.poll(() => bandRefs(page, "high")).toEqual(["ticket:0002", "ticket:0006"]);
+  await expect(grip("ticket:0006")).toBeFocused();
   // Back down past the edge: the start of later.
-  await grip("ticket:0006").focus();
   await page.keyboard.press("Alt+ArrowDown");
   await expect.poll(() => inBand("later")).toEqual(["ticket:0006", "ticket:0007"]);
+  await expect.poll(() => bandRefs(page, "later")).toEqual(["ticket:0006", "ticket:0007"]);
+  await expect(grip("ticket:0006")).toBeFocused();
 
   // Dropped in another band: its priority changes and it lands where it was dropped.
   await grip("ticket:0007").dragTo(row(page, "ticket:0002"), { targetPosition: { x: 40, y: 4 } });
@@ -453,8 +474,6 @@ test("the root shows the grimoire's own level: its body, its bars and its pages 
   const root = await tool<{ node: { links: string[] } }>(page, "get", { ref: "page:overview" });
   const cards = await linkedRefs(page, "#pages");
   expect(cards).toEqual(root.node.links.filter((l) => l.startsWith("page:")));
-  // No story page is opened out at the root: none of its requirements or modules is listed.
-  expect((await linkedRefs(page)).some((r) => r.startsWith("req:") || r.startsWith("module:"))).toBe(false);
   // Each card carries its page's rollup, and the whole grimoire's rollup heads the page.
   const outline = await tool<Outline>(page, "outline", { depth: 64 });
   const architecture = find(outline.roots, "page:architecture")!.rollup;
@@ -468,6 +487,8 @@ test("the root shows the grimoire's own level: its body, its bars and its pages 
   await expect(page.locator("main h1").first()).toHaveText(outline.roots[0].title);
   expect(cards).not.toContain("page:handbook");
   await expect(page.locator(`main a[href^="/n/page%3A"]:not(${rail} a)`)).toHaveCount(cards.length);
+  // No story page is opened out at the root: none of its requirements or modules is listed. Said last, with the whole root drawn.
+  expect((await linkedRefs(page)).some((r) => r.startsWith("req:") || r.startsWith("module:"))).toBe(false);
 });
 
 /**
@@ -481,9 +502,9 @@ test("a page lists each module it links once, with its criteria beneath it", asy
   await page.goto("/n/page%3Areadiness");
   const modules = page.locator("#modules");
   await expect(modules).toBeVisible();
-  const refs = await linkedRefs(page, "#modules");
-  expect(refs.filter((r) => r.startsWith("module:")).sort()).toEqual(["module:src", "module:src/ready"]);
-  expect(refs.filter((r) => r.startsWith("criterion:src/ready#")).sort()).toEqual(["criterion:src/ready#needs-commit", "criterion:src/ready#reads-only"]);
+  const listed = async (prefix: string) => (await linkedRefs(page, "#modules")).filter((r) => r.startsWith(prefix)).sort();
+  await expect.poll(() => listed("module:")).toEqual(["module:src", "module:src/ready"]);
+  await expect.poll(() => listed("criterion:src/ready#")).toEqual(["criterion:src/ready#needs-commit", "criterion:src/ready#reads-only"]);
   expect((await linkedRefs(page)).some((r) => r.startsWith("file:") || r.startsWith("decl:")), "no files or declarations").toBe(false);
   await expect(page.locator("main")).toContainText("Whether a workspace is ready.");
   // A long body shows five lines and a Show more; a short one shows whole.
@@ -586,9 +607,10 @@ test("a root linked from another root opens as a root, and a page reached twice 
   const current = page.locator(`${rail} a[aria-current='page']`);
   await page.goto("/n/page%3Ahandbook");
   await expect(page.locator("main h1").first()).toHaveText("Handbook");
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
   await expect(page.locator(`${rail} a[href='/n/page%3Ahandbook']`)).toHaveCount(2);
   await expect(current).toHaveCount(1);
+  // The breadcrumb is made from the rail's answer: its absence is said once that is here.
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveCount(0);
   // The current entry is the top-level root, not the one nested under overview.
   expect(await current.evaluate((a) => a.closest("ul")?.parentElement?.tagName)).toBe("NAV");
   await page.goto("/n/page%3Agoal");
@@ -739,9 +761,12 @@ test("a closed ticket's reference that leads nowhere is marked and not a link; a
   });
   await page.reload();
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
+  // Each panel draws when its own query answers: the links are counted until all four are there.
+  const linksTo = async (ref: string) => (await linkedRefs(page)).filter((r) => r === ref).length;
+  await expect.poll(() => linksTo("req:ready-old-name"), "the graph, Touches, Rests on and Links out").toBe(4);
+  await expect.poll(() => linksTo("page:old-naming"), "the graph, Relies on, Rests on and Links out").toBe(4);
+  // And with every panel drawn, none of them marks anything as gone.
   await expect(page.locator("main [data-gone]")).toHaveCount(0);
-  expect((await linkedRefs(page)).filter((r) => r === "req:ready-old-name"), "the graph, Touches, Rests on and Links out").toHaveLength(4);
-  expect((await linkedRefs(page)).filter((r) => r === "page:old-naming"), "the graph, Relies on, Rests on and Links out").toHaveLength(4);
 });
 
 /**
@@ -993,6 +1018,7 @@ test("the Rests on panel shows every node with every decision, folding past twen
   await expect(last).not.toContainText("The middle decision.");
   await expect(last).not.toContainText("The older decision.");
   await last.getByRole("button", { name: "2 earlier decisions" }).click();
+  await expect(last).toContainText("The older decision.");
   const text = await last.innerText();
   expect(text.indexOf("The newer decision.")).toBeGreaterThan(-1);
   expect(text.indexOf("The newer decision.")).toBeLessThan(text.indexOf("The middle decision."));
@@ -1009,9 +1035,14 @@ test("the Rests on panel shows every node with every decision, folding past twen
  * ```
  */
 test("a ticket that rests on nothing draws no graph", async ({ page }) => {
+  // The graph asks its own walk, with no depth: its absence is said once that has answered.
+  const walked = page.waitForResponse((r) => r.url().endsWith("/api/rests_on") && r.request().postDataJSON().depth === undefined);
   await page.goto("/n/ticket%3A0008");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Should readiness follow symlinks?");
-  await expect(page.getByText("Nothing below this node.")).toBeVisible();
+  await expect(page.getByText("Nothing below this node.", { exact: true })).toBeVisible();
+  await walked;
+  // The answer has arrived; the page still has to take it in. Nothing shows while it does, so the absence is said after a pause.
+  await page.waitForTimeout(300);
   await expect(page.getByRole("region", { name: "What this ticket rests on" })).toHaveCount(0);
 });
 
@@ -1109,6 +1140,8 @@ test("an active ticket lists what it proposes, and a node page reads it as propo
   await expect(main.getByRole("link", { name: "read it as proposed" })).toHaveAttribute("href", "/n/req%3Aready-needs-commit?ticket=0001");
   // An open ticket has nothing proposed and no section.
   await page.goto("/n/ticket%3A0006");
+  await expect(main.locator("h1")).toHaveText("Report readiness per workspace");
+  await expect(main.getByRole("heading", { name: "Touches" })).toBeVisible();
   await expect(main.getByRole("heading", { name: "Proposed" })).toHaveCount(0);
 });
 
@@ -1132,6 +1165,7 @@ test("a page names the ticket that would change it, and reads as proposed on req
   await expect(page.locator(rail)).toBeVisible();
   // A page no ticket proposes to change carries no line.
   await page.goto("/n/page%3Agoal");
+  await expect(main.locator("strong", { hasText: "What it is." })).toBeVisible();
   await expect(main.getByText("proposes a change to this")).toHaveCount(0);
   // A page the proposal adds has no place in the truth's outline, and opens through the ticket.
   await page.goto("/n/page%3Adetached");

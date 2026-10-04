@@ -2,11 +2,11 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."}]}
+ * {"purpose":"The board: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the gaps and questions no change relies on, then on request the recently closed; any row opens into the whole ticket, and changes are reordered by dragging.","criteria":[{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on its open gaps and questions with a count of those answered, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unattached gaps and questions; filters show or hide ready changes, changes needing refinement, unattached gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; dragging a change within its band calls reorder, dropping it in another band calls update_ticket for its priority and then reorder, and Alt+Up or Alt+Down on its handle moves it one place, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the change's own row does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the start and close actions, and a link to its own page."},{"id":"focus-follows","statement":"After a move from the keyboard, once the board has drawn the change in its new place, focus is on that change's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
  * ```
  */
 
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FocusEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { ErrorBox, Folded, GoneRef, Markdown, RefLink, StatusTag, TicketActions, empty, errorBox, mono } from "../components";
@@ -33,6 +33,9 @@ function bandsOf(board: Board | null): Bands {
 
 /** How long an order this view wrote stands in for the tool's, until the refetch after it arrives. */
 const WRITTEN_FRESH_MS = 1500;
+
+/** How long after a keyboard move was written its redraws may still arrive, and focus follow them. */
+const FOLLOW_MS = 3000;
 
 /** The time a move was written or read; called from moves, never while rendering. */
 function stamp(): number {
@@ -75,8 +78,21 @@ export function BoardView() {
   const writtenRef = useRef<{ bands: Bands; at: number } | null>(null);
   const { data, error } = useQuery(() => api.board({ closed: show.closed ? closedCount : 0 }), [show.closed, closedCount]);
   const dataRef = useRef<Board | null>(null);
+  // The change being moved from the keyboard, and until when a redraw is still that move's:
+  // while it is being written, then for a moment after. Not a redraw from anything else, later.
+  const movedRef = useRef<{ ref: Ref; until: number } | null>(null);
   useEffect(() => {
     dataRef.current = data ?? null;
+    // A change moved into another band is drawn again there, and the handle that had focus is gone:
+    // focus is put on the new one, so the next press moves the change again. Only when focus fell to
+    // the page; focus a person put elsewhere is theirs.
+    const moved = movedRef.current;
+    if (!moved) return;
+    if (stamp() > moved.until) {
+      movedRef.current = null;
+    } else if (document.activeElement === null || document.activeElement === document.body) {
+      document.querySelector<HTMLElement>(`[data-grip="${CSS.escape(moved.ref)}"]`)?.focus();
+    }
   }, [data]);
   if (error) return <ErrorBox error={error} />;
   if (!data) return <p className="text-fg-dim">Loading…</p>;
@@ -139,7 +155,18 @@ export function BoardView() {
     if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
     e.preventDefault();
     const up = e.key === "ArrowUp";
-    enqueue((bands) => step(bands, t.ref, up));
+    // Focus follows this move's redraws: until it is written, however long that takes, and a moment after.
+    movedRef.current = { ref: t.ref, until: Infinity };
+    enqueue(async (bands) => {
+      try {
+        await step(bands, t.ref, up);
+        if (movedRef.current?.ref === t.ref) movedRef.current = { ref: t.ref, until: stamp() + FOLLOW_MS };
+      } catch (e) {
+        // A move that failed redraws nothing of its own.
+        if (movedRef.current?.ref === t.ref) movedRef.current = null;
+        throw e;
+      }
+    });
   }
 
   const drag = {
@@ -147,6 +174,8 @@ export function BoardView() {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", ref);
       draggingRef.current = ref;
+      // A drag is the pointer's move: no redraw after it is a keyboard move's.
+      movedRef.current = null;
       // Drawing the drop targets changes the layout (an empty band appears),
       // and a browser abandons a drag whose layout changes inside dragstart;
       // so they are drawn just after it.
@@ -249,6 +278,10 @@ export function BoardView() {
                     onDrop: drag.drop,
                     onDragEnd: drag.end,
                     onKey: (e) => onKey(e, t),
+                    // Left by the person, not taken away by a redraw: a handle removed from the page is no longer connected.
+                    onBlur: (e) => {
+                      if (e.currentTarget.isConnected && movedRef.current?.ref === t.ref) movedRef.current = null;
+                    },
                   }}
                 />
               ))}
@@ -300,6 +333,7 @@ type ChangeRow = {
   onDrop: (e: DragEvent) => void;
   onDragEnd: () => void;
   onKey: (e: KeyboardEvent) => void;
+  onBlur: (e: FocusEvent<HTMLButtonElement>) => void;
 };
 
 /** One ticket: a line to scan, opening into the whole ticket. A change also carries its readiness and a drag handle. */
@@ -322,6 +356,8 @@ function Row({ t, open, onToggle, change }: { t: BoardTicket; open: boolean; onT
             onDragStart={change.onDragStart}
             onDragEnd={change.onDragEnd}
             onKeyDown={change.onKey}
+            onBlur={change.onBlur}
+            data-grip={t.ref}
             aria-label={`Move ${t.title}: drag, or Alt+Up and Alt+Down, which cross into the next priority at an edge`}
             className="p-0 w-5 h-7 bg-transparent border-none text-fg-dim cursor-grab flex items-center justify-center hover:bg-transparent"
           >
