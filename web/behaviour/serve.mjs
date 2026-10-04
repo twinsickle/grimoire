@@ -3,12 +3,22 @@
 // them), initialise a store there, fill it from store.json through the tools
 // under tickets of its own (its pages under two roots), adopt what it finds as
 // the baseline, add the new work, leave one ticket landing and one active with a proposal,
-// and run `grimoire serve` with the built UI until Playwright stops it.
+// and serve it with the built UI until Playwright stops it.
+//
+// Served two ways, as Grimoire is used. BEHAVIOUR_SETUP=solo (the default):
+// `grimoire serve` over the store, one person's daemon. BEHAVIOUR_SETUP=team:
+// the store is served shared on BEHAVIOUR_SERVER_PORT, the fixture's checkout
+// is pointed at that server and signed in with a token of its own, and the
+// UI is served by the checkout's daemon, which reads the server's intent and
+// sends its writes there. Either way the store is seeded first, through the
+// tools on a store of its own, since seeding through a server syncs on every
+// write. Nothing is read from or written to the person's own Grimoire data:
+// GRIMOIRE_HOME is the run's own.
 //
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
 
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +26,9 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const bin = process.env.GRIMOIRE_BIN ?? (process.platform === "win32" ? "grimoire.exe" : "grimoire");
 const port = process.env.BEHAVIOUR_PORT ?? "4343";
+const setup = process.env.BEHAVIOUR_SETUP ?? "solo";
+if (setup !== "solo" && setup !== "team") throw new Error(`BEHAVIOUR_SETUP is solo or team, not ${setup}`);
+const serverPort = process.env.BEHAVIOUR_SERVER_PORT ?? String(Number(port) + 50);
 
 // A fixture server stopped by force (Playwright and shots end the process
 // tree on Windows, where there are no signals) never reaches its cleanup, so
@@ -38,13 +51,20 @@ for (const name of readdirSync(tmpdir())) {
 const dir = mkdtempSync(join(tmpdir(), `${PREFIX}${process.pid}-`));
 const repo = join(dir, "repo");
 const store = join(dir, "store");
+// The run's own Grimoire data: credentials and a checkout's copy of a server's intent land here.
+// A token in the person's environment would be sent in place of the fixture's own, so none is passed on.
+const env = { ...process.env, GRIMOIRE_HOME: join(dir, "home") };
+delete env.GRIMOIRE_TOKEN;
 cpSync(join(here, "fixture", "repo"), repo, { recursive: true });
 for (const name of readdirSync(join(repo, "src"))) {
   if (name.endsWith(".txt")) renameSync(join(repo, "src", name), join(repo, "src", name.slice(0, -4)));
 }
 
 function grimoire(...args) {
-  const r = spawnSync(bin, args, { cwd: repo, encoding: "utf8" });
+  return run(args);
+}
+function run(args, input) {
+  const r = spawnSync(bin, args, { cwd: repo, encoding: "utf8", env, input });
   if (r.status !== 0) throw new Error(`grimoire ${args.join(" ")} failed:\n${r.stdout}${r.stderr}`);
   return r.stdout;
 }
@@ -110,13 +130,51 @@ tool("put_requirement", { slug: req.slug, title: `${req.title}, detached too`, s
 // And a page the truth does not have yet.
 tool("put_page", { slug: "detached", title: "Detached heads", body: "Proposed by the first ticket: a page the truth does not have yet.", links: [], ticket: draft });
 
-const ui = join(here, "..", "dist");
-const daemon = spawn(bin, ["serve", "--port", port, "--ui-dir", ui], { cwd: repo, stdio: "inherit" });
-const stop = () => {
-  daemon.kill();
+// A team's: the seeded store is served shared, and the fixture's checkout
+// becomes one that names that server, signed in, as a teammate's is.
+// Every process started from here is stopped with the rest, whatever ends
+// the run: Playwright stopping it, a step failing, or one of them exiting.
+const running = [];
+let stopping = false;
+const stop = (code) => {
+  if (stopping) return;
+  stopping = true;
+  for (const p of running) p.kill();
   rmSync(dir, { recursive: true, force: true });
-  process.exit(0);
+  process.exit(code);
 };
-process.on("SIGTERM", stop);
-process.on("SIGINT", stop);
-daemon.on("exit", (code) => process.exit(code ?? 0));
+const start = (args, cwd, name) => {
+  const p = spawn(bin, args, { cwd, stdio: "inherit", env });
+  running.push(p);
+  p.on("exit", (code) => {
+    if (!stopping) console.error(`the fixture's ${name} stopped (${code}); stopping the rest`);
+    stop(code ?? 1);
+  });
+  return p;
+};
+process.on("SIGTERM", () => stop(0));
+process.on("SIGINT", () => stop(0));
+
+try {
+  if (setup === "team") {
+    start(["serve", "--shared", "--store", store, "--port", serverPort], dir, "server");
+    const origin = `http://127.0.0.1:${serverPort}`;
+    // The server says it is up by answering its page, which asks no token; each try is bounded, and so is the wait.
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      const up = await fetch(origin, { signal: AbortSignal.timeout(2_000) }).then((r) => r.ok, () => false);
+      if (up) break;
+      if (Date.now() > deadline) throw new Error(`the fixture's server did not answer at ${origin} within 30 seconds`);
+      await new Promise((wait) => setTimeout(wait, 200));
+    }
+    const token = run(["token", "add", "behaviour", "--store", store]).trim();
+    writeFileSync(join(repo, ".grimoire.toml"), `server = "${origin}"\n`);
+    run(["login"], `${token}\n`);
+    // The current ticket is a machine's, not the server's: the checkout takes up the draft, as the person working it would.
+    run(["tool", "start_ticket", JSON.stringify({ ref: draft })]);
+  }
+  start(["serve", "--port", port, "--ui-dir", join(here, "..", "dist")], repo, "daemon");
+} catch (e) {
+  console.error(e instanceof Error ? e.message : e);
+  stop(1);
+}

@@ -69,6 +69,10 @@ repository only.
   `npm run behaviour` builds the UI and runs the Playwright behaviour specs
   against a fixture store it serves itself with the installed `grimoire`
   (`GRIMOIRE_BIN` to use another), so they can start and close tickets.
+  Every spec runs twice, as the `team` project (a shared server and the
+  fixture checkout's daemon signed in to it) and as `solo` (one person's
+  daemon over its own store); `--project team` runs one. The visual test
+  and the shots serve the team's.
   Reinstall after a Rust change first, or they test yesterday's daemon.
 - Lints beyond the check: `cargo clippy` (no `unwrap` outside tests) and
   `npm run check` in `web/` (tsc and ESLint). Under bacon they are the

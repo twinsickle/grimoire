@@ -378,23 +378,26 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
  */
 test("a line under a change says whether what it relies on is open, answered or closed, with its priority", async ({ page }) => {
   // The tool's own answer, with question 0005 set to each status in turn: the store the other specs share is not touched.
-  for (const [status, said, ready] of [
+  // One handler for the whole test, reading the status of the pass it answers in: swapping handlers between passes
+  // left a moment with none, and a refetch an event started then reached the page as the real answer.
+  let status: string = "open";
+  await page.route("**/api/board", async (route) => {
+    const response = await route.fetch();
+    const board = (await response.json()) as BoardAnswer;
+    for (const t of board.tickets) for (const w of t.waits_on ?? []) if (w.ref === "ticket:0005") w.status = status as typeof w.status;
+    await route.fulfill({ response, json: board });
+  });
+  for (const [now, said, ready] of [
     ["landing", "answered", true],
     ["closed", "closed", true],
     ["open", "open", false],
   ] as const) {
-    await page.unroute("**/api/board");
-    await page.route("**/api/board", async (route) => {
-      const response = await route.fetch();
-      const board = (await response.json()) as BoardAnswer;
-      for (const t of board.tickets) for (const w of t.waits_on ?? []) if (w.ref === "ticket:0005") w.status = status;
-      await route.fulfill({ response, json: board });
-    });
+    status = now;
     await page.goto("/cauldron");
     const line = row(page, "ticket:0006").locator("[data-wait='ticket:0005']");
-    await expect(line, status).toContainText(said);
-    await expect(line, status).toContainText("later");
-    await expect(row(page, "ticket:0006"), status).toContainText(ready ? "ready" : "waits on 1");
+    await expect(line, now).toContainText(said);
+    await expect(line, now).toContainText("later");
+    await expect(row(page, "ticket:0006"), now).toContainText(ready ? "ready" : "waits on 1");
   }
 });
 

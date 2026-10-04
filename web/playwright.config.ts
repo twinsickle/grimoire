@@ -2,7 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 // Visual tests: every route in behaviour/routes.ts, screenshotted against
 // the behaviour fixture store, which behaviour/serve.mjs builds in a
-// temporary directory and serves with the built UI. A fixed store means a
+// temporary directory and serves with the built UI, as a team serves it:
+// through a shared server and the checkout's daemon signed in to it. A fixed store means a
 // failing screenshot is a rendering change, not a ticket closed or a page
 // edited. Run `npm run visual`, which builds the UI first.
 const port = process.env.VISUAL_PORT ?? "4344";
@@ -39,6 +40,6 @@ export default defineConfig({
     url: `http://127.0.0.1:${port}/api/tools`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { BEHAVIOUR_PORT: port },
+    env: { BEHAVIOUR_PORT: port, BEHAVIOUR_SETUP: "team" },
   },
 });
