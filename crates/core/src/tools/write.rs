@@ -609,6 +609,11 @@ mod tests {
         assert_eq!(out.output["config"]["languages"], json!(["rust", "typescript"]));
         assert_eq!(s.store().config.roots, before.roots);
         assert_eq!(s.store().config.repository, before.repository);
+        // The pair changes only the root it gives; a list, as older stores held, names both.
+        call(&mut s, "configure", json!({ "roots": { "rites": "orphan" } }), "2026-09-28").unwrap();
+        assert_eq!(s.store().config.roots, crate::model::Roots::new("overview", "orphan"));
+        call(&mut s, "configure", json!({ "roots": ["orphan"] }), "2026-09-28").unwrap();
+        assert_eq!(s.store().config.roots, crate::model::Roots { grimoire: Some("orphan".into()), rites: None }, "a list's missing second is a rites missing");
     }
 
     /// # Test contract
@@ -625,6 +630,9 @@ mod tests {
         assert!(unsupported.to_string().contains("config"), "{unsupported}");
         let repo = call(&mut s, "configure", json!({ "repository": "D:/elsewhere" }), "2026-09-28").unwrap_err();
         assert!(repo.to_string().contains("repository"), "{repo}");
+        let one = call(&mut s, "configure", json!({ "roots": { "rites": "overview" } }), "2026-09-28").unwrap_err();
+        let detail = &serde_json::to_value(&one).unwrap()["details"][0];
+        assert!(detail["field"] == "roots" && detail["reason"].as_str().unwrap().contains("two pages"), "the grimoire and the rites are two pages: {detail}");
         let prefix = call(&mut s, "configure", json!({ "scope": { "include": ["../outside"] } }), "2026-09-28").unwrap_err();
         assert!(serde_json::to_value(&prefix).unwrap()["details"][0]["field"] == "scope.include");
         assert_eq!(s.store().config, before, "nothing changed");
@@ -859,7 +867,7 @@ mod tests {
         assert!(!s.store().pages.contains_key("orphan") && s.store().pages["kept"].body == orphan.body);
         // A root page's rename moves the root.
         call(&mut s, "rename_node", json!({ "ref": "page:overview", "to": "home" }), "2026-09-28").unwrap();
-        assert_eq!(s.store().config.roots, vec!["home".to_string()]);
+        assert_eq!(s.store().config.roots.grimoire.as_deref(), Some("home"));
     }
 
     #[test]

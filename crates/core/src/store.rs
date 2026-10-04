@@ -63,7 +63,7 @@ impl Default for StoreConfig {
         StoreConfig {
             version: StoreConfig::CURRENT_VERSION,
             repository: String::new(),
-            roots: Vec::new(),
+            roots: Roots::default(),
             scope: Scope::default(),
             order: Order::default(),
             languages: Vec::new(),
@@ -370,10 +370,12 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     for l in &c.languages {
         check_required(&mut e, "languages", l);
     }
-    if c.roots.is_empty() {
-        e.push(FieldError::new("roots", "at least one root page is required"));
+    // A root that is missing is not refused: the check reports it, and the store still loads. Two roots
+    // naming one page are refused: there would be no rites.
+    if c.roots.grimoire.is_some() && c.roots.grimoire == c.roots.rites {
+        e.push(FieldError::new("roots", "the grimoire and the rites are two pages, not one"));
     }
-    for r in &c.roots {
+    for r in c.roots.list() {
         check_slug(&mut e, "roots", r);
     }
     for p in &c.site {
@@ -476,11 +478,13 @@ mod tests {
     /// ```
     #[test]
     fn config_rules() {
-        let config = |version: u32, roots: Vec<String>| StoreConfig { site: vec![], version, repository: "C:/repo".into(), roots, languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = |version: u32, roots: Vec<String>| StoreConfig { site: vec![], version, repository: "C:/repo".into(), roots: roots.into(), languages: vec![], scope: Scope::default(), order: Default::default() };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
         assert!(validate_config(&config(StoreConfig::TRIMMED_ON_READ, vec!["overview".into()])).is_empty(), "version 1 is read, to be migrated");
-        assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![]))[0].field, "roots");
+        // A missing root is not refused: the check reports it, and the store still loads.
+        assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec![])).is_empty());
+        assert_eq!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["Not A Slug".into()]))[0].field, "roots");
         // The repository is absolute by its spelling, the same on every platform.
         let at = |repository: &str| StoreConfig { site: vec![], repository: repository.into(), ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
         for absolute in ["C:/repo", r"c:\repo", "/home/me/repo", r"\\server\share\repo", r"\\server\share", "//server/share/repo"] {
@@ -614,7 +618,7 @@ mod tests {
         assert!(validate_page(&linking("page:goal ")).iter().any(|e| e.field == "links"));
         assert!(validate_page(&linking("module:src/a")).is_empty());
         assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
-        let order = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
+        let order = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
         assert_eq!(validate_config(&order)[0].field, "order.next");
         // A baseline finding's check, and a start's ticket and fingerprints.
         let baseline: Baseline = serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();

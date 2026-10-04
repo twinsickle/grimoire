@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages (or a given page) to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages, the grimoire's and then the rites' (or a given page), to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup; and each node is marked rites when it is under the rites and not under the grimoire."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -32,6 +32,9 @@ pub struct Tree {
     /// a constraint that names no criterion.
     pub tests: usize,
     pub rollup: Rollup,
+    // Under the rites and not under the grimoire: held by the work, so its rollup, which measures
+    // the code, says nothing of it.
+    pub rites: bool,
     pub children: Vec<Tree>,
 }
 
@@ -132,7 +135,7 @@ fn tree(g: &Graph, r: &Reference, depth: usize, pages_only: bool, on: &Findings,
     let checks = on.checks.get(r).map(|c| c.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
     let tests = g.inbound_with(r, Relation::Checks).count();
     let rollup = rollup(g, r);
-    Tree { r#ref: r.clone(), title, coverage, findings, baselined, checks, tests, rollup, children }
+    Tree { r#ref: r.clone(), title, coverage, findings, baselined, checks, tests, rollup, rites: g.is_rite(r), children }
 }
 
 /// The rollup of everything at or below `r`, each node once however many
@@ -300,8 +303,9 @@ mod tests {
     fn outline_from_roots() {
         let g = graph();
         let t = outline(&g, 3, None, false).roots;
-        assert_eq!(t.len(), 1);
-        assert_eq!(t[0].r#ref, Reference::page("overview"));
+        // The grimoire's root and then the rites', the rites' marked as held by the work.
+        assert_eq!(t.iter().map(|x| x.r#ref.clone()).collect::<Vec<_>>(), vec![Reference::page("overview"), Reference::page("rites")]);
+        assert!(!t[0].rites && t[1].rites);
         let gr = &t[0].children[0];
         assert_eq!(gr.r#ref, Reference::page("git-readiness"));
         // one of two criteria under module ready is covered.

@@ -111,11 +111,11 @@ pub struct BaselineSummary {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct StatusAnswer {
     pub repository: String,
-    pub roots: Vec<String>,
+    pub roots: crate::model::Roots,
     pub languages: Vec<String>,
     pub version: String,
     pub supported_languages: Vec<String>,
-    /// How many nodes of each kind.
+    // How many nodes of each kind.
     pub nodes: BTreeMap<String, usize>,
     pub edges: usize,
     pub unresolved_imports: usize,

@@ -1253,7 +1253,11 @@ fn the_main_line_prunes_a_teams_baseline() {
     assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), &stranger("an intent that is not this one")), 409, "judged against intent that moved");
     assert_eq!(baseline_count(&t.origin.store), adopted - 3);
     assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), &stranger(&digest(t.port))), 200);
-    assert_eq!(baseline_count(&t.origin.store), 0, "told only of a finding it never held, every entry goes and none is added");
+    // Told only of a finding it never held, every entry goes but what the server's own intent still shows: its
+    // two roots, which init named and no page yet carries; none is added.
+    let left: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(t.origin.store.join("baseline.json")).unwrap()).unwrap();
+    let checks: Vec<&str> = left["findings"].as_array().unwrap().iter().map(|f| f["check"].as_str().unwrap()).collect();
+    assert_eq!(checks, ["missing-grimoire-root", "missing-rites-root"]);
     let (status, _) = http(t.port, &format!("POST /api/prune HTTP/1.0\r\n{}Content-Type: text/plain\r\nContent-Length: 2\r\n\r\n{{}}", bearer(&t.writer)));
     assert_eq!(status, 415);
     // An agent is never offered it.

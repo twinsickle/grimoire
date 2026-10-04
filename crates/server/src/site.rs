@@ -205,7 +205,7 @@ mod tests {
         let tmp = tempfile::Builder::new().prefix("grimoire-site-").tempdir().unwrap();
         let dir = tmp.path().join("store");
         let page = |slug: &str, links: &[&str]| Page { slug: slug.into(), title: slug.to_uppercase(), body: format!("The {slug} page."), links: links.iter().map(|l| l.parse::<Reference>().unwrap()).collect() };
-        let config = StoreConfig { site: vec!["goal".into(), "guarantees".into()], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout".into(), roots: vec!["overview".into()], languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig { site: vec!["goal".into(), "guarantees".into()], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() };
         let mut store = Store::new(config);
         for p in [page("overview", &["page:goal", "page:guarantees", "page:architecture"]), page("goal", &[]), page("guarantees", &["page:tickets"]), page("tickets", &["req:board", "module:src/ops"]), page("architecture", &[])] {
             store.pages.insert(p.slug.clone(), p);

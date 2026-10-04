@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, at least one root page slug, the languages to extract, an optional contract scope of include and exclude prefixes and the page slugs its site shows; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, and the pages and requirements it deletes by reference with that fingerprint; the current record is the slug of the ticket a write lands in when it names none."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"A decision's date is the only date in any store record; no record carries created, modified or closed timestamps."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes and the page slugs its site shows; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, and the pages and requirements it deletes by reference with that fingerprint; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -484,6 +484,88 @@ pub struct Current {
     pub ticket: String,
 }
 
+/// A store's two roots: the grimoire, the root page of the requirements the code carries, and the
+/// rites, the root page of the requirements on how the code is developed. Either may be missing, which
+/// the check reports; a config holding a list of slugs, as stores did before, reads its first as the
+/// grimoire and its second as the rites.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Roots {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub grimoire: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub rites: Option<String>,
+}
+
+impl Roots {
+    pub fn new(grimoire: &str, rites: &str) -> Roots {
+        Roots { grimoire: Some(grimoire.to_string()), rites: Some(rites.to_string()) }
+    }
+
+    /// The roots that are named, the grimoire first.
+    pub fn list(&self) -> Vec<&String> {
+        self.grimoire.iter().chain(self.rites.iter()).collect()
+    }
+
+    pub fn contains(&self, slug: &str) -> bool {
+        self.list().iter().any(|r| *r == slug)
+    }
+
+    /// Each named root that is `from`, renamed `to`; whether any was.
+    pub fn rename(&mut self, from: &str, to: &str) -> bool {
+        let mut hit = false;
+        for r in [&mut self.grimoire, &mut self.rites].into_iter().flatten() {
+            if r == from {
+                *r = to.to_string();
+                hit = true;
+            }
+        }
+        hit
+    }
+}
+
+/// The roots as an older build reads them, a list, when both are named, and as the pair only when
+/// one is missing, which an older build could not have held: for what a server hands a machine.
+pub fn roots_as_older_builds_read<S: Serializer>(roots: &Roots, s: S) -> Result<S::Ok, S::Error> {
+    match (&roots.grimoire, &roots.rites) {
+        (Some(g), Some(r)) => [g, r].serialize(s),
+        _ => roots.serialize(s),
+    }
+}
+
+/// A list of slugs, as stores held before the two roots: the first is the grimoire, the second the rites.
+impl From<Vec<String>> for Roots {
+    fn from(list: Vec<String>) -> Roots {
+        let mut it = list.into_iter();
+        Roots { grimoire: it.next(), rites: it.next() }
+    }
+}
+
+impl<'de> Deserialize<'de> for Roots {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Roots, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Pair {
+            #[serde(default)]
+            grimoire: Option<String>,
+            #[serde(default)]
+            rites: Option<String>,
+        }
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Shape {
+            List(Vec<String>),
+            Pair(Pair),
+        }
+        Ok(match Shape::deserialize(d).map_err(|_| serde::de::Error::custom("roots is `{grimoire, rites}`, each a page slug, or a list of slugs as older stores held"))? {
+            Shape::List(list) => list.into(),
+            Shape::Pair(p) => Roots { grimoire: p.grimoire, rites: p.rites },
+        })
+    }
+}
+
 /// `grimoire.json` at the root of a store.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -491,7 +573,7 @@ pub struct Current {
 pub struct StoreConfig {
     pub version: u32,
     pub repository: String,
-    pub roots: Vec<String>,
+    pub roots: Roots,
     pub languages: Vec<String>,
     #[serde(default, skip_serializing_if = "Scope::is_empty")]
     pub scope: Scope,
@@ -668,6 +750,31 @@ pub struct Decl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-config-names-two-roots", "checks": ["crates/core/src/model#two-roots"]}
+    /// ```
+    #[test]
+    fn a_config_names_two_roots() {
+        let read = |json: &str| serde_json::from_str::<Roots>(json).unwrap();
+        // The pair as written now, either half missing.
+        assert_eq!(read(r#"{"grimoire":"overview","rites":"rites"}"#), Roots::new("overview", "rites"));
+        assert_eq!(read(r#"{"grimoire":"overview"}"#), Roots { grimoire: Some("overview".into()), rites: None });
+        // A list, as older stores held: the first the grimoire, the second the rites, any further one dropped.
+        assert_eq!(read(r#"["overview","handbook","extra"]"#), Roots::new("overview", "handbook"));
+        assert_eq!(read(r#"["overview"]"#), Roots { grimoire: Some("overview".into()), rites: None });
+        assert!(serde_json::from_str::<Roots>(r#"{"grimoire":"a","other":"b"}"#).is_err(), "nothing else is a root");
+        // Written as the pair, whatever it was read as.
+        assert_eq!(serde_json::to_string(&read(r#"["overview","handbook"]"#)).unwrap(), r#"{"grimoire":"overview","rites":"handbook"}"#);
+        // The named roots, the grimoire first; a rename moves whichever matches.
+        let mut r = Roots::new("overview", "rites");
+        assert_eq!(r.list(), [&"overview".to_string(), &"rites".to_string()]);
+        assert!(r.rename("rites", "craft") && !r.rename("nowhere", "x"));
+        assert_eq!(r, Roots::new("overview", "craft"));
+        assert!(r.contains("craft") && !r.contains("rites"));
+    }
 
     #[test]
     fn scope_matches_whole_segments() {

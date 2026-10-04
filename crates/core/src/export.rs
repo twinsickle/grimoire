@@ -15,7 +15,9 @@ use crate::store::Store;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Exported {
     pub version: u32,
-    pub roots: Vec<String>,
+    // A list while both are named, so a machine on an older build still reads a newer server's export.
+    #[serde(serialize_with = "crate::model::roots_as_older_builds_read")]
+    pub roots: Roots,
     pub languages: Vec<String>,
     #[serde(default)]
     pub scope: Scope,
@@ -140,6 +142,11 @@ mod tests {
         assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
         assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone(), e.site.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone(), s.config.site.clone()));
         let text = serde_json::to_string(&e).unwrap();
+        // Both roots named: written as the list an older machine reads; one missing, as the pair, which reads back the same.
+        assert_eq!(serde_json::to_value(&e).unwrap()["roots"], serde_json::json!(["overview", "rites"]));
+        let one = Exported { roots: Roots { grimoire: Some("overview".into()), rites: None }, ..e.clone() };
+        assert_eq!(serde_json::to_value(&one).unwrap()["roots"], serde_json::json!({ "grimoire": "overview" }));
+        assert_eq!(serde_json::from_value::<Exported>(serde_json::to_value(&one).unwrap()).unwrap(), one);
         assert!(!text.contains(&s.config.repository) && !text.contains("fingerprints") && !text.contains("\"current\""), "no repository, start or current ticket");
         // It reads back as it was written, so a machine holds what the server does.
         assert_eq!(serde_json::from_str::<Exported>(&text).unwrap(), e);
@@ -203,7 +210,7 @@ mod tests {
         new.current = Some(live.clone());
         new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default() });
         new.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
-        new.config.roots.push("extra".into());
+        new.config.roots.rites = Some("extra".into());
         let d = difference(&old, &new);
         assert_eq!(d, vec![Changed::Deleted(Reference::req(&gone)), Changed::Page(page), Changed::Started(live.clone()), Changed::Current, Changed::Baseline, Changed::Config]);
         // Back again: the start goes beside its ticket, and a deleted ticket takes its own with it.

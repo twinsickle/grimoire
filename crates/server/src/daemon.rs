@@ -428,7 +428,7 @@ mod tests {
             std::fs::write(repo.join("src").join("a.rs"), CONTRACTED).unwrap();
             std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
             let store = dir.join("store");
-            let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+            let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
             // An active, current ticket, so a write that changes intent has a proposal to land in.
             let mut s = Store::new(config);
             s.tickets.insert("work".into(), grimoire_core::model::Ticket { slug: "work".into(), title: "Work".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });

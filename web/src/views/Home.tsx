@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the first root's level is shown: the first root page drawn as any page is, with its rollup bars (the whole grimoire's when there is one root) and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither; a requirement the outline counts as described is marked described, and a rollup with any described requirement adds a bar of the requirements decided."},{"id":"draft-line","statement":"A page's view carries one line naming each active or landing ticket whose proposal would change the page, linking to the page read as proposed; opened with ?ticket= it reads the page and its pane (its outline at depth 2) through that ticket's proposal and says so, the rail staying the truth's, and a page the proposal adds, which the truth's outline cannot place, opens this way with no breadcrumb; nothing else of a proposal is shown in the grimoire view."}]}
+ * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"story-order","statement":"At the root, only the grimoire root's level is shown: the grimoire root page drawn as any page is, with its rollup bars, and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, none for a page or card the outline marks as the rites, whose requirements are held by the work and not by the code the bars measure, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither, but a rite, which the outline marks as the rites, says it is held by the work; a requirement the outline counts as described is marked described, and a rollup with any described requirement adds a bar of the requirements decided."},{"id":"draft-line","statement":"A page's view carries one line naming each active or landing ticket whose proposal would change the page, linking to the page read as proposed; opened with ?ticket= it reads the page and its pane (its outline at depth 2) through that ticket's proposal and says so, the rail staying the truth's, and a page the proposal adds, which the truth's outline cannot place, opens this way with no breadcrumb; nothing else of a proposal is shown in the grimoire view."}]}
  * ```
  */
 
@@ -29,9 +29,9 @@ export function HomeView({ at }: { at: At }) {
   const named = "unplaced" in at ? "Unplaced" : "page" in at ? idOf(at.page) : null;
   if (error) return <><TabTitle subject={named} /><ErrorBox error={error} /></>;
   if (!data) return <><TabTitle subject={named} /><p className="text-fg-dim">Loading…</p></>;
-  // The first root is the grimoire's root, at /; a later one is read by selecting it.
-  const first = data.roots[0];
-  if (!first) return <><TabTitle subject={named} /><p className={empty}>No root page. The store's `roots` names none that exist.</p></>;
+  // The grimoire's root is at /; the rites' is read by selecting it. With no grimoire root, / says so rather than show the rites as home.
+  const first = data.roots.find((r) => !r.rites);
+  if (!first) return <><TabTitle subject={named} /><p className={empty}>No grimoire root. The check says how to name one with configure.</p></>;
   const path = "page" in at ? pathIn(data.roots, at.page) : null;
   // The rail marks the one entry the pane shows: the path to it, since a page linked twice appears twice.
   const selected = "unplaced" in at ? "unplaced" : "root" in at ? trailOf([first]) : path ? trailOf(path) : "";
@@ -215,7 +215,7 @@ function AreaCard({ tree }: { tree: Tree }) {
         <FindingCounts tree={tree} />
       </div>
       <p className="text-fg-dim m-0 text-[13px] line-clamp-2">{page ? firstParagraph(page.body) : "…"}</p>
-      <Bars rollup={tree.rollup} compact />
+      {!tree.rites && <Bars rollup={tree.rollup} compact />}
     </Link>
   );
 }
@@ -270,7 +270,8 @@ function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref 
           <span className="flex-1" />
           <FindingCounts tree={tree} />
         </div>
-        <Bars rollup={tree.rollup} />
+        {/* The rites are held by the work: the bars measure the code, and say nothing of them. */}
+        {!tree.rites && <Bars rollup={tree.rollup} />}
         <DraftNotice ref={tree.ref} ticket={ticket} drafts={data?.drafts} />
         {page ? <Folded key={`${tree.ref}:${ticket ?? ""}`} text={page.body} /> : <p className="text-fg-dim">Loading…</p>}
       </header>
@@ -360,12 +361,13 @@ function RequirementList({ reqs }: { reqs: Tree[] }) {
                 {count} criteri{count === 1 ? "on" : "a"}
               </span>
             )}
-            {count === 0 && r.tests > 0 && (
+            {r.rites && <span className="text-fg-dim text-xs whitespace-nowrap">held by the work</span>}
+            {!r.rites && count === 0 && r.tests > 0 && (
               <span className="text-test text-xs whitespace-nowrap">
                 held by {r.tests} test{r.tests === 1 ? "" : "s"}
               </span>
             )}
-            {count === 0 && r.tests === 0 && <Badge tone="warn">uncovered</Badge>}
+            {!r.rites && count === 0 && r.tests === 0 && <Badge tone="warn">uncovered</Badge>}
             {r.rollup.described > 0 && <Badge tone="warn">described</Badge>}
           </li>
         );

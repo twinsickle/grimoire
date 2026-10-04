@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, so every query and lint answers over a branch's own intent when asked to."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, so every query and lint answers over a branch's own intent when asked to."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -91,6 +91,10 @@ pub struct Graph {
     out: HashMap<Reference, Vec<usize>>,
     inbound: HashMap<Reference, Vec<usize>>,
     pub roots: Vec<String>,
+    /// The pages and requirements under the rites root and not under the grimoire's: the rites.
+    pub rites: HashSet<Reference>,
+    /// The two roots as the config names them, for the lint to say which is missing.
+    pub named_roots: Roots,
     pub malformed: Vec<Malformed>,
     pub unresolved_imports: usize,
     /// The store's baseline, as identities to match findings against.
@@ -123,7 +127,8 @@ impl Graph {
 
     pub fn build(store: &Store, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
         let mut g = Graph {
-            roots: store.config.roots.clone(),
+            roots: store.config.roots.list().into_iter().cloned().collect(),
+            named_roots: store.config.roots.clone(),
             malformed: malformed.to_vec(),
             unresolved_imports: extraction.unresolved_imports,
             baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
@@ -200,6 +205,9 @@ impl Graph {
             }
             g.nodes.insert(from, Node::File(f.clone()));
         }
+        // What sits under the rites and not under the grimoire: the rites, held by the work.
+        let (grimoire, rites) = (g.under(store.config.roots.grimoire.as_deref()), g.under(store.config.roots.rites.as_deref()));
+        g.rites = rites.difference(&grimoire).cloned().collect();
         g
     }
 
@@ -241,6 +249,33 @@ impl Graph {
             Node::Ticket(t) => Some(t),
             _ => None,
         })
+    }
+
+    /// The pages and requirements under the page `root`: every page reached from it through page
+    /// links, itself included, and every requirement one of them links. Empty when it names no page.
+    fn under(&self, root: Option<&str>) -> HashSet<Reference> {
+        let mut seen: HashSet<Reference> = HashSet::new();
+        let mut stack: Vec<Reference> = root.map(Reference::page).filter(|r| self.contains(r)).into_iter().collect();
+        while let Some(r) = stack.pop() {
+            if !seen.insert(r.clone()) {
+                continue;
+            }
+            for e in self.out(&r).filter(|e| e.relation == Relation::Links) {
+                match e.to.kind {
+                    Kind::Page if self.contains(&e.to) => stack.push(e.to.clone()),
+                    Kind::Req if self.contains(&e.to) => {
+                        seen.insert(e.to.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        seen
+    }
+
+    /// Whether a page or requirement is under the rites and not under the grimoire: a rite, held by the work rather than the code.
+    pub fn is_rite(&self, r: &Reference) -> bool {
+        self.rites.contains(r)
     }
 
     pub fn is_root(&self, slug: &str) -> bool {
@@ -327,11 +362,13 @@ pub(crate) mod fixtures {
     /// `orphan` page is linked by nothing. `stale` req names a criterion that
     /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
-        let mut s = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut s = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: Roots::new("overview", "rites"), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
         for p in [
             page("overview", &["page:git-readiness"]),
             page("git-readiness", &["req:ready-only-with-commit", "req:stale", "module:src/a/ready"]),
             page("orphan", &[]),
+            // The second root every store has, with nothing beneath it yet.
+            page("rites", &[]),
         ] {
             s.pages.insert(p.slug.clone(), p);
         }

@@ -49,6 +49,13 @@ it created in `warnings`. Every warning is work to do now.
   guess comes back as a dangling warning; a guess that names the wrong node
   does not.
 - **Slugs** are `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters.
+- **Two roots.** Every grimoire has two, named in its config: the
+  **grimoire**, the requirements the code carries, each held by the
+  criteria it names in `covered_by` or a test that checks it; and the
+  **rites**, the requirements on how the code is developed, held by the
+  work, which each ticket's closing decision shows. A rule of work goes
+  under the rites and names no criterion; a rule the code carries goes
+  under the grimoire. `status` names both.
 - A **requirement**: a normative `statement` (SHALL / MUST), at least one
   scenario (given, when, then; without one it is `unspecified`),
   `covered_by` criteria, dated append-only **decisions** of one paragraph

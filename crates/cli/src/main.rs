@@ -794,7 +794,8 @@ fn main() -> anyhow::Result<()> {
                 let empty = grimoire_core::Store::new(grimoire_core::StoreConfig { site: vec![],
                     version: grimoire_core::StoreConfig::CURRENT_VERSION,
                     repository: repo_str.clone(),
-                    roots: vec![scaffold::ROOT_SLUG.to_string()],
+                    // Both roots named, with no page yet: the check says which pages to put.
+                    roots: grimoire_core::model::Roots::new(scaffold::ROOT_SLUG, scaffold::RITES_SLUG),
                     languages,
                     scope: grimoire_core::model::Scope::default(),
                     order: Default::default(),

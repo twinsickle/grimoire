@@ -46,7 +46,7 @@ fn ticket(slug: &str, status: Status) -> Ticket {
 fn host() -> Host {
     let tmp = tempfile::Builder::new().prefix("grimoire-team-host-").tempdir().unwrap();
     let store = tmp.path().join("store");
-    let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout/on/another/machine".into(), roots: vec!["overview".into()], languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+    let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout/on/another/machine".into(), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
     let mut s = Store::new(config);
     s.pages.insert("overview".into(), Page { slug: "overview".into(), title: "Overview".into(), body: "What it is.".into(), links: vec![Reference::req("says-a"), Reference::module("src/a")] });
     s.requirements.insert("says-a".into(), Requirement { slug: "says-a".into(), title: "It says a".into(), statement: "It SHALL say a.".into(), scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: "w".into(), then: "t".into() }], covered_by: vec![Reference::criterion("src/a", "says")], decisions: vec![], retired: false });

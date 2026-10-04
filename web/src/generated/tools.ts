@@ -140,6 +140,8 @@ export type RestsOnMe = { nodes: Array<Affected>, tickets: Array<Summary>, };
 
 export type Rollup = { modules: number, contracted: number, criteria: number, tested: number, requirements: number, held: number, described: number, decided: number, };
 
+export type Roots = { grimoire?: string, rites?: string, };
+
 export type Rule = "dangling" | "uncovered" | "malformed" | "unspecified";
 
 export type Scenario = { title: string, given: string, when: string, then: string, };
@@ -156,15 +158,11 @@ export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array
 
 export type Status = "open" | "active" | "landing" | "closed";
 
-export type StatusAnswer = { repository: string, roots: Array<string>, languages: Array<string>, version: string, supported_languages: Array<string>, 
-/**
- * How many nodes of each kind.
- */
-nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, };
+export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 
-export type StoreConfig = { version: number, repository: string, roots: Array<string>, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, };
+export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, };
 
 export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 
@@ -197,7 +195,7 @@ checks: Array<string>,
  * How many tests check this node: a criterion's evidence, or what holds
  * a constraint that names no criterion.
  */
-tests: number, rollup: Rollup, children: Array<Tree>, };
+tests: number, rollup: Rollup, rites: boolean, children: Array<Tree>, };
 
 export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
 

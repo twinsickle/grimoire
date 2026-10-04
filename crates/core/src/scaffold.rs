@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture, constraints and conventions pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture, constraints and conventions pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture; and the rites root, a page rites linked from nothing, says what the rites are for and that a rule of work is put there, with both roots named in the config."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -12,6 +12,9 @@ use crate::store::{is_slug, Store, SLUG_MAX};
 
 pub const ROOT_SLUG: &str = "overview";
 pub const ARCHITECTURE_SLUG: &str = "architecture";
+/// The rites root, the second of the two roots every grimoire has, and what it says until someone writes it.
+pub const RITES_SLUG: &str = "rites";
+pub const RITES_PROMPT: &str = "How this project's code is developed: the practices its work follows the same way every time, so that each piece of it can be judged before it lands. A requirement here is held by the work, which each ticket's closing decision shows, not by the code; put a rule of work here, through a ticket, rather than in an agent's own guidance file.";
 
 /// The story pages every grimoire starts with, in reading order, with the
 /// prompt each carries until someone writes it. The convention: what this
@@ -105,14 +108,14 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
     let mut store = Store::new(StoreConfig {
         version: StoreConfig::CURRENT_VERSION,
         repository: repository.to_string(),
-        roots: vec![ROOT_SLUG.to_string()],
+        roots: Roots::new(ROOT_SLUG, RITES_SLUG),
         languages: languages.to_vec(),
         scope: Scope::default(),
         order: Default::default(),
         site: Vec::new(),
     });
 
-    let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string()]));
+    let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string(), RITES_SLUG.to_string()]));
     for (slug, _, _) in STORY {
         page_slugs.0.insert(slug.to_string());
     }
@@ -156,6 +159,8 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
         body: format!("Skeleton for `{repository}`. No module contracts were found; the story pages below say what belongs in each."),
         links: Vec::new(),
     });
+    // The rites, a root of its own beside the story: nothing links it.
+    pages.insert("rites:".to_string(), Page { slug: RITES_SLUG.to_string(), title: "Rites".to_string(), body: RITES_PROMPT.to_string(), links: Vec::new() });
     for (slug, title, prompt) in STORY {
         let key = format!("story:{slug}");
         pages.insert(key, Page { slug: slug.to_string(), title: title.to_string(), body: prompt.to_string(), links: Vec::new() });
@@ -280,6 +285,10 @@ mod tests {
         let x = extraction();
         let s = scaffold(&x, "C:/repo", &["rust".into()]);
         assert!(s.pages.contains_key("overview"));
+        // The second root, beside the story and linked from none of it, named with the first.
+        assert_eq!(s.config.roots, Roots::new("overview", "rites"));
+        assert!(s.pages["rites"].body.contains("held by the work") && s.pages["rites"].links.is_empty());
+        assert!(!s.pages.values().any(|p| p.links.contains(&Reference::page("rites"))), "a root, linked from nothing");
         assert_eq!(s.requirements.len(), 3);
         // The story outline: root links the six story pages in order, and
         // the top-level group hangs under architecture.
