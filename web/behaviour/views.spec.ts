@@ -63,7 +63,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
     ["/", rail],
     ["/n/page%3Agoal", rail],
     ["/unplaced", rail],
-    ["/board", "section[id^='band-']"],
+    ["/cauldron", "section[id^='band-']"],
     ["/n/req%3Aready-needs-commit", "h1"],
   ] as const) {
     await page.goto(path);
@@ -76,6 +76,10 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
   await page.goto("/map");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator(rail)).toBeVisible();
+  // The cauldron's earlier address still opens it.
+  await page.goto("/board");
+  await expect(page).toHaveURL(/\/cauldron$/);
+  await expect(page.locator("section[id^='band-']").first()).toBeVisible();
   await page.goto("/nowhere");
   await expect(page.locator("header")).toBeVisible();
   await expect(page.locator("main *")).toHaveCount(0);
@@ -111,13 +115,13 @@ test("exactly one tab is lit, following the section a node was reached from", as
   await page.goto("/");
   await expect(lit()).toHaveCount(1);
   await expect(lit()).toContainText("Grimoire");
-  await expect(page.locator("header nav a")).toHaveText(["Grimoire", "Board"]);
+  await expect(page.locator("header nav a")).toHaveText(["Grimoire", "Cauldron"]);
   await page.goto("/n/page%3Areadiness");
   await expect(lit()).toContainText("Grimoire");
   // Reached from the board, a ticket keeps Board lit.
-  await page.goto("/board");
+  await page.goto("/cauldron");
   await page.getByRole("link", { name: "Make readiness faster" }).click();
-  await expect(lit()).toHaveText("Board");
+  await expect(lit()).toHaveText("Cauldron");
   // Opened cold, a requirement lights Grimoire.
   await page.goto("/n/req%3Aready-needs-commit");
   await expect(lit()).toContainText("Grimoire");
@@ -135,7 +139,7 @@ test("the header shows new findings as a warning and inherited ones dimmed", asy
   const inherited = lint.findings.length - lint.new;
   expect(lint.new, "the fixture adds new work after adopting").toBeGreaterThan(0);
   expect(inherited).toBeGreaterThan(0);
-  await page.goto("/board");
+  await page.goto("/cauldron");
   const fresh = page.locator("header").getByText(`${lint.new} new`, { exact: true });
   await expect(fresh).toBeVisible();
   await expect(fresh).toHaveClass(/text-bad/);
@@ -210,7 +214,7 @@ test("while the latest text is unanswered, earlier results are not offered and E
     if (route.request().postDataJSON().query !== "goal") return route.continue();
     await new Promise(() => {});
   });
-  await page.goto("/board");
+  await page.goto("/cauldron");
   const search = page.getByPlaceholder("Find a page, requirement, module, ticket…");
   await search.fill("readiness");
   const first = (await tool<{ nodes: { ref: string }[] }>(page, "find", { query: "readiness", limit: 12 })).nodes[0].ref;
@@ -222,7 +226,7 @@ test("while the latest text is unanswered, earlier results are not offered and E
   await search.press("Enter");
   await asked;
   await search.press("Enter");
-  await expect(page).toHaveURL("/board");
+  await expect(page).toHaveURL("/cauldron");
 });
 
 /**
@@ -331,7 +335,7 @@ type BoardAnswer = { tickets: { ref: string; priority: string; waits_on?: { ref:
  * ```
  */
 test("the board lists changes with their readiness, then the unattached gaps, with filters", async ({ page }) => {
-  await page.goto("/board");
+  await page.goto("/cauldron");
   // The per-workspace report waits on the submodules question; Explain readiness waits on nothing.
   await expect(row(page, "ticket:0006")).toContainText("waits on 1");
   // What it waits on shows under its row without opening it: kind, title, own priority and status, and in no band of its own.
@@ -386,7 +390,7 @@ test("a line under a change says whether what it relies on is open, answered or 
       for (const t of board.tickets) for (const w of t.waits_on ?? []) if (w.ref === "ticket:0005") w.status = status;
       await route.fulfill({ response, json: board });
     });
-    await page.goto("/board");
+    await page.goto("/cauldron");
     const line = row(page, "ticket:0006").locator("[data-wait='ticket:0005']");
     await expect(line, status).toContainText(said);
     await expect(line, status).toContainText("later");
@@ -402,7 +406,7 @@ test("a line under a change says whether what it relies on is open, answered or 
  * ```
  */
 test("a board row opens into the whole ticket, with what it waits on and its actions", async ({ page }) => {
-  await page.goto("/board");
+  await page.goto("/cauldron");
   await page.getByRole("button", { name: "Show Report readiness per workspace" }).click();
   const opened = row(page, "ticket:0006");
   // The panel's heading, by role: the row's badge reads "waits on 1" before the panel has loaded at all.
@@ -448,7 +452,7 @@ test("a board row opens into the whole ticket, with what it waits on and its act
  * ```
  */
 test("the board keeps the tool's order, and a change is moved by dragging or from the keyboard", async ({ page }) => {
-  await page.goto("/board");
+  await page.goto("/cauldron");
   const answer = async () => tool<BoardAnswer>(page, "board");
   const inBand = async (band: string) => (await answer()).tickets.filter((x) => x.priority === band).map((x) => x.ref);
   await expect(row(page, "ticket:0007")).toBeVisible();
@@ -561,7 +565,7 @@ test("an adopted requirement reads as described, on its page and where a page li
  * ```
  */
 test("a change the priority rule raises back stays where the tool put it, and the board says why", async ({ page }) => {
-  await page.goto("/board");
+  await page.goto("/cauldron");
   const grip = (ref: string) => row(page, ref).getByRole("button", { name: /^Move / });
   // update_ticket answers as the rule would when another change holds what 0002 relies on at high: 0002 raised back.
   const reorders: unknown[] = [];
@@ -946,7 +950,7 @@ test("a body with script in it renders as Markdown and runs nothing", async ({ p
 test("a change dragged with the mouse into an empty band lands there and shows at once", async ({ page }) => {
   // A real pointer drag, not dispatched events: a browser abandons a drag whose
   // layout changes inside dragstart, and an empty band appears when one begins.
-  await page.goto("/board");
+  await page.goto("/cauldron");
   const row = (ref: string) => page.locator(`li[data-ticket="${ref}"]`);
   const answer = async () => tool<BoardAnswer>(page, "board");
   // Every priority as it was, put back afterwards so later specs see the fixture unchanged.
@@ -1318,7 +1322,7 @@ test("a landing ticket shows its decision as waiting to land, on its page and on
   await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
   // On the board it is listed with the changes, marked as waiting to land.
-  await page.goto("/board");
+  await page.goto("/cauldron");
   await expect(row(page, ref)).toContainText("waiting to land");
   await expect(row(page, ref)).toContainText("landing");
   await expect(row(page, ref)).not.toContainText("ready");
@@ -1337,7 +1341,7 @@ test("a landing ticket shows its decision as waiting to land, on its page and on
 test("the tab names what is open, then Grimoire, and carries the book", async ({ page, request }) => {
   const named: [string, string][] = [
     ["/", "Grimoire"],
-    ["/board", "Board · Grimoire"],
+    ["/cauldron", "Cauldron · Grimoire"],
     ["/unplaced", "Unplaced · Grimoire"],
     ["/n/page%3Areadiness", "Readiness · Grimoire"],
     ["/n/ticket%3A0006", "Report readiness per workspace · Grimoire"],

@@ -313,7 +313,7 @@ fn a_ui_directory_overrides_and_routes_land_on_its_index() {
     std::fs::write(dir.join("index.html"), "<div id=\"override\"></div>").unwrap();
     std::fs::write(dir.join("assets").join("app.js"), "run()").unwrap();
     let s = serve_with(http::Ui::Dir(dir.clone()));
-    for route in ["/", "/board", "/n/page%3Agoal"] {
+    for route in ["/", "/cauldron", "/n/page%3Agoal"] {
         let (code, body) = request(s.port, "GET", route, None);
         assert_eq!(code, 200, "{route}");
         assert!(body.contains("override"), "{route} is the given directory's index, not the embedded one: {body}");
@@ -331,7 +331,7 @@ fn a_ui_directory_overrides_and_routes_land_on_its_index() {
 #[test]
 fn the_embedded_ui_or_a_page_saying_there_is_none() {
     let s = serve_with(http::Ui::Embedded);
-    let (code, body) = request(s.port, "GET", "/board", None);
+    let (code, body) = request(s.port, "GET", "/cauldron", None);
     assert_eq!(code, 200);
     if http::embedded_ui_present() {
         assert!(body.contains("<div id=\"root\">"), "a client-side route gets the embedded index: {body}");
@@ -488,7 +488,7 @@ fn a_shared_daemon_admits_by_token_and_serves_no_interface() {
     assert!(store_io::tokens::revoke(&s.daemon.store_dir, "ana").unwrap());
     assert_eq!(request_as(s.port, "POST", "/api/board", Some(&json!({})), "127.0.0.1", &bearer(&writer)).0, 403);
     // No interface: any other path is a page saying what this is, to anyone.
-    for path in ["/", "/board", "/n/page%3Aoverview"] {
+    for path in ["/", "/cauldron", "/n/page%3Aoverview"] {
         let (code, _, body) = request_as(s.port, "GET", path, None, "grimoire.team.example", "");
         assert_eq!(code, 200, "{path}");
         assert!(body.contains("shared Grimoire server") && body.contains("no interface"), "{path}: {body}");

@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the grimoire, the board and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the board at /board; a node page at /n/<ref> for every other kind; /map redirects to /; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire and is the brand, the second Board; exactly one tab is lit at all times: Grimoire on the grimoire view, Board on /board, and on a node page the section the node was reached from, falling back to Board for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."}]}
+ * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."}]}
  * ```
  */
 
@@ -25,7 +25,8 @@ export function App() {
             <Route path="/" element={<HomeView at={{ root: true }} />} />
             <Route path="/unplaced" element={<HomeView at={{ unplaced: true }} />} />
             <Route path="/map" element={<Navigate to="/" replace />} />
-            <Route path="/board" element={<BoardView />} />
+            <Route path="/cauldron" element={<BoardView />} />
+            <Route path="/board" element={<Navigate to="/cauldron" replace />} />
             <Route path="/n/:ref" element={<NodeRoute />} />
           </Routes>
         </main>
@@ -43,11 +44,11 @@ function NodeRoute() {
 
 type Section = "grimoire" | "board";
 
-const SECTION_PATH: Record<Section, string> = { grimoire: "/", board: "/board" };
+const SECTION_PATH: Record<Section, string> = { grimoire: "/", board: "/cauldron" };
 
 function sectionOfPath(pathname: string): Section | null {
   if (pathname === "/" || pathname === "/unplaced" || pathname.startsWith("/n/page%3A") || pathname.startsWith("/n/page:")) return "grimoire";
-  if (pathname.startsWith("/board")) return "board";
+  if (pathname.startsWith("/cauldron") || pathname.startsWith("/board")) return "board";
   return null;
 }
 
@@ -73,6 +74,18 @@ function BookIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 6.5c-1.6-1.4-3.9-2-7-2v13c3.1 0 5.4.6 7 2 1.6-1.4 3.9-2 7-2v-13c-3.1 0-5.4.6-7 2z" />
       <path d="M12 6.5v13" />
+    </svg>
+  );
+}
+
+function CauldronIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 9h11" />
+      <path d="M8 9c-3.6 1.6-4.2 9.5 4 9.5s7.6-7.9 4-9.5" />
+      <path d="M8.3 18l-1 2.3M15.7 18l1 2.3" />
+      <circle cx="10.5" cy="5.6" r="1.2" />
+      <circle cx="14" cy="3.8" r="0.8" />
     </svg>
   );
 }
@@ -108,7 +121,8 @@ function Top() {
           <span className="font-bold tracking-wide">Grimoire</span>
         </Tab>
         <Tab section="board" lit={lit}>
-          Board
+          <CauldronIcon />
+          Cauldron
         </Tab>
       </nav>
       <Search />

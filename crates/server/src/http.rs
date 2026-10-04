@@ -264,7 +264,7 @@ mod tests {
             _ => None,
         };
         let body = |r: Response| async move { axum::body::to_bytes(r.into_body(), 1 << 20).await.map(|b| b.to_vec()).unwrap_or_default() };
-        for route in ["/", "/board", "/n/page%3Agoal", "/n/file%3Acrates%2Fcore%2Fsrc%2Flib.rs", "/unplaced"] {
+        for route in ["/", "/cauldron", "/n/page%3Agoal", "/n/file%3Acrates%2Fcore%2Fsrc%2Flib.rs", "/unplaced"] {
             let r = asset(route, files);
             assert_eq!(r.status(), StatusCode::OK, "{route}");
             assert_eq!(body(r).await, b"<div id=root></div>", "{route} is a client-side route");
