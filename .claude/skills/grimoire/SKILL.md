@@ -35,6 +35,14 @@ from the copy last fetched, and `status` says so under `server`. A check
 that names a ticket, as a pipeline's does, fails instead: it is judged only
 against the server's intent as it is now.
 
+**Name your checkout.** Pass `checkout`, your working directory as an
+absolute path, with every call, by MCP or HTTP. One daemon may serve
+several checkouts of the same grimoire, such as worktrees agents work in
+side by side, and answers from the code and current ticket of the one you
+name. With several served, a call that names none is refused with the list
+of checkouts; with one, nothing changes. A project with a store of its own
+serves one checkout: working in several at once makes it a team's.
+
 Every tool takes and returns JSON. Errors are `{ "error": code, "message" }`
 with codes `not_found`, `invalid` (with `details`), `conflict`,
 `store_unavailable`. A write never fails on a lint; it returns the findings

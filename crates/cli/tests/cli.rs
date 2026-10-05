@@ -594,6 +594,107 @@ Host: 127.0.0.1:{port}
     eventually("audit's site is served again", || get(site, "/").0 == 200);
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-by-checkouts", "crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/server/src/library/live#checkout-chosen", "crates/server/src/library/live#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
+/// ```
+#[test]
+fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
+    // A team's project, and on one machine two checkouts of it, the second as a worktree with code of its own.
+    let t = team_fixture(None);
+    let home = t.checkout.dir.join("home");
+    let main = &t.checkout.repo;
+    let wt = uninitialised();
+    let address = format!("http://127.0.0.1:{}", t.port);
+    assert!(team(&wt.repo, &home, None, &["init", "--server", &address]).status.success());
+    std::fs::write(wt.repo.join("src").join("lib.rs"), "pub mod a;\npub fn only_in_the_worktree() {}\n").unwrap();
+    assert!(team(main, &home, None, &["login", "--token", &t.writer]).status.success());
+    for repo in [main, &wt.repo] {
+        let check = team(repo, &home, None, &["check"]);
+        assert!(check.status.success(), "{}", text(&check));
+    }
+    // One daemon, started in the main checkout, serves both under the grimoire's one name.
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(main).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+    let repository = |r: &Path| grimoire_server::store_io::repository_string(r).unwrap();
+    let (main_at, wt_at) = (repository(main), repository(&wt.repo));
+    let ask = |path: &str, body: serde_json::Value| {
+        let (code, answer) = post(port, path, &body.to_string(), "");
+        (code, serde_json::from_str::<serde_json::Value>(&answer).unwrap_or_default())
+    };
+    let served = || ask("/g/repo/api/status", serde_json::json!({})).1["library"].as_array().map(|l| l.iter().filter(|g| g["name"] == "repo").count()).unwrap_or(0);
+    eventually("both checkouts are served", || served() == 2);
+    // Each answers from its own code; a call naming neither is refused, naming both checkouts.
+    let found = |checkout: Option<&str>| {
+        let mut input = serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"] });
+        if let Some(c) = checkout {
+            input["checkout"] = serde_json::json!(c);
+        }
+        ask("/g/repo/api/find", input)
+    };
+    let (code, answer) = found(Some(&wt_at));
+    assert_eq!((code, answer["nodes"].as_array().map(Vec::len)), (200, Some(1)), "the worktree's code: {answer}");
+    let (code, answer) = found(Some(&main_at));
+    assert_eq!((code, answer["nodes"].as_array().map(Vec::len)), (200, Some(0)), "the main checkout's: {answer}");
+    let (code, refused) = found(None);
+    let why = refused["message"].as_str().unwrap_or_default();
+    assert!(code == 400 && refused["error"] == "invalid" && why.contains("2 checkouts") && why.contains("`checkout`"), "{refused}");
+    assert_eq!(refused["details"][0]["field"], "checkout", "an invalid error naming the field, as a tool's is: {refused}");
+    // A caller the trust step refuses meets that refusal first, and learns nothing of the checkouts.
+    let (code, foreign) = post(port, "/g/repo/api/find", r#"{"query":"x"}"#, "Origin: https://elsewhere.example
+");
+    assert!(code == 403 && !foreign.contains(&wt_at) && !foreign.contains("checkouts"), "{foreign}");
+    // The bare routes are the daemon's own grimoire, chosen the same way.
+    assert_eq!(ask("/api/find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": wt_at })).1["nodes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(ask("/api/find", serde_json::json!({ "query": "x" })).0, 400);
+    // status is answered without one, by the daemon's own checkout.
+    let (code, status) = ask("/g/repo/api/status", serde_json::json!({}));
+    assert_eq!((code, status["repository"].as_str()), (200, Some(main_at.as_str())));
+    // Over MCP the refusal is a tool error the agent reads; named, the call is answered.
+    let mcp = |arguments: serde_json::Value| {
+        let call = serde_json::json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": "find", "arguments": arguments } });
+        let (_, answer) = post(port, "/g/repo/mcp", &call.to_string(), "Accept: application/json, text/event-stream\r\n");
+        let json = answer.lines().find_map(|l| l.strip_prefix("data: ")).unwrap_or(&answer).to_string();
+        serde_json::from_str::<serde_json::Value>(&json).unwrap()
+    };
+    let refused = mcp(serde_json::json!({ "query": "x" }));
+    assert!(refused["result"]["isError"] == true && refused["id"] == 9 && refused["result"]["content"][0]["text"].as_str().unwrap().contains("checkouts"), "{refused}");
+    let named = mcp(serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": wt.repo.join("src").to_string_lossy() }));
+    assert!(named["result"]["isError"] != true && named["result"]["content"][0]["text"].as_str().unwrap().contains("only_in_the_worktree"), "a subfolder of the worktree is the worktree's: {named}");
+    // A command run in the worktree names it, and each checkout keeps its own current ticket.
+    let filed = team(&wt.repo, &home, None, &["tool", "file_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(team(&wt.repo, &home, None, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    let page = |checkout: &str| ask("/g/repo/api/put_page", serde_json::json!({ "slug": "notes", "title": "Notes", "body": "b", "links": [], "checkout": checkout }));
+    assert_eq!(page(&wt_at).0, 200, "the worktree's write lands in its own current ticket");
+    let (code, refused) = page(&main_at);
+    assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("no ticket is current"), "the main checkout has started none: {refused}");
+    // A directory no checkout holds is refused.
+    assert_eq!(ask("/g/repo/api/lint", serde_json::json!({ "checkout": t.origin.dir.to_string_lossy() })).0, 400);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-store-of-its-own-serves-one-checkout", "checks": ["crates/server/src/library/live#checkout-refused", "req:machine-checkouts"]}
+/// ```
+#[test]
+fn a_store_of_its_own_serves_one_checkout() {
+    // A project with a store of its own, served by its daemon, and a second checkout of it naming the same store.
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", "solo-one", "--name", "solo"]).status.success());
+    let other = bare_repo();
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
+    marked_port(&test_home().join("stores").join("solo-one"));
+    let ask = |checkout: &Path| post(port, "/g/solo/api/lint", &serde_json::json!({ "checkout": checkout.to_string_lossy() }).to_string(), "");
+    assert_eq!(ask(&p.repo).0, 200, "its own checkout is answered");
+    let (code, refused) = ask(&other.repo);
+    assert!(code == 400 && refused.contains("a store of its own, which serves one checkout") && refused.contains("team"), "{refused}");
+}
+
 /// Wait until `ok` holds, up to thirty seconds.
 fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(30);

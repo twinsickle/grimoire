@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself; and ask a daemon's library to let a store go for deletion, and to take it again after.","criteria":[{"id":"defers-to-daemon","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository; a marker nobody answers, or one answered for another repository, is ignored; a daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon; the daemon is asked at the address its marker records, and at the path of the store's grimoire in its library when the marker records one, both to probe and to call, the loopback of the same family when it listens on every address; and a call carries GRIMOIRE_TOKEN as a bearer token when it is set."},{"id":"release","statement":"release asks the daemon at an address to let a store go from its library and answers whether it did; release_done tells it the command is done with the store, so its library may take it again."}]}
+//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself; and ask a daemon's library to let a store go for deletion, and to take it again after.","criteria":[{"id":"defers-to-daemon","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository; a marker nobody answers, or one answered for another repository, is ignored; a daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon; the daemon is asked at the address its marker records, and at the path of the store's grimoire in its library when the marker records one, both to probe and to call, the loopback of the same family when it listens on every address; and a call carries GRIMOIRE_TOKEN as a bearer token when it is set."},{"id":"names-its-checkout","statement":"A call to the daemon serving a store, the probe's status included, names as `checkout` the repository the store records, unless its input already names one, so a daemon serving several checkouts of the grimoire answers from that one; a call to a daemon's bare routes by port or address names none."},{"id":"release","statement":"release asks the daemon at an address to let a store go from its library and answers whether it did; release_done tells it the command is done with the store, so its library may take it again."}]}
 //! ```
 
 use std::io::{Read, Write};
@@ -30,6 +30,8 @@ pub enum ClientError {
 pub struct At {
     pub addr: SocketAddr,
     pub path: String,
+    /// The checkout every call names, so a daemon serving several checkouts of the grimoire answers from this one.
+    pub checkout: Option<String>,
 }
 
 impl std::fmt::Display for At {
@@ -56,7 +58,7 @@ pub enum Probe {
 /// crash, or a port reused by something else, is ignored.
 pub fn probe(store_dir: &Path, repository: &str) -> Probe {
     let Some(marker) = store_io::read_serving(store_dir) else { return Probe::None };
-    let at = At { addr: marker.addr(), path: marker.path.clone().unwrap_or_default() };
+    let at = At { addr: marker.addr(), path: marker.path.clone().unwrap_or_default(), checkout: Some(repository.to_string()) };
     match exchange(&at, "status", &Value::Object(Default::default())) {
         Ok((code, status)) if (200..300).contains(&code) && status["repository"] == repository => Probe::Serving(at),
         // The trust step's own refusal, as a daemon gives it; anything else on that port is not ours.
@@ -81,7 +83,7 @@ pub fn call(port: u16, tool: &str, input: &Value) -> Result<(bool, Value), Clien
 
 /// The same, for a daemon at `addr`, on its bare routes.
 pub fn call_at(addr: SocketAddr, tool: &str, input: &Value) -> Result<(bool, Value), ClientError> {
-    call_to(&At { addr, path: String::new() }, tool, input)
+    call_to(&At { addr, path: String::new(), checkout: None }, tool, input)
 }
 
 /// The same, for the grimoire at `at`.
@@ -108,7 +110,14 @@ pub fn release_done(addr: SocketAddr, store_dir: &Path) -> Result<(), ClientErro
 
 /// One call: the status code and the JSON body.
 fn exchange(at: &At, tool: &str, input: &Value) -> Result<(u16, Value), ClientError> {
-    post(at.addr, &format!("{}/api/{tool}", at.path), input)
+    match (&at.checkout, input) {
+        (Some(checkout), Value::Object(fields)) if !fields.contains_key("checkout") => {
+            let mut named = fields.clone();
+            named.insert("checkout".to_string(), Value::String(checkout.clone()));
+            post(at.addr, &format!("{}/api/{tool}", at.path), &Value::Object(named))
+        }
+        _ => post(at.addr, &format!("{}/api/{tool}", at.path), input),
+    }
 }
 
 /// One POST of `input` to `path` on the daemon at `addr`: the status code and the JSON body.
@@ -188,6 +197,42 @@ mod tests {
         assert_eq!((at.addr.port(), at.path.as_str()), (port, "/g/ledger"));
         let (ok, answer) = call_to(&at, "status", &Value::Object(Default::default())).unwrap();
         assert!(ok && answer["repository"] == "C:/ledger", "a call goes to the same path: {answer}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-call-names-its-checkout", "checks": ["crates/server/src/client#names-its-checkout"]}
+    /// ```
+    #[test]
+    fn a_call_names_its_checkout() {
+        // A daemon that answers for the repository and keeps every request's body.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (sent, seen) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten().take(4) {
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                let _ = sent.send(request.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default());
+                let body = r#"{"repository":"C:/ledger-two"}"#;
+                let _ = write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}", body.len());
+            }
+        });
+        let tmp = temp_store();
+        store_io::write_serving_in(tmp.path(), SocketAddr::from(([127, 0, 0, 1], port)), Some("/g/ledger")).unwrap();
+        let body = || serde_json::from_str::<Value>(&seen.recv_timeout(Duration::from_secs(5)).unwrap()).unwrap();
+        // The probe and every call through it name the repository the store records.
+        let at = serving(tmp.path(), "C:/ledger-two").expect("served");
+        assert_eq!(body()["checkout"], "C:/ledger-two", "the probe names it");
+        call_to(&at, "lint", &serde_json::json!({})).unwrap();
+        assert_eq!(body()["checkout"], "C:/ledger-two", "a call names it");
+        // One the input names already is kept; a call by address alone names none.
+        call_to(&at, "lint", &serde_json::json!({ "checkout": "C:/elsewhere" })).unwrap();
+        assert_eq!(body()["checkout"], "C:/elsewhere");
+        call_at(SocketAddr::from(([127, 0, 0, 1], port)), "status", &serde_json::json!({})).unwrap();
+        assert!(body().get("checkout").is_none(), "a call to the bare routes names none");
     }
 
     /// # Test contract

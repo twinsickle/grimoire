@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"The header says the daemon is not answering and that the page retries while useAway is true, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."},{"id":"library-switcher","statement":"The header names the grimoire status says is on screen; when status lists more than one grimoire in its library it offers them all, the one on screen chosen, and choosing another opens /g/<name>/ as a new page; with none named it shows nothing."}]}
+ * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"The header says the daemon is not answering and that the page retries while useAway is true, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."},{"id":"library-switcher","statement":"The header names the grimoire status says is on screen; when status lists more than one grimoire or checkout in its library it offers each, a grimoire served for several checkouts once for each, labelled with its checkout's folder, the one on screen chosen, and choosing another opens /g/<name>/?checkout=<checkout> as a new page; with none named it shows nothing."}]}
  * ```
  */
 
@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, base, useAway, useQuery } from "./api";
 import { KindTag, mono } from "./components";
-import { idOf, kindOf, libraryShown, nodePath, serverAway, type Summary } from "./types";
+import { idOf, kindOf, libraryChoices, libraryShown, nodePath, serverAway, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
 import { NodeView } from "./views/Node";
@@ -129,7 +129,7 @@ function Top() {
       </nav>
       <Search />
       <span className="flex-1" />
-      <Library grimoire={status.data?.grimoire ?? null} library={status.data?.library ?? []} />
+      <Library grimoire={status.data?.grimoire ?? null} checkout={status.data?.repository ?? null} library={status.data?.library ?? []} />
       <span className="text-fg-faint text-xs">
         {daemonAway ? <span className="text-bad">daemon not answering · retrying</span> : status.error && <span className="text-bad">{status.error.message}</span>}
         {status.data && (
@@ -154,8 +154,9 @@ function Top() {
  * of them. Choosing one opens it at its own address as a page of its own, so
  * every query and the event stream are that grimoire's from the start.
  */
-function Library({ grimoire, library }: { grimoire: string | null; library: { name: string; repository: string }[] }) {
+function Library({ grimoire, checkout, library }: { grimoire: string | null; checkout: string | null; library: { name: string; repository: string }[] }) {
   const shown = libraryShown(grimoire, library);
+  const choices = libraryChoices(grimoire, checkout, library);
   if (shown === "none") return null;
   if (shown === "name") return <span className={`text-fg-dim text-xs ${mono}`} aria-label="Grimoire">{grimoire}</span>;
   return (
@@ -164,12 +165,15 @@ function Library({ grimoire, library }: { grimoire: string | null; library: { na
       <select
         aria-label="Grimoire"
         className={`bg-bg-2 border border-line rounded px-1.5 py-0.5 text-fg ${mono}`}
-        value={grimoire ?? undefined}
-        onChange={(e) => window.location.assign(`/g/${e.target.value}/`)}
+        value={choices.find((c) => c.chosen)?.key}
+        onChange={(e) => {
+          const to = choices.find((c) => c.key === e.target.value);
+          if (to) window.location.assign(to.href);
+        }}
       >
-        {library.map((g) => (
-          <option key={g.name} value={g.name} title={g.repository}>
-            {g.name}
+        {choices.map((c) => (
+          <option key={c.key} value={c.key} title={c.key.split("\n")[1]}>
+            {c.label}
           </option>
         ))}
       </select>

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Describe every tool for MCP tools/list and the API: its name, a description and its JSON input schema.","criteria":[{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."}]}
+//! {"purpose":"Describe every tool for MCP tools/list and the API: its name, a description and its JSON input schema.","criteria":[{"id":"definitions-match","statement":"Every tool the dispatcher accepts is listed in definitions() with an input schema, and nothing is listed that it does not accept."},{"id":"checkout-offered","statement":"Every tool's input schema offers `checkout`, a string, described as the caller's working directory, which a daemon serving several checkouts of the grimoire uses to choose the caller's, and none requires it."}]}
 //! ```
 
 use serde_json::{json, Value};
@@ -59,6 +59,11 @@ pub fn definitions() -> Vec<ToolDef> {
     for d in defs.iter_mut().filter(|d| !super::is_write(d.name) || super::proposes(d.name)) {
         d.input_schema["properties"]["ticket"] = ticket.clone();
     }
+    // Every tool takes the caller's checkout, which the daemon routes by and the tool never sees (req:machine-checkouts).
+    let checkout = json!({ "type": "string", "description": "Your working directory, as an absolute path. Pass it with every call: one daemon may serve several checkouts of this grimoire, such as worktrees, and answers from the code and current ticket of the one you name. With several served, a call that names none is refused." });
+    for d in defs.iter_mut() {
+        d.input_schema["properties"]["checkout"] = checkout.clone();
+    }
     defs
 }
 
@@ -103,6 +108,33 @@ mod tests {
             let taken = !crate::tools::is_write(d.name) || crate::tools::proposes(d.name);
             assert_eq!(offered, taken, "{}", d.name);
         }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "every-tool-offers-checkout", "checks": ["crates/core/src/tools/definitions#checkout-offered", "crates/core/src/tools#checkout-ignored"]}
+    /// ```
+    #[test]
+    fn every_tool_offers_checkout() {
+        let mut s = state();
+        for d in definitions() {
+            assert_eq!(d.input_schema["properties"]["checkout"]["type"], "string", "{}", d.name);
+            assert!(!d.input_schema["required"].as_array().is_some_and(|r| r.iter().any(|f| f == "checkout")), "{} does not require it", d.name);
+        }
+        // The tools never see it: a strict input, which refuses fields it does not know, takes it.
+        let named = |mut input: Value| {
+            input["checkout"] = json!("C:/somewhere/worktree");
+            input
+        };
+        assert!(call(&mut s, "status", named(json!({})), "2026-10-05").is_ok());
+        assert!(call(&mut s, "file_ticket", named(json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })), "2026-10-05").is_ok());
+        let e = call(&mut s, "get", named(json!({ "ref": "req:nope" })), "2026-10-05").unwrap_err();
+        assert_eq!(e.code(), "not_found", "checkout is not refused as an unknown field: {e}");
+        assert_eq!(call(&mut s, "get", json!({ "ref": "req:nope", "other": 1 }), "2026-10-05").unwrap_err().code(), "invalid", "an unknown field still is");
+        // Of the tools, status alone is answered with no checkout named, since it lists the ones to name.
+        let any: Vec<&str> = definitions().iter().map(|d| d.name).filter(|n| crate::tools::answers_any_checkout(n)).collect();
+        assert_eq!(any, ["status"]);
     }
 
     /// # Test contract

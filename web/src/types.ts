@@ -54,6 +54,22 @@ export function libraryShown(grimoire: string | null, library: { name: string }[
 }
 
 /**
+ * The grimoires a library's switcher offers, one for each checkout: the label names the
+ * checkout's folder when the grimoire is served for several, the address opens it as
+ * /g/<name>/?checkout=<checkout>, and the one on screen is chosen.
+ */
+export function libraryChoices(grimoire: string | null, checkout: string | null, library: { name: string; repository: string }[]): { key: string; label: string; href: string; chosen: boolean }[] {
+  const several = (name: string) => library.filter((g) => g.name === name).length > 1;
+  const folder = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
+  return library.map((g) => ({
+    key: `${g.name}\n${g.repository}`,
+    label: several(g.name) ? `${g.name} · ${folder(g.repository)}` : g.name,
+    href: `/g/${g.name}/?checkout=${encodeURIComponent(g.repository)}`,
+    chosen: g.name === grimoire && (checkout === null || g.repository === checkout),
+  }));
+}
+
+/**
  * What the grimoire view says when it has no grimoire root to show: the root
  * the config names, when one is, has no page yet; else no root is named.
  */

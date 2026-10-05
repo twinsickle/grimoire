@@ -36,6 +36,12 @@ pub trait Policy: Send + Sync {
     fn admit(&self, headers: &HeaderMap) -> Result<Caller, String>;
 }
 
+/// A call a daemon's library refused for the checkout it names, or does not name, before it
+/// reached a checkout: put on the request it hands to the grimoire's routes, so the trust step
+/// admits the caller first and the call is answered with this error as any tool's is.
+#[derive(Debug, Clone)]
+pub struct CheckoutRefused(pub grimoire_core::ops::ToolError);
+
 /// A caller on this machine, not a page in a browser on another site's behalf.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Local;

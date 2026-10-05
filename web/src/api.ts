@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, for the grimoire the page's address names, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response whose body is a tool's error is thrown as an ApiError carrying its code and message; a request that fails to connect, or a server error whose body is no tool's error, as a proxy answers while the daemon is away, is thrown as Unreachable, saying the daemon is not answering; any other answer that is not JSON is thrown as an error naming its status and the start of its body; no answer is thrown as a JSON syntax error."},{"id":"stream-reopens","statement":"When the browser closes the event stream for good, as it does when a reconnect is answered with anything but an event stream, it is opened again after a backoff of one second doubling to ten, reset on each opening; every opening counts as an event."},{"id":"away-keeps-data","statement":"useAway is true from a call thrown as Unreachable or an error on the event stream until any answer from the daemon or an opened stream; while it is, a query whose deps are unchanged keeps its last data and reports no error, and a query with no data for its deps reports the Unreachable error."},{"id":"retries-while-away","statement":"While useAway is true, every listener of onEvent, and so every query, is told every two seconds, so the page asks again until the daemon answers whether or not an event comes; once it answers, the retries stop."},{"id":"grimoire-base","statement":"A page opened at /g/<name>/ makes every tool call and opens its event stream under /g/<name>/api/, that grimoire's in the daemon's library; one opened elsewhere uses the bare /api/, the daemon's default grimoire; grimoireBase reads the name only from a leading /g/ followed by a slug."}]}
+ * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, for the grimoire the page's address names, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response whose body is a tool's error is thrown as an ApiError carrying its code and message; a request that fails to connect, or a server error whose body is no tool's error, as a proxy answers while the daemon is away, is thrown as Unreachable, saying the daemon is not answering; any other answer that is not JSON is thrown as an error naming its status and the start of its body; no answer is thrown as a JSON syntax error."},{"id":"names-its-checkout","statement":"Every call and the event stream name a checkout: the one the page's address names as ?checkout=, kept for the tab, else the one the first status answers for, which is learned before any other call is sent or the stream is opened; status itself names it once it is known; a call refused for the checkout it names forgets that checkout, learns it again and is sent once more."},{"id":"stream-reopens","statement":"When the browser closes the event stream for good, as it does when a reconnect is answered with anything but an event stream, it is opened again after a backoff of one second doubling to ten, reset on each opening; every opening counts as an event."},{"id":"away-keeps-data","statement":"useAway is true from a call thrown as Unreachable or an error on the event stream until any answer from the daemon or an opened stream; while it is, a query whose deps are unchanged keeps its last data and reports no error, and a query with no data for its deps reports the Unreachable error."},{"id":"retries-while-away","statement":"While useAway is true, every listener of onEvent, and so every query, is told every two seconds, so the page asks again until the daemon answers whether or not an event comes; once it answers, the retries stop."},{"id":"grimoire-base","statement":"A page opened at /g/<name>/ makes every tool call and opens its event stream under /g/<name>/api/, that grimoire's in the daemon's library; one opened elsewhere uses the bare /api/, the daemon's default grimoire; grimoireBase reads the name only from a leading /g/ followed by a slug."}]}
  * ```
  */
 
@@ -69,15 +69,79 @@ export function grimoireBase(pathname: string): string {
 /** The grimoire this page reads, from the address it was opened at; switching grimoires opens a page of its own. */
 export const base: string = typeof window === "undefined" ? "" : grimoireBase(window.location.pathname);
 
+const CHECKOUT_KEY = `grimoire.checkout:${base}`;
+
+/** The checkout the page's address names, else the one this tab chose before, else none yet. */
+function checkoutAsked(): string | null {
+  if (typeof window === "undefined") return null;
+  const named = new URLSearchParams(window.location.search).get("checkout");
+  try {
+    if (named) sessionStorage.setItem(CHECKOUT_KEY, named);
+    return named ?? sessionStorage.getItem(CHECKOUT_KEY);
+  } catch {
+    return named;
+  }
+}
+
+// The checkout this page reads (req:machine-checkouts): a daemon may serve several of one grimoire.
+let checkout: string | null = checkoutAsked();
+let learning: Promise<boolean> | null = null;
+
+/** The checkout this page names in its calls, once it is known. */
+export function currentCheckout(): string | null {
+  return checkout;
+}
+
+/** Learn the checkout from the first status, which is answered without one, before any other call goes; whether it was. */
+function learnCheckout(): Promise<boolean> {
+  learning ??= call("status").then(
+    (s) => {
+      checkout ??= s.repository;
+      return true;
+    },
+    () => {
+      // Not learned: the next call tries again.
+      learning = null;
+      return false;
+    },
+  );
+  return learning;
+}
+
 /** Call a tool by name; its answer's type follows from the name, generated from the Rust answer types. */
 export async function call<K extends keyof ToolAnswers>(tool: K, input: unknown = {}): Promise<ToolAnswers[K]> {
+  try {
+    return await callOnce(tool, input);
+  } catch (e) {
+    // The checkout this page named is no longer served, or was never one: forget it, learn it again, ask once more.
+    if (e instanceof ApiError && checkout !== null && e.body.error === "invalid" && e.body.details.some((d) => d.field === "checkout")) {
+      forgetCheckout();
+      return callOnce(tool, input);
+    }
+    throw e;
+  }
+}
+
+function forgetCheckout() {
+  checkout = null;
+  learning = null;
+  try {
+    sessionStorage.removeItem(CHECKOUT_KEY);
+  } catch {
+    // Nothing kept, nothing to forget.
+  }
+}
+
+async function callOnce<K extends keyof ToolAnswers>(tool: K, input: unknown): Promise<ToolAnswers[K]> {
+  if (checkout === null && tool !== "status") await learnCheckout();
+  const named = checkout !== null && typeof input === "object" && input !== null && !Array.isArray(input) ? { ...input, checkout } : input;
   let res: Response;
   let text: string;
   try {
     res = await fetch(`${base}/api/${tool}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify(named),
     });
     text = await res.text();
   } catch (e) {
@@ -135,9 +199,24 @@ function notify() {
   listeners.forEach((l) => l());
 }
 
+let streamWaits = false;
+
 function ensureStream() {
-  if (stream) return;
-  const opened = new EventSource(`${base}/api/events`);
+  if (stream || streamWaits) return;
+  // The stream names the page's checkout, so it waits until the checkout is known.
+  if (checkout === null) {
+    streamWaits = true;
+    void learnCheckout().then((learned) => {
+      streamWaits = false;
+      if (learned) return ensureStream();
+      // The daemon did not answer: try again later, as a closed stream is.
+      const wait = backoff;
+      backoff = Math.min(backoff * 2, 10_000);
+      setTimeout(ensureStream, wait);
+    });
+    return;
+  }
+  const opened = new EventSource(`${base}/api/events${checkout ? `?checkout=${encodeURIComponent(checkout)}` : ""}`);
   stream = opened;
   opened.onmessage = notify;
   // On a daemon restart the browser reconnects by itself; the graph may have

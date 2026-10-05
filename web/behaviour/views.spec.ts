@@ -103,7 +103,7 @@ test("a grimoire of the library is read at its own address, and the header switc
   await expect(page.locator("main h1")).toHaveText("Cauldron");
   await expect(page.locator("header")).toContainText("0 pages · 0 reqs");
   const switcher = page.locator("header select[aria-label='Grimoire']");
-  await expect(switcher).toHaveValue("ledger");
+  await expect(switcher.locator("option:checked")).toHaveText("ledger");
   await expect(switcher.locator("option")).toHaveText(["ledger", "repo"]);
   // Every call and the event stream went to ledger's address, none to the bare routes.
   expect(calls.length).toBeGreaterThan(0);
@@ -112,10 +112,10 @@ test("a grimoire of the library is read at its own address, and the header switc
   await page.locator("header nav a").first().click();
   await expect(page).toHaveURL(/\/g\/ledger\/?$/);
   // Choosing the other opens it at its own address, a page of its own.
-  await switcher.selectOption("repo");
-  await expect(page).toHaveURL(/\/g\/repo\/$/);
+  await switcher.selectOption({ label: "repo" });
+  await expect(page).toHaveURL(/\/g\/repo\/(\?checkout=[^/]+)?$/);
   await expect(page.locator(rail)).toBeVisible();
-  await expect(page.locator("header select[aria-label='Grimoire']")).toHaveValue("repo");
+  await expect(page.locator("header select[aria-label='Grimoire'] option:checked")).toHaveText("repo");
   const goal = await tool<{ node: { title: string } }>(page, "get", { ref: "page:goal" });
   await page.goto("/g/repo/n/page%3Agoal");
   await expect(page.locator("main h1").first()).toContainText(goal.node.title);
@@ -706,7 +706,12 @@ test("a page lists each module it links once, with its criteria beneath it", asy
 test("the rail is the outline's pages, ending with the unplaced modules", async ({ page }) => {
   const asked: object[] = [];
   page.on("request", (r) => {
-    if (r.url().endsWith("/api/outline")) asked.push(r.postDataJSON());
+    // What the view asks, without the checkout every call names.
+    if (r.url().endsWith("/api/outline")) {
+      const input = r.postDataJSON() as Record<string, unknown>;
+      delete input.checkout;
+      asked.push(input);
+    }
   });
   await page.goto("/");
   await expect(page.locator(rail)).toBeVisible();
@@ -1540,7 +1545,8 @@ async function daemonAway(page: Page) {
 test("a stream the browser closed is opened again, and the page is current once the daemon answers", async ({ page }) => {
   // Every attempt at the stream is answered as the proxy answers in a rebuild, which closes it for good.
   let refused = 0;
-  await page.route("**/api/events", (route) => {
+  const events = (url: URL) => url.pathname.endsWith("/api/events");
+  await page.route(events, (route) => {
     refused++;
     return route.fulfill({ status: 500, contentType: "text/plain", body: "" });
   });
@@ -1550,7 +1556,7 @@ test("a stream the browser closed is opened again, and the page is current once 
   await expect(page.locator(`#unattached li[data-ticket='${own.node.ref}']`)).toBeVisible();
   await expect.poll(() => refused, { message: "the page tries the stream again after it was closed" }).toBeGreaterThan(1);
   // The daemon answers again: the stream is opened, and a write elsewhere shows without a reload.
-  await page.unroute("**/api/events");
+  await page.unroute(events);
   const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Back after a rebuild", kind: "gap", priority: "later", touches: [], body: "Filed once the stream was back." });
   await expect(page.locator(`#unattached li[data-ticket='${filed.node.ref}']`)).toBeVisible({ timeout: 20_000 });
 });

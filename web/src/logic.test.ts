@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { goneOf, idOf, kindOf, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
+import { goneOf, idOf, kindOf, libraryChoices, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -187,6 +187,11 @@ class FakeStream {
   }
 }
 
+/** A daemon whose status answers for the checkout C:/r and whose every other tool answers nothing. */
+function stubStatus() {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/api/status") ? { repository: "C:/r" } : {}), { status: 200 })));
+}
+
 /** api.ts afresh, its one stream and its away state new, over the fake stream and fake timers. */
 async function freshApi() {
   vi.resetModules();
@@ -206,10 +211,14 @@ async function freshApi() {
 test("a stream closed for good is opened again after one second doubling to ten, one at a time, the wait reset by an opening", async () => {
   const api = await freshApi();
   try {
+    stubStatus();
     let told = 0;
     const stop = api.onEvent(() => told++);
     api.onEvent(() => {});
+    // The stream is opened once the page's checkout is known, from the first status.
+    await vi.advanceTimersByTimeAsync(0);
     expect(FakeStream.made).toHaveLength(1);
+    expect(FakeStream.made[0].url).toBe("/api/events?checkout=C%3A%2Fr");
     // Each refusal waits longer before the next attempt: 1, 2, 4, 8, then 10 seconds at most.
     for (const wait of [1000, 2000, 4000, 8000, 10_000, 10_000]) {
       const before = FakeStream.made.length;
@@ -250,8 +259,10 @@ test("a stream closed for good is opened again after one second doubling to ten,
 test("while the daemon is away every listener is told every two seconds, and no longer once it answers", async () => {
   const api = await freshApi();
   try {
+    stubStatus();
     let told = 0;
     api.onEvent(() => told++);
+    await vi.advanceTimersByTimeAsync(0);
     vi.advanceTimersByTime(10_000);
     expect(told, "nothing is retried while the daemon answers").toBe(0);
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
@@ -265,6 +276,98 @@ test("while the daemon is away every listener is told every two seconds, and no 
   } finally {
     vi.useRealTimers();
   }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "every-call-names-the-pages-checkout", "checks": ["web/src/api#names-its-checkout"]}
+ * ```
+ */
+test("every call names the checkout the first status answered for, learned before any other call goes", async () => {
+  const api = await freshApi();
+  try {
+    const sent: { tool: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: { body: string }) => {
+        const tool = url.split("/api/")[1];
+        sent.push({ tool, body: JSON.parse(init.body) as Record<string, unknown> });
+        return new Response(JSON.stringify(tool === "status" ? { repository: "C:/shop/wt" } : {}), { status: 200 });
+      }),
+    );
+    expect(api.currentCheckout()).toBeNull();
+    await Promise.all([api.call("lint"), api.call("find", { query: "x" })]);
+    // One status first, naming none; every call after names the checkout it answered for.
+    expect(sent[0]).toEqual({ tool: "status", body: {} });
+    expect(sent.filter((s) => s.tool === "status")).toHaveLength(1);
+    expect(sent.slice(1).map((s) => s.body.checkout)).toEqual(["C:/shop/wt", "C:/shop/wt"]);
+    expect(sent.find((s) => s.tool === "find")?.body.query).toBe("x");
+    await api.call("status");
+    expect(sent.at(-1)?.body.checkout).toBe("C:/shop/wt");
+    expect(api.currentCheckout()).toBe("C:/shop/wt");
+    // The event stream names it too.
+    api.onEvent(() => {});
+    expect(FakeStream.made.at(-1)?.url).toBe("/api/events?checkout=C%3A%2Fshop%2Fwt");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-checkout-no-longer-served-is-learned-again", "checks": ["web/src/api#names-its-checkout"]}
+ * ```
+ */
+test("a call refused for the checkout it names forgets it, learns it again and is sent once more", async () => {
+  const api = await freshApi();
+  try {
+    // First the daemon serves C:/old; then that checkout is gone, and C:/new answers status.
+    let served = "C:/old";
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: { body: string }) => {
+        const body = JSON.parse(init.body) as Record<string, unknown>;
+        sent.push(body);
+        if (url.endsWith("/api/status") && (body.checkout === undefined || body.checkout === served)) return new Response(JSON.stringify({ repository: served }), { status: 200 });
+        if (body.checkout !== served) return new Response(JSON.stringify({ error: "invalid", message: "no checkout", details: [{ field: "checkout", reason: "gone" }] }), { status: 400 });
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    await api.call("lint");
+    expect(api.currentCheckout()).toBe("C:/old");
+    served = "C:/new";
+    await api.call("lint");
+    expect(api.currentCheckout()).toBe("C:/new");
+    expect(sent.at(-1)?.checkout).toBe("C:/new");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-switcher-offers-each-checkout", "checks": ["web/src/App#library-switcher"]}
+ * ```
+ */
+test("the switcher offers each checkout of a grimoire, named by its folder, the one on screen chosen", () => {
+  const library = [
+    { name: "ledger", repository: "C:/code/ledger" },
+    { name: "shop", repository: "C:/code/shop" },
+    { name: "shop", repository: "C:/code/shop/.claude/worktrees/wt" },
+  ];
+  const choices = libraryChoices("shop", "C:/code/shop/.claude/worktrees/wt", library);
+  expect(choices.map((c) => c.label)).toEqual(["ledger", "shop · shop", "shop · wt"]);
+  expect(choices.map((c) => c.chosen)).toEqual([false, false, true]);
+  expect(choices[2].href).toBe("/g/shop/?checkout=C%3A%2Fcode%2Fshop%2F.claude%2Fworktrees%2Fwt");
+  // Before the checkout is known, the grimoire on screen is chosen.
+  expect(libraryChoices("ledger", null, library).map((c) => c.chosen)).toEqual([true, false, false]);
 });
 
 /**

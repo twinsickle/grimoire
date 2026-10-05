@@ -12,7 +12,7 @@ import type { Route } from "../behaviour/routes";
 export async function open(page: Page, route: Route): Promise<void> {
   let inFlight = 0;
   let last = Date.now();
-  const isTool = (url: string) => new URL(url).pathname.startsWith("/api/") && !url.endsWith("/api/events");
+  const isTool = (url: string) => new URL(url).pathname.startsWith("/api/") && !new URL(url).pathname.endsWith("/api/events");
   page.on("request", (r) => {
     if (isTool(r.url())) inFlight++;
   });

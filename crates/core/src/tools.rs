@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."}]}
 //! ```
 
 use serde::Deserialize;
@@ -82,6 +82,12 @@ pub fn is_write(name: &str) -> bool {
     matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "land_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
 }
 
+/// The tools a daemon serving several checkouts of a grimoire answers with no `checkout` named:
+/// `status`, which lists the checkouts a caller may name (req:machine-checkouts).
+pub fn answers_any_checkout(name: &str) -> bool {
+    name == "status"
+}
+
 /// The writes that cannot be taken back by another write: a deletion, and a close or landing, which applies a proposal and discards the ticket's body.
 pub fn is_destructive(name: &str) -> bool {
     matches!(name, "delete_node" | "close_ticket" | "land_ticket")
@@ -89,6 +95,10 @@ pub fn is_destructive(name: &str) -> bool {
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
 pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
+    // The caller's checkout routed the call here; the tool has no use for it.
+    if let Some(o) = input.as_object_mut() {
+        o.remove("checkout");
+    }
     if is_write(name) {
         // Every string a write stores is trimmed here, once, so no write tool can forget.
         crate::store::trim_strings(&mut input);

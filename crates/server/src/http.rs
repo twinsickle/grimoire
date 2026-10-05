@@ -148,12 +148,16 @@ fn error_response(e: ToolError) -> Response {
     (status, Json(serde_json::to_value(&e).unwrap_or_default())).into_response()
 }
 
-async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, tool: String, input: Value, token: Option<String>) -> Response {
+async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, refused: Option<access::CheckoutRefused>, tool: String, input: Value, token: Option<String>) -> Response {
     if !grimoire_core::tools::TOOL_NAMES.contains(&tool.as_str()) {
         return error_response(ToolError::invalid(format!("unknown tool `{tool}`"), vec![]));
     }
     if let Err(e) = access::may_call(caller.as_ref(), &tool) {
         return (StatusCode::FORBIDDEN, Json(serde_json::to_value(&e).unwrap_or_default())).into_response();
+    }
+    // Refused by the library for its checkout, once the caller is admitted (req:machine-checkouts).
+    if let Some(access::CheckoutRefused(e)) = refused {
+        return error_response(e);
     }
     let result = tokio::task::spawn_blocking(move || daemon.call_as(&tool, input, token)).await;
     match result {
@@ -163,7 +167,7 @@ async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, tool: String, input: V
     }
 }
 
-async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
+async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, refused: Option<Extension<access::CheckoutRefused>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
     // A form can post a body spelled as JSON with a form content type, and a
     // browser sends a form without asking first; JSON cannot be sent that way.
     let json_body = headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|ct| ct.split(';').next().is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json")));
@@ -182,12 +186,12 @@ async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<C
     // The token the request carries: a command run with GRIMOIRE_TOKEN sends it, and on a project
     // that names a server its write goes to the server signed in as that command, not as this daemon.
     let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
-    run(daemon, caller.map(|Extension(c)| c), tool, input, token).await
+    run(daemon, caller.map(|Extension(c)| c), refused.map(|Extension(r)| r), tool, input, token).await
 }
 
 /// GET form for convenience: each query value is parsed as JSON when it is,
 /// otherwise taken as a string, so `?ref=page:overview&depth=3` works.
-async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
+async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, refused: Option<Extension<access::CheckoutRefused>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
     // A write always takes a POST with a JSON body: a GET is the easiest
     // request for another site to forge.
     if grimoire_core::tools::is_write(&tool) {
@@ -199,7 +203,7 @@ async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Ca
         let parsed = serde_json::from_str::<Value>(&v).ok().filter(|p| !p.is_string()).unwrap_or(Value::String(v));
         input.insert(k, parsed);
     }
-    run(daemon, caller.map(|Extension(c)| c), tool, Value::Object(input), None).await
+    run(daemon, caller.map(|Extension(c)| c), refused.map(|Extension(r)| r), tool, Value::Object(input), None).await
 }
 
 /// The store's whole intent in one read, for a machine that keeps a copy of

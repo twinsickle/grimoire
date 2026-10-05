@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; so is one whose name the default checkout's grimoire or an earlier one already holds, the reason naming both checkouts, and the default checkout's own grimoire is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
+//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; every checkout of a copy of a team's grimoire is returned, so several share one name when they copy the same server's grimoire; one whose name the default checkout's grimoire or an earlier one already holds is skipped, the reason naming both checkouts, unless both are copies of that same server's grimoire; and the default checkout's own grimoire is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
 //! ```
 
 pub mod live;
@@ -73,15 +73,17 @@ pub fn find(stores: &Path, copies: &Path, default: &Grimoire) -> Found {
                 continue;
             }
         };
-        // On a machine a grimoire is served with one checkout (question 0173).
-        let taken = std::iter::once(default).chain(found.grimoires.iter()).find(|g| g.name == name).map(|g| g.repo.display().to_string());
+        // Every checkout of one team's grimoire is served, each a copy of its own; any other
+        // grimoire of a name already taken is another project's, and skipped (question 0173).
+        let one_team = |g: &Grimoire| g.server.is_some() && g.server == server;
+        let taken = std::iter::once(default).chain(found.grimoires.iter()).find(|g| g.name == name && !one_team(g)).map(|g| g.repo.display().to_string());
         if let Some(other) = taken {
             found.skipped.push(format!("{shown}: the grimoire `{name}` is served already, with the checkout {other}; this checkout, {repository}, is not served beside it"));
             continue;
         }
         found.grimoires.push(Grimoire { name, store_dir, repo, server });
     }
-    found.grimoires.sort_by(|a, b| a.name.cmp(&b.name));
+    found.grimoires.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.repo.cmp(&b.repo)));
     found
 }
 

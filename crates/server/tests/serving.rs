@@ -212,7 +212,7 @@ fn mcp_instructions_carry_the_rules() {
     let s = serve();
     let r = mcp(s.port, 1, "initialize", json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "t", "version": "0" } }));
     let text = r["result"]["instructions"].as_str().unwrap().to_string();
-    for rule in ["Orient first", "Work is a ticket", "same piece of work", "`# Module contract`", "`find` before writing any reference", "Never write the store's files", "never on your own decision"] {
+    for rule in ["Orient first", "Work is a ticket", "same piece of work", "`# Module contract`", "`find` before writing any reference", "Never write the store's files", "never on your own decision", "Pass `checkout`, your working directory, with every call"] {
         assert!(text.contains(rule), "the instructions say {rule:?}: {text}");
     }
     // The reading order is each root page's links; a list of the story pages here goes stale.
