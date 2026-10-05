@@ -147,6 +147,16 @@ impl Live {
         matches!(self.source, Source::Machine { .. })
     }
 
+    /// What a grimoire is served from, as the log names it: a checkout on a machine,
+    /// whose code it is joined with; its store on a team's server, which holds no checkouts.
+    fn served_from<'a>(&self, g: &'a Grimoire) -> &'a Path {
+        if self.on_a_machine() {
+            &g.repo
+        } else {
+            &g.store_dir
+        }
+    }
+
     /// The names of the grimoires served now, in name order.
     pub fn names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.held.lock().expect("library lock").served.keys().map(|(name, _)| name.clone()).collect();
@@ -191,8 +201,13 @@ impl Live {
         };
         let mut changed = !gone.is_empty();
         for (name, s) in gone {
+            let store_dir = s.store_dir.clone();
             s.let_go();
-            tracing::info!("library: let go of `{name}`, which this machine's checkouts no longer name");
+            if self.on_a_machine() {
+                tracing::info!("library: let go of `{name}`, which this machine's checkouts no longer name");
+            } else {
+                tracing::info!("library: let go of `{name}`: {} is no longer a store of the library by that name", store_dir.display());
+            }
         }
         // Opened without the library held, since opening reads a checkout's code.
         for g in wanted {
@@ -203,7 +218,7 @@ impl Live {
                 shelved.let_go();
                 continue;
             }
-            tracing::info!("library: serving `{}` from {} at /g/{}", g.name, g.repo.display(), g.name);
+            tracing::info!("library: serving `{}` from {} at /g/{}", g.name, self.served_from(&g).display(), g.name);
             held.served.insert((g.name.clone(), g.repo.clone()), shelved);
             changed = true;
         }
@@ -938,5 +953,20 @@ mod tests {
         }
         assert!(Arc::ptr_eq(&first, &live.daemon_of("shop").unwrap()), "the same daemon serves it throughout: never let go and taken again");
         live.stop();
+    }
+
+    #[test]
+    fn the_log_names_what_a_grimoire_is_served_from() {
+        // A team's server holds no checkouts, so it names the store; a machine names the checkout.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (shop, ledger) = (project(root, "shop"), project(root, "ledger"));
+        let shared = Live::new_shared(root.join("stores"), SocketAddr::from(([127, 0, 0, 1], 4299)));
+        let on_server = Grimoire { repo: PathBuf::new(), ..ledger.clone() };
+        assert_eq!(shared.served_from(&on_server), ledger.store_dir.as_path());
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let machine = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        assert_eq!(machine.served_from(&ledger), ledger.repo.as_path());
     }
 }
