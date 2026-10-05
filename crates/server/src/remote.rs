@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join a machine with a team's server: call the server with the person's token, keep the machine's copy of the server's intent, send a write there and answer it from the machine's own graph, and follow the server so a teammate's write arrives.","criteria":[{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"sync","statement":"sync fetches the server's intent in one read, joins it with what is the machine's own, creates the copy when there is none and otherwise writes only what differs, and rewrites from the server's intent, or removes, any file of the copy that did not load, and notes in the copy which server it is of and when it was fetched; it answers the store the copy now holds and what changed."},{"id":"offline","statement":"When the server does not answer, a machine that holds a copy opens on it and goes on reading it, status naming the server as unreachable and when the copy was fetched, and every write is refused as store_unavailable naming the server, with nothing changed; a machine that holds no copy does not open, and one whose token the server refuses does not open either; a server that refuses the token a call carries is told apart from one that refuses the call, by asking it with the same token for its status, whichever call finds it out, a write among them; a daemon already serving then says so in status, as refused and not as unreachable, stays refused while the server cannot be reached to be asked again, and takes up again by itself once the server takes its token."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start the server took is kept in the copy as the machine ran it, its current ticket and its start being nowhere else; adopt is sent with the findings the machine sees."},{"id":"current-is-the-checkouts","statement":"A write that changes intent and names no ticket is sent naming the checkout's current ticket; start_ticket on a ticket the server already has active or landing, and land_ticket naming none, are answered on the machine and never sent, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket active or landing, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes."},{"id":"follows-the-server","statement":"A daemon on a project that names a server follows the server's event stream: it syncs when the stream opens and on every event, announces on its own stream what a sync changed, and when the stream cannot be opened marks the server unreachable and tries again; whenever the server stops or starts answering, the daemon announces that too, as a change to `server`."}]}
+//! {"purpose":"Join a machine with a team's server: call the server with the person's token, keep the machine's copy of the server's intent, send a write there and answer it from the machine's own graph, and follow the server so a teammate's write arrives.","criteria":[{"id":"checkout-stays","statement":"A call sent to the server never carries `checkout`: the caller's checkout chose a checkout on this machine and names nothing on the server, so a server older than the field is not refused it."},{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"sync","statement":"sync fetches the server's intent in one read, joins it with what is the machine's own, creates the copy when there is none and otherwise writes only what differs, and rewrites from the server's intent, or removes, any file of the copy that did not load, and notes in the copy which server it is of and when it was fetched; it answers the store the copy now holds and what changed."},{"id":"offline","statement":"When the server does not answer, a machine that holds a copy opens on it and goes on reading it, status naming the server as unreachable and when the copy was fetched, and every write is refused as store_unavailable naming the server, with nothing changed; a machine that holds no copy does not open, and one whose token the server refuses does not open either; a server that refuses the token a call carries is told apart from one that refuses the call, by asking it with the same token for its status, whichever call finds it out, a write among them; a daemon already serving then says so in status, as refused and not as unreachable, stays refused while the server cannot be reached to be asked again, and takes up again by itself once the server takes its token."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start the server took is kept in the copy as the machine ran it, its current ticket and its start being nowhere else; adopt is sent with the findings the machine sees."},{"id":"current-is-the-checkouts","statement":"A write that changes intent and names no ticket is sent naming the checkout's current ticket; start_ticket on a ticket the server already has active or landing, and land_ticket naming none, are answered on the machine and never sent, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket active or landing, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes."},{"id":"follows-the-server","statement":"A daemon on a project that names a server follows the server's event stream: it syncs when the stream opens and on every event, announces on its own stream what a sync changed, and when the stream cannot be opened marks the server unreachable and tries again; whenever the server stops or starts answering, the daemon announces that too, as a change to `server`."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -203,7 +203,12 @@ impl Server {
         if let Some(token) = self.token() {
             request = request.header("Authorization", format!("Bearer {token}"));
         }
-        self.read(request.send(input.to_string()).map_err(|e| self.unreachable(e))?)
+        // The caller's checkout chose this machine's checkout; it names nothing on the server, which may predate it.
+        let sent = match input {
+            Value::Object(fields) if fields.contains_key("checkout") => Value::Object(fields.iter().filter(|(k, _)| *k != "checkout").map(|(k, v)| (k.clone(), v.clone())).collect()),
+            _ => input.clone(),
+        };
+        self.read(request.send(sent.to_string()).map_err(|e| self.unreachable(e))?)
     }
 
     /// The server's whole intent, in one read.
@@ -703,6 +708,46 @@ pub fn follow(daemon: &Arc<Daemon>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-checkout-stays-on-the-machine", "checks": ["crates/server/src/remote#checkout-stays"]}
+    /// ```
+    #[test]
+    fn the_checkout_stays_on_the_machine() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut got = Vec::new();
+            let mut buf = [0u8; 4096];
+            // Headers, then a body as long as Content-Length says, or chunks up to the last, empty one.
+            while let Ok(n) = s.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                got.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&got).to_string();
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let len = head.lines().find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)));
+                    if len.is_some_and(|len| body.len() >= len) || body.ends_with("0\r\n\r\n") {
+                        break;
+                    }
+                }
+            }
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 2\r\n\r\n{}");
+            // The JSON object the body holds, whether sent sized or in chunks.
+            let text = String::from_utf8_lossy(&got).split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default();
+            text.find('{').zip(text.rfind('}')).map(|(a, b)| text[a..=b].to_string()).unwrap_or_default()
+        });
+        let server = Server::new(&format!("http://127.0.0.1:{port}"), Some("t".into()));
+        server.call("land_ticket", &serde_json::json!({ "ref": "ticket:0001", "checkout": "C:/a/worktree" })).unwrap().unwrap();
+        let body: Value = serde_json::from_str(&seen.join().unwrap()).unwrap();
+        assert_eq!(body, serde_json::json!({ "ref": "ticket:0001" }), "the rest of the input goes as it came");
+    }
 
     /// # Test contract
     ///
