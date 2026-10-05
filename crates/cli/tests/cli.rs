@@ -535,6 +535,65 @@ fn a_teams_server_serves_its_library() {
     assert!(std::fs::read_to_string(q.repo.join(".grimoire.toml")).unwrap().contains("name = \"ledger\""), "the address names the grimoire, not the name the file held before");
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-serves-the-site-it-names", "checks": ["crates/server/src#shared-library", "crates/server/src/site#library-site", "crates/cli/src#serve-site-of", "req:server-library"]}
+/// ```
+#[test]
+fn a_library_serves_the_site_it_names() {
+    // A team's library holding `shop`, whose site shows its goal.
+    let tmp = tempfile::Builder::new().prefix("grimoire-library-site-").tempdir().unwrap();
+    let library = tmp.path().join("library");
+    // Made beside the library and moved in whole, so a server already running takes it complete.
+    let make = |name: &str| {
+        let p = uninitialised();
+        let store = tmp.path().join(name);
+        assert!(run(&p.repo, &["init", "--store", &store.to_string_lossy()]).status.success());
+        assert!(run(&p.repo, &["tool", "configure", r#"{"site":["goal"]}"#]).status.success());
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::rename(&store, library.join(name)).unwrap();
+    };
+    make("shop");
+    let free = || TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let lib = library.to_string_lossy().to_string();
+    // A site beside a library names its grimoire, or the server does not start.
+    let refused = grimoire().args(["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site", "127.0.0.1:0"]).output().unwrap();
+    assert!(!refused.status.success() && text(&refused).contains("--site-of"), "{}", text(&refused));
+    // A grimoire named without a site to serve it on, or without a library, is refused too.
+    for args in [vec!["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site-of", "shop"], vec!["serve", "--shared", "--listen", "127.0.0.1:0", "--site", "127.0.0.1:0", "--site-of", "shop"]] {
+        let refused = grimoire().args(&args).output().unwrap();
+        assert!(!refused.status.success() && text(&refused).contains("--site-of"), "{args:?}: {}", text(&refused));
+    }
+    let get = |port: u16, path: &str| http(port, &format!("GET {path} HTTP/1.0
+Host: 127.0.0.1:{port}
+
+"));
+    // Named, it is that grimoire's site, with no token asked.
+    let site = free();
+    let shop = Serving(grimoire().args(["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site", &format!("127.0.0.1:{site}"), "--site-of", "shop"]).spawn().unwrap());
+    marked_port(&library.join("shop"));
+    eventually("shop's site answers", || std::net::TcpStream::connect(("127.0.0.1", site)).is_ok());
+    let (code, page) = get(site, "/");
+    assert!(code == 200 && page.contains("/goal\""), "{page}");
+    assert_eq!(get(site, "/api/status").0, 404, "nothing but the site on its address");
+    drop(shop);
+    // Named before its grimoire exists, the site says so, and follows it once its store arrives.
+    let site = free();
+    let _audit = Serving(grimoire().args(["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site", &format!("127.0.0.1:{site}"), "--site-of", "audit"]).spawn().unwrap());
+    eventually("audit's site answers", || std::net::TcpStream::connect(("127.0.0.1", site)).is_ok());
+    let (code, page) = get(site, "/");
+    assert!(code == 404 && page.contains("no grimoire <code>audit</code>"), "{page}");
+    make("audit");
+    eventually("audit's site is served", || get(site, "/").0 == 200);
+    // Let go when it stops being a store, and followed again when it is one again, with no restart.
+    let (config, away) = (library.join("audit").join("grimoire.json"), tmp.path().join("audit-grimoire.json"));
+    std::fs::rename(&config, &away).unwrap();
+    eventually("audit's site is let go", || get(site, "/").0 == 404);
+    std::fs::rename(&away, &config).unwrap();
+    eventually("audit's site is served again", || get(site, "/").0 == 200);
+}
+
 /// Wait until `ok` holds, up to thirty seconds.
 fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(30);

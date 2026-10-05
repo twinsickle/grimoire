@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"renders","statement":"Each page of the site renders as one self-contained HTML document with no script: the site's name, linking /, above a list of every page of the site in order, indented by depth, linking each at /<slug>, then the page's title, its body as Markdown with raw HTML shown as escaped text, a link kept only to a page of the site and any other link or image shown as its text, and each requirement it links by title, statement and scenarios; its browser title is the page's title then the site's name; every text from the store is escaped, and an empty site renders a page saying the project shows nothing yet."},{"id":"only-the-site","statement":"The site's router answers GET (and so HEAD) / with the first page of the site and /<slug> with that page when it is in the site, and every other path and method with 404, so nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."}]}
+//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"renders","statement":"Each page of the site renders as one self-contained HTML document with no script: the site's name, linking /, above a list of every page of the site in order, indented by depth, linking each at /<slug>, then the page's title, its body as Markdown with raw HTML shown as escaped text, a link kept only to a page of the site and any other link or image shown as its text, and each requirement it links by title, statement and scenarios; its browser title is the page's title then the site's name; every text from the store is escaped, and an empty site renders a page saying the project shows nothing yet."},{"id":"only-the-site","statement":"The site's router answers GET (and so HEAD) / with the first page of the site and /<slug> with that page when it is in the site, and every other path and method with 404, so nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."},{"id":"library-site","statement":"router_in serves, as router does, the site of the grimoire a library holds by the name given, looked up as each request arrives, so a grimoire taken or let go after it started is followed; while the library holds none by that name, every path answers 404 with a page saying that grimoire is not served here."}]}
 //! ```
 
 use std::sync::Arc;
@@ -15,13 +15,49 @@ use grimoire_core::query::{Site, SiteEntry, SitePage};
 use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag, TagEnd};
 
 use crate::daemon::Daemon;
+use crate::library::live::Live;
+
+/// Whose site a router serves.
+enum Source {
+    /// One daemon's, for as long as it serves.
+    Daemon(Arc<Daemon>),
+    /// The grimoire a library holds by this name, whichever that is as a request arrives.
+    Library(Arc<Live>, String),
+}
+
+impl Source {
+    fn daemon(&self) -> Option<Arc<Daemon>> {
+        match self {
+            Source::Daemon(d) => Some(d.clone()),
+            Source::Library(live, name) => live.daemon_of(name),
+        }
+    }
+
+    /// Not found, under the site's name, or saying whose site is not served yet.
+    fn unserved(&self) -> Response {
+        match self {
+            Source::Library(_, name) => (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html; charset=utf-8")], document("Not served", None, &format!("<main><h1>Not served</h1><p>This server holds no grimoire <code>{}</code> yet, so its site is not served here.</p></main>", escape(name)))).into_response(),
+            Source::Daemon(_) => not_found(None),
+        }
+    }
+}
 
 /// The site's router: its pages and nothing else.
 pub fn router(daemon: Arc<Daemon>) -> Router {
-    Router::new().route("/", get(first)).route("/{slug}", get(page)).fallback(elsewhere).method_not_allowed_fallback(elsewhere).with_state(daemon)
+    over(Source::Daemon(daemon))
 }
 
-async fn first(State(daemon): State<Arc<Daemon>>) -> Response {
+/// The router of the site of the grimoire `name` in a team's library, looked up at each request.
+pub fn router_in(live: Arc<Live>, name: String) -> Router {
+    over(Source::Library(live, name))
+}
+
+fn over(source: Source) -> Router {
+    Router::new().route("/", get(first)).route("/{slug}", get(page)).fallback(elsewhere).method_not_allowed_fallback(elsewhere).with_state(Arc::new(source))
+}
+
+async fn first(State(source): State<Arc<Source>>) -> Response {
+    let Some(daemon) = source.daemon() else { return source.unserved() };
     let site = daemon.site(None);
     match &site.shown {
         Some(p) => html_page(render(&site, p)),
@@ -29,7 +65,8 @@ async fn first(State(daemon): State<Arc<Daemon>>) -> Response {
     }
 }
 
-async fn page(State(daemon): State<Arc<Daemon>>, Path(slug): Path<String>) -> Response {
+async fn page(State(source): State<Arc<Source>>, Path(slug): Path<String>) -> Response {
+    let Some(daemon) = source.daemon() else { return source.unserved() };
     let site = daemon.site(Some(&slug));
     match &site.shown {
         Some(p) => html_page(render(&site, p)),
@@ -38,7 +75,8 @@ async fn page(State(daemon): State<Arc<Daemon>>, Path(slug): Path<String>) -> Re
 }
 
 /// Any other path or method: not found, under the site's name.
-async fn elsewhere(State(daemon): State<Arc<Daemon>>) -> Response {
+async fn elsewhere(State(source): State<Arc<Source>>) -> Response {
+    let Some(daemon) = source.daemon() else { return source.unserved() };
     // An empty slug names no page, so only the list and the name are gathered.
     not_found(daemon.site(Some("")).name.as_deref())
 }
@@ -216,8 +254,8 @@ mod tests {
         let daemon = Arc::new(Daemon::open_shared(&dir).unwrap());
         let writer = daemon.clone();
         // The site on an address of its own, as serve opens it; an address already taken is refused.
-        let at = crate::serve_site(daemon.clone(), "127.0.0.1:0".parse().unwrap()).await.unwrap();
-        assert!(crate::serve_site(daemon, at).await.is_err(), "the address is taken");
+        let at = crate::serve_site(router(daemon.clone()), "127.0.0.1:0".parse().unwrap()).await.unwrap();
+        assert!(crate::serve_site(router(daemon), at).await.is_err(), "the address is taken");
         let get = move |path: &'static str| {
             tokio::task::spawn_blocking(move || {
                 let agent: ureq::Agent = ureq::Agent::config_builder().http_status_as_error(false).build().into();

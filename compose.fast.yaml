@@ -1,0 +1,35 @@
+# The fast path: the server from a debug build made in a Rust container over
+# this checkout, so a change to the server's side needs no image rebuilt. Its
+# target and the cargo registry are volumes, so a rebuild compiles only what
+# changed. Used over compose.yaml:
+#   docker compose -f compose.yaml -f compose.fast.yaml up -d server
+# or by the dev loop with GRIMOIRE_DEV_SERVER=fast.
+
+services:
+  build:
+    image: rust:1-bookworm
+    working_dir: /src
+    # Built into the target volume; the library is made the server's user's, as the image makes it,
+    # in case this is the first container ever to mount it.
+    command: ["sh", "-c", "cargo build --locked -p grimoire-cli --target-dir /target && chown 10001:10001 /data"]
+    volumes:
+      - .:/src:ro
+      - cargo:/usr/local/cargo/registry
+      - target:/target
+      - library:/data
+
+  server:
+    image: debian:bookworm-slim
+    build: !reset null
+    user: "10001:10001"
+    environment:
+      PATH: /target/debug:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - target:/target:ro
+    depends_on:
+      build:
+        condition: service_completed_successfully
+
+volumes:
+  cargo:
+  target:

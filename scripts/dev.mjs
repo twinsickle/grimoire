@@ -1,31 +1,36 @@
 #!/usr/bin/env node
 // This repository's dev loop in one console, in the setup a team uses: the
-// shared server that holds this project's intent, the daemon under bacon,
-// rebuilt on every Rust change, which reads that intent with this checkout's
-// code, and the Vite dev server, the UI with hot reload. Their output is
-// merged, each line prefixed with where it came from; Ctrl+C, or any one
-// stopping, stops them all.
+// team's server that holds this project's intent, run as a team runs it, a
+// container of the image this checkout builds (compose.yaml); the daemon under
+// bacon, rebuilt on every Rust change, which reads that intent with this
+// checkout's code; and the Vite dev server, the UI with hot reload. Their
+// output is merged, each line prefixed with where it came from; Ctrl+C, or any
+// one stopping, stops them all, the server's container included.
 //
-//   node scripts/dev.mjs        (or `npm run dev:all` in web/)
+//   node scripts/dev.mjs                            (or `npm run dev:all` in web/)
+//   GRIMOIRE_DEV_SERVER=fast node scripts/dev.mjs
 //
-// The server is the build last installed (`cargo install --path crates/cli`),
-// as a host runs a release, and is run from a copy, so installing again while
-// the loop runs works: a running program cannot be replaced on Windows. The
-// loop watches the installed build, and when an install replaces it, copies
-// it again and restarts the server alone, the daemon and the UI running on;
-// the store is on disk, so nothing is lost. The server also serves the
-// project's site, how it is meant to be used, on the port after its own. Its address is the one `.grimoire.toml` names; a project
+// The server is started with `docker compose up --detach --build`, which
+// rebuilds only what changed, and its log is followed as its output. With
+// GRIMOIRE_DEV_SERVER=fast it runs instead from a debug build made in a Rust
+// container (compose.fast.yaml), so a change to the server's side needs no
+// image rebuilt. Either way its library is the volume `grimoire_library`, and
+// `docker compose up -d` while the loop runs restarts it: the loop follows the
+// new container. It also serves the project's site, how it is meant to be
+// used, on the port after its own. Its address is the one `.grimoire.toml`
+// names, `/g/<name>` naming the grimoire in the server's library; a project
 // file naming a server that is not this machine, or naming a store, starts
 // none, and the loop is then the daemon and the UI alone. Whoever runs the
 // loop is signed in to the server if the server says they are not, with a
-// token of their own made for it; no token is ever revoked here.
+// token of their own made inside the container; no token is ever revoked here.
 //
 // Stopping is forceful, as bacon's own restarts are: the daemon does not get
 // to remove its serving marker, which every command already tolerates, since
-// they check that a daemon answers before deferring to it.
+// they check that a daemon answers before deferring to it. The server's
+// container is stopped with `docker compose stop`, which lets it unmark.
 
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, watchFile } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { constants, homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,25 +50,34 @@ function refuse(why) {
 const named = readFileSync(join(root, ".grimoire.toml"), "utf8").match(/^\s*server\s*=\s*"([^"]+)"/m);
 const address = named ? new URL(named[1]) : null;
 const local = address !== null && ["127.0.0.1", "localhost", "[::1]"].includes(address.hostname);
+// The grimoire the address names in the server's library, whose store is /data/<name> in the container.
+const grimoireName = address?.pathname.match(/\/g\/([a-z0-9-]+)\/?$/)?.[1];
+if (local && !grimoireName) refuse(`${address.href} names no grimoire: a team's server serves a library, so its address ends in /g/<name>`);
 
-// The build last installed, or the one GRIMOIRE_BIN names.
+// The build last installed, or the one GRIMOIRE_BIN names: it signs the person in, as any checkout does.
 const installed = process.env.GRIMOIRE_BIN ?? join(process.env.CARGO_HOME ?? join(homedir(), ".cargo"), "bin", exe);
 if (local && !existsSync(installed)) refuse(`${installed} does not exist; install it with \`cargo install --path crates/cli\``);
 
-// The store the server serves: this project's own, where it has always been.
-const store = process.env.GRIMOIRE_DEV_STORE ?? "grimoire";
-
-// The server runs a copy of the installed build, so the installed one can be
-// replaced while the loop runs.
-const serverBin = join(root, "target", "dev-server", exe);
-if (local) {
-  mkdirSync(dirname(serverBin), { recursive: true });
-  copyFileSync(installed, serverBin);
-}
-
+// The server's container: from the image, or on the fast path from a debug build made in a container.
+const fast = process.env.GRIMOIRE_DEV_SERVER === "fast";
+const composeFiles = ["-f", "compose.yaml", ...(fast ? ["-f", "compose.fast.yaml"] : [])];
+const port = address?.port || "80";
 // Beside it, the project's site, how it is meant to be used, as someone outside the project reads it: one port up.
-const sitePort = Number(address?.port || 80) + 1;
-const server = { name: "server", command: serverBin, args: ["serve", "--shared", "--store", store, "--port", address?.port || "80", "--site", `127.0.0.1:${sitePort}`], cwd: root, colour: 33 };
+const composeEnv = { ...process.env, GRIMOIRE_PORT: port, GRIMOIRE_SITE_PORT: String(Number(port) + 1) };
+const compose = (args) => ["compose", ...composeFiles, ...args];
+
+// The server's output is its container's log, followed; `since` keeps a log followed again from repeating itself.
+let since = null;
+const server = {
+  name: "server",
+  command: "docker",
+  get args() {
+    return compose(["logs", "--follow", "--no-log-prefix", ...(since ? ["--since", since] : []), "server"]);
+  },
+  cwd: root,
+  env: composeEnv,
+  colour: 33,
+};
 const processes = [
   { name: "daemon", command: "bacon", args: ["serve", "--headless"], cwd: root, colour: 36 },
   // Vite's own entry point, run with this Node: no shell, which on Windows
@@ -129,6 +143,7 @@ function stopTree(child, signal) {
 
 let reason = null;
 let open = 0;
+let serverStarted = false;
 const children = [];
 
 /** Record why the loop is stopping, once; later events do not change it. */
@@ -137,6 +152,8 @@ function stopAll(code) {
   reason = code;
   process.exitCode = code;
   children.forEach((c) => stopTree(c, "SIGTERM"));
+  // The container outlives the log that follows it: it is stopped here, its library staying on the volume.
+  if (serverStarted) spawnSync("docker", compose(["stop", "server"]), { cwd: root, env: composeEnv, stdio: "ignore" });
   // Anything still running at the deadline is killed outright, and the loop
   // exits then even if a stream never closes.
   setTimeout(() => {
@@ -149,7 +166,7 @@ function start(p) {
   open += 1;
   // Off Windows each child leads its own process group, so the whole group
   // can be stopped at once; on Windows taskkill stops the tree.
-  const child = spawn(p.command, p.args, { cwd: p.cwd, detached: !windows, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(p.command, p.args, { cwd: p.cwd, env: p.env ?? process.env, detached: !windows, stdio: ["ignore", "pipe", "pipe"] });
   children.push(child);
   prefix(p, child.stdout, process.stdout);
   prefix(p, child.stderr, process.stderr);
@@ -188,7 +205,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 /** Whether the server answers at all: any HTTP answer will do, a refusal included. */
 async function answering() {
   try {
-    await fetch(new URL("/api/status", address), { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await fetch(`${address.href.replace(/\/$/, "")}/api/status`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     return true;
   } catch {
     return false;
@@ -200,7 +217,7 @@ const grimoire = (args, input) => spawnSync(installed, args, { cwd: root, encodi
 
 /**
  * Sign whoever runs the loop in to the server, if the server says they are
- * not: a token of their own, made beside the store and kept outside the
+ * not: a token of their own, made in the server's container and kept outside the
  * repository by `login`. A read through the server is what says whether they
  * are; it also fetches this checkout's copy of the intent, so the daemon
  * finds one when it opens. Only the server refusing the sign-in is taken for
@@ -220,7 +237,8 @@ function signIn() {
   const who = `${process.env.USER ?? process.env.USERNAME ?? "someone"}-${hostname()}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
   const name = `dev-${who}-${Date.now().toString(36)}`;
   write(server, process.stdout, `not signed in to the server: making the token \`${name}\` and signing in`);
-  const made = grimoire(["token", "add", name, "--store", store]);
+  // Made inside the container, by the server's own binary, as a team's host makes one.
+  const made = spawnSync("docker", compose(["exec", "-T", "server", "grimoire", "token", "add", name, "--store", `/data/${grimoireName}`]), { cwd: root, env: composeEnv, encoding: "utf8" });
   const login = made.status === 0 ? grimoire(["login"], made.stdout) : made;
   const signed = login.status === 0 ? grimoire(["tool", "status"]) : login;
   if (signed.status === 0) return true;
@@ -228,93 +246,67 @@ function signIn() {
   return false;
 }
 
-// The server first: the daemon reads its intent from it. Then the rest.
-if (!local) write(server, process.stdout, address ? `${address.origin} is not this machine: no server is started here` : ".grimoire.toml names a store: no server is started, and the daemon serves that store");
-if (local) {
-  start(server);
-  const deadline = Date.now() + 30_000;
-  while (reason === null && !(await answering())) {
-    if (Date.now() > deadline) {
-      write(server, process.stderr, `no answer at ${address.origin} after 30 seconds; stopping`);
-      stopAll(1);
-    }
-    await new Promise((wait) => setTimeout(wait, 200));
-  }
-  if (reason === null && !signIn()) stopAll(1);
+
+/** Run docker compose to its end, its output tagged as the server's; its exit code. */
+function composeRun(args) {
+  return new Promise((done) => {
+    const child = spawn("docker", compose(args), { cwd: root, env: composeEnv, stdio: ["ignore", "pipe", "pipe"] });
+    prefix(server, child.stdout, process.stdout);
+    prefix(server, child.stderr, process.stderr);
+    child.on("error", (e) => {
+      write(server, process.stderr, `could not run docker: ${e.message}`);
+      done(1);
+    });
+    child.on("close", (code) => done(code ?? 1));
+  });
 }
-if (reason === null) processes.forEach(start);
 
 /** Wait until the server answers again, or the loop is stopping; false at the deadline. */
 async function untilAnswering(seconds) {
   const deadline = Date.now() + seconds * 1000;
   while (reason === null && !(await answering())) {
     if (Date.now() > deadline) return false;
-    await new Promise((wait) => setTimeout(wait, 200));
+    await new Promise((wait) => setTimeout(wait, 500));
   }
   return reason === null;
 }
 
 /**
- * Restart the server alone on the build just installed: stop it, copy the new
- * build over its copy (retried, since an install may still hold the file a
- * moment), start it, and wait for it to answer. Bacon and the UI run on; the
- * daemon reconnects to the server by itself.
+ * Follow the server's log for as long as the loop runs. The log ends when its
+ * container stops, as when `docker compose up -d` replaces it with a new one:
+ * the loop then waits for the server to answer again and follows the new
+ * container, the daemon and the UI running on, and stops only when it does not.
  */
-async function restartServer(child) {
+function follow(child) {
   server.restarting = true;
-  write(server, process.stdout, "a new build was installed: restarting the server on it");
-  stopTree(child, "SIGTERM");
-  await new Promise((done) => (child.exitCode !== null || child.signalCode !== null ? done() : child.once("exit", done)));
-  for (let tries = 0; ; tries++) {
-    try {
-      copyFileSync(installed, serverBin);
-      break;
-    } catch (e) {
-      if (tries >= 20) {
-        write(server, process.stderr, `could not copy the new build: ${e.message}; stopping`);
-        stopAll(1);
-        return null;
-      }
-      await new Promise((wait) => setTimeout(wait, 500));
+  child.on("exit", async () => {
+    if (reason !== null) return;
+    since = new Date().toISOString();
+    write(server, process.stdout, "the server's container stopped: waiting for it to answer again");
+    if (await untilAnswering(120)) {
+      write(server, process.stdout, `answering again at ${address.href}`);
+      follow(start(server));
+    } else if (reason === null) {
+      write(server, process.stderr, `no answer at ${address.href} after 120 seconds; stopping`);
+      stopAll(1);
     }
-  }
-  server.restarting = false;
-  if (reason !== null) return null;
-  const next = start(server);
-  if (await untilAnswering(30)) write(server, process.stdout, `restarted, answering at ${address.origin}`);
-  else if (reason === null) {
-    write(server, process.stderr, `no answer at ${address.origin} after 30 seconds; stopping`);
-    stopAll(1);
-  }
-  return next;
+  });
 }
 
-// Watch the installed build: an install replaces it, and the server follows once the file has settled.
-if (local && reason === null) {
-  let running = children[0];
-  let settle = null;
-  let restarting = Promise.resolve();
-  const stamp = () => {
-    try {
-      const s = statSync(installed);
-      return `${s.mtimeMs}:${s.size}`;
-    } catch {
-      return null;
-    }
-  };
-  let seen = stamp();
-  watchFile(installed, { interval: 1000 }, () => {
-    if (reason !== null) return;
-    clearTimeout(settle);
-    // Two seconds with no further change: the install has finished writing it.
-    settle = setTimeout(() => {
-      const now = stamp();
-      if (now === null || now === seen) return;
-      seen = now;
-      restarting = restarting.then(async () => {
-        const next = await restartServer(running);
-        if (next) running = next;
-      });
-    }, 2000);
-  }).unref();
+// The server first: the daemon reads its intent from it. Then the rest.
+if (!local) write(server, process.stdout, address ? `${address.origin} is not this machine: no server is started here` : ".grimoire.toml names a store: no server is started, and the daemon serves that store");
+if (local) {
+  write(server, process.stdout, fast ? "starting from a debug build made in a container (compose.fast.yaml)" : "starting from the image this checkout builds (compose.yaml)");
+  serverStarted = true;
+  if ((await composeRun(["up", "--detach", "--build", "server"])) !== 0) {
+    write(server, process.stderr, "the server's container did not start; stopping");
+    stopAll(1);
+  }
+  if (reason === null) follow(start(server));
+  if (reason === null && !(await untilAnswering(60))) {
+    if (reason === null) write(server, process.stderr, `no answer at ${address.href} after 60 seconds; stopping`);
+    stopAll(1);
+  }
+  if (reason === null && !signIn()) stopAll(1);
 }
+if (reason === null) processes.forEach(start);

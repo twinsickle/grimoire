@@ -348,6 +348,11 @@ impl Live {
         }
     }
 
+    /// The daemon of the grimoire served by `name` now, if any.
+    pub fn daemon_of(&self, name: &str) -> Option<Arc<Daemon>> {
+        self.held.lock().expect("library lock").served.get(name).map(|s| s.daemon.clone())
+    }
+
     fn routes_of(&self, name: &str) -> Option<Router> {
         self.held.lock().expect("library lock").served.get(name).map(|s| s.routes.clone())
     }

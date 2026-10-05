@@ -1,0 +1,13 @@
+# The image is built from what the binary is built from, and nothing else:
+# the workspace, the interface's source and the skill embedded in the binary.
+*
+!Cargo.toml
+!Cargo.lock
+!crates
+!web
+!.claude/skills
+**/target
+web/node_modules
+web/dist
+web/visual/out
+web/behaviour/out

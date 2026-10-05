@@ -1,0 +1,23 @@
+# This repository's team server, run as a team runs one, as the page
+# Running a team's server says: the image built from this checkout, its
+# library on a named volume.
+# The dev loop starts it; `docker compose up -d --build server` rebuilds and
+# restarts it, and compose.fast.yaml runs it from a debug build instead.
+name: grimoire
+
+services:
+  server:
+    build: .
+    image: grimoire:dev
+    command: ["grimoire", "serve", "--shared", "--library", "/data", "--listen", "0.0.0.0:4243", "--site", "0.0.0.0:4244", "--site-of", "grimoire"]
+    # Reached from this machine alone, as the address .grimoire.toml names.
+    ports:
+      - "127.0.0.1:${GRIMOIRE_PORT:-4243}:4243"
+      - "127.0.0.1:${GRIMOIRE_SITE_PORT:-4244}:4244"
+    volumes:
+      - library:/data
+    # Ctrl+C in a foreground run, and `docker compose stop`, give it time to unmark its stores.
+    stop_grace_period: 10s
+
+volumes:
+  library:
