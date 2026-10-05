@@ -11,14 +11,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::Router;
 use grimoire_core::answer::LibraryEntry;
 
 use super::{find, Grimoire};
 use crate::access::{self, Policy};
 use crate::daemon::Daemon;
 use crate::store_io::{self, StoreLock};
-use crate::{http, remote, watch};
+use crate::{remote, watch};
 
 mod routing;
 
@@ -42,7 +41,6 @@ struct Shelved {
     /// A copy of a team's grimoire, of which a machine may hold several checkouts; else a store of its own.
     team: bool,
     daemon: Arc<Daemon>,
-    routes: Router,
     /// The store's lock, shared by every checkout of a store of its own served beside this one.
     lock: Option<Arc<StoreLock>>,
     watcher: Option<Watcher>,
@@ -52,9 +50,8 @@ impl Shelved {
     /// Let it go, off the routes already: stop watching, wait for the requests
     /// it is answering, which hold its daemon, then unmark and unlock.
     fn let_go(self) {
-        let Shelved { daemon, routes, lock, watcher, .. } = self;
+        let Shelved { daemon, lock, watcher, .. } = self;
         drop(watcher);
-        drop(routes);
         let deadline = Instant::now() + DRAIN;
         // Ours is the one strong reference left once no request holds the daemon.
         while Arc::strong_count(&daemon) > 1 && Instant::now() < deadline {
@@ -117,10 +114,8 @@ impl Live {
     /// The library around `default`, already served by `daemon` on `port`;
     /// the others are taken by `refresh`.
     pub fn new(default: Grimoire, daemon: Arc<Daemon>, port: u16, policy: Arc<dyn Policy>, stores: PathBuf, copies: PathBuf) -> Arc<Live> {
-        let routes = http::api(daemon.clone(), policy.clone());
         let mut held = Held::default();
-        let shelved =
-            Shelved { store_dir: default.store_dir.clone(), repo: default.repo.clone(), canon: canonical(&default.repo), team: default.server.is_some(), daemon, routes, lock: None, watcher: None };
+        let shelved = Shelved { store_dir: default.store_dir.clone(), repo: default.repo.clone(), canon: canonical(&default.repo), team: default.server.is_some(), daemon, lock: None, watcher: None };
         held.served.insert((default.name.clone(), default.repo.clone()), shelved);
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
         let live = Arc::new(Live {
@@ -288,8 +283,7 @@ impl Live {
         if g.server.is_some() {
             remote::follow(&daemon);
         }
-        let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
-        Ok(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: g.server.is_some(), daemon, routes, lock: Some(Arc::new(lock)), watcher: Some(watcher) })
+        Ok(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: g.server.is_some(), daemon, lock: Some(Arc::new(lock)), watcher: Some(watcher) })
     }
 
     /// Take another checkout of a store this library serves already: its view of the store beside
@@ -321,8 +315,7 @@ impl Live {
                 return None;
             }
         };
-        let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
-        Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: false, daemon, routes, lock, watcher: Some(watcher) })
+        Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: false, daemon, lock, watcher: Some(watcher) })
     }
 
     /// Serve the checkout `dir` is in, by its nearest project file, when that file names the
@@ -391,10 +384,15 @@ impl Live {
         Took::Served
     }
 
-    /// Whether the grimoire `name`'s trust step would admit a request with these headers.
-    fn admits(&self, name: &str, headers: &axum::http::HeaderMap) -> bool {
+    /// The policy the grimoire `name`'s trust step asks, or none when the library holds no grimoire by that name.
+    fn policy_of(&self, name: &str) -> Option<Arc<dyn Policy>> {
         let store_dir = self.held.lock().expect("library lock").served.iter().find(|((n, _), _)| n == name).map(|(_, s)| s.store_dir.clone());
-        store_dir.is_some_and(|dir| self.policy_for(&dir).admit(headers).is_ok())
+        store_dir.map(|dir| self.policy_for(&dir))
+    }
+
+    /// The daemon of the checkout served under `key`, if it is served still.
+    fn daemon_at(&self, key: &Key) -> Option<Arc<Daemon>> {
+        self.held.lock().expect("library lock").served.get(key).map(|s| s.daemon.clone())
     }
 
     /// Take one grimoire of a team's server: its lock and its daemon, which holds
@@ -421,8 +419,7 @@ impl Live {
             self.say(&g.name, &format!("not served: its store could not be marked as served: {e}"));
             return None;
         }
-        let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
-        Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: false, daemon, routes, lock: Some(Arc::new(lock)), watcher: None })
+        Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: false, daemon, lock: Some(Arc::new(lock)), watcher: None })
     }
 
     /// Who may call a grimoire: the machine's one policy, or on a team's server its own tokens.
@@ -584,8 +581,8 @@ mod tests {
         live.refresh();
         assert_eq!(live.names(), ["ledger", "shop"]);
         assert!(store_io::read_serving(&ledger.store_dir).is_some_and(|m| m.path.as_deref() == Some("/g/ledger")));
-        // A request under way holds the grimoire's routes, and with them its daemon.
-        let under_way = live.routes_for("ledger", None).unwrap();
+        // A request under way holds the daemon answering it.
+        let under_way = live.daemon_of("ledger").unwrap();
         let answering = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(400));
             drop(under_way);

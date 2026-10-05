@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"tools-fresh","statement":"The tool list is answered with ttlMs 0 and cacheScope private: stale at once and for this client alone, so no client is told to treat a list a rebuilt or upgraded daemon no longer serves as fresh, nor a shared cache to keep it; when a client asks again is the client's."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them, pass `checkout`, the caller's working directory, with every call; they list no grimoire's pages, a paragraph naming three or more of the scaffold's story pages being a list, one or two in passing not, since each root page's links are its reading order and a list here goes stale unseen."},{"id":"caller-checked","statement":"A tool call runs only once may_call allows the caller the trust step put on the HTTP request rmcp hands over; a call it refuses, a reader's write or a call with no caller, comes back as a tool-level error result carrying the error object, and the tool never runs."}]}
+//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"tools-fresh","statement":"The tool list is answered with ttlMs 0 and cacheScope private: stale at once and for this client alone, so no client is told to treat a list a rebuilt or upgraded daemon no longer serves as fresh, nor a shared cache to keep it; when a client asks again is the client's."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them, pass `checkout`, the caller's working directory, with every call; they list no grimoire's pages, a paragraph naming three or more of the scaffold's story pages being a list, one or two in passing not, since each root page's links are its reading order and a list here goes stale unseen."},{"id":"checkout-from-arguments","statement":"A tool call is answered by the daemon the routes' answerer gives for the `checkout` in the arguments rmcp parsed, asked once may_call has allowed the caller, so the call is parsed once, by rmcp; a checkout refused comes back as a tool-level error result carrying the error object, and no other message needs a daemon."},{"id":"caller-checked","statement":"A tool call runs only once may_call allows the caller the trust step put on the HTTP request rmcp hands over; a call it refuses, a reader's write or a call with no caller, comes back as a tool-level error result carrying the error object, and the tool never runs."}]}
 //! ```
 
 use std::sync::Arc;
@@ -13,16 +13,16 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 use rmcp::{ErrorData, RoleServer, ServerHandler};
 
 use crate::access::Caller;
-use crate::daemon::Daemon;
+use crate::http::Answerer;
 
 #[derive(Clone)]
 pub struct McpServer {
-    daemon: Arc<Daemon>,
+    answerer: Arc<dyn Answerer>,
 }
 
 impl McpServer {
-    pub fn new(daemon: Arc<Daemon>) -> Self {
-        McpServer { daemon }
+    pub fn new(answerer: Arc<dyn Answerer>) -> Self {
+        McpServer { answerer }
     }
 }
 
@@ -70,17 +70,19 @@ impl ServerHandler for McpServer {
 
     async fn call_tool(&self, request: CallToolRequestParams, context: RequestContext<RoleServer>) -> Result<CallToolResponse, ErrorData> {
         let input = request.arguments.map(serde_json::Value::Object).unwrap_or_else(|| serde_json::json!({}));
-        let daemon = self.daemon.clone();
+        let answerer = self.answerer.clone();
         let name = request.name.to_string();
         // The caller the trust step admitted, carried on the HTTP request rmcp hands over.
         let parts = context.extensions.get::<axum::http::request::Parts>();
         let caller = parts.and_then(|p| p.extensions.get::<Caller>()).cloned();
-        // Refused by the daemon's library for its checkout, answered as any tool's error once the caller is admitted.
-        let checkout_refused = parts.and_then(|p| p.extensions.get::<crate::access::CheckoutRefused>()).map(|r| r.0.clone());
-        let result = match (crate::access::may_call(caller.as_ref(), &name), checkout_refused) {
-            (Err(refused), _) => Err(refused),
-            (Ok(()), Some(refused)) => Err(refused),
-            (Ok(()), None) => tokio::task::spawn_blocking(move || daemon.call(&name, input)).await.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
+        // The checkout the arguments rmcp parsed name chooses the daemon (req:machine-checkouts).
+        let checkout = input.get("checkout").and_then(serde_json::Value::as_str).map(str::to_string);
+        let lenient = grimoire_core::tools::answers_any_checkout(&name);
+        let result = match crate::access::may_call(caller.as_ref(), &name) {
+            Err(refused) => Err(refused),
+            Ok(()) => tokio::task::spawn_blocking(move || answerer.daemon(checkout.as_deref(), lenient).and_then(|daemon| daemon.call(&name, input)))
+                .await
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
         };
         Ok(match result {
             Ok(output) => {
@@ -103,9 +105,9 @@ impl ServerHandler for McpServer {
 
 /// The tower service to mount at `/mcp`. Stateless, so a daemon restart
 /// costs a client nothing but a reconnect.
-pub fn service(daemon: Arc<Daemon>) -> StreamableHttpService<McpServer, LocalSessionManager> {
+pub fn service(answerer: Arc<dyn Answerer>) -> StreamableHttpService<McpServer, LocalSessionManager> {
     let mut config = StreamableHttpServerConfig::default();
     config.legacy_session_mode = false;
     config.json_response = true;
-    StreamableHttpService::new(move || Ok(McpServer::new(daemon.clone())), Arc::new(LocalSessionManager::default()), config)
+    StreamableHttpService::new(move || Ok(McpServer::new(answerer.clone())), Arc::new(LocalSessionManager::default()), config)
 }

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"shared-page","statement":"A router built for a shared daemon answers every path that is not the API, the event stream or MCP with a plain page saying it is a shared server with no interface of its own, whatever UI the build holds."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own or whose Sec-Fetch-Site is cross-site or same-site, under either policy, and under the local policy to one whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"prune","statement":"POST /api/prune takes a JSON body naming the findings the main line saw and the digest of the intent it judged them against, and has the daemon prune its baseline to them, refused as a conflict when the intent has moved since, answering how many entries went and how many are left; it is refused with 403 to a caller who may only read, with 415 to a body that is not JSON, as invalid to one that names anything else, and as a conflict by a daemon that holds code; it is a route and not a tool, so it is not listed for an agent nor offered over MCP."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/export, /api/prune, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."},{"id":"export","statement":"GET /api/export answers the store's whole intent as one value, to any caller the trust step admits, a reader included; it is a route and not a tool, so it is not listed for an agent nor offered over MCP."},{"id":"passes-the-token","statement":"POST /api/<tool> hands the tool the bearer token its request carries, so a daemon whose intent is a server's sends that caller's write signed in as the caller; no other daemon makes any use of it past the trust step."},{"id":"library-routes","statement":"with_ui serves the interface for every path the routes beside it do not answer, a grimoire's client routes under /g/<name>/ included, while those routes answer each grimoire's API and MCP at its own path, with the built files served from the root."}]}
+//! {"purpose":"Serve the JSON API, the event stream, MCP and the web UI from one port.","criteria":[{"id":"api-mirrors-tools","statement":"POST /api/<tool> runs the tool of that name with the JSON body as input and returns its output, or the error object with a status matching its code."},{"id":"checkout-from-the-parse","statement":"Each handler reads and parses its request once, after the trust step, and asks the routes' answerer for the daemon that answers from the `checkout` it parsed: the input of POST /api/<tool>, the query of GET /api/<tool>, of the event stream and of the export, and the query of the prune, whose body names only its findings; the tools list needs no daemon; the answerer's error, a checkout refused, is answered as a tool's own error is, after may_call, and over one daemon the answerer is that daemon whatever is named."},{"id":"events","statement":"GET /api/events streams every daemon event as server-sent events."},{"id":"ui-optional","statement":"The UI is served from --ui-dir when given, otherwise from the copy embedded in the binary when there is one, otherwise as a plain page saying no UI is available; the API and MCP serve in every case."},{"id":"shared-page","statement":"A router built for a shared daemon answers every path that is not the API, the event stream or MCP with a plain page saying it is a shared server with no interface of its own, whatever UI the build holds."},{"id":"same-origin","statement":"The JSON API, the event stream and MCP answer 403 with the error object to a request whose Origin is not the daemon's own or whose Sec-Fetch-Site is cross-site or same-site, under either policy, and under the local policy to one whose Host is not localhost, 127.0.0.1 or [::1]; a POST to /api/<tool> whose body is not application/json is refused with 415; no route sends CORS headers, and the UI's own files are served to any navigation."},{"id":"reads-on-get","statement":"GET /api/<tool> runs read tools only; a write tool named over GET is refused as invalid with status 405."},{"id":"ui-embedded","statement":"From the embedded UI, a file is served with its content type; a missing file under /assets/ is a 404; and any other path, a client-side route, is answered with index.html."},{"id":"prune","statement":"POST /api/prune takes a JSON body naming the findings the main line saw and the digest of the intent it judged them against, and has the daemon prune its baseline to them, refused as a conflict when the intent has moved since, answering how many entries went and how many are left; it is refused with 403 to a caller who may only read, with 415 to a body that is not JSON, as invalid to one that names anything else, and as a conflict by a daemon that holds code; it is a route and not a tool, so it is not listed for an agent nor offered over MCP."},{"id":"every-route-passes","statement":"/api/tools, /api/events, /api/export, /api/prune, /api/<tool> and /mcp all sit behind the trust step, which runs before any of their handlers, and /api/<tool> asks may_call before dispatch; only the UI's own files are served without it."},{"id":"export","statement":"GET /api/export answers the store's whole intent as one value, to any caller the trust step admits, a reader included; it is a route and not a tool, so it is not listed for an agent nor offered over MCP."},{"id":"passes-the-token","statement":"POST /api/<tool> hands the tool the bearer token its request carries, so a daemon whose intent is a server's sends that caller's write signed in as the caller; no other daemon makes any use of it past the trust step."},{"id":"library-routes","statement":"with_ui serves the interface for every path the routes beside it do not answer, a grimoire's client routes under /g/<name>/ included, while those routes answer each grimoire's API and MCP at its own path, with the built files served from the root."}]}
 //! ```
 
 use std::convert::Infallible;
@@ -26,6 +26,29 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::access::{self, Caller, Policy};
 use crate::daemon::Daemon;
+
+/// Which daemon answers a call, chosen from the `checkout` its handler parsed (req:machine-checkouts):
+/// one daemon's routes always answer with it; a library's grimoire with the checkout the call names.
+/// Asked off the async runtime, since choosing may look for a project file or serve a checkout.
+pub trait Answerer: Send + Sync {
+    /// The daemon answering a call naming `checkout`; `lenient`: one that may be answered without one.
+    fn daemon(&self, checkout: Option<&str>, lenient: bool) -> Result<Arc<Daemon>, ToolError>;
+}
+
+/// One daemon, answering whatever a call names.
+struct One(Arc<Daemon>);
+
+impl Answerer for One {
+    fn daemon(&self, _checkout: Option<&str>, _lenient: bool) -> Result<Arc<Daemon>, ToolError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// The daemon a call naming `checkout` is answered by, asked off the async runtime.
+async fn answering(answerer: &Arc<dyn Answerer>, checkout: Option<String>, lenient: bool) -> Result<Arc<Daemon>, ToolError> {
+    let answerer = answerer.clone();
+    tokio::task::spawn_blocking(move || answerer.daemon(checkout.as_deref(), lenient)).await.unwrap_or_else(|e| Err(ToolError::unavailable(e.to_string())))
+}
 
 /// Where the UI's files come from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,14 +79,20 @@ pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
 /// the export, the prune and MCP. A library nests one under `/g/<name>` for
 /// each of its grimoires (req:machine-library).
 pub fn api(daemon: Arc<Daemon>, policy: Arc<dyn Policy>) -> Router {
+    api_over(Arc::new(One(daemon)), policy)
+}
+
+/// A grimoire's routes over `answerer`, which says which daemon answers each call: the
+/// trust step runs on the headers first, and each handler parses its request once.
+pub fn api_over(answerer: Arc<dyn Answerer>, policy: Arc<dyn Policy>) -> Router {
     Router::new()
         .route("/api/tools", get(list_tools))
         .route("/api/events", get(events))
         .route("/api/export", get(export))
         .route("/api/prune", axum::routing::post(prune))
         .route("/api/{tool}", get(call_get).post(call_post))
-        .with_state(daemon.clone())
-        .nest_service("/mcp", crate::mcp::service(daemon))
+        .with_state(answerer.clone())
+        .nest_service("/mcp", crate::mcp::service(answerer))
         // Everything above passes the trust step first; the UI's files below are
         // served to any navigation, so a link to the UI from elsewhere opens it.
         .layer(middleware::from_fn_with_state(policy, access::admit))
@@ -148,18 +177,17 @@ fn error_response(e: ToolError) -> Response {
     (status, Json(serde_json::to_value(&e).unwrap_or_default())).into_response()
 }
 
-async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, refused: Option<access::CheckoutRefused>, tool: String, input: Value, token: Option<String>) -> Response {
+async fn run(answerer: Arc<dyn Answerer>, caller: Option<Caller>, tool: String, input: Value, token: Option<String>) -> Response {
     if !grimoire_core::tools::TOOL_NAMES.contains(&tool.as_str()) {
         return error_response(ToolError::invalid(format!("unknown tool `{tool}`"), vec![]));
     }
     if let Err(e) = access::may_call(caller.as_ref(), &tool) {
         return (StatusCode::FORBIDDEN, Json(serde_json::to_value(&e).unwrap_or_default())).into_response();
     }
-    // Refused by the library for its checkout, once the caller is admitted (req:machine-checkouts).
-    if let Some(access::CheckoutRefused(e)) = refused {
-        return error_response(e);
-    }
-    let result = tokio::task::spawn_blocking(move || daemon.call_as(&tool, input, token)).await;
+    // The checkout the parsed input names chooses the daemon (req:machine-checkouts); the tool never sees it.
+    let checkout = input.get("checkout").and_then(Value::as_str).map(str::to_string);
+    let lenient = grimoire_core::tools::answers_any_checkout(&tool);
+    let result = tokio::task::spawn_blocking(move || answerer.daemon(checkout.as_deref(), lenient).and_then(|daemon| daemon.call_as(&tool, input, token))).await;
     match result {
         Ok(Ok(v)) => Json(v).into_response(),
         Ok(Err(e)) => error_response(e),
@@ -167,14 +195,7 @@ async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, refused: Option<access
     }
 }
 
-async fn call_post(
-    State(daemon): State<Arc<Daemon>>,
-    caller: Option<Extension<Caller>>,
-    refused: Option<Extension<access::CheckoutRefused>>,
-    Path(tool): Path<String>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Response {
+async fn call_post(State(answerer): State<Arc<dyn Answerer>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
     // A form can post a body spelled as JSON with a form content type, and a
     // browser sends a form without asking first; JSON cannot be sent that way.
     let json_body = headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|ct| ct.split(';').next().is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json")));
@@ -193,18 +214,12 @@ async fn call_post(
     // The token the request carries: a command run with GRIMOIRE_TOKEN sends it, and on a project
     // that names a server its write goes to the server signed in as that command, not as this daemon.
     let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
-    run(daemon, caller.map(|Extension(c)| c), refused.map(|Extension(r)| r), tool, input, token).await
+    run(answerer, caller.map(|Extension(c)| c), tool, input, token).await
 }
 
 /// GET form for convenience: each query value is parsed as JSON when it is,
 /// otherwise taken as a string, so `?ref=page:overview&depth=3` works.
-async fn call_get(
-    State(daemon): State<Arc<Daemon>>,
-    caller: Option<Extension<Caller>>,
-    refused: Option<Extension<access::CheckoutRefused>>,
-    Path(tool): Path<String>,
-    Query(q): Query<Vec<(String, String)>>,
-) -> Response {
+async fn call_get(State(answerer): State<Arc<dyn Answerer>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
     // A write always takes a POST with a JSON body: a GET is the easiest
     // request for another site to forge.
     if grimoire_core::tools::is_write(&tool) {
@@ -216,12 +231,16 @@ async fn call_get(
         let parsed = serde_json::from_str::<Value>(&v).ok().filter(|p| !p.is_string()).unwrap_or(Value::String(v));
         input.insert(k, parsed);
     }
-    run(daemon, caller.map(|Extension(c)| c), refused.map(|Extension(r)| r), tool, Value::Object(input), None).await
+    run(answerer, caller.map(|Extension(c)| c), tool, Value::Object(input), None).await
 }
 
 /// The store's whole intent in one read, for a machine that keeps a copy of
 /// it. Not a tool: no agent has a use for a whole store in one answer.
-async fn export(State(daemon): State<Arc<Daemon>>) -> Response {
+async fn export(State(answerer): State<Arc<dyn Answerer>>, Query(q): Query<Named>) -> Response {
+    let daemon = match answering(&answerer, q.checkout, true).await {
+        Ok(d) => d,
+        Err(e) => return error_response(e),
+    };
     match tokio::task::spawn_blocking(move || daemon.exported()).await {
         Ok(exported) => Json(exported).into_response(),
         Err(e) => error_response(ToolError::unavailable(e.to_string())),
@@ -231,7 +250,7 @@ async fn export(State(daemon): State<Arc<Daemon>>) -> Response {
 /// Prune the baseline to the findings the main line saw, for the command a
 /// pipeline runs there. Not a tool: an agent on a branch is never offered a
 /// way to prune the team's baseline. It writes, so it takes a caller who may.
-async fn prune(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, headers: HeaderMap, body: Bytes) -> Response {
+async fn prune(State(answerer): State<Arc<dyn Answerer>>, Query(q): Query<Named>, caller: Option<Extension<Caller>>, headers: HeaderMap, body: Bytes) -> Response {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {
@@ -259,6 +278,10 @@ async fn prune(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Calle
         Ok(i) => i,
         Err(e) => return error_response(ToolError::invalid(format!("the body is not a list of present findings: {e}"), vec![])),
     };
+    let daemon = match answering(&answerer, q.checkout, true).await {
+        Ok(d) => d,
+        Err(e) => return error_response(e),
+    };
     match tokio::task::spawn_blocking(move || daemon.prune_to(input.present, &input.intent)).await {
         Ok(Ok(v)) => Json(v).into_response(),
         Ok(Err(e)) => error_response(e),
@@ -266,7 +289,20 @@ async fn prune(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Calle
     }
 }
 
-async fn events(State(daemon): State<Arc<Daemon>>) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
+/// The checkout a request with no body names in its query.
+#[derive(serde::Deserialize)]
+struct Named {
+    checkout: Option<String>,
+}
+
+async fn events(State(answerer): State<Arc<dyn Answerer>>, Query(q): Query<Named>) -> Response {
+    match answering(&answerer, q.checkout, true).await {
+        Ok(daemon) => stream_of(&daemon).into_response(),
+        Err(e) => error_response(e),
+    }
+}
+
+fn stream_of(daemon: &Daemon) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
     let rx = daemon.subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|item| match item {
         Ok(ev) => Some(Ok(SseEvent::default().json_data(&ev).unwrap_or_else(|_| SseEvent::default().data("{}")))),

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Route a request to the library's grimoires: each one's API and MCP at /g/<name>/, and the daemon's own on the bare routes, handed to the checkout the request names or refused for its checkout at that grimoire's trust step; and the release a command asks for.","criteria":[{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp is answered by the routes of a checkout the library holds of the grimoire by that name as the request arrives, the default's included, with the path the grimoire's own routes expect, its body passed on as it came but for a GET's, which carries nothing, and none of the library's own path parameters; a name the library does not hold is answered not_found."},{"id":"checkout-chosen","statement":"The checkout a request is answered by is the one its `checkout` names, read from the JSON body of a POST to /api/<tool>, from the arguments of an MCP tools/call, every tools/call of a batch naming the same one, or from the query of any other request: the served checkout whose project file is nearest above that directory, found from the directory as the system resolves it, a directory that does not exist as its nearest existing folder's, and naming this grimoire at the store or copy that checkout is served from, so a checkout kept inside another is its own and the outer one never answers for it, and the project file is looked up before the library is held; with none named, the grimoire's one checkout, or, for status, the tools list, the event stream, the export, the prune and every MCP message but a tools/call, the default's when it is a checkout of the grimoire and else the first."},{"id":"checkout-refused","statement":"A request naming no checkout to a grimoire served for several, but those answered without one, and a request naming a directory no served checkout of the grimoire is or holds, are refused, as are a batch's calls naming different checkouts: the request is handed to the grimoire's first checkout's routes marked CheckoutRefused, so its caller is admitted or refused at that trust step first, and the refusal is then answered as a tool's own invalid error is, its details naming `checkout`, over the API as that error and over MCP as a tool-level error result; the message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`, and, for a call naming none, that tools offering no such field are a list the client kept from before it, which a new session fetches again and a reconnect may not, and that the HTTP API at /g/<name>/api/<tool> takes `checkout` until then."}]}
+//! {"purpose":"Route a request to the library's grimoires: each one's API and MCP at /g/<name>/, and the daemon's own on the bare routes, handed unread to that grimoire's routes, which answer each call from the checkout it names; and the release a command asks for.","criteria":[{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp, or to the bare routes for the daemon's own grimoire, is handed to that grimoire's routes as the request arrives, behind its trust step, with the path the grimoire's own routes expect and none of the library's own path parameters, its body passed on unread: the library neither reads nor parses a request's body, so a caller the step refuses costs no more than its discard, and the handler that parses the call chooses its checkout; a name the library does not hold is answered not_found."},{"id":"checkout-chosen","statement":"The checkout a call is answered by is the one the `checkout` its handler parsed names: the served checkout whose project file is nearest above that directory, found from the directory as the system resolves it, a directory that does not exist as its nearest existing folder's, and naming this grimoire at the store or copy that checkout is served from, so a checkout kept inside another is its own and the outer one never answers for it, and the project file is looked up before the library is held; with none named, the grimoire's one checkout, or, for status, the event stream, the export and the prune, the default's when it is a checkout of the grimoire and else the first."},{"id":"checkout-refused","statement":"A call naming no checkout to a grimoire served for several, but those answered without one, and a call naming a directory no served checkout of the grimoire is or holds, are refused once the trust step has admitted the caller, as a tool's own invalid error is, its details naming `checkout`, over the API as that error and over MCP as a tool-level error result; the message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`, and, for a call naming none, that tools offering no such field are a list the client kept from before it, which a new session fetches again and a reconnect may not, and that the HTTP API at /g/<name>/api/<tool> takes `checkout` until then."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -19,6 +19,8 @@ use tower::ServiceExt;
 
 use super::{canonical, same, Key, Live, Shelved, Took};
 use crate::access;
+use crate::daemon::Daemon;
+use crate::http;
 use crate::store_io;
 
 impl Live {
@@ -62,17 +64,6 @@ impl Live {
                 list()
             ))),
         }
-    }
-
-    /// The routes a request is handed to: the checkout's under `key`, or, refused, the grimoire's
-    /// first checkout's, which admit the caller at their trust step before answering the refusal.
-    pub(super) fn routes_for(&self, name: &str, key: Option<&Key>) -> Option<Router> {
-        let held = self.held.lock().expect("library lock");
-        match key {
-            Some(key) => held.served.get(key),
-            None => held.served.iter().find(|((n, _), _)| n == name).map(|(_, s)| s),
-        }
-        .map(|s| s.routes.clone())
     }
 }
 
@@ -121,7 +112,7 @@ async fn to_grimoire_mcp(State(live): State<Arc<Live>>, UrlPath(name): UrlPath<S
     forward(&live, &name, "/mcp", req).await
 }
 
-/// Why no checkout answers a request.
+/// Why no checkout answers a call.
 enum Refusal {
     NotFound(String),
     Invalid(ToolError),
@@ -132,122 +123,52 @@ fn refused(message: String) -> Refusal {
     Refusal::Invalid(ToolError::invalid(message.clone(), vec![FieldError { field: "checkout".into(), reason: message }]))
 }
 
-/// The most a request's body may hold for the library to read its `checkout`.
-const BODY_LIMIT: usize = 64 * 1024 * 1024;
+/// A grimoire of the library as its routes' answerer: each call is answered by the checkout the
+/// `checkout` its handler parsed names, and a checkout not served yet is served first. Its routes
+/// run behind the grimoire's trust step, so only an admitted caller gets one served.
+struct InLibrary {
+    live: Arc<Live>,
+    name: String,
+}
 
-/// What a request says about its checkout: for each call in it, the directory it names and
-/// whether it may be answered without one. An MCP message that is no tools/call is one call
-/// answered by any checkout; a batch is as many as its tools/calls.
-fn asked(path: &str, query: Option<&str>, body: &[u8]) -> Vec<(Option<String>, bool)> {
-    let from_query = query.and_then(|q| q.split('&').filter_map(|pair| pair.split_once('=')).find(|(k, _)| *k == "checkout").map(|(_, v)| percent_decode(v)));
-    let json: Option<serde_json::Value> = serde_json::from_slice(body).ok();
-    if path == "/mcp" || path.starts_with("/mcp/") {
-        let messages: Vec<serde_json::Value> = match json {
-            Some(serde_json::Value::Array(all)) => all,
-            Some(one) => vec![one],
-            None => vec![],
+impl http::Answerer for InLibrary {
+    fn daemon(&self, checkout: Option<&str>, lenient: bool) -> Result<Arc<Daemon>, ToolError> {
+        let chosen = match self.live.choose(&self.name, checkout, lenient) {
+            // A directory in a checkout not served yet: served, then chosen (req:machine-checkouts).
+            Err(Refusal::Invalid(e)) => match checkout.map(|dir| self.live.take_checkout(&self.name, dir)) {
+                Some(Took::Served) => self.live.choose(&self.name, checkout, lenient),
+                Some(Took::Failed(why)) => Err(refused(why)),
+                _ => Err(Refusal::Invalid(e)),
+            },
+            other => other,
         };
-        let calls: Vec<(Option<String>, bool)> = messages
-            .iter()
-            .filter(|m| m["method"] == "tools/call")
-            .map(|m| (m["params"]["arguments"]["checkout"].as_str().map(str::to_string), m["params"]["name"].as_str().is_some_and(grimoire_core::tools::answers_any_checkout)))
-            .collect();
-        // Every other message is the same whichever checkout answers.
-        return if calls.is_empty() { vec![(from_query, true)] } else { calls };
+        let key = match chosen {
+            Ok(key) => key,
+            Err(Refusal::Invalid(e)) => return Err(e),
+            Err(Refusal::NotFound(message)) => return Err(ToolError::NotFound { message }),
+        };
+        self.live
+            .daemon_at(&key)
+            .ok_or_else(|| ToolError::unavailable(format!("the checkout {} of the grimoire `{}` was let go while the call was answered; send it again", key.1.display(), self.name)))
     }
-    let tool = path.strip_prefix("/api/").unwrap_or("");
-    // The tools list, the event stream, the export and the prune are routes, not tools: the same whichever checkout answers.
-    let lenient = grimoire_core::tools::answers_any_checkout(tool) || matches!(tool, "tools" | "events" | "export" | "prune");
-    let from_body = json.as_ref().and_then(|j| j["checkout"].as_str().map(str::to_string));
-    vec![(from_body.or(from_query), lenient)]
 }
 
-/// A query value with its `+` and `%XX` escapes undone.
-fn percent_decode(v: &str) -> String {
-    let bytes = v.replace('+', " ").into_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = |b: u8| (b as char).to_digit(16);
-        match (bytes[i], bytes.get(i + 1).copied().and_then(hex), bytes.get(i + 2).copied().and_then(hex)) {
-            (b'%', Some(h), Some(l)) => {
-                out.push((h * 16 + l) as u8);
-                i += 3;
-            }
-            (b, _, _) => {
-                out.push(b);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// The checkout every call of a request names, or why it cannot be answered by one.
-fn one_checkout(live: &Live, name: &str, calls: &[(Option<String>, bool)]) -> Result<Key, Refusal> {
-    let mut chosen: Option<Key> = None;
-    for (checkout, lenient) in calls {
-        let key = live.choose(name, checkout.as_deref(), *lenient)?;
-        match &chosen {
-            Some(other) if *other != key => return Err(refused(format!("the calls of one request name different checkouts of the grimoire `{name}`; send each checkout's calls apart"))),
-            _ => chosen = Some(key),
-        }
-    }
-    chosen.ok_or_else(|| Refusal::NotFound(format!("this daemon's library holds no grimoire `{name}`")))
-}
-
-/// Hand `req` to the routes of the checkout of grimoire `name` it names, at `path`, its query
-/// kept. The request is made afresh from its method, headers and body: the library's own
-/// route left its path parameters on it, which the grimoire's routes would read as theirs,
-/// and the grimoire's trust step admits the caller again itself. A request refused for its
-/// checkout goes to the grimoire's first checkout marked CheckoutRefused, so it meets the
-/// trust step first and its error is answered as any tool's is, over the API or MCP alike.
+/// Hand `req` to the routes of grimoire `name`, at `path`, its query kept and its body passed on
+/// unread: the grimoire's trust step admits the caller on the headers, and the handler that parses
+/// the call chooses the checkout from what it parsed (req:daemon-trust-model). The request is made
+/// afresh from its method, headers and body, since the library's own route left its path
+/// parameters on it, which the grimoire's routes would read as theirs.
 async fn forward(live: &Arc<Live>, name: &str, path: &str, req: Request<Body>) -> Response {
-    let query = req.uri().query().map(str::to_string);
-    let target = match &query {
+    let Some(policy) = live.policy_of(name) else {
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found", "message": format!("this daemon's library holds no grimoire `{name}`") }))).into_response();
+    };
+    let routes = http::api_over(Arc::new(InLibrary { live: live.clone(), name: name.to_string() }), policy);
+    let target = match req.uri().query() {
         Some(q) => format!("{path}?{q}"),
         None => path.to_string(),
     };
     let (parts, body) = req.into_parts();
-    // A GET, the event stream's among them, carries nothing in its body and names its checkout in
-    // its query; any other request is read whole for it and passed on as it came.
-    let bytes = if parts.method == axum::http::Method::GET {
-        Default::default()
-    } else {
-        match axum::body::to_bytes(body, BODY_LIMIT).await {
-            Ok(b) => b,
-            Err(_) => return (StatusCode::PAYLOAD_TOO_LARGE, Json(serde_json::json!({ "error": "invalid", "message": "the request is too large" }))).into_response(),
-        }
-    };
-    let calls = asked(path, query.as_deref(), &bytes);
-    let mut chosen = one_checkout(live, name, &calls);
-    // A directory in a checkout not served yet: served, then chosen (req:machine-checkouts), but only for a
-    // caller this grimoire admits; any other meets the trust step, as a refusal does.
-    if matches!(chosen, Err(Refusal::Invalid(_))) && live.admits(name, &parts.headers) {
-        let dirs: Vec<String> = calls.iter().filter_map(|(c, _)| c.clone()).collect();
-        if !dirs.is_empty() {
-            let (owner, grimoire) = (live.clone(), name.to_string());
-            let took = tokio::task::spawn_blocking(move || dirs.iter().map(|dir| owner.take_checkout(&grimoire, dir)).collect::<Vec<Took>>()).await.unwrap_or_default();
-            if took.iter().any(|t| matches!(t, Took::Served)) {
-                chosen = one_checkout(live, name, &calls);
-            } else if let Some(Took::Failed(why)) = took.into_iter().find(|t| matches!(t, Took::Failed(_))) {
-                chosen = Err(refused(why));
-            }
-        }
-    }
-    let (routes, refusal) = match chosen {
-        Ok(key) => (live.routes_for(name, Some(&key)), None),
-        Err(Refusal::Invalid(e)) => (live.routes_for(name, None), Some(e)),
-        Err(Refusal::NotFound(message)) => return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found", "message": message }))).into_response(),
-    };
-    let Some(routes) = routes else {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "not_found", "message": format!("this daemon's library holds no grimoire `{name}`") }))).into_response();
-    };
-    let mut fresh = Request::new(Body::from(bytes));
-    if let Some(e) = refusal {
-        fresh.extensions_mut().insert(access::CheckoutRefused(e));
-    }
-
+    let mut fresh = Request::new(body);
     match target.parse() {
         Ok(uri) => *fresh.uri_mut() = uri,
         Err(_) => return StatusCode::BAD_REQUEST.into_response(),
@@ -313,33 +234,11 @@ mod tests {
     async fn a_call_is_answered_by_the_checkout_it_names() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        // `shop`, the daemon's own, and a worktree of it kept inside it, served as two checkouts of one team's grimoire.
-        let main = project(root, "shop");
-        let worktree = project(&main.repo, "wt");
-        // A worktree of `shop`: its project file names the grimoire `shop`, at the store it is served from.
-        std::fs::write(worktree.repo.join(store_io::PROJECT_FILE), format!("name = \"shop\"\nstore = {}\n", toml::Value::String(worktree.store_dir.to_string_lossy().to_string()))).unwrap();
-        let _locks = (store_io::lock(&main.store_dir).unwrap(), store_io::lock(&worktree.store_dir).unwrap());
-        let daemon = Arc::new(Daemon::open(&main.store_dir).unwrap().0);
-        let live = Live::new(Grimoire { server: Some("http://team".into()), ..main.clone() }, daemon, 4299, Arc::new(access::Local), root.join("none"), root.join("none"));
-        let other = Arc::new(Daemon::open(&worktree.store_dir).unwrap().0);
-        {
-            let mut held = live.held.lock().unwrap();
-            let shelved = Shelved {
-                store_dir: worktree.store_dir.clone(),
-                repo: worktree.repo.clone(),
-                canon: canonical(&worktree.repo),
-                team: true,
-                daemon: other.clone(),
-                routes: http::api(other, Arc::new(access::Local)),
-                lock: None,
-                watcher: None,
-            };
-            held.served.insert(("shop".into(), worktree.repo.clone()), shelved);
-        }
+        let (live, main, worktree, _locks) = shop_and_worktree(root, Arc::new(access::Local));
         let repo = |g: &Grimoire| store_io::repository_string(&g.repo).unwrap();
         let named = |dir: &Path| dir.to_string_lossy().to_string();
         // Each checkout answers for itself; a subfolder is its checkout's, the deepest that holds it.
-        let at = |key: Result<Key, Refusal>| live.routes_for("shop", Some(&key.ok().unwrap())).unwrap();
+        let at = |key: Result<Key, Refusal>| http::api(live.daemon_at(&key.ok().unwrap()).unwrap(), Arc::new(access::Local));
         assert_eq!(repository_of(at(live.choose("shop", Some(&named(&main.repo)), false)), None).await, repo(&main));
         assert_eq!(repository_of(at(live.choose("shop", Some(&named(&worktree.repo.join("src"))), false)), None).await, repo(&worktree), "the worktree inside the main checkout is the deeper");
         assert_eq!(repository_of(at(live.choose("shop", Some(&named(&main.repo.join("src"))), false)), None).await, repo(&main));
@@ -373,26 +272,13 @@ mod tests {
         // A directory no checkout holds is refused, naming them.
         let message = why(live.choose("shop", Some(&named(root)), false));
         assert!(message.contains("is no checkout of the grimoire `shop`") && message.contains(&worktree.repo.display().to_string()), "{message}");
-        // The calls of one request name one checkout, or all are refused.
-        assert!(one_checkout(&live, "shop", &[(Some(named(&main.repo)), false), (Some(named(&main.repo.join("src"))), false)]).is_ok());
-        let message = why(one_checkout(&live, "shop", &[(Some(named(&main.repo)), false), (Some(named(&worktree.repo)), false)]));
-        assert!(message.contains("different checkouts"), "{message}");
         // A store of its own serves one checkout: another is told so, and that several make a team.
         let ledger = project(root, "ledger");
         let _ledger_lock = store_io::lock(&ledger.store_dir).unwrap();
         let solo = Arc::new(Daemon::open(&ledger.store_dir).unwrap().0);
         {
             let mut held = live.held.lock().unwrap();
-            let shelved = Shelved {
-                store_dir: ledger.store_dir.clone(),
-                repo: ledger.repo.clone(),
-                canon: canonical(&ledger.repo),
-                team: false,
-                daemon: solo.clone(),
-                routes: http::api(solo, Arc::new(access::Local)),
-                lock: None,
-                watcher: None,
-            };
+            let shelved = Shelved { store_dir: ledger.store_dir.clone(), repo: ledger.repo.clone(), canon: canonical(&ledger.repo), team: false, daemon: solo.clone(), lock: None, watcher: None };
             held.served.insert(("ledger".into(), ledger.repo.clone()), shelved);
         }
         assert!(live.choose("ledger", None, false).is_ok(), "one checkout needs no naming");
@@ -403,20 +289,113 @@ mod tests {
         assert!(matches!(live.choose("audit", None, true), Err(Refusal::NotFound(_))));
     }
 
+    /// `shop`, the daemon's own, and a worktree of it kept inside it, served as two checkouts of one
+    /// team's grimoire, with the locks that keep them.
+    fn shop_and_worktree(root: &Path, policy: Arc<dyn access::Policy>) -> (Arc<Live>, Grimoire, Grimoire, (store_io::StoreLock, store_io::StoreLock)) {
+        let main = project(root, "shop");
+        let worktree = project(&main.repo, "wt");
+        // A worktree of `shop`: its project file names the grimoire `shop`, at the store it is served from.
+        std::fs::write(worktree.repo.join(store_io::PROJECT_FILE), format!("name = \"shop\"\nstore = {}\n", toml::Value::String(worktree.store_dir.to_string_lossy().to_string()))).unwrap();
+        let locks = (store_io::lock(&main.store_dir).unwrap(), store_io::lock(&worktree.store_dir).unwrap());
+        let daemon = Arc::new(Daemon::open(&main.store_dir).unwrap().0);
+        let live = Live::new(Grimoire { server: Some("http://team".into()), ..main.clone() }, daemon, 4299, policy, root.join("none"), root.join("none"));
+        let other = Arc::new(Daemon::open(&worktree.store_dir).unwrap().0);
+        {
+            let mut held = live.held.lock().unwrap();
+            let shelved =
+                Shelved { store_dir: worktree.store_dir.clone(), repo: worktree.repo.clone(), canon: canonical(&worktree.repo), team: true, daemon: other.clone(), lock: None, watcher: None };
+            held.served.insert(("shop".into(), worktree.repo.clone()), shelved);
+        }
+        (live, main, worktree, locks)
+    }
+
+    /// What `req` is answered with: its status, whether the connection is closed, and its JSON.
+    async fn answer(routes: &Router, req: Request<Body>) -> (StatusCode, bool, serde_json::Value) {
+        let res = routes.clone().oneshot(req).await.unwrap();
+        let (status, closed) = (res.status(), res.headers().get("connection").is_some_and(|v| v == "close"));
+        let bytes = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+        (status, closed, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    /// What happened to a request, in order: each time the trust step asked the policy, and the first
+    /// time anything read the body.
+    type Log = Arc<std::sync::Mutex<Vec<&'static str>>>;
+
+    /// The local policy, writing each time it is asked into the log.
+    struct Logged(Log);
+
+    impl access::Policy for Logged {
+        fn admit(&self, headers: &axum::http::HeaderMap) -> Result<access::Caller, String> {
+            self.0.lock().unwrap().push("policy");
+            access::Local.admit(headers)
+        }
+    }
+
+    /// A body that writes into the log when it is first read.
+    fn logged(log: &Log, bytes: impl Into<Vec<u8>>) -> Body {
+        let (log, bytes) = (log.clone(), bytes.into());
+        Body::from_stream(futures::stream::once(async move {
+            log.lock().unwrap().push("body");
+            Ok::<_, std::io::Error>(bytes)
+        }))
+    }
+
+    fn post(uri: &str, host: &str, body: impl Into<Body>) -> Request<Body> {
+        Request::builder().method("POST").uri(uri).header("host", host).header("content-type", "application/json").header("accept", "application/json, text/event-stream").body(body.into()).unwrap()
+    }
+
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-request-says-its-checkout", "checks": ["crates/server/src/library/live/routing#checkout-chosen"]}
+    /// {"test": "a-library-hands-a-call-on-unread", "checks": ["crates/server/src/library/live/routing#routes", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/http#checkout-from-the-parse", "crates/server/src/mcp#checkout-from-arguments"]}
     /// ```
-    #[test]
-    fn a_request_says_its_checkout() {
-        assert_eq!(asked("/api/lint", None, br#"{"checkout":"C:/shop/wt"}"#), [(Some("C:/shop/wt".to_string()), false)]);
-        assert_eq!(asked("/api/status", None, b"{}"), [(None, true)], "status is answered without one");
-        assert_eq!(asked("/api/events", Some("checkout=C%3A%2Fshop+wt&x=1"), b""), [(Some("C:/shop wt".to_string()), true)], "from the query, unescaped");
-        let call = br#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"lint","arguments":{"checkout":"C:/shop"}}}"#;
-        assert_eq!(asked("/mcp", None, call), [(Some("C:/shop".to_string()), false)]);
-        assert_eq!(asked("/mcp", None, br#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#), [(None, true)], "any other MCP message goes to any checkout");
-        let batch = br#"[{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"status","arguments":{}}},{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"lint","arguments":{"checkout":"C:/b"}}}]"#;
-        assert_eq!(asked("/mcp", None, batch), [(None, true), (Some("C:/b".to_string()), false)], "every call of a batch");
+    #[tokio::test]
+    async fn a_library_hands_a_call_on_unread_and_its_handler_chooses_the_checkout() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log: Log = Arc::default();
+        let (live, _main, worktree, _locks) = shop_and_worktree(tmp.path(), Arc::new(Logged(log.clone())));
+        let app = routes(live.clone()).merge(bare(live.clone(), "shop".into()));
+        // What a request did, taken from the log and cleared for the next.
+        let did = || std::mem::take(&mut *log.lock().unwrap());
+        let wt = worktree.repo.to_string_lossy().to_string();
+        let repo = store_io::repository_string(&worktree.repo).unwrap();
+        // The JSON API: the checkout from the input its handler parsed, at /g/<name>/ and on the bare routes.
+        // The trust step asks the policy once, on the headers, before anything reads the body, which is
+        // then read once, by the handler that parses it.
+        for uri in ["/g/shop/api/status", "/api/status"] {
+            let (status, _, v) = answer(&app, post(uri, "127.0.0.1", logged(&log, serde_json::json!({ "checkout": wt }).to_string()))).await;
+            assert_eq!((status, v["repository"].as_str()), (StatusCode::OK, Some(repo.as_str())), "{uri}: {v}");
+            assert_eq!(did(), ["policy", "body"], "{uri}");
+        }
+        // A GET names it in its query.
+        let get =
+            Request::builder().uri(format!("/g/shop/api/status?checkout={}", wt.replace('\\', "%5C").replace(':', "%3A").replace(' ', "%20"))).header("host", "127.0.0.1").body(Body::empty()).unwrap();
+        let (status, _, v) = answer(&app, get).await;
+        assert_eq!((status, v["repository"].as_str()), (StatusCode::OK, Some(repo.as_str())), "{v}");
+        assert_eq!(did(), ["policy"]);
+        // MCP: the checkout from the arguments rmcp parsed.
+        let call = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "status", "arguments": { "checkout": wt } } });
+        let (status, _, v) = answer(&app, post("/g/shop/mcp", "127.0.0.1", logged(&log, call.to_string()))).await;
+        assert_eq!((status, v["result"]["structuredContent"]["repository"].as_str()), (StatusCode::OK, Some(repo.as_str())), "{v}");
+        assert_eq!(did(), ["policy", "body"], "MCP: the body read once, by rmcp, after the step");
+        // A checkout refused, once the caller is admitted, is a tool's error over each.
+        let (status, _, v) = answer(&app, post("/g/shop/api/lint", "127.0.0.1", "{}")).await;
+        assert_eq!((status, v["error"].as_str(), v["details"][0]["field"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid"), Some("checkout")), "{v}");
+        let call = serde_json::json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "lint", "arguments": {} } });
+        let (_, _, v) = answer(&app, post("/g/shop/mcp", "127.0.0.1", call.to_string())).await;
+        assert_eq!((v["result"]["isError"].as_bool(), v["result"]["structuredContent"]["details"][0]["field"].as_str()), (Some(true), Some("checkout")), "{v}");
+        // A caller the trust step refuses is answered 403 on its headers: a body past what the library once
+        // read (64 MiB) is not read to find a checkout, nor met with a 413, and the connection is closed.
+        did();
+        let huge = vec![b' '; 65 * 1024 * 1024];
+        let (status, closed, v) = answer(&app, post("/g/shop/api/lint", "evil.example", logged(&log, huge))).await;
+        assert_eq!((status, closed, v["error"].as_str()), (StatusCode::FORBIDDEN, true, Some("invalid")), "{v}");
+        assert_eq!(did(), ["policy", "body"], "refused on the headers, the body read only by the step's discard");
+        // A refused GET that carries a body has it discarded too, so its 403 is not lost to a reset.
+        let get = Request::builder().uri("/g/shop/api/status").header("host", "evil.example").body(logged(&log, "{}")).unwrap();
+        assert_eq!(answer(&app, get).await.0, StatusCode::FORBIDDEN);
+        assert_eq!(did(), ["policy", "body"]);
+        // A name the library does not hold.
+        assert_eq!(answer(&app, post("/g/audit/api/status", "127.0.0.1", "{}")).await.0, StatusCode::NOT_FOUND);
     }
 }
