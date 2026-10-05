@@ -61,8 +61,10 @@ with their own checkout's code and sends its writes there.
 
 ```
 grimoire serve --shared --store <path> --listen <addr:port>   # on the host: intent only, callers sign in with a token
+grimoire serve --shared --library <dir> --listen <addr:port>  # or the team's library: every store under <dir>, each at /g/<folder>
 grimoire token add <name> [--read-only] --store <path>        # on the host: a token, printed once
 grimoire init --server https://grimoire.example               # in the repository, once: the project file names the server; commit it
+                                                              # (https://grimoire.example/g/<name> for a grimoire of a library)
 grimoire login                                                # each person, once: the token is kept outside the repository
 grimoire serve                                                # each person: the daemon in their checkout, as for any project
 grimoire check --ticket <ticket>                              # the pipeline, before a change merges: its code against the ticket's proposal

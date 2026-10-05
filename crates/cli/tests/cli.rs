@@ -438,6 +438,103 @@ fn init_sets_a_project_up_in_one_command() {
     assert_eq!((config["roots"]["grimoire"].clone(), config["roots"]["rites"].clone()), (serde_json::json!("overview"), serde_json::json!("rites")), "both roots named: {config}");
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/cli/src#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
+/// ```
+#[test]
+fn a_teams_server_serves_its_library() {
+    // A team's library: two stores in one directory, each with a token of its own.
+    let tmp = tempfile::Builder::new().prefix("grimoire-library-").tempdir().unwrap();
+    let library = tmp.path().join("library");
+    let make = |name: &str| -> String {
+        let p = uninitialised();
+        let store = library.join(name);
+        assert!(run(&p.repo, &["init", "--store", &store.to_string_lossy()]).status.success());
+        String::from_utf8_lossy(&run(&p.repo, &["token", "add", "ana", "--store", &store.to_string_lossy()]).stdout).trim().to_string()
+    };
+    let (shop, ledger) = (make("shop"), make("ledger"));
+    let _server = Serving(grimoire().args(["serve", "--shared", "--library", &library.to_string_lossy(), "--listen", "127.0.0.1:0"]).spawn().unwrap());
+    let port = marked_port(&library.join("shop"));
+    marked_port(&library.join("ledger"));
+    let ask = |path: &str, token: &str| http(port, &format!("POST {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"));
+    // Each grimoire admits its own token and refuses the other's; the bare routes are no grimoire's.
+    assert_eq!(ask("/g/shop/api/status", &shop).0, 200);
+    assert_eq!(ask("/g/ledger/api/status", &ledger).0, 200);
+    assert_eq!(ask("/g/shop/api/status", &ledger).0, 403, "a token is its grimoire's alone");
+    let (code, bare) = ask("/api/status", &shop);
+    assert!(code == 404 && bare.contains("/g/<name>"), "no grimoire answers on the bare routes, and the answer says where to go: {bare}");
+    // Every kind of route is the grimoire's own: a token for ledger reaches none of shop's.
+    let crossed = |request: String| http(port, &request).0;
+    for get in ["/g/shop/api/export", "/g/shop/api/events", "/g/shop/api/tools"] {
+        assert_eq!(crossed(format!("GET {get} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {ledger}\r\n\r\n")), 403, "{get}");
+    }
+    assert_eq!(ask("/g/shop/api/board", &ledger).0, 403);
+    assert_eq!(ask("/g/shop/api/prune", &ledger).0, 403);
+    let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#;
+    let mcp = |token: &str| crossed(format!("POST /g/shop/mcp HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{init}", init.len()));
+    assert_eq!((mcp(&ledger), mcp(&shop)), (403, 200), "MCP is shop's alone");
+    // A team's server lets no command take a store back: there is no release route on it.
+    let (_, released) = ask("/library/release", &shop);
+    assert!(!released.contains("released"), "{released}");
+    // Tokens are read as each request comes: one added while serving is let in, one revoked is not.
+    let shop_store = library.join("shop").to_string_lossy().to_string();
+    let host = tmp.path().to_path_buf();
+    let bo = String::from_utf8_lossy(&run(&host, &["token", "add", "bo", "--store", &shop_store]).stdout).trim().to_string();
+    assert_eq!(ask("/g/shop/api/status", &bo).0, 200);
+    assert!(run(&host, &["token", "revoke", "bo", "--store", &shop_store]).status.success());
+    assert_eq!(ask("/g/shop/api/status", &bo).0, 403);
+    let (_, status) = ask("/g/ledger/api/status", &ledger);
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let names: Vec<&str> = status["library"].as_array().unwrap().iter().map(|g| g["name"].as_str().unwrap()).collect();
+    assert_eq!((status["grimoire"].as_str(), names), (Some("ledger"), vec!["ledger", "shop"]));
+    // A store added while it runs is served, with no restart.
+    let audit = make("audit");
+    eventually("audit is served", || ask("/g/audit/api/status", &audit).0 == 200);
+    // A store that stops being one while served is let go: its marker goes and its lock is free.
+    std::fs::remove_file(library.join("audit").join("grimoire.json")).unwrap();
+    eventually("audit is let go", || ask("/g/audit/api/status", &audit).0 == 404);
+    assert!(!library.join("audit").join("serve.json").exists(), "its marker is gone");
+    drop(grimoire_server::store_io::lock_new(&library.join("audit")).expect("its lock is free"));
+    // A checkout of shop: its grimoire is named by the address, and every command reaches shop alone.
+    let p = uninitialised();
+    let home = p.dir.join("home");
+    let address = format!("http://127.0.0.1:{port}/g/shop");
+    assert!(team(&p.repo, &home, None, &["init", "--server", &address]).status.success());
+    let project = std::fs::read_to_string(p.repo.join(".grimoire.toml")).unwrap();
+    assert!(project.contains("name = \"shop\"") && project.contains(&format!("server = \"{address}\"")), "{project}");
+    assert!(team(&p.repo, &home, None, &["login", "--token", &shop]).status.success());
+    let check = team(&p.repo, &home, None, &["check"]);
+    assert!(check.status.success(), "{}", text(&check));
+    let filed = team(&p.repo, &home, None, &["tool", "file_ticket", r#"{"title":"For shop","kind":"change","priority":"later","body":"b"}"#]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let board = |path: &str, token: &str| ask(path, token).1;
+    assert!(board("/g/shop/api/board", &shop).contains("For shop"));
+    assert!(!board("/g/ledger/api/board", &ledger).contains("For shop"), "the write went to shop's grimoire alone");
+    // Landing and the main line's prune go to shop's grimoire through its address too.
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    for (tool, input) in [("start_ticket", format!(r#"{{"ref":"{ticket}"}}"#)), ("close_ticket", format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#))] {
+        assert!(team(&p.repo, &home, None, &["tool", tool, &input]).status.success(), "{tool}");
+    }
+    let landed = team(&p.repo, &home, Some(&shop), &["land", ticket.trim_start_matches("ticket:")]);
+    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")), "{}", text(&landed));
+    let main_line = team(&p.repo, &home, Some(&shop), &["check", "--main-line"]);
+    assert!(text(&main_line).contains("pruned"), "{}", text(&main_line));
+    // The checkout's own daemon serves its copy of shop in the machine's library, following the server.
+    let daemon_port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &daemon_port.to_string()]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+    eventually("the copy of shop is served on this machine", || post(daemon_port, "/g/shop/api/status", "{}", "").0 == 200);
+    let (_, status) = post(daemon_port, "/g/shop/api/status", "{}", "");
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!((status["server"]["address"].as_str(), status["server"]["reachable"].as_bool()), (Some(address.as_str()), Some(true)), "{status}");
+    // A project file pointed at another grimoire of the library takes that grimoire's name.
+    let q = uninitialised();
+    assert!(team(&q.repo, &home, None, &["init", "--server", &format!("http://127.0.0.1:{port}"), "--name", "old-name"]).status.success());
+    assert!(team(&q.repo, &home, None, &["init", "--server", &format!("http://127.0.0.1:{port}/g/ledger")]).status.success());
+    assert!(std::fs::read_to_string(q.repo.join(".grimoire.toml")).unwrap().contains("name = \"ledger\""), "the address names the grimoire, not the name the file held before");
+}
+
 /// Wait until `ok` holds, up to thirty seconds.
 fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(30);

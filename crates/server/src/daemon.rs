@@ -217,8 +217,8 @@ impl Daemon {
     }
 
     /// The same, for a grimoire served at `path` in the daemon's library on `port`.
-    pub fn mark_serving_in(&self, port: u16, path: &str) -> Result<(), StoreIoError> {
-        store_io::write_serving_in(&self.store_dir, std::net::SocketAddr::from(([127, 0, 0, 1], port)), Some(path))
+    pub fn mark_serving_in(&self, addr: std::net::SocketAddr, path: &str) -> Result<(), StoreIoError> {
+        store_io::write_serving_in(&self.store_dir, addr, Some(path))
     }
 
     pub fn unmark_serving(&self) {

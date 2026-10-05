@@ -1,10 +1,11 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a machine's library served while the daemon runs: open, route and mark each grimoire its checkouts name, find them again every few seconds, and let one go when it goes or while a command deletes its store.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns that is not served or held back, under its lock, watched, marked at /g/<name> and following its server when it is a copy of one, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, and once stopped, refresh takes nothing."},{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp is answered by the routes of the grimoire the library holds by that name as the request arrives, the default's included, with the path the grimoire's own routes expect and none of the library's own path parameters; a name the library does not hold is answered not_found."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for the default grimoire, which it never lets go, and for a store it does not serve."}]}
+//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: open, route and mark each grimoire it holds, find them again every few seconds, and let one go when it goes or while a command deletes its store.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, and once stopped, refresh takes nothing."},{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp is answered by the routes of the grimoire the library holds by that name as the request arrives, the default's included, with the path the grimoire's own routes expect and none of the library's own path parameters; a name the library does not hold is answered not_found."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for the default grimoire, which it never lets go, and for a store it does not serve."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -71,15 +72,25 @@ struct Held {
 
 /// The machine's library as the daemon serves it.
 pub struct Live {
-    default: Grimoire,
-    port: u16,
-    policy: Arc<dyn Policy>,
-    stores: PathBuf,
-    copies: PathBuf,
+    /// The grimoire a machine's daemon was started for, served already; a team's server has none.
+    default: Option<Grimoire>,
+    source: Source,
+    /// Where the daemon listens, which every marker names.
+    addr: SocketAddr,
+    /// A machine's one policy; a team's server admits each grimoire's callers by its own tokens.
+    policy: Option<Arc<dyn Policy>>,
     held: Mutex<Held>,
     /// One refresh at a time, and the stop waits for one under way.
     refreshing: Mutex<()>,
     stopped: AtomicBool,
+}
+
+/// Where a library's grimoires come from.
+enum Source {
+    /// A machine's: the stores and copies its checkouts name.
+    Machine { stores: PathBuf, copies: PathBuf },
+    /// A team's server's: the stores under its library directory, holding no code.
+    Shared { dir: PathBuf },
 }
 
 fn same(a: &Path, b: &Path) -> bool {
@@ -93,10 +104,26 @@ impl Live {
         let routes = http::api(daemon.clone(), policy.clone());
         let mut held = Held::default();
         held.served.insert(default.name.clone(), Shelved { store_dir: default.store_dir.clone(), daemon, routes, lock: None, watcher: None });
-        let live = Arc::new(Live { default, port, policy, stores, copies, held: Mutex::new(held), refreshing: Mutex::new(()), stopped: AtomicBool::new(false) });
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let live = Arc::new(Live { default: Some(default), source: Source::Machine { stores, copies }, addr, policy: Some(policy), held: Mutex::new(held), refreshing: Mutex::new(()), stopped: AtomicBool::new(false) });
         // Told from the start, so status names a library of one before anything else is found.
         live.tell();
         live
+    }
+
+    /// A team's server's library: the stores under `dir`, served at `addr`, each
+    /// admitting a caller by its own tokens; all of them are taken by `refresh`.
+    pub fn new_shared(dir: PathBuf, addr: SocketAddr) -> Arc<Live> {
+        Arc::new(Live { default: None, source: Source::Shared { dir }, addr, policy: None, held: Mutex::new(Held::default()), refreshing: Mutex::new(()), stopped: AtomicBool::new(false) })
+    }
+
+    fn is_default(&self, name: &str) -> bool {
+        self.default.as_ref().is_some_and(|d| d.name == name)
+    }
+
+    /// Whether this is a machine's library, which commands ask to let a store go.
+    fn on_a_machine(&self) -> bool {
+        matches!(self.source, Source::Machine { .. })
     }
 
     /// The names of the grimoires served now, in name order.
@@ -117,7 +144,11 @@ impl Live {
         if self.stopped.load(Ordering::SeqCst) {
             return;
         }
-        let found = find(&self.stores, &self.copies, &self.default);
+        let found = match (&self.source, &self.default) {
+            (Source::Machine { stores, copies }, Some(default)) => find(stores, copies, default),
+            (Source::Shared { dir }, _) => super::find_shared(dir),
+            (Source::Machine { .. }, None) => super::Found::default(),
+        };
         for why in &found.skipped {
             self.say("not served", why);
         }
@@ -128,7 +159,7 @@ impl Live {
             let names: Vec<String> = held
                 .served
                 .iter()
-                .filter(|(name, s)| **name != self.default.name && !found.grimoires.iter().any(|g| g.name == **name && same(&g.store_dir, &s.store_dir)))
+                .filter(|(name, s)| !self.is_default(name) && !found.grimoires.iter().any(|g| g.name == **name && same(&g.store_dir, &s.store_dir)))
                 .map(|(name, _)| name.clone())
                 .collect();
             let gone: Vec<(String, Shelved)> = names.into_iter().filter_map(|n| held.served.remove(&n).map(|s| (n, s))).collect();
@@ -162,6 +193,9 @@ impl Live {
     /// marker, and its server followed when it is a copy of one. None when any of
     /// these fails, said once, to be tried again on the next refresh.
     fn open(&self, g: &Grimoire) -> Option<Shelved> {
+        if !self.on_a_machine() {
+            return self.open_shared(g);
+        }
         let lock = match &g.server {
             Some(_) => remote::lock_copy(&g.store_dir),
             None => store_io::lock(&g.store_dir),
@@ -198,15 +232,51 @@ impl Live {
             }
         };
         // Marked before it is routed: a grimoire commands cannot find would leave them refused by its lock.
-        if let Err(e) = daemon.mark_serving_in(self.port, &format!("/g/{}", g.name)) {
+        if let Err(e) = daemon.mark_serving_in(self.addr, &format!("/g/{}", g.name)) {
             self.say(&g.name, &format!("not served: its store could not be marked as served: {e}"));
             return None;
         }
         if g.server.is_some() {
             remote::follow(&daemon);
         }
-        let routes = http::api(daemon.clone(), self.policy.clone());
+        let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
         Some(Shelved { store_dir: g.store_dir.clone(), daemon, routes, lock: Some(lock), watcher: Some(watcher) })
+    }
+
+    /// Take one grimoire of a team's server: its lock and its daemon, which holds
+    /// intent only, and its marker; nothing is watched, since it holds no code.
+    fn open_shared(&self, g: &Grimoire) -> Option<Shelved> {
+        let lock = match store_io::lock(&g.store_dir) {
+            Ok(lock) => lock,
+            Err(e) => {
+                self.say(&g.name, &format!("not served: another process holds it: {e}"));
+                return None;
+            }
+        };
+        let daemon = match Daemon::open_shared(&g.store_dir) {
+            Ok(daemon) => Arc::new(daemon),
+            Err(e) => {
+                self.say(&g.name, &format!("not served: it could not be opened: {e}"));
+                return None;
+            }
+        };
+        if store_io::tokens::list(&g.store_dir).map(|t| t.is_empty()).unwrap_or(true) {
+            self.say(&g.name, &format!("served, but it holds no tokens, so nobody can sign in: make one with `grimoire token add <name> --store {}`", g.store_dir.display()));
+        }
+        if let Err(e) = daemon.mark_serving_in(self.addr, &format!("/g/{}", g.name)) {
+            self.say(&g.name, &format!("not served: its store could not be marked as served: {e}"));
+            return None;
+        }
+        let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
+        Some(Shelved { store_dir: g.store_dir.clone(), daemon, routes, lock: Some(lock), watcher: None })
+    }
+
+    /// Who may call a grimoire: the machine's one policy, or on a team's server its own tokens.
+    fn policy_for(&self, store_dir: &Path) -> Arc<dyn Policy> {
+        match &self.policy {
+            Some(p) => p.clone(),
+            None => Arc::new(access::Tokens { store_dir: store_dir.to_path_buf() }),
+        }
     }
 
     /// Tell every served grimoire the whole library, for `status`.
@@ -228,7 +298,7 @@ impl Live {
     pub fn release(&self, store_dir: &Path) -> bool {
         let taken = {
             let mut held = self.held.lock().expect("library lock");
-            let name = held.served.iter().find(|(name, s)| **name != self.default.name && same(&s.store_dir, store_dir)).map(|(name, _)| name.clone());
+            let name = held.served.iter().find(|(name, s)| !self.is_default(name) && same(&s.store_dir, store_dir)).map(|(name, _)| name.clone());
             let taken = name.and_then(|n| held.served.remove(&n).map(|s| (n, s)));
             if let Some((_, s)) = &taken {
                 held.held_back.insert(s.store_dir.clone());
@@ -256,7 +326,7 @@ impl Live {
         let _one = self.refreshing.lock().expect("refresh lock");
         let held = self.held.lock().expect("library lock");
         for (name, s) in &held.served {
-            if *name != self.default.name {
+            if !self.is_default(name) {
                 s.daemon.unmark_serving();
             }
         }
@@ -285,14 +355,17 @@ impl Live {
 
 /// The routes of the library: each grimoire's API and MCP at `/g/<name>/`,
 /// looked up as each request arrives, and the release a command asks for.
-pub fn routes(live: Arc<Live>, policy: Arc<dyn Policy>) -> Router {
-    let release = Router::new().route("/library/release", post(release)).with_state(live.clone()).layer(middleware::from_fn_with_state(policy, access::admit));
-    Router::new()
+pub fn routes(live: Arc<Live>) -> Router {
+    let grimoires = Router::new()
         .route("/g/{name}/api/{*rest}", any(to_grimoire))
         .route("/g/{name}/mcp", any(to_grimoire_mcp))
         .route("/g/{name}/mcp/{*rest}", any(to_grimoire))
-        .with_state(live)
-        .merge(release)
+        .with_state(live.clone());
+    // Only a machine's library is asked to let a store go: a team's server has no uninstall beside it.
+    match live.policy.clone() {
+        Some(policy) => grimoires.merge(Router::new().route("/library/release", post(release)).with_state(live).layer(middleware::from_fn_with_state(policy, access::admit))),
+        None => grimoires,
+    }
 }
 
 async fn to_grimoire(State(live): State<Arc<Live>>, UrlPath((name, rest)): UrlPath<(String, String)>, req: Request) -> Response {

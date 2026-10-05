@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"project-name","statement":"A project file's grimoire is named by its `name`, which must be a slug or the file is refused; with none, by its store when that is a bare name, and otherwise by its repository folder's name, each made a slug; init writes the name it is given or that folder name, before the store or server."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise."}]}
+//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"project-name","statement":"A project file's grimoire is named by its `name`, which must be a slug or the file is refused; with none, by its store when that is a bare name, and otherwise by its repository folder's name, each made a slug; init writes the name it is given or that folder name, before the store or server."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise. A server's address carries no query or fragment, and names a grimoire of a team's library only last, as /g/<slug>; server_grimoire reads that name from it."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -75,7 +75,26 @@ pub fn server_address(given: &str) -> Result<String, String> {
     if rest.is_empty() || rest.starts_with('/') || rest.chars().any(char::is_whitespace) {
         return Err(format!("`{given}` is not a server's address: it names no host"));
     }
+    if rest.contains(['?', '#']) {
+        return Err(format!("`{given}` is not a server's address: it carries a query or a fragment"));
+    }
+    // A grimoire of a team's library is named last, by a slug: `/g/<name>`, after any prefix a proxy adds.
+    let segments: Vec<&str> = rest.split('/').skip(1).collect();
+    if let Some(at) = segments.iter().position(|s| *s == "g") {
+        if at + 2 != segments.len() || !grimoire_core::store::is_slug(segments[at + 1]) {
+            return Err(format!("`{given}` is not a server's address: a grimoire of a team's library is named last, as /g/<name>, the name a slug"));
+        }
+    }
     Ok(format!("{scheme}://{rest}"))
+}
+
+/// The grimoire a server's address names in its team's library, `/g/<name>` at
+/// its end; none for a server of one grimoire.
+pub fn server_grimoire(address: &str) -> Option<String> {
+    let (_, rest) = address.split_once("://")?;
+    let mut segments = rest.trim_end_matches('/').rsplit('/');
+    let (name, g) = (segments.next()?, segments.next()?);
+    (g == "g" && grimoire_core::store::is_slug(name)).then(|| name.to_string())
 }
 
 /// A canonical path as a store records it: `/`-separated, without the
@@ -394,9 +413,15 @@ store = \"shop\"
         assert!(refused("server = \"grimoire.example\"\n").contains("http://"));
         assert!(refused("server = \"https://\"\n").contains("no host"));
         assert!(refused("server = 4242\n").contains("not a string"));
-        for (given, kept) in [("http://127.0.0.1:4242", "http://127.0.0.1:4242"), (" https://grimoire.example/team/ ", "https://grimoire.example/team")] {
+        for (given, kept) in [("http://127.0.0.1:4242", "http://127.0.0.1:4242"), (" https://grimoire.example/team/ ", "https://grimoire.example/team"), ("https://grimoire.example/g/shop/", "https://grimoire.example/g/shop"), ("https://host/proxy/g/shop", "https://host/proxy/g/shop")] {
             assert_eq!(server_address(given).unwrap(), kept);
         }
+        // A grimoire of a library is named last, by a slug, and an address carries no query or fragment.
+        for refused in ["https://host/g/Not A Slug", "https://host/g/shop/more", "https://host/g/", "https://host/g/shop?x=1", "https://host#top"] {
+            assert!(server_address(refused).is_err(), "{refused}");
+        }
+        assert_eq!(server_grimoire("https://host/proxy/g/shop").as_deref(), Some("shop"));
+        assert_eq!(server_grimoire("https://grimoire.example/team"), None);
         // A person's tokens are kept outside any repository.
         assert!(!credentials_file().unwrap().starts_with(dir));
     }

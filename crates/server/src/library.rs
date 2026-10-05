@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the grimoires a machine's library serves: those its checkouts name, among the stores and the copies of a server's intent kept on it.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; so is one whose name the default checkout's grimoire or an earlier one already holds, the reason naming both checkouts, and the default checkout's own grimoire is never returned."}]}
+//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; so is one whose name the default checkout's grimoire or an earlier one already holds, the reason naming both checkouts, and the default checkout's own grimoire is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
 //! ```
 
 pub mod live;
@@ -85,6 +85,29 @@ pub fn find(stores: &Path, copies: &Path, default: &Grimoire) -> Found {
     found
 }
 
+/// The grimoires of a team's server: every store directly under `dir`, named by
+/// its folder, which must be a slug; a team's server holds no checkouts to name them.
+pub fn find_shared(dir: &Path) -> Found {
+    let mut found = Found::default();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        found.skipped.push(format!("{}: the library directory cannot be read", dir.display()));
+        return found;
+    };
+    let mut entries: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    entries.sort();
+    for store_dir in entries {
+        let folder = store_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if !store_dir.join(store_io::CONFIG_FILE).is_file() {
+            found.skipped.push(format!("{}: it holds no store", store_dir.display()));
+        } else if !grimoire_core::store::is_slug(&folder) {
+            found.skipped.push(format!("{}: `{folder}` is not a slug, so it names no grimoire; rename the folder", store_dir.display()));
+        } else {
+            found.grimoires.push(Grimoire { name: folder, store_dir, repo: PathBuf::new(), server: None });
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,6 +121,29 @@ mod tests {
         std::fs::write(store.join(store_io::CONFIG_FILE), serde_json::json!({ "repository": repository }).to_string()).unwrap();
         std::fs::write(repo.join(store_io::PROJECT_FILE), format!("name = \"{name}\"\nstore = {}\n", toml::Value::String(named.to_string()))).unwrap();
         repo
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-teams-library-is-its-store-folders", "checks": ["crates/server/src/library#shared-stores"]}
+    /// ```
+    #[test]
+    fn a_teams_library_is_its_store_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        for folder in ["shop", "ledger", "Not A Slug", "empty"] {
+            std::fs::create_dir_all(dir.join(folder)).unwrap();
+            if folder != "empty" {
+                std::fs::write(dir.join(folder).join(store_io::CONFIG_FILE), "{}").unwrap();
+            }
+        }
+        std::fs::write(dir.join("notes.txt"), "a file, not a store").unwrap();
+        let found = find_shared(dir);
+        let names: Vec<&str> = found.grimoires.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, ["ledger", "shop"]);
+        let why = found.skipped.join("\n");
+        assert!(why.contains("is not a slug") && why.contains("holds no store"), "{why}");
     }
 
     /// # Test contract
