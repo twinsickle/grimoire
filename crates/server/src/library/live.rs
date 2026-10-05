@@ -172,7 +172,7 @@ impl Live {
             let keys: Vec<Key> = held
                 .served
                 .iter()
-                .filter(|(key, s)| !self.is_default(key) && !found.grimoires.iter().any(|g| g.name == key.0 && same(&g.store_dir, &s.store_dir) && same(&g.repo, &s.repo)))
+                .filter(|(key, s)| !self.is_default(key) && !found.grimoires.iter().any(|g| g.name == key.0 && same(&g.store_dir, &s.store_dir) && (g.repo == s.repo || same(&g.repo, &s.repo))))
                 .map(|(key, _)| key.clone())
                 .collect();
             let gone: Vec<(String, Shelved)> = keys.into_iter().filter_map(|k| held.served.remove(&k).map(|s| (k.0, s))).collect();
@@ -807,6 +807,26 @@ mod tests {
         std::fs::write(&config, c.to_string()).unwrap();
         live.refresh();
         assert_eq!(served_with().iter().map(|r| canonical(r)).collect::<Vec<_>>(), [canonical(&moved)]);
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-teams-server-keeps-serving-what-it-serves", "checks": ["crates/server/src/library/live#current"]}
+    /// ```
+    #[test]
+    fn a_teams_server_keeps_serving_what_it_serves() {
+        // A team's library: its grimoires have no checkout, so nothing about one changes between refreshes.
+        let tmp = tempfile::tempdir().unwrap();
+        let shop = project(tmp.path(), "shop");
+        let live = Live::new_shared(shop.store_dir.parent().unwrap().to_path_buf(), SocketAddr::from(([127, 0, 0, 1], 4299)));
+        live.refresh();
+        let first = live.daemon_of("shop").expect("served");
+        for _ in 0..3 {
+            live.refresh();
+        }
+        assert!(Arc::ptr_eq(&first, &live.daemon_of("shop").unwrap()), "the same daemon serves it throughout: never let go and taken again");
         live.stop();
     }
 }
