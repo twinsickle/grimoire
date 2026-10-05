@@ -1521,3 +1521,81 @@ test("the unsettled gaps and questions are ranked by band, apart from the change
     for (const ref of [a, b, c, d]) await tool(page, "delete_node", { ref });
   }
 });
+
+/**
+ * Answer every tool call the page makes as the dev proxy does while the daemon is away, an empty
+ * `500 text/plain`; the stream already open is left alone, so an event still makes the page fetch.
+ */
+async function daemonAway(page: Page) {
+  await page.route("**/api/**", (route) => (new URL(route.request().url()).pathname.endsWith("/api/events") ? route.continue() : route.fulfill({ status: 500, contentType: "text/plain", body: "" })));
+}
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-page-follows-the-daemon-back", "checks": ["web/src/api#stream-reopens", "req:web-one-stream"]}
+ * ```
+ */
+test("a stream the browser closed is opened again, and the page is current once the daemon answers", async ({ page }) => {
+  // Every attempt at the stream is answered as the proxy answers in a rebuild, which closes it for good.
+  let refused = 0;
+  await page.route("**/api/events", (route) => {
+    refused++;
+    return route.fulfill({ status: 500, contentType: "text/plain", body: "" });
+  });
+  // A gap of the spec's own, so earlier specs' writes to the fixture do not matter.
+  const own = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Seen before the rebuild", kind: "gap", priority: "later", touches: [], body: "On the board from the start." });
+  await page.goto("/cauldron");
+  await expect(page.locator(`#unattached li[data-ticket='${own.node.ref}']`)).toBeVisible();
+  await expect.poll(() => refused, { message: "the page tries the stream again after it was closed" }).toBeGreaterThan(1);
+  // The daemon answers again: the stream is opened, and a write elsewhere shows without a reload.
+  await page.unroute("**/api/events");
+  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Back after a rebuild", kind: "gap", priority: "later", touches: [], body: "Filed once the stream was back." });
+  await expect(page.locator(`#unattached li[data-ticket='${filed.node.ref}']`)).toBeVisible({ timeout: 20_000 });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-page-says-the-daemon-is-not-answering", "checks": ["web/src/api#errors-typed", "web/src/api#away-keeps-data", "web/src/App#header-away", "req:web-daemon-away"]}
+ * ```
+ */
+test("while the daemon is away the page says so, keeps what it showed, and recovers", async ({ page }) => {
+  const own = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Shown before the daemon went", kind: "gap", priority: "later", touches: [], body: "Stays shown while it is away." });
+  await page.goto("/cauldron");
+  const gap = page.locator(`#unattached li[data-ticket='${own.node.ref}']`);
+  await expect(gap).toBeVisible();
+  const header = page.locator("header");
+  await expect(header).not.toContainText("not answering");
+  // Tool calls now meet the proxy's empty 500; the open stream still carries the event that makes the board fetch again.
+  await daemonAway(page);
+  const away = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Written while away", kind: "gap", priority: "later", touches: [], body: "Its event makes the board fetch." });
+  await expect(header).toContainText("daemon not answering · retrying");
+  await expect(gap).toBeVisible();
+  await expect(page.locator(`#unattached li[data-ticket='${away.node.ref}']`)).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText("JSON");
+  // Back, and no further event comes: the page's own retry finds it, clears the header and shows what was written meanwhile.
+  await page.unrouteAll();
+  await expect(page.locator(`#unattached li[data-ticket='${away.node.ref}']`)).toBeVisible({ timeout: 10_000 });
+  await expect(header).not.toContainText("not answering");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-opened-with-no-daemon-says-so", "checks": ["web/src/api#errors-typed", "web/src/api#away-keeps-data", "req:web-daemon-away"]}
+ * ```
+ */
+test("a page opened while the daemon cannot be reached says so in each of its views, never a JSON error", async ({ page }) => {
+  await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+  // The grimoire, the cauldron and a node page: each view says so in its place.
+  for (const path of ["/", "/cauldron", "/n/module%3Asrc%2Fready"]) {
+    await page.goto(path);
+    await expect(page.locator("main"), path).toContainText("The daemon is not answering");
+    await expect(page.locator("header"), path).toContainText("daemon not answering · retrying");
+    await expect(page.locator("body"), path).not.toContainText("JSON");
+  }
+});

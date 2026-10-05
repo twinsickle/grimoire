@@ -2,7 +2,7 @@
 // tested in a browser by web/behaviour.
 
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, call, grimoireBase } from "./api";
+import { ApiError, call, grimoireBase, Unreachable } from "./api";
 import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
@@ -128,6 +128,143 @@ test("a tool error is thrown with its code and message", async () => {
   expect((e as ApiError).body.error).toBe("not_found");
   expect((e as ApiError).message).toBe("req:nope does not exist");
   expect((e as ApiError).status).toBe(404);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "every-answer-is-told-for-what-it-is", "checks": ["web/src/api#errors-typed"]}
+ * ```
+ */
+test("every answer and failure is told for what it is, never as a JSON syntax error", async () => {
+  const answer = (status: number, body: string) => vi.fn(async () => new Response(body, { status, headers: { "content-type": "text/plain" } }));
+  const tried = async (fetch: () => Promise<Response>) => {
+    vi.stubGlobal("fetch", fetch);
+    return call("status").then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+  };
+  const tool = JSON.stringify({ error: "internal", message: "the store could not be read" });
+  const cases: [string, () => Promise<Response>, (e: Error) => void][] = [
+    ["no connection", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))), (e) => expect(e).toBeInstanceOf(Unreachable)],
+    ["the proxy's empty 500", answer(500, ""), (e) => expect(e).toBeInstanceOf(Unreachable)],
+    ["a proxy's 502 with text", answer(502, "Bad Gateway"), (e) => expect(e.message).toMatch(/not answering \(502: Bad Gateway\)/)],
+    ["a tool error on a 500", answer(500, tool), (e) => expect([e instanceof ApiError, e.message]).toEqual([true, "the store could not be read"])],
+    ["a 404 that is no tool's", answer(404, "Not Found"), (e) => expect([e instanceof ApiError, e instanceof Unreachable, e.message]).toEqual([false, false, `status answered 404 with "Not Found", not a tool's answer`])],
+    ["a 200 that is not JSON", answer(200, "<!doctype html>"), (e) => expect([e instanceof Unreachable, e.message]).toEqual([false, 'status answered 200 with something that is not JSON: "<!doctype html>"'])],
+  ];
+  for (const [what, fetch, check] of cases) {
+    const e = await tried(fetch);
+    expect(e, what).not.toBeNull();
+    expect(e?.message, what).not.toMatch(/JSON input|Unexpected token|is not valid JSON/);
+    check(e as Error);
+  }
+});
+
+/** A stand-in EventSource the tests open, fail and close by hand. */
+class FakeStream {
+  static made: FakeStream[] = [];
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readyState = FakeStream.CONNECTING;
+  onopen: (() => void) | null = null;
+  onmessage: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(readonly url: string) {
+    FakeStream.made.push(this);
+  }
+  open() {
+    this.readyState = FakeStream.OPEN;
+    this.onopen?.();
+  }
+  /** Closed for good, as a browser closes it when a reconnect is answered with no event stream. */
+  refuse() {
+    this.readyState = FakeStream.CLOSED;
+    this.onerror?.();
+  }
+}
+
+/** api.ts afresh, its one stream and its away state new, over the fake stream and fake timers. */
+async function freshApi() {
+  vi.resetModules();
+  vi.useFakeTimers();
+  FakeStream.made = [];
+  vi.stubGlobal("EventSource", FakeStream);
+  return import("./api");
+}
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-closed-stream-is-opened-again-with-a-backoff", "checks": ["web/src/api#stream-reopens", "web/src/api#one-stream"]}
+ * ```
+ */
+test("a stream closed for good is opened again after one second doubling to ten, one at a time, the wait reset by an opening", async () => {
+  const api = await freshApi();
+  try {
+    let told = 0;
+    const stop = api.onEvent(() => told++);
+    api.onEvent(() => {});
+    expect(FakeStream.made).toHaveLength(1);
+    // Each refusal waits longer before the next attempt: 1, 2, 4, 8, then 10 seconds at most.
+    for (const wait of [1000, 2000, 4000, 8000, 10_000, 10_000]) {
+      const before = FakeStream.made.length;
+      FakeStream.made.at(-1)?.refuse();
+      vi.advanceTimersByTime(wait - 1);
+      expect(FakeStream.made.length, `not before ${wait}ms`).toBe(before);
+      vi.advanceTimersByTime(1);
+      expect(FakeStream.made.length, `after ${wait}ms`).toBe(before + 1);
+    }
+    // An opening counts as an event, and resets the wait.
+    const atOpen = told;
+    FakeStream.made.at(-1)?.open();
+    expect(told).toBe(atOpen + 1);
+    const before = FakeStream.made.length;
+    FakeStream.made.at(-1)?.refuse();
+    vi.advanceTimersByTime(1000);
+    expect(FakeStream.made.length).toBe(before + 1);
+    // A stream that errs but is reconnecting by itself is left to it: no second stream.
+    const live = FakeStream.made.at(-1) as FakeStream;
+    live.open();
+    live.readyState = FakeStream.CONNECTING;
+    live.onerror?.();
+    vi.advanceTimersByTime(20_000);
+    expect(FakeStream.made.at(-1)).toBe(live);
+    stop();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-page-asks-again-while-the-daemon-is-away", "checks": ["web/src/api#retries-while-away", "web/src/api#away-keeps-data"]}
+ * ```
+ */
+test("while the daemon is away every listener is told every two seconds, and no longer once it answers", async () => {
+  const api = await freshApi();
+  try {
+    let told = 0;
+    api.onEvent(() => told++);
+    vi.advanceTimersByTime(10_000);
+    expect(told, "nothing is retried while the daemon answers").toBe(0);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+    await expect(api.call("status")).rejects.toBeInstanceOf(api.Unreachable);
+    vi.advanceTimersByTime(api.RETRY_MS * 3);
+    expect(told).toBe(3);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    await api.call("status");
+    vi.advanceTimersByTime(api.RETRY_MS * 3);
+    expect(told, "the retries stop once it answers").toBe(3);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 /**
