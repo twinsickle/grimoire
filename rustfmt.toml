@@ -1,0 +1,7 @@
+# The code is written with long lines on purpose. At 200 columns, with the
+# small heuristics at their maximum, rustfmt reflows the fewest of the lines
+# already written: narrower wraps more of them, wider joins lines that were
+# broken by hand. Stable options only, so `cargo fmt` needs no nightly.
+# See Conventions in the rites.
+max_width = 200
+use_small_heuristics = "Max"

@@ -13,6 +13,12 @@ need_stdout = false
 command = ["cargo", "clippy", "--workspace", "--all-targets", "--color", "always"]
 need_stdout = false
 
+# Whether the Rust code is as rustfmt.toml formats it; the same check the
+# pre-push hook runs. `cargo fmt --all` fixes what it reports.
+[jobs.fmt]
+command = ["cargo", "fmt", "--all", "--", "--check", "--color", "always"]
+need_stdout = true
+
 # The frontend lint and type check, re-run when web/src changes. The same
 # two commands the pre-push hook runs (scripts/pre-push).
 [jobs.web]
@@ -45,4 +51,5 @@ allow_warnings = true
 s = "job:serve"
 l = "job:lint"
 c = "job:clippy"
+f = "job:fmt"
 w = "job:web"
