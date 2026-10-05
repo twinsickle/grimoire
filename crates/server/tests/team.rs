@@ -274,6 +274,16 @@ fn the_current_ticket_is_each_checkouts_own() {
     assert!(h.daemon.call("get", json!({ "ref": "page:from-ana", "ticket": "0001" })).is_ok());
     assert!(h.daemon.call("get", json!({ "ref": "page:from-ben", "ticket": "0002" })).is_ok());
     assert!(h.daemon.call("get", json!({ "ref": "page:from-ben", "ticket": "0001" })).is_err());
+    // An edit to another ticket's references is sent naming the checkout's current change, and waits in its proposal there.
+    a.call("update_ticket", json!({ "ref": "ticket:0003", "touches": ["page:overview"] })).unwrap();
+    let edited = h.daemon.call("get", json!({ "ref": "ticket:0003" })).unwrap();
+    assert_eq!((edited["node"]["touches"].clone(), edited["drafts"].clone()), (json!([]), json!(["ticket:0001"])));
+    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0003", "ticket": "0001" })).unwrap()["node"]["touches"], json!(["page:overview"]));
+    // A title, or the current ticket's own references, is sent as given and changes at once.
+    a.call("update_ticket", json!({ "ref": "ticket:0003", "title": "Renamed" })).unwrap();
+    a.call("update_ticket", json!({ "ref": "ticket:0001", "touches": ["page:overview"] })).unwrap();
+    let truth = |r: &str| h.daemon.call("get", json!({ "ref": r })).unwrap()["node"].clone();
+    assert_eq!((truth("ticket:0003")["title"].clone(), truth("ticket:0001")["touches"].clone()), (json!("Renamed"), json!(["page:overview"])));
     // The server keeps none: there a write has to name its ticket.
     assert!(!h.store.join("current.json").exists());
     assert_eq!(code(h.daemon.call("put_page", page("unnamed")).unwrap_err()), "invalid");

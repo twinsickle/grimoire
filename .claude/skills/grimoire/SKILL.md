@@ -91,8 +91,19 @@ it created in `warnings`. Every warning is work to do now.
   `conflict`: `get` the record and put it whole again under the ticket.
   Every read takes `ticket` too and then answers as that proposal would
   leave the graph; `lint` with none uses the current ticket, so a branch is
-  judged against its own intent. Tickets, the baseline, the config, the
-  board's order and `rename_node` apply at once and take no `ticket`.
+  judged against its own intent. The baseline, the config, the board's
+  order, `rename_node` and every ticket write apply at once and take no
+  `ticket`, but for one part of `update_ticket`, below.
+- **A ticket's references are proposal state.** Its own `touches` and
+  `relies_on` are kept on it and readable everywhere, but the check judges
+  them only where the ticket is current, and on the main line when it
+  lands; `file_ticket` and an edit to a ticket's own references apply at
+  once. An edit `update_ticket` makes to *another* ticket's `touches` or
+  `relies_on` under a change being worked (named in `ticket`, else the
+  current one) waits in that change's proposal, shown on the other ticket
+  as a draft, and reaches it when the change lands; under a gap, a question
+  or no ticket it applies at once. Title, priority and body always apply at
+  once.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -227,7 +227,11 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
 /// has, changes nothing at the close and is no draft.
 fn drafts_of(store: &crate::store::Store, r: &Reference) -> (Option<ProposalView>, Option<Vec<Reference>>) {
     match r.kind {
-        Kind::Ticket => (store.proposals.get(&r.id).map(|p| proposal_view(store, p)), None),
+        Kind::Ticket => {
+            // Its references are drafts too, when another ticket's proposal edits them.
+            let tickets: Vec<Reference> = store.ticket_drafts().remove(&r.id).unwrap_or_default().iter().map(|t| Reference::ticket(t)).collect();
+            (store.proposals.get(&r.id).map(|p| proposal_view(store, p)), if tickets.is_empty() { None } else { Some(tickets) })
+        }
         Kind::Page | Kind::Req => {
             let tickets: Vec<Reference> = store.proposals.values().filter(|p| changes(store, p, r)).map(|p| Reference::ticket(&p.ticket)).collect();
             (None, if tickets.is_empty() { None } else { Some(tickets) })
@@ -290,7 +294,18 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
         })
         .collect();
     let deleted = p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok()).filter(|r| changes(store, p, r)).collect();
-    ProposalView { pages, requirements, deleted }
+    // The tickets whose references it would change; an edit equal to the truth's lists, or to a ticket since closed or gone, changes nothing.
+    let tickets = p
+        .tickets
+        .iter()
+        .filter_map(|(slug, q)| {
+            let t = store.tickets.get(slug).filter(|t| t.status != Status::Closed)?;
+            let differs: Vec<String> =
+                [("touches", t.touches != q.record.touches), ("relies_on", t.relies_on != q.record.relies_on)].into_iter().filter(|(_, d)| *d).map(|(f, _)| f.to_string()).collect();
+            (!differs.is_empty()).then(|| Draft { r#ref: Reference::ticket(slug), title: t.title.clone(), new: false, differs })
+        })
+        .collect();
+    ProposalView { pages, requirements, deleted, tickets }
 }
 
 /// What `status` and `adopt` show of a baseline; the entries stay in the store.

@@ -233,7 +233,7 @@ mod tests {
         // A ticket closed elsewhere: it stops being current and loses its proposal before its record says closed,
         // so a writer stopped anywhere between leaves a store that loads.
         let mut worked = new.clone();
-        worked.proposals.insert(live.clone(), Proposal { ticket: live.clone(), pages: Default::default(), requirements: Default::default(), deleted: Default::default() });
+        worked.proposals.insert(live.clone(), Proposal { ticket: live.clone(), pages: Default::default(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default() });
         let mut closed = worked.clone();
         closed.tickets.get_mut(&live).unwrap().status = Status::Closed;
         closed.proposals.remove(&live);

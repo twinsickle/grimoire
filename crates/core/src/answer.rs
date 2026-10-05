@@ -26,7 +26,7 @@ pub struct NodesAnswer {
 }
 
 /// `get` and `record_decision`: one node in full. A ticket comes with its
-/// proposal as drafts; a page or requirement with the tickets whose
+/// proposal as drafts; a page, requirement or ticket with the tickets whose
 /// proposals would change it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -41,13 +41,15 @@ pub struct NodeAnswer {
 }
 
 /// A ticket's proposal as a reader sees it: each proposed page and
-/// requirement, and the records it would delete.
+/// requirement, the records it would delete, and the other tickets whose
+/// references it would change, each naming `touches` or `relies_on`.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ProposalView {
     pub pages: Vec<Draft>,
     pub requirements: Vec<Draft>,
     pub deleted: Vec<Reference>,
+    pub tickets: Vec<Draft>,
 }
 
 /// One proposed record: new to the truth, or changed, naming the fields

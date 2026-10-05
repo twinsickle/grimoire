@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes and the page slugs its site shows; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, and the pages and requirements it deletes by reference with that fingerprint; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes and the page slugs its site shows; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -447,14 +447,34 @@ pub struct Proposal {
     /// the truth's record when the deletion was proposed.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub deleted: std::collections::BTreeMap<String, String>,
+    /// Other tickets' references as this ticket's edits leave them, by slug,
+    /// each with the fingerprint of the truth's two lists it was written
+    /// against: they reach the ticket when this one lands.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub tickets: std::collections::BTreeMap<String, Proposed<TicketReferences>>,
 }
 
 impl Proposal {
     pub fn new(ticket: &str) -> Self {
-        Proposal { ticket: ticket.to_string(), pages: Default::default(), requirements: Default::default(), deleted: Default::default() }
+        Proposal { ticket: ticket.to_string(), pages: Default::default(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default() }
     }
     pub fn is_empty(&self) -> bool {
-        self.pages.is_empty() && self.requirements.is_empty() && self.deleted.is_empty()
+        self.pages.is_empty() && self.requirements.is_empty() && self.deleted.is_empty() && self.tickets.is_empty()
+    }
+}
+
+/// A ticket's references, its proposal state: what a proposal holds of a
+/// ticket whose references it edits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TicketReferences {
+    pub touches: Vec<Reference>,
+    pub relies_on: Vec<Reference>,
+}
+
+impl TicketReferences {
+    pub fn of(t: &Ticket) -> TicketReferences {
+        TicketReferences { touches: t.touches.clone(), relies_on: t.relies_on.clone() }
     }
 }
 
@@ -886,6 +906,13 @@ mod tests {
         assert_eq!(new.base, None);
         assert!(serde_json::from_str::<Proposal>(r#"{"ticket":"t","extra":1}"#).is_err());
         assert!(Proposal::new("t").is_empty());
+        // Another ticket's references, as the edit leaves them, with the truth's lists' fingerprint.
+        let edit = r#"{"ticket":"t","tickets":{"0200":{"record":{"touches":["req:x"],"relies_on":[]},"base":"fp3"}}}"#;
+        let p: Proposal = serde_json::from_str(edit).unwrap();
+        assert_eq!((p.tickets["0200"].record.touches[0].to_string(), p.tickets["0200"].base.as_deref()), ("req:x".to_string(), Some("fp3")));
+        assert!(!p.is_empty());
+        assert_eq!(serde_json::from_value::<Proposal>(serde_json::to_value(&p).unwrap()).unwrap(), p);
+        assert!(serde_json::from_str::<Proposal>(r#"{"ticket":"t","tickets":{"0200":{"record":{"touches":[],"relies_on":[],"body":""}}}}"#).is_err());
         let c: Current = serde_json::from_str(r#"{"ticket":"t"}"#).unwrap();
         assert_eq!(c.ticket, "t");
     }

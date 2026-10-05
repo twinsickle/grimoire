@@ -1351,6 +1351,36 @@ test("an active ticket lists what it proposes, and a node page reads it as propo
  * # Test contract
  *
  * ```json
+ * {"test": "an-edit-to-another-ticket-is-shown-as-proposed", "checks": ["web/src/views/Node#draft-shown", "web/src/views/Board#ticket-in-place"]}
+ * ```
+ */
+test("a ticket another proposes to edit is named on its page and in the cauldron, and listed in the proposal", async ({ page }) => {
+  type Got = { node: { touches: string[]; relies_on: string[] }; drafts?: string[] };
+  const before = (await tool<Got>(page, "get", { ref: "ticket:0006" })).node;
+  // Ticket 0001's proposal repoints 0006's touches; 0006 keeps the truth's until 0001 lands.
+  await tool(page, "update_ticket", { ref: "ticket:0006", touches: [...before.touches, "page:readiness"], ticket: "0001" });
+  expect((await tool<Got>(page, "get", { ref: "ticket:0006" })).drafts).toEqual(["ticket:0001"]);
+  const main = page.locator("main");
+  await page.goto("/n/ticket%3A0001");
+  const edit = main.locator("h2:has-text('Proposed') + ul > li").filter({ hasText: "Report readiness per workspace" });
+  await expect(edit).toContainText("changes touches");
+  await expect(edit.getByRole("link", { name: "as proposed" })).toHaveAttribute("href", "/n/ticket%3A0006?ticket=0001");
+  await page.goto("/n/ticket%3A0006");
+  await expect(main.getByText("proposes a change to this")).toBeVisible();
+  await expect(main.getByRole("link", { name: "read it as proposed" })).toHaveAttribute("href", "/n/ticket%3A0006?ticket=0001");
+  await page.goto("/cauldron");
+  await page.getByRole("button", { name: "Show Report readiness per workspace" }).click();
+  const opened = row(page, "ticket:0006");
+  await expect(opened.getByText("proposes a change to this")).toBeVisible();
+  // Put back as the truth has it, the edit changes nothing and is no draft; the specs after this one see 0006 as it was.
+  await tool(page, "update_ticket", { ref: "ticket:0006", touches: before.touches, relies_on: before.relies_on, ticket: "0001" });
+  expect((await tool<Got>(page, "get", { ref: "ticket:0006" })).drafts).toBeUndefined();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-page-names-its-draft-and-reads-as-proposed", "checks": ["web/src/views/Home#draft-line"]}
  * ```
  */
