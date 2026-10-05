@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Decide who is calling the daemon and what they may do: one step every API, event and MCP request passes, asking a policy, and one check before any tool runs; the local policy for a daemon on one person's machine, the token policy for a shared one.","criteria":[{"id":"one-step","statement":"admit asks the policy for the caller of a request and puts it on the request, or answers 403 with the error object and goes no further, so a refused request reaches no handler."},{"id":"local-policy","statement":"The local policy admits a request whose Host is localhost, 127.0.0.1 or [::1] and which no browser marks as from another site or another origin as a local caller who may read and write, and refuses any other with the reason."},{"id":"token-policy","statement":"The token policy admits a request that carries Authorization: Bearer with a token the store's tokens file holds, as a caller named for the token who may read, or read and write, as it says, and refuses every other, one with no token, one that is not a bearer token, one the file does not hold, and any request when the file cannot be read, whatever name its Host gives; like the local policy it refuses a request a browser marks as from another site, or whose Origin is not the Host it was sent, over http or https, token or not; the file is read on each request."},{"id":"writes-need-write","statement":"may_call lets a read tool run for any admitted caller and a write tool only for a caller who may write, and refuses a call with no admitted caller, so a tool is never run for a request that skipped the step."}]}
+//! {"purpose":"Decide who is calling the daemon and what they may do: one step every API, event and MCP request passes, asking a policy, and one check before any tool runs; the local policy for a daemon on one person's machine, the token policy for a shared one.","criteria":[{"id":"one-step","statement":"admit asks the policy for the caller of a request and puts it on the request, or answers 403 with the error object and goes no further, so a refused request reaches no handler; before it refuses it reads and discards the request's body up to 4 MiB, so a client that sends its body late reads the 403 rather than a reset, and answers a body past that with the 403 and the connection closed."},{"id":"local-policy","statement":"The local policy admits a request whose Host is localhost, 127.0.0.1 or [::1] and which no browser marks as from another site or another origin as a local caller who may read and write, and refuses any other with the reason."},{"id":"token-policy","statement":"The token policy admits a request that carries Authorization: Bearer with a token the store's tokens file holds, as a caller named for the token who may read, or read and write, as it says, and refuses every other, one with no token, one that is not a bearer token, one the file does not hold, and any request when the file cannot be read, whatever name its Host gives; like the local policy it refuses a request a browser marks as from another site, or whose Origin is not the Host it was sent, over http or https, token or not; the file is read on each request."},{"id":"writes-need-write","statement":"may_call lets a read tool run for any admitted caller and a write tool only for a caller who may write, and refuses a call with no admitted caller, so a tool is never run for a request that skipped the step."}]}
 //! ```
 
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::header::{AUTHORIZATION, HOST, ORIGIN};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header::{AUTHORIZATION, CONNECTION, HOST, ORIGIN};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -128,6 +128,10 @@ fn forbidden(why: String) -> Response {
     (StatusCode::FORBIDDEN, Json(serde_json::to_value(ToolError::invalid(why, vec![])).unwrap_or_default())).into_response()
 }
 
+/// The most of a refused request's body the step reads before it answers: the most any handler
+/// behind it takes from an admitted caller, MCP's 4 MiB (rmcp's default; the JSON API takes axum's 2 MiB).
+const REFUSED_BODY_LIMIT: usize = 4 * 1024 * 1024;
+
 /// The one step: the policy's caller put on the request, or a 403.
 pub async fn admit(State(policy): State<Arc<dyn Policy>>, mut req: Request, next: Next) -> Response {
     match policy.admit(req.headers()) {
@@ -135,7 +139,17 @@ pub async fn admit(State(policy): State<Arc<dyn Policy>>, mut req: Request, next
             req.extensions_mut().insert(caller);
             next.run(req).await
         }
-        Err(why) => forbidden(why),
+        Err(why) => {
+            // Read what the caller is still sending before answering: a connection closed with its
+            // body unread is reset, and the client's next read loses the 403 to that reset.
+            if axum::body::to_bytes(req.into_body(), REFUSED_BODY_LIMIT).await.is_ok() {
+                forbidden(why)
+            } else {
+                let mut answer = forbidden(why);
+                answer.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+                answer
+            }
+        }
     }
 }
 
@@ -251,6 +265,94 @@ Host: 127.0.0.1
         let (code, ran, caller) = through_the_step(Arc::new(Local)).await;
         assert_eq!((code, ran), (200, true));
         assert_eq!(caller, Some(Caller { who: "local".into(), access: Access::ReadWrite }), "the handler sees the caller the step put on the request");
+    }
+
+    /// A refusing policy's step in front of a POST handler that records whether it ran.
+    fn refusing_router(ran: Arc<std::sync::atomic::AtomicBool>, policy: Arc<dyn Policy>) -> axum::Router {
+        axum::Router::new()
+            .route(
+                "/x",
+                axum::routing::post(move || {
+                    ran.store(true, std::sync::atomic::Ordering::SeqCst);
+                    async { "ran" }
+                }),
+            )
+            .layer(axum::middleware::from_fn_with_state(policy, admit))
+    }
+
+    /// Refuses everyone, and says each time it has.
+    struct Says(std::sync::Mutex<std::sync::mpsc::Sender<()>>);
+
+    impl Policy for Says {
+        fn admit(&self, _: &HeaderMap) -> Result<Caller, String> {
+            let _ = self.0.lock().unwrap().send(());
+            Err("no one".into())
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-refused-caller-sending-its-body-late-reads-the-403", "checks": ["crates/server/src/access#one-step"]}
+    /// ```
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_refused_caller_sending_its_body_late_reads_the_403() {
+        use std::io::{Read, Write};
+        use std::time::Duration;
+        let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (said, heard) = std::sync::mpsc::channel();
+        let app = refusing_router(ran.clone(), Arc::new(Says(std::sync::Mutex::new(said))));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let (early, answer) = tokio::task::spawn_blocking(move || {
+            let body = br#"{"name":"ana"}"#;
+            let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            write!(s, "POST /x HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+            // The headers alone: once the policy has refused, the step waits for the body rather
+            // than answering and closing, as it did before it read the body.
+            heard.recv_timeout(Duration::from_secs(10)).expect("the policy was asked");
+            s.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+            let mut first = [0u8; 1];
+            let early = match s.read(&mut first) {
+                Ok(n) => Some(n),
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => None,
+                Err(e) => panic!("the connection failed before the body was sent: {e}"),
+            };
+            s.write_all(body).unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).expect("the 403 is read, not a reset");
+            (early, out)
+        })
+        .await
+        .unwrap();
+        assert_eq!(early, None, "nothing is answered before the body arrives");
+        assert!(answer.starts_with("HTTP/1.1 403"), "{answer}");
+        assert!(answer.contains("\"error\":\"invalid\""), "the error object: {answer}");
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst), "no handler ran");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-refused-body-past-the-limit-is-answered-and-closed", "checks": ["crates/server/src/access#one-step"]}
+    /// ```
+    #[tokio::test]
+    async fn a_refused_body_past_the_limit_is_answered_and_closed() {
+        use tower::ServiceExt;
+        let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let send = |size: usize| {
+            let app = refusing_router(ran.clone(), Arc::new(Nobody));
+            async move { app.oneshot(Request::post("/x").body(axum::body::Body::from(vec![b' '; size])).unwrap()).await.unwrap() }
+        };
+        let within = send(REFUSED_BODY_LIMIT).await;
+        assert_eq!(within.status(), StatusCode::FORBIDDEN);
+        assert!(within.headers().get(CONNECTION).is_none(), "a body read to its end leaves the connection to the client");
+        let past = send(REFUSED_BODY_LIMIT + 1).await;
+        assert_eq!(past.status(), StatusCode::FORBIDDEN);
+        assert_eq!(past.headers().get(CONNECTION).map(|v| v.as_bytes()), Some(&b"close"[..]), "past the limit the connection is closed");
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst), "no handler ran");
     }
 
     /// # Test contract
