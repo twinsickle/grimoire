@@ -44,6 +44,8 @@ pub struct State {
     without_code: bool,
     /// Set on a machine whose store is a copy of a team's server's intent.
     server: Option<crate::answer::ServerCopy>,
+    /// A store of its own that several checkouts share, each with its own current ticket.
+    shares_checkouts: bool,
 }
 
 /// Reads a repository file's text for the `source` tool. The core does no
@@ -70,7 +72,7 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None, library: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None, library: None, shares_checkouts: false }
     }
     /// The store's current ticket, the one last started.
     pub fn current(&self) -> Option<String> {
@@ -102,6 +104,14 @@ impl State {
     }
     /// Say this state holds no code, as a shared daemon's does: what only
     /// code can show is then left out of every answer, never called missing.
+    /// Say the store is a store of its own that several checkouts share, so a ticket another
+    /// checkout is working can be taken up in this one.
+    pub fn set_shares_checkouts(&mut self, shares: bool) {
+        self.shares_checkouts = shares;
+    }
+    pub fn shares_checkouts(&self) -> bool {
+        self.shares_checkouts
+    }
     pub fn set_without_code(&mut self, without_code: bool) {
         self.without_code = without_code;
         self.drop_shared_current();
@@ -156,6 +166,10 @@ impl State {
     /// Tell the state what build is running. The graph does not depend on it.
     pub fn set_build(&mut self, build: Build) {
         self.build = build;
+    }
+    /// The store files that did not load, as the graph reports them.
+    pub fn malformed(&self) -> &[Malformed] {
+        &self.malformed
     }
     pub fn set_store(&mut self, store: Store, malformed: Vec<Malformed>) {
         self.store = store;

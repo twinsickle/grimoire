@@ -675,24 +675,109 @@ fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
     assert_eq!(ask("/g/repo/api/lint", serde_json::json!({ "checkout": t.origin.dir.to_string_lossy() })).0, 400);
 }
 
+/// A worktree of `p`'s repository: a folder beside it holding the same code and project file.
+fn worktree_of(p: &Project, name: &str) -> PathBuf {
+    let wt = p.dir.join(name);
+    std::fs::create_dir_all(wt.join("src")).unwrap();
+    for f in ["Cargo.toml", "src/lib.rs", store_io_project_file()] {
+        if p.repo.join(f).is_file() {
+            std::fs::copy(p.repo.join(f), wt.join(f)).unwrap();
+        }
+    }
+    wt
+}
+
+fn store_io_project_file() -> &'static str {
+    grimoire_server::store_io::PROJECT_FILE
+}
+
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-one-checkout", "checks": ["crates/server/src/library/live#checkout-refused", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
-fn a_store_of_its_own_serves_one_checkout() {
-    // A project with a store of its own, served by its daemon, and a second checkout of it naming the same store.
+fn a_store_of_its_own_serves_every_checkout() {
+    // A project with a store of its own, served by its daemon, and a worktree of it that has run nothing.
     let p = bare_repo();
     assert!(run(&p.repo, &["init", "--store", "solo-one", "--name", "solo"]).status.success());
-    let other = bare_repo();
+    let wt = worktree_of(&p, "wt");
+    std::fs::write(wt.join("src").join("lib.rs"), format!("{CONTRACTED}pub fn only_in_the_worktree() {{}}\n")).unwrap();
+    let store = test_home().join("stores").join("solo-one");
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
-    marked_port(&test_home().join("stores").join("solo-one"));
-    let ask = |checkout: &Path| post(port, "/g/solo/api/lint", &serde_json::json!({ "checkout": checkout.to_string_lossy() }).to_string(), "");
-    assert_eq!(ask(&p.repo).0, 200, "its own checkout is answered");
-    let (code, refused) = ask(&other.repo);
-    assert!(code == 400 && refused.contains("a store of its own, which serves one checkout") && refused.contains("team"), "{refused}");
+    marked_port(&store);
+    let at = |r: &Path| grimoire_server::store_io::repository_string(r).unwrap();
+    let ask = |tool: &str, input: serde_json::Value| {
+        let (code, answer) = post(port, &format!("/g/solo/api/{tool}"), &input.to_string(), "");
+        (code, serde_json::from_str::<serde_json::Value>(&answer).unwrap_or_default())
+    };
+    let find = |checkout: &Path| ask("find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": checkout.join("src").to_string_lossy() })).1["nodes"].as_array().map(Vec::len);
+    // Its first call, naming a directory in it, adds it to the store and is answered from its code.
+    assert_eq!(find(&wt), Some(1), "the worktree's own code");
+    assert_eq!(find(&p.repo), Some(0), "the main checkout's");
+    let listed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store.join("checkouts.json")).unwrap()).unwrap();
+    assert!(listed["checkouts"].get(at(&wt)).is_some(), "{listed}");
+    // Each its own current ticket: a command run in the worktree names it.
+    let filed = run(&wt, &["tool", "file_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(run(&wt, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    let page = |checkout: &Path| ask("put_page", serde_json::json!({ "slug": "notes", "title": "Notes", "body": "b", "links": [], "checkout": checkout.to_string_lossy() }));
+    assert_eq!(page(&wt).0, 200, "the worktree's write lands in its own ticket");
+    let (code, refused) = page(&p.repo);
+    assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("no ticket is current"), "the main checkout started none: {refused}");
+    // Two checkouts served now: a call naming neither is refused, listing both.
+    let (code, refused) = ask("lint", serde_json::json!({}));
+    assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("2 checkouts"), "{refused}");
+    // init in a third checkout adds it, through the daemon.
+    let wt2 = worktree_of(&p, "wt2");
+    let init = run(&wt2, &["init", "--store", "solo-one", "--name", "solo"]);
+    assert!(init.status.success() && text(&init).contains("serves this checkout"), "{}", text(&init));
+    let listed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store.join("checkouts.json")).unwrap()).unwrap();
+    assert!(listed["checkouts"].get(at(&wt2)).is_some(), "{listed}");
+    // A check in a fourth, while the daemon holds the store, has the daemon add it; and a command
+    // given --store in a checkout reads that checkout's view of the store.
+    let wt3 = worktree_of(&p, "wt3");
+    let check = run(&wt3, &["check"]);
+    assert!(text(&check).contains("finding(s)"), "{}", text(&check));
+    let listed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store.join("checkouts.json")).unwrap()).unwrap();
+    assert!(listed["checkouts"].get(at(&wt3)).is_some(), "{listed}");
+    let status = run(&wt, &["tool", "status", "--store", "solo-one"]);
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&status.stdout).unwrap()["repository"], at(&wt), "{}", text(&status));
+    // A folder of another project is no checkout of this store, and is not added.
+    let other = bare_repo();
+    let (code, refused) = ask("lint", serde_json::json!({ "checkout": other.repo.to_string_lossy() }));
+    assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("is no checkout of the grimoire `solo`"), "{refused}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-worktrees-check-prunes-nothing", "checks": ["crates/cli/src#check-without-daemon", "req:store-checkouts"]}
+/// ```
+#[test]
+fn a_worktrees_check_prunes_nothing() {
+    // A store of its own whose findings are adopted, and a worktree of it, with no daemon.
+    let p = bare_repo();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\n").unwrap();
+    std::fs::write(p.repo.join("src").join("a.rs"), "pub fn a() {}\n").unwrap();
+    assert!(run(&p.repo, &["init", "--store", "solo-two", "--name", "solo-two"]).status.success());
+    let store = test_home().join("stores").join("solo-two");
+    let adopted = baseline_count(&store);
+    assert!(adopted > 0);
+    let wt = worktree_of(&p, "wt");
+    std::fs::copy(p.repo.join("src").join("a.rs"), wt.join("src").join("a.rs")).unwrap();
+    // The worktree fixes a finding (its contract brings new ones of its own): its check prunes nothing, and adds it to the store.
+    std::fs::write(wt.join("src").join("a.rs"), CONTRACTED).unwrap();
+    let check = run(&wt, &["check"]);
+    assert!(text(&check).contains("baselined"), "{}", text(&check));
+    assert_eq!(baseline_count(&store), adopted, "a branch's fix has not landed");
+    assert!(std::fs::read_to_string(store.join("checkouts.json")).unwrap().contains("wt"));
+    // The fix landed on the main checkout: its check prunes.
+    std::fs::write(p.repo.join("src").join("a.rs"), CONTRACTED).unwrap();
+    run(&p.repo, &["check"]);
+    assert!(baseline_count(&store) < adopted);
 }
 
 /// Wait until `ok` holds, up to thirty seconds.

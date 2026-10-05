@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."},{"id":"site-listener","statement":"serve, shared or not, given a site address binds it beside the daemon's own and serves the site's router alone there for as long as the daemon serves, refusing to start when the address cannot be bound; given none, it opens no further address."},{"id":"library","statement":"serve given a library name serves its own grimoire on the bare routes, marked at /g/<name>, the bare routes answered through library::live as /g/<name>/ is, by the checkout a call names, and keeps the machine's library served beside it through library::live, found once before the daemon answers a request and again every few seconds after; it removes every marker it wrote when it stops; given none, it serves its own store alone."},{"id":"shared-library","statement":"serve with shared and a library directory serves every store under it through library::live, each grimoire at /g/<name> where it listens, behind its own tokens, with the shared page for everything else and no grimoire on the bare routes; it refuses a library directory without shared; given a site address and the name of a grimoire, it serves that grimoire's site there through site::router_in, and it refuses a site that names no grimoire, or a grimoire named with no site."},{"id":"graceful-stop","statement":"serve stops on Ctrl+C and, where the system has one, on SIGTERM, as docker stop sends: it finishes the requests it is answering and removes every marker it wrote before it exits."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."},{"id":"site-listener","statement":"serve, shared or not, given a site address binds it beside the daemon's own and serves the site's router alone there for as long as the daemon serves, refusing to start when the address cannot be bound; given none, it opens no further address."},{"id":"library","statement":"serve given a library name serves its own grimoire on the bare routes, as the checkout it was started in sees it, that checkout added to a store of its own's checkouts if it is not its main one or one already, marked at /g/<name>, the bare routes answered through library::live as /g/<name>/ is, by the checkout a call names, and keeps the machine's library served beside it through library::live, found once before the daemon answers a request and again every few seconds after; it removes every marker it wrote when it stops; given none, it serves its own store alone."},{"id":"shared-library","statement":"serve with shared and a library directory serves every store under it through library::live, each grimoire at /g/<name> where it listens, behind its own tokens, with the shared page for everything else and no grimoire on the bare routes; it refuses a library directory without shared; given a site address and the name of a grimoire, it serves that grimoire's site there through site::router_in, and it refuses a site that names no grimoire, or a grimoire named with no site."},{"id":"graceful-stop","statement":"serve stops on Ctrl+C and, where the system has one, on SIGTERM, as docker stop sends: it finishes the requests it is answering and removes every marker it wrote before it exits."}]}
 //! ```
 
 pub mod access;
@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use daemon::{load, load_store, Daemon, Loaded};
+pub use daemon::{load, load_for, load_store, Daemon, Loaded};
 
 pub struct ServeOptions {
     pub store_dir: PathBuf,
@@ -41,6 +41,9 @@ pub struct ServeOptions {
     pub shared_library: Option<PathBuf>,
     /// With a team's library, the grimoire whose site `site` serves.
     pub site_of: Option<String>,
+    /// The checkout serve was started in, for a store of its own several checkouts may share:
+    /// served as that checkout sees the store, added to its checkouts first if need be.
+    pub checkout: Option<PathBuf>,
 }
 
 /// Serve a site's router on its own address beside the daemon, until the process stops.
@@ -93,7 +96,23 @@ pub async fn serve(mut opts: ServeOptions) -> anyhow::Result<()> {
             let copy = opts.store_dir.clone();
             tokio::task::spawn_blocking(move || Daemon::open_remote(&copy, &repo, server)).await??
         }
-        None => Daemon::open(&opts.store_dir)?,
+        None => {
+            // Started in another checkout of a store of its own than its main one: that checkout's view (req:store-checkouts).
+            let view = match &opts.checkout {
+                Some(dir) => {
+                    let repository = store_io::repository_string(dir)?;
+                    if repository != store_io::checkouts::main_of(&opts.store_dir)? {
+                        // This daemon holds the store's lock, so it adds the checkout itself.
+                        store_io::checkouts::register(&opts.store_dir, dir)?;
+                        Some(repository)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            };
+            Daemon::open_for(&opts.store_dir, view.as_deref())?
+        }
     };
     for e in &extract_errors {
         tracing::warn!("{e}");

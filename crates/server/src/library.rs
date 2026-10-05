@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; every checkout of a copy of a team's grimoire is returned, so several share one name when they copy the same server's grimoire; one whose name the default checkout's grimoire or an earlier one already holds is skipped, the reason naming both checkouts, unless both are copies of that same server's grimoire; and the default checkout's own grimoire is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
+//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; every checkout of a copy of a team's grimoire is returned, so several share one name when they copy the same server's grimoire, and so is every checkout of a store of its own, the one grimoire.json names and each checkouts.json lists whose project file names the store, sharing the store's name and folder; one whose name the default checkout's grimoire or an earlier one already holds is skipped, the reason naming both checkouts, unless both are copies of that same server's grimoire or checkouts of that same store; and the default checkout itself is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
 //! ```
 
 pub mod live;
@@ -38,53 +38,71 @@ pub fn find(stores: &Path, copies: &Path, default: &Grimoire) -> Found {
         entries.sort();
         candidates.extend(entries);
     }
-    let same = |a: &Path, b: &Path| a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b);
     for store_dir in candidates {
-        if same(&store_dir, &default.store_dir) {
-            continue;
-        }
         let shown = store_dir.display().to_string();
-        let Some(repository) = std::fs::read_to_string(store_dir.join(store_io::CONFIG_FILE)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|c| c["repository"].as_str().map(str::to_string)) else {
+        let Some(main) = std::fs::read_to_string(store_dir.join(store_io::CONFIG_FILE)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|c| c["repository"].as_str().map(str::to_string)) else {
             found.skipped.push(format!("{shown}: its grimoire.json names no repository"));
             continue;
         };
-        let repo = PathBuf::from(&repository);
-        let named = match store_io::project_at(&repo) {
-            Ok(Some(named)) => named,
-            Ok(None) if repo.is_dir() => {
-                found.skipped.push(format!("{shown}: its checkout {repository} holds no {}", store_io::PROJECT_FILE));
+        // Every checkout of a store of its own: the one it was made for, and those it lists beside it (req:store-checkouts).
+        for repository in std::iter::once(main).chain(store_io::checkouts::others(&store_dir)) {
+            let repo = PathBuf::from(&repository);
+            // The daemon's own checkout is served already.
+            if same(&store_dir, &default.store_dir) && (repo == default.repo || same(&repo, &default.repo)) {
                 continue;
             }
-            Ok(None) => {
-                found.skipped.push(format!("{shown}: its checkout {repository} is gone"));
-                continue;
+            if let Some(g) = checkout_of(&store_dir, &shown, repo, &repository, default, &found.grimoires, &mut found.skipped) {
+                found.grimoires.push(g);
             }
-            Err(e) => {
-                found.skipped.push(format!("{shown}: {e}"));
-                continue;
-            }
-        };
-        let (home, name) = named;
-        let server = match &home {
-            Home::Store(named) if same(named, &store_dir) => None,
-            Home::Server { address, copy } if same(copy, &store_dir) => Some(address.clone()),
-            _ => {
-                found.skipped.push(format!("{shown}: the project file in {repository} names another grimoire"));
-                continue;
-            }
-        };
-        // Every checkout of one team's grimoire is served, each a copy of its own; any other
-        // grimoire of a name already taken is another project's, and skipped (question 0173).
-        let one_team = |g: &Grimoire| g.server.is_some() && g.server == server;
-        let taken = std::iter::once(default).chain(found.grimoires.iter()).find(|g| g.name == name && !one_team(g)).map(|g| g.repo.display().to_string());
-        if let Some(other) = taken {
-            found.skipped.push(format!("{shown}: the grimoire `{name}` is served already, with the checkout {other}; this checkout, {repository}, is not served beside it"));
-            continue;
         }
-        found.grimoires.push(Grimoire { name, store_dir, repo, server });
     }
     found.grimoires.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.repo.cmp(&b.repo)));
     found
+}
+
+/// The same folder, however spelt.
+fn same(a: &Path, b: &Path) -> bool {
+    a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+}
+
+/// The grimoire the checkout at `repo` makes of the store or copy at `store_dir`, if its project
+/// file names that very folder and its name is not another project's; else why not, in `skipped`.
+fn checkout_of(store_dir: &Path, shown: &str, repo: PathBuf, repository: &str, default: &Grimoire, taken: &[Grimoire], skipped: &mut Vec<String>) -> Option<Grimoire> {
+    let store_dir = store_dir.to_path_buf();
+    let named = match store_io::project_at(&repo) {
+        Ok(Some(named)) => named,
+        Ok(None) if repo.is_dir() => {
+            skipped.push(format!("{shown}: its checkout {repository} holds no {}", store_io::PROJECT_FILE));
+            return None;
+        }
+        Ok(None) => {
+            skipped.push(format!("{shown}: its checkout {repository} is gone"));
+            return None;
+        }
+        Err(e) => {
+            skipped.push(format!("{shown}: {e}"));
+            return None;
+        }
+    };
+    let (home, name) = named;
+    let server = match &home {
+        Home::Store(named) if same(named, &store_dir) => None,
+        Home::Server { address, copy } if same(copy, &store_dir) => Some(address.clone()),
+        _ => {
+            skipped.push(format!("{shown}: the project file in {repository} names another grimoire"));
+            return None;
+        }
+    };
+    // Every checkout of one team's grimoire, each a copy of its own, and every checkout of one
+    // store of its own is served; any other grimoire of a name already taken is another
+    // project's, and skipped (questions 0173 and 0187).
+    let one_project = |g: &Grimoire| (g.server.is_some() && g.server == server) || (g.server.is_none() && server.is_none() && same(&g.store_dir, &store_dir));
+    let other = std::iter::once(default).chain(taken.iter()).find(|g| g.name == name && !one_project(g)).map(|g| g.repo.display().to_string());
+    if let Some(other) = other {
+        skipped.push(format!("{shown}: the grimoire `{name}` is served already, with the checkout {other}; this checkout, {repository}, is not served beside it"));
+        return None;
+    }
+    Some(Grimoire { name, store_dir, repo, server })
 }
 
 /// The grimoires of a team's server: every store directly under `dir`, named by

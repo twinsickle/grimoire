@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the current ticket while there is one, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal or current that does not parse, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, current ticket and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal or current that does not parse, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ use grimoire_core::ops::Changed;
 use grimoire_core::store::{validate_baseline, validate_config, validate_page, validate_proposal, validate_requirement, validate_start, validate_ticket};
 use grimoire_core::{Malformed, Store};
 
+pub mod checkouts;
 mod location;
 mod lock;
 pub mod tokens;
@@ -158,6 +159,14 @@ fn rel(store: &Path, path: &Path) -> String {
 
 /// Load a store directory. Malformed files are collected, not fatal; a
 /// missing or unreadable `grimoire.json` is.
+/// Load the store as the checkout at `checkout`, a repository as its canonical path, sees it:
+/// its own current ticket, and its repository; the main checkout's as `load` gives it.
+pub fn load_for(store_dir: &Path, checkout: &str) -> Result<(Store, Vec<Malformed>), StoreIoError> {
+    let (mut store, mut malformed) = load(store_dir)?;
+    checkouts::view(&mut store, store_dir, checkout, &mut malformed)?;
+    Ok((store, malformed))
+}
+
 pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
     let config = read_config(store_dir)?;
     // A version 1 store is read with its strings trimmed; its first writer rewrites it as version 2.
@@ -224,6 +233,10 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             Ok(c) => store.current = Some(c.ticket),
             Err(reason) => malformed.push(Malformed { path: CURRENT_FILE.to_string(), reason }),
         }
+    }
+    // The other checkouts' file, read when one of them is served; one that does not load is said here.
+    if let Err(reason) = checkouts::read(store_dir) {
+        malformed.push(Malformed { path: checkouts::CHECKOUTS_FILE.to_string(), reason });
     }
     let baseline_path = store_dir.join(BASELINE_FILE);
     if baseline_path.is_file() {
@@ -334,7 +347,17 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             let t = store.tickets.get(slug).expect("changed ticket exists");
             write_atomic(&store_dir.join("tickets").join(format!("{slug}.json")), &to_pretty(t))
         }
-        Changed::Config => write_atomic(&store_dir.join(CONFIG_FILE), &to_pretty(&store.config)),
+        // The config names the store's main checkout, whichever checkout's view writes it; a
+        // repository that is none of its other checkouts is a re-point, written as given.
+        Changed::Config => {
+            let mut config = store.config.clone();
+            if checkouts::others(store_dir).contains(&config.repository) {
+                if let Ok(main) = checkouts::main_of(store_dir) {
+                    config.repository = main;
+                }
+            }
+            write_atomic(&store_dir.join(CONFIG_FILE), &to_pretty(&config))
+        }
         Changed::Many(changes) => {
             for c in changes {
                 persist(store_dir, store, c)?;
@@ -354,6 +377,8 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             Some(p) => write_atomic(&store_dir.join(PROPOSALS_DIR).join(format!("{slug}.json")), &to_pretty(p)),
             None => remove_if_present(&store_dir.join(PROPOSALS_DIR).join(format!("{slug}.json"))),
         },
+        // The main checkout's current ticket is current.json; another checkout's is kept with it in checkouts.json.
+        Changed::Current if checkouts::main_of(store_dir).is_ok_and(|main| main != store.config.repository) => checkouts::set_current(store_dir, &store.config.repository, store.current.as_deref()),
         Changed::Current => match &store.current {
             Some(t) => write_atomic(&store_dir.join(CURRENT_FILE), &to_pretty(&Current { ticket: t.clone() })),
             None => remove_if_present(&store_dir.join(CURRENT_FILE)),
@@ -444,6 +469,8 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
         }
         remove_if_present(&store_dir.join(BASELINE_FILE))?;
         remove_if_present(&store_dir.join(CURRENT_FILE))?;
+        // The other checkouts and their current tickets were the old store's.
+        remove_if_present(&store_dir.join(checkouts::CHECKOUTS_FILE))?;
     }
     std::fs::create_dir_all(store_dir).map_err(|e| StoreIoError::Io(store_dir.to_path_buf(), e))?;
     write_atomic(&config_path, &to_pretty(&store.config))?;
@@ -628,7 +655,9 @@ mod tests {
         assert_eq!((back.proposals.get("0001"), back.current.as_deref()), (full.proposals.get("0001"), Some("0001")));
         // Who may sign in is not what the store says: a replacement leaves the tokens as they are.
         let token = tokens::add(&dir.join("store"), "ana", true).unwrap();
+        std::fs::write(dir.join("store").join(checkouts::CHECKOUTS_FILE), r#"{"checkouts":{"C:/elsewhere":{}}}"#).unwrap();
         write_all(&dir.join("store"), &good, true).unwrap();
+        assert!(!dir.join("store").join(checkouts::CHECKOUTS_FILE).exists(), "the old store's other checkouts go with it");
         let back = load(&dir.join("store")).unwrap().0;
         assert!(back.starts.is_empty() && back.baseline.is_none() && back.proposals.is_empty() && back.current.is_none(), "replaced whole");
         assert_eq!(tokens::lookup(&dir.join("store"), &token).unwrap().map(|t| t.name), Some("ana".to_string()));

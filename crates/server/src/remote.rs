@@ -571,6 +571,8 @@ impl Daemon {
             files: Mutex::new(loaded.files),
             state: Mutex::new(loaded.state),
             events,
+            kin: Arc::default(),
+            main: true,
         };
         Ok((daemon, loaded.extract_errors))
     }
