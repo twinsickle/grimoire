@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -212,6 +212,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 baseline: state.store.baseline.as_ref().map(baseline_summary),
                 shared: state.without_code(),
                 server: state.server().cloned(),
+                grimoire: state.library.as_ref().map(|(name, _)| name.clone()),
+                library: state.library.as_ref().map(|(_, all)| all.clone()).unwrap_or_default(),
             };
             answer(name, status, None)
         }
@@ -312,6 +314,25 @@ mod tests {
         // The rest of the answer is untouched by the build.
         assert!(out.output["nodes"].is_object());
         assert!(out.output["edges"].is_number());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "status-names-the-grimoire-and-its-library", "checks": ["crates/core/src/tools/state#library", "crates/core/src/tools/read#status"]}
+    /// ```
+    #[test]
+    fn status_names_the_grimoire_and_its_library() {
+        let mut s = state();
+        // Served alone: no name, no library.
+        let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
+        assert_eq!((out.output["grimoire"].clone(), out.output["library"].clone()), (json!(null), json!([])));
+        // Served in a library, which is listed in name order.
+        let entry = |name: &str| crate::answer::LibraryEntry { name: name.into(), repository: format!("C:/{name}") };
+        s.set_library("shop".into(), vec![entry("shop"), entry("ledger")]);
+        let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
+        assert_eq!(out.output["grimoire"], "shop");
+        assert_eq!(out.output["library"], json!([{ "name": "ledger", "repository": "C:/ledger" }, { "name": "shop", "repository": "C:/shop" }]));
     }
 
     /// # Test contract

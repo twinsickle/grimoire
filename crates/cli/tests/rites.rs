@@ -17,7 +17,7 @@ fn this_repository_is_worked_on_in_the_setup_a_team_uses() {
     // Its own grimoire is a server's: the project file names one, and no store.
     let project = read(".grimoire.toml");
     let named: Vec<&str> = project.lines().filter(|l| !l.trim_start().starts_with('#') && l.contains('=')).map(|l| l.split('=').next().unwrap().trim()).collect();
-    assert_eq!(named, ["server"], "{project}");
+    assert!(named.contains(&"server") && !named.contains(&"store"), "{project}");
     // The loop starts that server, shared, from a copy of the installed build, at the address the
     // project file names, before the daemon that reads from it, and signs its person in.
     let dev = read("scripts/dev.mjs");

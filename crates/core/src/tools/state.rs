@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name and repository, in name order; a state told nothing answers with no name and an empty library."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -38,6 +38,8 @@ pub struct State {
     /// The graph as one ticket's proposal would leave it, cached like the truth's.
     view: Option<(String, Graph)>,
     pub(super) source: Option<std::sync::Arc<dyn SourceReader>>,
+    /// This grimoire's name in its daemon's library, and the library, when it is served in one.
+    pub(super) library: Option<(String, Vec<crate::answer::LibraryEntry>)>,
     /// Set by a daemon that holds no code: every graph is marked so, and the baseline is left alone.
     without_code: bool,
     /// Set on a machine whose store is a copy of a team's server's intent.
@@ -68,7 +70,7 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None }
+        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None, library: None }
     }
     /// The store's current ticket, the one last started.
     pub fn current(&self) -> Option<String> {
@@ -144,6 +146,12 @@ impl State {
     /// Give the state a way to read the repository's files, for `source`.
     pub fn set_source(&mut self, reader: std::sync::Arc<dyn SourceReader>) {
         self.source = Some(reader);
+    }
+    /// Tell the state it is served in a library, as `name`, beside the grimoires
+    /// of `library`, which `status` lists in name order. The graph does not depend on it.
+    pub fn set_library(&mut self, name: String, mut library: Vec<crate::answer::LibraryEntry>) {
+        library.sort_by(|a, b| a.name.cmp(&b.name));
+        self.library = Some((name, library));
     }
     /// Tell the state what build is running. The graph does not depend on it.
     pub fn set_build(&mut self, build: Build) {

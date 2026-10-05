@@ -211,6 +211,11 @@ impl Daemon {
         store_io::write_serving_at(&self.store_dir, addr)
     }
 
+    /// Say this grimoire is served in a library, as `name`, beside the grimoires of `library`.
+    pub fn set_library(&self, name: &str, library: Vec<grimoire_core::answer::LibraryEntry>) {
+        self.state.lock().expect("state lock").set_library(name.to_string(), library);
+    }
+
     /// The same, for a grimoire served at `path` in the daemon's library on `port`.
     pub fn mark_serving_in(&self, port: u16, path: &str) -> Result<(), StoreIoError> {
         store_io::write_serving_in(&self.store_dir, std::net::SocketAddr::from(([127, 0, 0, 1], port)), Some(path))

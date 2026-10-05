@@ -89,6 +89,42 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * # Test contract
  *
  * ```json
+ * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#three-views", "web/src/App#library-switcher", "web/src/api#grimoire-base"]}
+ * ```
+ */
+test("a grimoire of the library is read at its own address, and the header switches between them", async ({ page }) => {
+  // The fixture's daemon serves a library of two: its own checkout, `repo`, and `ledger`.
+  const calls: string[] = [];
+  page.on("request", (r) => {
+    const path = new URL(r.url()).pathname;
+    if (path.includes("/api/")) calls.push(path);
+  });
+  await page.goto("/g/ledger/cauldron");
+  await expect(page.locator("main h1")).toHaveText("Cauldron");
+  await expect(page.locator("header")).toContainText("0 pages · 0 reqs");
+  const switcher = page.locator("header select[aria-label='Grimoire']");
+  await expect(switcher).toHaveValue("ledger");
+  await expect(switcher.locator("option")).toHaveText(["ledger", "repo"]);
+  // Every call and the event stream went to ledger's address, none to the bare routes.
+  expect(calls.length).toBeGreaterThan(0);
+  expect(calls.filter((c) => !c.startsWith("/g/ledger/api/")), "calls outside ledger's address").toEqual([]);
+  // Its links stay under its address: the grimoire tab opens ledger's grimoire.
+  await page.locator("header nav a").first().click();
+  await expect(page).toHaveURL(/\/g\/ledger\/?$/);
+  // Choosing the other opens it at its own address, a page of its own.
+  await switcher.selectOption("repo");
+  await expect(page).toHaveURL(/\/g\/repo\/$/);
+  await expect(page.locator(rail)).toBeVisible();
+  await expect(page.locator("header select[aria-label='Grimoire']")).toHaveValue("repo");
+  const goal = await tool<{ node: { title: string } }>(page, "get", { ref: "page:goal" });
+  await page.goto("/g/repo/n/page%3Agoal");
+  await expect(page.locator("main h1").first()).toContainText(goal.node.title);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "the-application-is-all-the-page-holds", "checks": ["web/src/main#mounts-app"]}
  * ```
  */

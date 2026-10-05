@@ -126,6 +126,18 @@ pub struct StatusAnswer {
     pub shared: bool,
     // Set on a machine whose intent is a copy of a team's server's.
     pub server: Option<ServerCopy>,
+    // This grimoire's name in its daemon's library; none on a daemon serving one store alone.
+    pub grimoire: Option<String>,
+    // Every grimoire that daemon serves, in name order; empty on a daemon serving one store alone.
+    pub library: Vec<LibraryEntry>,
+}
+
+/// One grimoire of a daemon's library, as `status` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct LibraryEntry {
+    pub name: String,
+    pub repository: String,
 }
 
 /// What a machine's intent is a copy of: the server's address, when the copy

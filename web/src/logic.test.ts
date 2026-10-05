@@ -2,17 +2,46 @@
 // tested in a browser by web/behaviour.
 
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, call } from "./api";
+import { ApiError, call, grimoireBase } from "./api";
 import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { goneOf, idOf, kindOf, localId, serverAway, type AnyNode } from "./types";
+import { goneOf, idOf, kindOf, libraryShown, localId, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
 
 afterEach(() => vi.unstubAllGlobals());
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "an-address-names-its-grimoire", "checks": ["web/src/api#grimoire-base"]}
+ * ```
+ */
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-header-names-a-lone-grimoire", "checks": ["web/src/App#library-switcher"]}
+ * ```
+ */
+test("the header names a lone grimoire and lists a library of more", () => {
+  expect(libraryShown(null, [])).toBe("none");
+  expect(libraryShown("shop", [])).toBe("name");
+  expect(libraryShown("shop", [{ name: "shop" }])).toBe("name");
+  expect(libraryShown("shop", [{ name: "ledger" }, { name: "shop" }])).toBe("list");
+});
+
+test("an address names its grimoire only by a leading /g/ and a slug", () => {
+  expect(grimoireBase("/g/ledger/")).toBe("/g/ledger");
+  expect(grimoireBase("/g/ledger")).toBe("/g/ledger");
+  expect(grimoireBase("/g/billing-service/n/page%3Agoal")).toBe("/g/billing-service");
+  // The bare routes are the daemon's default.
+  for (const bare of ["/", "/cauldron", "/n/page%3Ag", "/gx/ledger/", "/g/", "/g/Not A Slug/", "/x/g/ledger/"]) expect(grimoireBase(bare)).toBe("");
+});
 
 /**
  * # Test contract

@@ -414,7 +414,7 @@ fn post(port: u16, path: &str, body: &str, extra_headers: &str) -> (u16, String)
 /// # Test contract
 ///
 /// ```json
-/// {"test": "one-daemon-serves-the-machines-library", "checks": ["crates/server/src#library", "req:project-name"]}
+/// {"test": "one-daemon-serves-the-machines-library", "checks": ["crates/server/src#library", "req:project-name", "req:tool-status"]}
 /// ```
 #[test]
 fn one_daemon_serves_the_machines_library() {
@@ -452,6 +452,14 @@ fn one_daemon_serves_the_machines_library() {
         let (code, body) = post(port, path, "{}", "");
         assert_eq!(code, 200, "{path}: {body}");
         assert_eq!(repository(&body), named(repo), "{path}");
+    }
+    // Each grimoire's status names it and lists the library, the held one not among them.
+    for (path, named) in [("/g/ledger/api/status", "ledger"), ("/g/shop/api/status", "shop"), ("/api/status", "shop")] {
+        let (_, status) = post(port, path, "{}", "");
+        let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+        assert_eq!(status["grimoire"], named, "{path}");
+        let library: Vec<&str> = status["library"].as_array().unwrap().iter().map(|g| g["name"].as_str().unwrap()).collect();
+        assert_eq!(library, ["ledger", "shop"], "{path}");
     }
     // A command in the second sends its write to the daemon, at the second's path.
     let filed = run(&ledger.repo, &["tool", "file_ticket", r#"{"title":"Through the library","kind":"change","priority":"later","body":"b"}"#]);

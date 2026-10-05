@@ -80,6 +80,8 @@ export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
 export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
+export type LibraryEntry = { name: string, repository: string, };
+
 export type Linked = { ref: Ref, title: string | null, };
 
 export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, without_code: boolean, };
@@ -158,7 +160,7 @@ export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array
 
 export type Status = "open" | "active" | "landing" | "closed";
 
-export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, };
+export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, grimoire: string | null, library: Array<LibraryEntry>, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 

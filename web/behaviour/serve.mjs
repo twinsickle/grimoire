@@ -18,7 +18,7 @@
 // GRIMOIRE_BIN names the binary; `grimoire` on PATH by default.
 
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,8 +63,8 @@ for (const name of readdirSync(join(repo, "src"))) {
 function grimoire(...args) {
   return run(args);
 }
-function run(args, input) {
-  const r = spawnSync(bin, args, { cwd: repo, encoding: "utf8", env, input });
+function run(args, input, cwd = repo) {
+  const r = spawnSync(bin, args, { cwd, encoding: "utf8", env, input });
   if (r.status !== 0) throw new Error(`grimoire ${args.join(" ")} failed:\n${r.stdout}${r.stderr}`);
   return r.stdout;
 }
@@ -129,6 +129,13 @@ const req = tool("get", { ref: "req:ready-needs-commit" }).node;
 tool("put_requirement", { slug: req.slug, title: `${req.title}, detached too`, statement: req.statement, scenarios: req.scenarios, covered_by: req.covered_by, ticket: draft });
 // And a page the truth does not have yet.
 tool("put_page", { slug: "detached", title: "Detached heads", body: "Proposed by the first ticket: a page the truth does not have yet.", links: [], ticket: draft });
+
+// A second grimoire on the run's machine, a store of its own named `ledger`, so
+// the daemon serves a library of two and the views show its switcher.
+const ledger = join(dir, "ledger");
+mkdirSync(join(ledger, "src"), { recursive: true });
+writeFileSync(join(ledger, "README.md"), "The ledger: a second grimoire in the fixture's library.\n");
+run(["init", "--store", "ledger", "--name", "ledger"], undefined, ledger);
 
 // A team's: the seeded store is served shared, and the fixture's checkout
 // becomes one that names that server, signed in, as a teammate's is.

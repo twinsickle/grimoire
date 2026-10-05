@@ -25,6 +25,8 @@ const config = (daemon: string) => ({
       // passed on for the daemon to refuse.
       "/api": { target: daemon, changeOrigin: true, configure: sameOrigin },
       "/mcp": { target: daemon, changeOrigin: true, configure: sameOrigin },
+      // A grimoire of the daemon's library, at its own address.
+      "^/g/[a-z0-9-]+/(api|mcp)": { target: daemon, changeOrigin: true, configure: sameOrigin },
     },
   },
   build: { outDir: "dist", emptyOutDir: true, sourcemap: true },

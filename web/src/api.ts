@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response is thrown as an ApiError carrying the tool's error code and message."}]}
+ * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, for the grimoire the page's address names, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response is thrown as an ApiError carrying the tool's error code and message."},{"id":"grimoire-base","statement":"A page opened at /g/<name>/ makes every tool call and opens its event stream under /g/<name>/api/, that grimoire's in the daemon's library; one opened elsewhere uses the bare /api/, the daemon's default grimoire; grimoireBase reads the name only from a leading /g/ followed by a slug."}]}
  * ```
  */
 
@@ -15,9 +15,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The grimoire an address names in the daemon's library: `/g/<name>` when the
+ * path starts with one, else "" for the daemon's default on the bare routes.
+ */
+export function grimoireBase(pathname: string): string {
+  const m = pathname.match(/^\/g\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/|$)/);
+  return m ? `/g/${m[1]}` : "";
+}
+
+/** The grimoire this page reads, from the address it was opened at; switching grimoires opens a page of its own. */
+export const base: string = typeof window === "undefined" ? "" : grimoireBase(window.location.pathname);
+
 /** Call a tool by name; its answer's type follows from the name, generated from the Rust answer types. */
 export async function call<K extends keyof ToolAnswers>(tool: K, input: unknown = {}): Promise<ToolAnswers[K]> {
-  const res = await fetch(`/api/${tool}`, {
+  const res = await fetch(`${base}/api/${tool}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -52,7 +64,7 @@ let stream: EventSource | null = null;
 
 function ensureStream() {
   if (stream) return;
-  stream = new EventSource("/api/events");
+  stream = new EventSource(`${base}/api/events`);
   const notify = () => listeners.forEach((l) => l());
   stream.onmessage = notify;
   // On a daemon restart the browser reconnects by itself; the graph may have

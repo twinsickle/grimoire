@@ -35,6 +35,11 @@ fn serve_with(ui: http::Ui) -> Served {
 
 /// The same store, served with the given UI behind the given policy.
 fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> Served {
+    serve_app(|daemon| http::router(daemon, ui, policy))
+}
+
+/// The same store, served by the router `app` builds for its daemon.
+fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
     let tmp = tempfile::Builder::new().prefix("grimoire-serving-").tempdir().unwrap();
     let dir = tmp.path().to_path_buf();
     let repo = dir.join("repo");
@@ -52,7 +57,7 @@ fn serve_as(ui: http::Ui, policy: Arc<dyn grimoire_server::access::Policy>) -> S
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
     let port = listener.local_addr().unwrap().port();
-    let app = http::router(daemon.clone(), ui, policy);
+    let app = app(daemon.clone());
     runtime.spawn(async move { axum::serve(listener, app).await });
     Served { port, daemon, _runtime: runtime, _tmp: tmp }
 }
@@ -321,6 +326,36 @@ fn a_ui_directory_overrides_and_routes_land_on_its_index() {
     let (_, head, body) = request_as(s.port, "GET", "/assets/app.js", None, "127.0.0.1", "");
     assert_eq!(body, "run()");
     assert!(head.to_ascii_lowercase().contains("javascript"), "{head}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-serves-each-grimoire-and-the-interface-beside-them", "checks": ["crates/server/src/http#library-routes"]}
+/// ```
+#[test]
+fn a_library_serves_each_grimoire_and_the_interface_beside_them() {
+    let tmp = tempfile::Builder::new().prefix("grimoire-ui-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(dir.join("index.html"), "<div id=\"library\"></div>").unwrap();
+    std::fs::write(dir.join("assets").join("app.js"), "run()").unwrap();
+    // A library as serve builds one: a grimoire on the bare routes and at its own path, another at its own.
+    let policy: Arc<dyn grimoire_server::access::Policy> = Arc::new(grimoire_server::access::Local);
+    let s = serve_app(|d| http::with_ui(http::api(d.clone(), policy.clone()).nest("/g/first", http::api(d.clone(), policy.clone())).nest("/g/second", http::api(d, policy.clone())), http::Ui::Dir(dir.clone())));
+    for path in ["/api/status", "/g/first/api/status", "/g/second/api/status"] {
+        let (code, body) = request(s.port, "POST", path, Some(&json!({})));
+        assert_eq!(code, 200, "{path}: {body}");
+        assert!(json(&body)["repository"].is_string(), "{path} is a grimoire's API: {body}");
+    }
+    // A grimoire's client routes land on the interface, whose files are served from the root.
+    for route in ["/g/second/", "/g/second/cauldron", "/g/second/n/page%3Agoal", "/cauldron"] {
+        let (code, body) = request(s.port, "GET", route, None);
+        assert_eq!(code, 200, "{route}");
+        assert!(body.contains("library"), "{route} is the interface's index: {body}");
+    }
+    let (_, body) = request(s.port, "GET", "/assets/app.js", None);
+    assert_eq!(body, "run()");
 }
 
 /// # Test contract

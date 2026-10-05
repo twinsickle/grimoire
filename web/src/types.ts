@@ -43,6 +43,16 @@ export function localId(ref: G.Ref): string {
 }
 
 /** The UI route for a node's page. */
+/**
+ * What the header shows of the daemon's library: nothing when no grimoire is
+ * named, the name alone when the library holds one, and a list of them when
+ * it holds more.
+ */
+export function libraryShown(grimoire: string | null, library: { name: string }[]): "none" | "name" | "list" {
+  if (!grimoire) return "none";
+  return library.length < 2 ? "name" : "list";
+}
+
 export function nodePath(ref: G.Ref): string {
   return `/n/${encodeURIComponent(ref)}`;
 }
