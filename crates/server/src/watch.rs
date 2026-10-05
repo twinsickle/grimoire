@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group re-extracts every repository path it names that the extractor handles and the repository does not ignore, once, however many events name it."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles or marks a nested checkout's boundary, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
 //! ```
 
 use std::collections::HashMap;
@@ -114,7 +114,7 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
             }
             let rels = {
                 let extractor = daemon.extractor.read().expect("extractor lock");
-                to_reextract(events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)), |p| ignorer.ignores(p), |p| daemon.relative(p), |r| extractor.handles(r))
+                to_reextract(events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)), |p| ignorer.ignores(p), |p| daemon.relative(p), |r| extractor.handles(r) || extractor.is_boundary(r))
             };
             if !rels.is_empty() {
                 daemon.reextract(&rels);
@@ -152,6 +152,22 @@ fn to_reextract<'a>(paths: impl IntoIterator<Item = &'a Path>, ignored: impl Fn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-watcher-hands-on-markers-and-files-of-a-kind-read", "checks": ["crates/server/src/watch#debounced"]}
+    /// ```
+    #[test]
+    fn the_watcher_hands_on_markers_and_files_of_a_kind_read() {
+        // As start asks it: the extractor's kinds and a nested checkout's marker reach the daemon, which decides what is read.
+        let root = Path::new("C:/repo");
+        let e = grimoire_extract::Extractor::for_languages(root, &["rust".to_string()]);
+        let paths = ["C:/repo/src/a.rs", "C:/repo/worktrees/wt/src/b.rs", "C:/repo/worktrees/wt/.git", "C:/repo/pkg/.grimoire.toml", "C:/repo/README.md", "C:/repo/.grimoire.toml"].map(Path::new);
+        let rel = |p: &Path| p.strip_prefix(root).ok().map(|r| r.to_string_lossy().replace('\\', "/"));
+        let handed = to_reextract(paths, |_| false, rel, |r| e.handles(r) || e.is_boundary(r));
+        assert_eq!(handed, ["src/a.rs", "worktrees/wt/src/b.rs", "worktrees/wt/.git", "pkg/.grimoire.toml"]);
+    }
 
     /// # Test contract
     ///

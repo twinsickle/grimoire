@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -511,11 +511,26 @@ impl Daemon {
         let mut changed = Vec::new();
         // A pruned baseline is a write to the store, taken one at a time with its other checkouts'.
         let _one = self.kin.write.lock().expect("kin write lock");
+        // A nested checkout's marker appeared or went: where this checkout's code ends moved, so all of it is read again.
+        if paths.iter().any(|p| self.extractor.read().expect("extractor lock").is_boundary(p)) {
+            let languages = self.state.lock().expect("state lock").store().config.languages.clone();
+            self.reextract_all(&languages);
+            let mut state = self.state.lock().expect("state lock");
+            if self.prune(&mut state) {
+                self.hand_on(state);
+            }
+            return;
+        }
         {
             let mut files = self.files.lock().expect("files lock");
             let extractor = self.extractor.read().expect("extractor lock");
             for rel in paths {
-                if !extractor.handles(rel) {
+                // Read only when reading the whole checkout would read it (req:extract-nested-checkouts-skipped);
+                // one held from before that is no longer read goes.
+                if !extractor.reads(rel) {
+                    if files.remove(rel).is_some() {
+                        changed.push(rel.clone());
+                    }
                     continue;
                 }
                 let full = self.repo.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
@@ -688,6 +703,39 @@ mod tests {
         assert_eq!(a["node"]["statement"], "It says a, changed.");
         let b = d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap();
         assert!(b["node"]["decls"].as_array().unwrap().iter().any(|x| x["path"] == "b"), "the unchanged file was not read again");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-folder-that-becomes-a-checkout-leaves-the-graph", "checks": ["crates/server/src/daemon#one-file-reextract", "req:extract-nested-checkouts-skipped"]}
+    /// ```
+    #[test]
+    fn a_folder_that_becomes_a_checkout_leaves_the_graph() {
+        let h = Harness::new();
+        let d = h.open();
+        let held = |d: &Daemon| d.files.lock().unwrap().contains_key("pkg/src/lib.rs");
+        // A folder of this checkout's code, read as it changes.
+        std::fs::create_dir_all(h.repo.join("pkg").join("src")).unwrap();
+        std::fs::write(h.repo.join("pkg").join("src").join("lib.rs"), "pub fn p() {}\n").unwrap();
+        d.reextract(&["pkg/src/lib.rs".to_string()]);
+        assert!(held(&d));
+        // It becomes a checkout of its own: its marker arriving takes its code out, and a later save is not read.
+        std::fs::write(h.repo.join("pkg").join(".grimoire.toml"), "store = \"other\"\n").unwrap();
+        d.reextract(&["pkg/.grimoire.toml".to_string()]);
+        assert!(!held(&d), "the nested checkout's code is its own");
+        std::fs::write(h.repo.join("pkg").join("src").join("lib.rs"), "pub fn p2() {}\n").unwrap();
+        d.reextract(&["pkg/src/lib.rs".to_string()]);
+        assert!(!held(&d), "a save there is not read");
+        // The marker going brings it back, read whole again.
+        std::fs::remove_file(h.repo.join("pkg").join(".grimoire.toml")).unwrap();
+        d.reextract(&["pkg/.grimoire.toml".to_string()]);
+        assert!(held(&d), "the folder is this checkout's again");
+        // A file held from before that the extractor no longer reads goes when it is named.
+        let held_from_before = d.files.lock().unwrap()["src/a.rs"].clone();
+        d.files.lock().unwrap().insert(".hidden/x.rs".to_string(), held_from_before);
+        d.reextract(&[".hidden/x.rs".to_string()]);
+        assert!(!d.files.lock().unwrap().contains_key(".hidden/x.rs"));
     }
 
     /// # Test contract

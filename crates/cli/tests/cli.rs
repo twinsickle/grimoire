@@ -705,8 +705,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
     let main = &t.checkout.repo;
     assert!(team(main, &home, None, &["login", "--token", &t.writer]).status.success());
     assert!(team(main, &home, None, &["check"]).status.success());
-    // The main checkout's code leaves its worktrees out, as this repository's would once a nested checkout is skipped.
-    std::fs::write(main.join(".gitignore"), "worktrees/\n").unwrap();
+    // No ignore file: the main checkout's code ends where a worktree, a checkout of its own, begins.
     let nested = |name: &str| {
         let wt = main.join("worktrees").join(name);
         std::fs::create_dir_all(wt.join("src")).unwrap();

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."}]}
 //! ```
 
 pub mod contract;
@@ -215,10 +215,48 @@ impl Extractor {
         self.adapter_for(rel_path).is_some()
     }
 
+    /// Whether this repository path marks a checkout nested below the root, a `.git` or a
+    /// `.grimoire.toml` in a folder beneath it: one appearing or going moves where the
+    /// repository's code ends, so the whole of it is read again.
+    pub fn is_boundary(&self, rel_path: &str) -> bool {
+        let parts: Vec<&str> = rel_path.split('/').filter(|p| !p.is_empty()).collect();
+        parts.len() > 1 && matches!(parts.last(), Some(&".git") | Some(&".grimoire.toml")) && !parts[..parts.len() - 1].contains(&".git")
+    }
+
+    /// Whether reading the whole repository would read this repository path: a file an adapter
+    /// handles, hidden nowhere along its path and in no checkout nested below the root
+    /// (req:extract-nested-checkouts-skipped). Asked of a single changed file, so it is read
+    /// only when the walk would read it.
+    pub fn reads(&self, rel_path: &str) -> bool {
+        if !self.handles(rel_path) {
+            return false;
+        }
+        let parts: Vec<&str> = rel_path.split('/').filter(|p| !p.is_empty()).collect();
+        if parts.iter().any(|p| p.starts_with('.')) {
+            return false;
+        }
+        let mut dir = self.root.clone();
+        for part in &parts[..parts.len().saturating_sub(1)] {
+            dir.push(part);
+            if is_checkout(&dir) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Every handled file under the root, honouring `.gitignore`, sorted.
     pub fn walk(&self) -> Result<Vec<String>, ExtractError> {
         let mut out = Vec::new();
-        let walker = ignore::WalkBuilder::new(&self.root).hidden(true).git_ignore(true).git_exclude(true).git_global(true).require_git(false).build();
+        // A folder below the root that is a checkout of its own is that checkout's code, not this one's.
+        let walker = ignore::WalkBuilder::new(&self.root)
+            .hidden(true)
+            .git_ignore(true)
+            .git_exclude(true)
+            .git_global(true)
+            .require_git(false)
+            .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && is_checkout(e.path())))
+            .build();
         for entry in walker {
             let entry = entry.map_err(|e| ExtractError::Walk(self.root.clone(), e))?;
             if !entry.file_type().is_some_and(|t| t.is_file()) {
@@ -258,9 +296,51 @@ impl Extractor {
     }
 }
 
+/// Whether a folder is a checkout of its own: a git repository, a worktree or a submodule, or a
+/// folder a Grimoire project file names a grimoire for.
+fn is_checkout(dir: &Path) -> bool {
+    dir.join(".git").exists() || dir.join(".grimoire.toml").exists()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-checkout-ends-where-another-begins", "checks": ["crates/extract/src#nested-checkouts-skipped", "req:extract-nested-checkouts-skipped"]}
+    /// ```
+    #[test]
+    fn a_checkout_ends_where_another_begins() {
+        let dir = tempfile::Builder::new().prefix("grimoire-extract-").tempdir().unwrap();
+        let root = dir.path();
+        let file = |rel: &str| {
+            let p = root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, "pub fn f() {}\n").unwrap();
+        };
+        std::fs::write(root.join("Cargo.toml"), "[package]\nname = \"r\"\nversion = \"0.1.0\"\n").unwrap();
+        file("src/lib.rs");
+        // A worktree kept inside, a submodule, a folder another grimoire names, and a hidden folder.
+        file("worktrees/wt/src/lib.rs");
+        std::fs::write(root.join("worktrees/wt/.git"), "gitdir: elsewhere\n").unwrap();
+        file("vendor/sub/src/lib.rs");
+        std::fs::create_dir_all(root.join("vendor/sub/.git")).unwrap();
+        file("tools/other/src/lib.rs");
+        std::fs::write(root.join("tools/other/.grimoire.toml"), "store = \"other\"\n").unwrap();
+        file(".claude/worktrees/agent/src/lib.rs");
+        let e = Extractor::for_languages(root, &["rust".to_string()]);
+        assert_eq!(e.walk().unwrap(), ["src/lib.rs"], "the checkout's own code alone");
+        // A single changed file is read only when the walk would read it.
+        assert!(e.reads("src/lib.rs"));
+        for rel in ["worktrees/wt/src/lib.rs", "vendor/sub/src/lib.rs", "tools/other/src/lib.rs", ".claude/worktrees/agent/src/lib.rs", "Cargo.toml"] {
+            assert!(!e.reads(rel), "{rel}");
+        }
+        // A nested checkout's marker is a boundary; the root's own, and anything inside a .git folder, are not.
+        assert!(e.is_boundary("worktrees/wt/.git") && e.is_boundary("tools/other/.grimoire.toml"));
+        assert!(!e.is_boundary(".grimoire.toml") && !e.is_boundary("vendor/sub/.git/index") && !e.is_boundary("src/lib.rs"));
+    }
 
     /// # Test contract
     ///
