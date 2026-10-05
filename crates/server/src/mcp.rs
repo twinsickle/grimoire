@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them, pass `checkout`, the caller's working directory, with every call; they list no grimoire's pages, a paragraph naming three or more of the scaffold's story pages being a list, one or two in passing not, since each root page's links are its reading order and a list here goes stale unseen."},{"id":"caller-checked","statement":"A tool call runs only once may_call allows the caller the trust step put on the HTTP request rmcp hands over; a call it refuses, a reader's write or a call with no caller, comes back as a tool-level error result carrying the error object, and the tool never runs."}]}
+//! {"purpose":"Expose the core tool dispatcher as an MCP server over streamable HTTP.","criteria":[{"id":"same-tools","statement":"The tools listed over MCP are exactly the core definitions, with the same names, descriptions and input schemas."},{"id":"tools-fresh","statement":"The tool list is answered with ttlMs 0 and cacheScope private: stale at once and for this client alone, so no client is told to treat a list a rebuilt or upgraded daemon no longer serves as fresh, nor a shared cache to keep it; when a client asks again is the client's."},{"id":"errors-visible","statement":"A tool error is returned as a tool-level error result carrying the error JSON, so the caller sees the code and message."},{"id":"stateless","statement":"The MCP transport keeps no session, so a daemon restart costs a client nothing but its next request."},{"id":"instructions","statement":"The server's instructions, sent to every client on connect, carry the non-negotiables: orient first, work is a ticket, the grimoire moves with the code, every module carries a contract, resolve references before writing them, never write the store's files, propose resolutions but do not decide them, pass `checkout`, the caller's working directory, with every call; they list no grimoire's pages, a paragraph naming three or more of the scaffold's story pages being a list, one or two in passing not, since each root page's links are its reading order and a list here goes stale unseen."},{"id":"caller-checked","statement":"A tool call runs only once may_call allows the caller the trust step put on the HTTP request rmcp hands over; a call it refuses, a reader's write or a call with no caller, comes back as a tool-level error result carrying the error object, and the tool never runs."}]}
 //! ```
 
 use std::sync::Arc;
@@ -58,9 +58,10 @@ impl ServerHandler for McpServer {
     }
 
     async fn list_tools(&self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>) -> Result<ListToolsResult, ErrorData> {
-        // Protocol 2026-07-28 requires the cache fields on list results. The
-        // tool set is fixed for the life of the process, so cache it freely.
-        Ok(ListToolsResult::with_all_items(tool_defs()).with_ttl_ms(24 * 60 * 60 * 1000).with_cache_scope(CacheScope::Public))
+        // Protocol 2026-07-28 requires the cache fields on list results. The tool set
+        // changes whenever the daemon is rebuilt or upgraded, which a client's cache
+        // outlives: stale at once, and this client's alone (req:mcp-same-tools).
+        Ok(ListToolsResult::with_all_items(tool_defs()).with_ttl_ms(0).with_cache_scope(CacheScope::Private))
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {

@@ -162,12 +162,15 @@ fn events_stream_to_a_listener() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "mcp-lists-the-core-tools", "checks": ["crates/server/src/mcp#same-tools"]}
+/// {"test": "mcp-lists-the-core-tools", "checks": ["crates/server/src/mcp#same-tools", "crates/server/src/mcp#tools-fresh"]}
 /// ```
 #[test]
 fn mcp_lists_the_core_tools() {
     let s = serve();
-    let listed = mcp(s.port, 1, "tools/list", json!({}))["result"]["tools"].clone();
+    let answer = mcp(s.port, 1, "tools/list", json!({}))["result"].clone();
+    // Stale at once and this client's alone: a rebuilt daemon's tools reach a client that asks again.
+    assert_eq!((answer["ttlMs"].clone(), answer["cacheScope"].clone()), (json!(0), json!("private")), "{answer}");
+    let listed = answer["tools"].clone();
     let listed: Vec<(String, String, Value)> = listed.as_array().unwrap().iter().map(|t| (t["name"].as_str().unwrap().to_string(), t["description"].as_str().unwrap().to_string(), t["inputSchema"].clone())).collect();
     let core: Vec<(String, String, Value)> = grimoire_core::tools::definitions().into_iter().map(|d| (d.name.to_string(), d.description.to_string(), d.input_schema)).collect();
     assert_eq!(listed, core);
