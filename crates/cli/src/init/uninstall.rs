@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::{guidance::without_guidance, hooks, io, write, without_codex_server, InitError, CODEX_REL, HARNESSES, MCP_REL, SKILL_FILES};
+use super::{guidance::without_guidance, hooks, io, without_codex_server, write, InitError, CODEX_REL, HARNESSES, MCP_REL, SKILL_FILES};
 
 /// What uninstall did, or will do, to one path of the integration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,9 +201,9 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::init::install;
     use crate::init::tests::{temp, walk};
     use crate::init::{hook_script, HOOK_REL, LANDING_HOOK_REL};
-    use crate::init::install;
     use serde_json::json;
 
     fn uninstall(repo: &Path) -> Vec<Undone> {

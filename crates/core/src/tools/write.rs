@@ -13,8 +13,8 @@ use crate::answer::*;
 use crate::lint::{self, Rule};
 use crate::model::*;
 use crate::ops::{self, Changed, ToolError};
-use crate::store::FieldError;
 use crate::query;
+use crate::store::FieldError;
 
 /// Run the write tool `name`. `today` is the ISO date used when a decision has none.
 /// A write that changes intent lands in the proposal of the `ticket` its input
@@ -287,7 +287,9 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                         return Err(ToolError::conflict(format!("{r} is an answer waiting for the change that applies it: it closes when that change lands, and is not landed itself")))
                     }
                     Some(t) if r.kind == Kind::Ticket && t.status == Status::Landing => Some(r),
-                    Some(t) if r.kind == Kind::Ticket => return Err(ToolError::conflict(format!("{r} is {}, not landing: its decision is written with close_ticket and when: landed", t.status.name()))),
+                    Some(t) if r.kind == Kind::Ticket => {
+                        return Err(ToolError::conflict(format!("{r} is {}, not landing: its decision is written with close_ticket and when: landed", t.status.name())))
+                    }
                     _ => return Err(ToolError::not_found(&r)),
                 },
                 None if note.is_some() => None,
@@ -305,7 +307,11 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             let waiting: Vec<query::Summary> = state.store.tickets.values().filter(|t| t.status == Status::Landing && t.kind == TicketKind::Change).map(query::ticket_summary).collect();
             match landed {
                 None => answer(name, Landed { landed: false, node: None, findings: vec![], baselined: 0, untouched: None, unnamed: None, settled: vec![], waiting, note }, None),
-                Some((c, changed)) => answer(name, Landed { landed: true, node: Some(c.node), findings: c.findings, baselined: c.baselined, untouched: c.untouched, unnamed: c.unnamed, settled: c.settled, waiting, note: None }, Some(changed)),
+                Some((c, changed)) => answer(
+                    name,
+                    Landed { landed: true, node: Some(c.node), findings: c.findings, baselined: c.baselined, untouched: c.untouched, unnamed: c.unnamed, settled: c.settled, waiting, note: None },
+                    Some(changed),
+                ),
             }
         }
         "rename_node" => {
@@ -361,7 +367,12 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 // Supplied by a caller that holds the code, as a machine does for the server it writes through.
                 Some(keys) => keys,
                 // Every present finding is what a baseline is, and a daemon with no code cannot see them all.
-                None if state.without_code() => return Err(ToolError::invalid("this daemon holds no code, so it cannot see every finding: adopt from a machine that has the code, which supplies them", vec![FieldError::new("findings", "absent, and this daemon holds no code to find them")])),
+                None if state.without_code() => {
+                    return Err(ToolError::invalid(
+                        "this daemon holds no code, so it cannot see every finding: adopt from a machine that has the code, which supplies them",
+                        vec![FieldError::new("findings", "absent, and this daemon holds no code to find them")],
+                    ))
+                }
                 None => lint::lint(state.graph(), &Rule::ALL).iter().map(lint::Finding::key).collect(),
             };
             let (baseline, replaced, changed) = ops::adopt(state.store_mut(), keys, i.reason, today.to_string())?;
@@ -371,7 +382,12 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             let i: RefIn = parse(input)?;
             // A ticket is not intent and goes at once; a page or requirement is a proposed deletion.
             let view = match i.r#ref.kind {
-                Kind::Ticket if ticket.is_some() => return Err(ToolError::invalid("`ticket` does not apply: a ticket is deleted at once, with its start and proposal", vec![FieldError::new("ticket", "not taken when deleting a ticket")])),
+                Kind::Ticket if ticket.is_some() => {
+                    return Err(ToolError::invalid(
+                        "`ticket` does not apply: a ticket is deleted at once, with its start and proposal",
+                        vec![FieldError::new("ticket", "not taken when deleting a ticket")],
+                    ))
+                }
                 Kind::Ticket => None,
                 _ => Some(ops::target_ticket(state.store(), ticket.as_deref())?),
             };
@@ -546,13 +562,16 @@ mod tests {
     fn a_ticket_write_warns_as_lint_would() {
         let mut s = state();
         let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
-        call(&mut s, "put_requirement", json!({ "slug": "only-proposed", "title": "P", "statement": "It SHALL hold.", "scenarios": scenario, "covered_by": [], "ticket": "later-1" }), "2026-10-04").unwrap();
+        call(&mut s, "put_requirement", json!({ "slug": "only-proposed", "title": "P", "statement": "It SHALL hold.", "scenarios": scenario, "covered_by": [], "ticket": "later-1" }), "2026-10-04")
+            .unwrap();
         let file = |s: &mut State| {
-            let out = call(s, "file_ticket", json!({ "title": "Names it", "kind": "change", "priority": "later", "touches": ["req:only-proposed", "req:nowhere"], "body": "x" }), "2026-10-04").unwrap();
+            let out =
+                call(s, "file_ticket", json!({ "title": "Names it", "kind": "change", "priority": "later", "touches": ["req:only-proposed", "req:nowhere"], "body": "x" }), "2026-10-04").unwrap();
             let warned: Vec<String> = out.output["warnings"].as_array().unwrap().iter().map(|w| w["edge"]["to"].as_str().unwrap_or_default().to_string()).collect();
             let lint = call(s, "lint", json!({ "kinds": ["dangling"] }), "2026-10-04").unwrap();
             let slug = out.output["node"]["slug"].as_str().unwrap().to_string();
-            let flagged: Vec<String> = lint.output["findings"].as_array().unwrap().iter().filter(|f| f["ref"] == format!("ticket:{slug}")).map(|f| f["edge"]["to"].as_str().unwrap_or_default().to_string()).collect();
+            let flagged: Vec<String> =
+                lint.output["findings"].as_array().unwrap().iter().filter(|f| f["ref"] == format!("ticket:{slug}")).map(|f| f["edge"]["to"].as_str().unwrap_or_default().to_string()).collect();
             let sorted = |mut v: Vec<String>| {
                 v.sort();
                 v
@@ -634,7 +653,13 @@ mod tests {
         assert!(s.prune_baseline().is_none(), "nothing fixed yet");
         // Fix the one unspecified requirement, under the active ticket, and land it by closing.
         let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
-        call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": scenario, "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }), "2026-09-28").unwrap();
+        call(
+            &mut s,
+            "put_requirement",
+            json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": scenario, "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }),
+            "2026-09-28",
+        )
+        .unwrap();
         assert!(s.prune_baseline().is_none(), "a proposal fixes nothing in the truth yet");
         call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Fixed." } }), "2026-09-28").unwrap();
         assert!(matches!(s.prune_baseline(), Some(Changed::Baseline)));
@@ -716,10 +741,19 @@ mod tests {
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-28").unwrap().output;
         assert_eq!(out["findings"], json!([]), "everything on the touched nodes is inherited");
         assert!(out["baselined"].as_u64().unwrap() > 0);
-        let w = call(&mut s, "put_requirement", json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }), "2026-09-28").unwrap().output;
+        let w = call(
+            &mut s,
+            "put_requirement",
+            json!({ "slug": "stale", "title": "Stale", "statement": "It SHALL.", "scenarios": [], "covered_by": ["criterion:src/a/ready#gone"], "ticket": "later-1" }),
+            "2026-09-28",
+        )
+        .unwrap()
+        .output;
         assert_eq!(w["warnings"], json!([]), "stale was already dangling and unspecified when adopted");
         assert_eq!(w["baselined"], 2);
-        let fresh = call(&mut s, "put_requirement", json!({ "slug": "fresh", "title": "Fresh", "statement": "It SHALL.", "scenarios": [], "covered_by": [], "ticket": "later-1" }), "2026-09-28").unwrap().output;
+        let fresh = call(&mut s, "put_requirement", json!({ "slug": "fresh", "title": "Fresh", "statement": "It SHALL.", "scenarios": [], "covered_by": [], "ticket": "later-1" }), "2026-09-28")
+            .unwrap()
+            .output;
         assert_eq!(fresh["warnings"][0]["check"], "no-scenario", "new work is handed over");
         assert_eq!(fresh["baselined"], 0);
     }
@@ -761,7 +795,10 @@ mod tests {
         assert_eq!(out.output["untouched"], json!(["module:src/a/ready"]), "the requirement and the page changed; a reference that never existed is the lint's");
         // The close applies the proposal, then closes the ticket, then clears the current ticket.
         let Some(Changed::Many(steps)) = out.changed else { panic!("a close is several changes") };
-        assert!(matches!(steps.first(), Some(Changed::Many(applied)) if applied.iter().any(|c| matches!(c, Changed::Page(p) if p == "orphan")) && applied.iter().any(|c| matches!(c, Changed::Requirement(q) if q == "ready-only-with-commit"))), "{steps:?}");
+        assert!(
+            matches!(steps.first(), Some(Changed::Many(applied)) if applied.iter().any(|c| matches!(c, Changed::Page(p) if p == "orphan")) && applied.iter().any(|c| matches!(c, Changed::Requirement(q) if q == "ready-only-with-commit"))),
+            "{steps:?}"
+        );
         assert!(matches!(&steps[1], Changed::Closed(slug) if slug == "phase-62"));
         assert!(matches!(steps.last(), Some(Changed::Current)));
         assert!(s.store().current.is_none(), "closing the current ticket clears it");
@@ -1153,7 +1190,11 @@ mod tests {
         let t = s.store().tickets[q.trim_start_matches("ticket:")].clone();
         assert_eq!((t.status, t.decision.is_none()), (Status::Open, true));
         let c_id = c.trim_start_matches("ticket:");
-        assert!(t.body.starts_with("Asked.") && t.body.contains("Answered 2026-10-05") && t.body.contains(&format!("change {c_id} stopped relying on it")) && t.body.ends_with("This one."), "{}", t.body);
+        assert!(
+            t.body.starts_with("Asked.") && t.body.contains("Answered 2026-10-05") && t.body.contains(&format!("change {c_id} stopped relying on it")) && t.body.ends_with("This one."),
+            "{}",
+            t.body
+        );
         // And one whose change lands closes with it, named in what the landing answers.
         call(&mut s, "update_ticket", json!({ "ref": c, "relies_on": [q] }), "2026-10-06").unwrap();
         call(&mut s, "start_ticket", json!({ "ref": q }), "2026-10-06").unwrap();
@@ -1242,7 +1283,17 @@ mod tests {
     #[test]
     fn a_reopened_answer_is_cut_to_the_body_limit() {
         let mut store = crate::store::Store::default();
-        let gap = |body: String| Ticket { slug: "g".into(), title: "G".into(), kind: TicketKind::Gap, priority: Priority::Later, status: Status::Landing, touches: vec![], relies_on: vec![], body, decision: Some(Decision::new("2026-10-04", "x".repeat(3000))) };
+        let gap = |body: String| Ticket {
+            slug: "g".into(),
+            title: "G".into(),
+            kind: TicketKind::Gap,
+            priority: Priority::Later,
+            status: Status::Landing,
+            touches: vec![],
+            relies_on: vec![],
+            body,
+            decision: Some(Decision::new("2026-10-04", "x".repeat(3000))),
+        };
         store.tickets.insert("g".into(), gap("y".repeat(3000)));
         let (settled, _) = ops::settle(&mut store, &[Reference::ticket("g")], ops::Settling::Gone("change c was deleted before it landed"));
         assert_eq!(settled.reopened, vec!["g".to_string()]);
@@ -1274,7 +1325,10 @@ mod tests {
             let lint = call(&mut shared, "lint", input, "2026-10-03").unwrap().output;
             assert_eq!(lint["without_code"], true);
             let checks: Vec<&str> = lint["findings"].as_array().unwrap().iter().map(|f| f["check"].as_str().unwrap()).collect();
-            assert!(!checks.contains(&"unheld") && !lint["findings"].as_array().unwrap().iter().any(|f| f["edge"]["to"].as_str().is_some_and(|t| t.starts_with("criterion:") || t.starts_with("module:"))), "{checks:?}");
+            assert!(
+                !checks.contains(&"unheld") && !lint["findings"].as_array().unwrap().iter().any(|f| f["edge"]["to"].as_str().is_some_and(|t| t.starts_with("criterion:") || t.starts_with("module:"))),
+                "{checks:?}"
+            );
         }
         // A close there cannot say which touched nodes never changed: the code is among them and it holds none.
         let closed = call(&mut shared, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-10-03").unwrap().output;
@@ -1390,13 +1444,16 @@ mod tests {
         // What a machine with the code sees.
         let mut machine = state();
         let seen = call(&mut machine, "lint", json!({}), "2026-10-03").unwrap().output["findings"].as_array().unwrap().clone();
-        let keys: Vec<Value> = seen.iter().map(|f| {
-            let mut k = json!({ "rule": f["rule"], "check": f["check"], "ref": f["ref"] });
-            if !f["edge"].is_null() {
-                k["edge"] = f["edge"].clone();
-            }
-            k
-        }).collect();
+        let keys: Vec<Value> = seen
+            .iter()
+            .map(|f| {
+                let mut k = json!({ "rule": f["rule"], "check": f["check"], "ref": f["ref"] });
+                if !f["edge"].is_null() {
+                    k["edge"] = f["edge"].clone();
+                }
+                k
+            })
+            .collect();
         assert!(seen.iter().any(|f| f["check"] == "untested"), "among them what only code produces");
         // A state with no code takes them as the baseline, and refuses to adopt without them.
         let mut shared = State::new(machine.store().clone(), crate::extraction::Extraction::from_files(&Vec::<crate::extraction::FileExtraction>::new()), vec![]);
@@ -1411,5 +1468,4 @@ mod tests {
         // A finding that is not one is refused.
         assert_eq!(call(&mut shared, "adopt", json!({ "reason": "inherited", "findings": [{ "rule": "nonsense" }] }), "2026-10-03").unwrap_err().code(), "invalid");
     }
-
 }

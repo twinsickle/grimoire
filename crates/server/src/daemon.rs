@@ -595,10 +595,31 @@ mod tests {
             std::fs::write(repo.join("src").join("a.rs"), CONTRACTED).unwrap();
             std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
             let store = dir.join("store");
-            let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+            let config = StoreConfig {
+                site: vec![],
+                version: StoreConfig::CURRENT_VERSION,
+                repository: repo.to_string_lossy().replace('\\', "/"),
+                roots: vec!["overview".into()].into(),
+                languages: vec!["rust".into()],
+                scope: Scope::default(),
+                order: Default::default(),
+            };
             // An active, current ticket, so a write that changes intent has a proposal to land in.
             let mut s = Store::new(config);
-            s.tickets.insert("work".into(), grimoire_core::model::Ticket { slug: "work".into(), title: "Work".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+            s.tickets.insert(
+                "work".into(),
+                grimoire_core::model::Ticket {
+                    slug: "work".into(),
+                    title: "Work".into(),
+                    kind: grimoire_core::model::TicketKind::Change,
+                    priority: grimoire_core::model::Priority::Later,
+                    status: grimoire_core::model::Status::Active,
+                    touches: vec![],
+                    relies_on: vec![],
+                    body: "b".into(),
+                    decision: None,
+                },
+            );
             s.current = Some("work".into());
             store_io::write_all(&store, &s, false).unwrap();
             Harness { repo, store, _tmp: tmp }
@@ -868,7 +889,11 @@ mod tests {
         d.mark_serving(4299).unwrap();
         let mut entries: Vec<String> = std::fs::read_dir(&h.store).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         entries.sort();
-        assert_eq!(entries, vec!["baseline.json", "current.json", "grimoire.json", "pages", "proposals", "requirements", "serve.json", "tickets"], "records, the baseline, the current ticket, its proposal and the marker; no index or cache");
+        assert_eq!(
+            entries,
+            vec!["baseline.json", "current.json", "grimoire.json", "pages", "proposals", "requirements", "serve.json", "tickets"],
+            "records, the baseline, the current ticket, its proposal and the marker; no index or cache"
+        );
         for dir in ["pages", "requirements", "tickets", "proposals"] {
             for e in std::fs::read_dir(h.store.join(dir)).unwrap().flatten() {
                 assert!(e.file_name().to_string_lossy().ends_with(".json"), "{dir} holds only records");
@@ -986,7 +1011,12 @@ mod tests {
         let mut events = shared.subscribe();
         // The main line still sees all but the first, and one the baseline never held.
         let mut seen: Vec<_> = adopted.findings[1..].to_vec();
-        seen.push(grimoire_core::model::FindingKey { rule: grimoire_core::lint::Rule::Unspecified, check: "no-scenario".into(), r#ref: grimoire_core::model::Reference::req("never-held"), edge: None });
+        seen.push(grimoire_core::model::FindingKey {
+            rule: grimoire_core::lint::Rule::Unspecified,
+            check: "no-scenario".into(),
+            r#ref: grimoire_core::model::Reference::req("never-held"),
+            edge: None,
+        });
         // Judged against intent that has since moved: refused, and nothing goes.
         let read = crate::remote::intent_digest(&shared.exported());
         shared.call("file_ticket", json!({ "title": "Meanwhile", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
@@ -1015,7 +1045,10 @@ mod tests {
         baseline.findings.push(broken.clone());
         store.baseline = Some(baseline);
         store_io::persist(&h.store, &store, &grimoire_core::ops::Changed::Baseline).unwrap();
-        let shared = { drop(shared); Daemon::open_shared(&h.store).unwrap() };
+        let shared = {
+            drop(shared);
+            Daemon::open_shared(&h.store).unwrap()
+        };
         let intent = crate::remote::intent_digest(&shared.exported());
         shared.prune_to(Vec::new(), &intent).unwrap();
         let own: std::collections::HashSet<_> = lint::lint(shared.state.lock().unwrap().graph(), &lint::Rule::ALL).iter().map(lint::Finding::key).collect();

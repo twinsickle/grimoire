@@ -119,10 +119,19 @@ impl Live {
     pub fn new(default: Grimoire, daemon: Arc<Daemon>, port: u16, policy: Arc<dyn Policy>, stores: PathBuf, copies: PathBuf) -> Arc<Live> {
         let routes = http::api(daemon.clone(), policy.clone());
         let mut held = Held::default();
-        let shelved = Shelved { store_dir: default.store_dir.clone(), repo: default.repo.clone(), canon: canonical(&default.repo), team: default.server.is_some(), daemon, routes, lock: None, watcher: None };
+        let shelved =
+            Shelved { store_dir: default.store_dir.clone(), repo: default.repo.clone(), canon: canonical(&default.repo), team: default.server.is_some(), daemon, routes, lock: None, watcher: None };
         held.served.insert((default.name.clone(), default.repo.clone()), shelved);
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
-        let live = Arc::new(Live { default: Some(default), source: Source::Machine { stores, copies }, addr, policy: Some(policy), held: Mutex::new(held), refreshing: Mutex::new(()), stopped: AtomicBool::new(false) });
+        let live = Arc::new(Live {
+            default: Some(default),
+            source: Source::Machine { stores, copies },
+            addr,
+            policy: Some(policy),
+            held: Mutex::new(held),
+            refreshing: Mutex::new(()),
+            stopped: AtomicBool::new(false),
+        });
         // Told from the start, so status names a library of one before anything else is found.
         live.tell();
         live
@@ -192,7 +201,11 @@ impl Live {
                 .map(|(key, _)| key.clone())
                 .collect();
             let gone: Vec<(String, Shelved)> = keys.into_iter().filter_map(|k| held.served.remove(&k).map(|s| (k.0, s))).collect();
-            let wanted: Vec<Grimoire> = found.grimoires.into_iter().filter(|g| !held.served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &g.repo)) && !held.held_back.iter().any(|r| same(r, &g.store_dir))).collect();
+            let wanted: Vec<Grimoire> = found
+                .grimoires
+                .into_iter()
+                .filter(|g| !held.served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &g.repo)) && !held.held_back.iter().any(|r| same(r, &g.store_dir)))
+                .collect();
             (gone, wanted)
         };
         let mut changed = !gone.is_empty();
@@ -209,7 +222,10 @@ impl Live {
         for g in wanted {
             let Some(shelved) = self.open(&g) else { continue };
             let mut held = self.held.lock().expect("library lock");
-            if self.stopped.load(Ordering::SeqCst) || held.served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &g.repo)) || held.held_back.iter().any(|r| same(r, &g.store_dir)) {
+            if self.stopped.load(Ordering::SeqCst)
+                || held.served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &g.repo))
+                || held.held_back.iter().any(|r| same(r, &g.store_dir))
+            {
                 drop(held);
                 shelved.let_go();
                 continue;
@@ -255,7 +271,9 @@ impl Live {
         };
         let lock = lock.map_err(|e| format!("another process holds it: {e}"))?;
         let opened = match &g.server {
-            Some(address) => store_io::credentials_file().map_err(|e| e.to_string()).and_then(|credentials| Daemon::open_remote(&g.store_dir, &g.repo, remote::Server::signed_in(address, &credentials)).map_err(|e| e.to_string())),
+            Some(address) => store_io::credentials_file()
+                .map_err(|e| e.to_string())
+                .and_then(|credentials| Daemon::open_remote(&g.store_dir, &g.repo, remote::Server::signed_in(address, &credentials)).map_err(|e| e.to_string())),
             None => Daemon::open(&g.store_dir).map_err(|e| e.to_string()),
         };
         let (daemon, errors) = opened.map_err(|e| format!("it could not be opened: {e}"))?;
@@ -536,7 +554,15 @@ mod tests {
         std::fs::create_dir_all(repo.join("src")).unwrap();
         std::fs::write(repo.join("src").join("lib.rs"), "pub fn a() {}\n").unwrap();
         let store_dir = root.join("stores").join(name);
-        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: store_io::repository_string(&repo).unwrap(), roots: Roots::new("overview", "rites"), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: store_io::repository_string(&repo).unwrap(),
+            roots: Roots::new("overview", "rites"),
+            languages: vec!["rust".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+        };
         store_io::write_all(&store_dir, &grimoire_core::Store::new(config), false).unwrap();
         std::fs::write(repo.join(store_io::PROJECT_FILE), format!("name = \"{name}\"\nstore = {}\n", toml::Value::String(store_dir.to_string_lossy().to_string()))).unwrap();
         Grimoire { name: name.into(), store_dir, repo, server: None }

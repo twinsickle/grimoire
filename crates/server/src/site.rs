@@ -36,7 +36,12 @@ impl Source {
     /// Not found, under the site's name, or saying whose site is not served yet.
     fn unserved(&self) -> Response {
         match self {
-            Source::Library(_, name) => (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html; charset=utf-8")], document("Not served", None, &format!("<main><h1>Not served</h1><p>This server holds no grimoire <code>{}</code> yet, so its site is not served here.</p></main>", escape(name)))).into_response(),
+            Source::Library(_, name) => (
+                StatusCode::NOT_FOUND,
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                document("Not served", None, &format!("<main><h1>Not served</h1><p>This server holds no grimoire <code>{}</code> yet, so its site is not served here.</p></main>", escape(name))),
+            )
+                .into_response(),
             Source::Daemon(_) => not_found(None),
         }
     }
@@ -82,12 +87,18 @@ async fn elsewhere(State(source): State<Arc<Source>>) -> Response {
 }
 
 fn not_found(name: Option<&str>) -> Response {
-    (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html; charset=utf-8")], document("Not found", name, "<main><h1>Not found</h1><p>This page is not part of the site. <a href=\"/\">Start at the beginning.</a></p></main>")).into_response()
+    (
+        StatusCode::NOT_FOUND,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        document("Not found", name, "<main><h1>Not found</h1><p>This page is not part of the site. <a href=\"/\">Start at the beginning.</a></p></main>"),
+    )
+        .into_response()
 }
 
 fn html_page(body: String) -> Response {
     // No script runs here, and the page loads nothing from anywhere else.
-    ([(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CONTENT_SECURITY_POLICY, "default-src 'none'; style-src 'unsafe-inline'"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CONTENT_SECURITY_POLICY, "default-src 'none'; style-src 'unsafe-inline'"), (header::CACHE_CONTROL, "no-cache")], body)
+        .into_response()
 }
 
 /// Text from the store, safe to put in HTML.
@@ -195,9 +206,17 @@ mod tests {
     use grimoire_core::query::SiteRequirement;
 
     fn site(shown: usize) -> Site {
-        let req = SiteRequirement { slug: "board".into(), title: "board".into(), statement: "It SHALL <list>.".into(), scenarios: vec![Scenario { title: "T".into(), given: "g".into(), when: "w".into(), then: "t".into() }] };
+        let req = SiteRequirement {
+            slug: "board".into(),
+            title: "board".into(),
+            statement: "It SHALL <list>.".into(),
+            scenarios: vec![Scenario { title: "T".into(), given: "g".into(), when: "w".into(), then: "t".into() }],
+        };
         let body = "**What it is.** <script>alert(1)</script> See [tickets](/tickets), [the board](board), [elsewhere](https://example.com), <https://example.com/auto>, [run](javascript:alert(1)) and ![a picture](https://example.com/p.png).";
-        let pages = [SitePage { slug: "goal".into(), title: "Goal".into(), body: body.into(), requirements: vec![] }, SitePage { slug: "tickets".into(), title: "Tickets".into(), body: "A ticket.".into(), requirements: vec![req] }];
+        let pages = [
+            SitePage { slug: "goal".into(), title: "Goal".into(), body: body.into(), requirements: vec![] },
+            SitePage { slug: "tickets".into(), title: "Tickets".into(), body: "A ticket.".into(), requirements: vec![req] },
+        ];
         Site {
             name: Some("Grim & co".into()),
             pages: vec![SiteEntry { slug: "goal".into(), title: "Goal".into(), depth: 0 }, SiteEntry { slug: "tickets".into(), title: "Tickets".into(), depth: 1 }],
@@ -242,13 +261,40 @@ mod tests {
         use grimoire_core::Store;
         let tmp = tempfile::Builder::new().prefix("grimoire-site-").tempdir().unwrap();
         let dir = tmp.path().join("store");
-        let page = |slug: &str, links: &[&str]| Page { slug: slug.into(), title: slug.to_uppercase(), body: format!("The {slug} page."), links: links.iter().map(|l| l.parse::<Reference>().unwrap()).collect() };
-        let config = StoreConfig { site: vec!["goal".into(), "guarantees".into()], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() };
+        let page = |slug: &str, links: &[&str]| Page {
+            slug: slug.into(),
+            title: slug.to_uppercase(),
+            body: format!("The {slug} page."),
+            links: links.iter().map(|l| l.parse::<Reference>().unwrap()).collect(),
+        };
+        let config = StoreConfig {
+            site: vec!["goal".into(), "guarantees".into()],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/a/checkout".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        };
         let mut store = Store::new(config);
-        for p in [page("overview", &["page:goal", "page:guarantees", "page:architecture"]), page("goal", &[]), page("guarantees", &["page:tickets"]), page("tickets", &["req:board", "module:src/ops"]), page("architecture", &[])] {
+        for p in [
+            page("overview", &["page:goal", "page:guarantees", "page:architecture"]),
+            page("goal", &[]),
+            page("guarantees", &["page:tickets"]),
+            page("tickets", &["req:board", "module:src/ops"]),
+            page("architecture", &[]),
+        ] {
             store.pages.insert(p.slug.clone(), p);
         }
-        let board = Requirement { slug: "board".into(), title: "board".into(), statement: "It SHALL list.".into(), scenarios: vec![Scenario { title: "T".into(), given: "g".into(), when: "w".into(), then: "t".into() }], covered_by: vec![], decisions: vec![grimoire_core::model::Decision::new("2026-10-04", "A reason nobody outside reads.")], retired: false };
+        let board = Requirement {
+            slug: "board".into(),
+            title: "board".into(),
+            statement: "It SHALL list.".into(),
+            scenarios: vec![Scenario { title: "T".into(), given: "g".into(), when: "w".into(), then: "t".into() }],
+            covered_by: vec![],
+            decisions: vec![grimoire_core::model::Decision::new("2026-10-04", "A reason nobody outside reads.")],
+            retired: false,
+        };
         store.requirements.insert("board".into(), board);
         crate::store_io::write_all(&dir, &store, false).unwrap();
         let daemon = Arc::new(Daemon::open_shared(&dir).unwrap());

@@ -156,7 +156,12 @@ mod tests {
         let names: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names.len(), 3, "the store's config, the tokens and their lock: {names:?}");
         // Changed from several places at once, every change holds.
-        let handles: Vec<_> = (0..8).map(|i| { let dir = dir.to_path_buf(); std::thread::spawn(move || add(&dir, &format!("worker-{i}"), i % 2 == 0).unwrap()) }).collect();
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let dir = dir.to_path_buf();
+                std::thread::spawn(move || add(&dir, &format!("worker-{i}"), i % 2 == 0).unwrap())
+            })
+            .collect();
         for h in handles {
             h.join().unwrap();
         }

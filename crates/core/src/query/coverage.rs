@@ -96,11 +96,7 @@ mod tests {
     #[test]
     fn requirement_coverage_in_order_with_modules() {
         let mut store = crate::graph::fixtures::store();
-        let r = crate::graph::fixtures::req(
-            "spans",
-            &["criterion:src/a/layout#stable", "criterion:src/a/ready#gone", "criterion:src/a/ready#guarantee", "criterion:src/z/missing#x"],
-            &[],
-        );
+        let r = crate::graph::fixtures::req("spans", &["criterion:src/a/layout#stable", "criterion:src/a/ready#gone", "criterion:src/a/ready#guarantee", "criterion:src/z/missing#x"], &[]);
         store.requirements.insert(r.slug.clone(), r.clone());
         let empty = crate::graph::fixtures::req("names-nothing", &[], &[]);
         store.requirements.insert(empty.slug.clone(), empty.clone());

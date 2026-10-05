@@ -47,10 +47,31 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
     std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"s\"\nversion = \"0.1.0\"\n").unwrap();
     std::fs::write(repo.join("src").join("lib.rs"), "pub fn s() {}\n").unwrap();
     let store = dir.join("store");
-    let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: repo.to_string_lossy().replace('\\', "/"), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+    let config = StoreConfig {
+        site: vec![],
+        version: StoreConfig::CURRENT_VERSION,
+        repository: repo.to_string_lossy().replace('\\', "/"),
+        roots: vec!["overview".into()].into(),
+        languages: vec!["rust".into()],
+        scope: Scope::default(),
+        order: Default::default(),
+    };
     // An active, current ticket, so a write that changes intent has a proposal to land in; reads of it name the ticket.
     let mut s = Store::new(config);
-    s.tickets.insert("work".into(), grimoire_core::model::Ticket { slug: "work".into(), title: "Work".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+    s.tickets.insert(
+        "work".into(),
+        grimoire_core::model::Ticket {
+            slug: "work".into(),
+            title: "Work".into(),
+            kind: grimoire_core::model::TicketKind::Change,
+            priority: grimoire_core::model::Priority::Later,
+            status: grimoire_core::model::Status::Active,
+            touches: vec![],
+            relies_on: vec![],
+            body: "b".into(),
+            decision: None,
+        },
+    );
     s.current = Some("work".into());
     store_io::write_all(&store, &s, false).unwrap();
     let daemon = Arc::new(Daemon::open(&store).unwrap().0);
@@ -80,7 +101,8 @@ fn request_as(port: u16, method: &str, path: &str, body: Option<&Value>, host: &
     let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
     s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let body = body.map(|b| b.to_string()).unwrap_or_default();
-    write!(s, "{method} {path} HTTP/1.0\r\nHost: {host}\r\n{extra}Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    write!(s, "{method} {path} HTTP/1.0\r\nHost: {host}\r\n{extra}Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+        .unwrap();
     let mut answer = String::new();
     s.read_to_string(&mut answer).unwrap();
     let (head, body) = answer.split_once("\r\n\r\n").unwrap();
@@ -171,7 +193,8 @@ fn mcp_lists_the_core_tools() {
     // Stale at once and this client's alone: a rebuilt daemon's tools reach a client that asks again.
     assert_eq!((answer["ttlMs"].clone(), answer["cacheScope"].clone()), (json!(0), json!("private")), "{answer}");
     let listed = answer["tools"].clone();
-    let listed: Vec<(String, String, Value)> = listed.as_array().unwrap().iter().map(|t| (t["name"].as_str().unwrap().to_string(), t["description"].as_str().unwrap().to_string(), t["inputSchema"].clone())).collect();
+    let listed: Vec<(String, String, Value)> =
+        listed.as_array().unwrap().iter().map(|t| (t["name"].as_str().unwrap().to_string(), t["description"].as_str().unwrap().to_string(), t["inputSchema"].clone())).collect();
     let core: Vec<(String, String, Value)> = grimoire_core::tools::definitions().into_iter().map(|d| (d.name.to_string(), d.description.to_string(), d.input_schema)).collect();
     assert_eq!(listed, core);
 }
@@ -215,7 +238,16 @@ fn mcp_instructions_carry_the_rules() {
     let s = serve();
     let r = mcp(s.port, 1, "initialize", json!({ "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "t", "version": "0" } }));
     let text = r["result"]["instructions"].as_str().unwrap().to_string();
-    for rule in ["Orient first", "Work is a ticket", "same piece of work", "`# Module contract`", "`find` before writing any reference", "Never write the store's files", "never on your own decision", "Pass `checkout`, your working directory, with every call"] {
+    for rule in [
+        "Orient first",
+        "Work is a ticket",
+        "same piece of work",
+        "`# Module contract`",
+        "`find` before writing any reference",
+        "Never write the store's files",
+        "never on your own decision",
+        "Pass `checkout`, your working directory, with every call",
+    ] {
         assert!(text.contains(rule), "the instructions say {rule:?}: {text}");
     }
     // The reading order is each root page's links; a list of the story pages here goes stale.
@@ -243,7 +275,6 @@ fn one_answer_whichever_transport() {
         assert_eq!(over_mcp, in_process, "{tool} over MCP");
     }
 }
-
 
 /// # Test contract
 ///
@@ -345,7 +376,9 @@ fn a_library_serves_each_grimoire_and_the_interface_beside_them() {
     std::fs::write(dir.join("assets").join("app.js"), "run()").unwrap();
     // A library as serve builds one: a grimoire on the bare routes and at its own path, another at its own.
     let policy: Arc<dyn grimoire_server::access::Policy> = Arc::new(grimoire_server::access::Local);
-    let s = serve_app(|d| http::with_ui(http::api(d.clone(), policy.clone()).nest("/g/first", http::api(d.clone(), policy.clone())).nest("/g/second", http::api(d, policy.clone())), http::Ui::Dir(dir.clone())));
+    let s = serve_app(|d| {
+        http::with_ui(http::api(d.clone(), policy.clone()).nest("/g/first", http::api(d.clone(), policy.clone())).nest("/g/second", http::api(d, policy.clone())), http::Ui::Dir(dir.clone()))
+    });
     for path in ["/api/status", "/g/first/api/status", "/g/second/api/status"] {
         let (code, body) = request(s.port, "POST", path, Some(&json!({})));
         assert_eq!(code, 200, "{path}: {body}");
@@ -480,7 +513,15 @@ fn a_reader_cannot_write() {
 fn serve_shared() -> (Served, String, String) {
     let tmp = tempfile::Builder::new().prefix("grimoire-shared-").tempdir().unwrap();
     let store = tmp.path().join("store");
-    let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout/on/another/machine".into(), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+    let config = StoreConfig {
+        site: vec![],
+        version: StoreConfig::CURRENT_VERSION,
+        repository: "C:/a/checkout/on/another/machine".into(),
+        roots: vec!["overview".into()].into(),
+        languages: vec!["rust".into()],
+        scope: Scope::default(),
+        order: Default::default(),
+    };
     store_io::write_all(&store, &Store::new(config), false).unwrap();
     let writer = store_io::tokens::add(&store, "ana", true).unwrap();
     let reader = store_io::tokens::add(&store, "pipeline-check", false).unwrap();

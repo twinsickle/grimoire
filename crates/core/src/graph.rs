@@ -328,11 +328,7 @@ pub(crate) mod fixtures {
     /// A requirement with one scenario; `stale` has none, so the unspecified
     /// rule has something to report.
     pub fn req(slug: &str, covered_by: &[&str], decisions: &[(&str, &str)]) -> Requirement {
-        let scenarios = if slug == "stale" {
-            vec![]
-        } else {
-            vec![Scenario { title: "It holds".into(), given: "a repository".into(), when: format!("{slug} is checked"), then: "it holds".into() }]
-        };
+        let scenarios = if slug == "stale" { vec![] } else { vec![Scenario { title: "It holds".into(), given: "a repository".into(), when: format!("{slug} is checked"), then: "it holds".into() }] };
         Requirement {
             slug: slug.into(),
             title: slug.to_uppercase(),
@@ -362,7 +358,15 @@ pub(crate) mod fixtures {
     /// `orphan` page is linked by nothing. `stale` req names a criterion that
     /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
-        let mut s = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: Roots::new("overview", "rites"), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut s = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: Roots::new("overview", "rites"),
+            languages: vec!["rust".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         for p in [
             page("overview", &["page:git-readiness"]),
             page("git-readiness", &["req:ready-only-with-commit", "req:stale", "module:src/a/ready"]),
@@ -372,10 +376,9 @@ pub(crate) mod fixtures {
         ] {
             s.pages.insert(p.slug.clone(), p);
         }
-        for r in [
-            req("ready-only-with-commit", &["criterion:src/a/ready#guarantee"], &[("2026-09-12", "Identity is required rather than invented.")]),
-            req("stale", &["criterion:src/a/ready#gone"], &[]),
-        ] {
+        for r in
+            [req("ready-only-with-commit", &["criterion:src/a/ready#guarantee"], &[("2026-09-12", "Identity is required rather than invented.")]), req("stale", &["criterion:src/a/ready#gone"], &[])]
+        {
             s.requirements.insert(r.slug.clone(), r);
         }
         for t in [
@@ -497,7 +500,10 @@ mod tests {
     fn a_proposal_is_read_as_a_branch() {
         let mut s = super::fixtures::store();
         let ext = crate::extraction::fixtures::extraction();
-        crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Whole, |w| crate::ops::put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::module("src/a/ready")] })).unwrap();
+        crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Whole, |w| {
+            crate::ops::put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::module("src/a/ready")] })
+        })
+        .unwrap();
         crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Partial, |w| crate::ops::delete_node(w, &Reference::page("orphan")).map(|c| ((), c))).unwrap();
         let branch = Graph::with_proposal(&s, "later-1", &ext, &[]);
         assert!(branch.get(&Reference::page("aim")).is_some() && branch.get(&Reference::page("orphan")).is_none());

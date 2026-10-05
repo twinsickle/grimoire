@@ -34,12 +34,7 @@ pub struct EdgeView {
 pub fn view(g: &Graph, r: &Reference) -> Option<NodeView> {
     let node = g.get(r)?.clone();
     let edge = |other: &Reference, relation: Relation| EdgeView { r#ref: other.clone(), relation, title: g.get(other).map(Node::title) };
-    Some(NodeView {
-        r#ref: r.clone(),
-        node,
-        r#in: g.inbound(r).map(|e| edge(&e.from, e.relation)).collect(),
-        out: g.out(r).map(|e| edge(&e.to, e.relation)).collect(),
-    })
+    Some(NodeView { r#ref: r.clone(), node, r#in: g.inbound(r).map(|e| edge(&e.from, e.relation)).collect(), out: g.out(r).map(|e| edge(&e.to, e.relation)).collect() })
 }
 
 /// The short form used in lists.

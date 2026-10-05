@@ -58,7 +58,15 @@ impl Exported {
         if self.version > StoreConfig::CURRENT_VERSION {
             return Err(format!("the server's store is version {}, and this build writes version {}: update grimoire on this machine", self.version, StoreConfig::CURRENT_VERSION));
         }
-        let config = StoreConfig { version: StoreConfig::CURRENT_VERSION, repository: repository.to_string(), roots: self.roots, languages: self.languages, scope: self.scope, order: self.order, site: self.site };
+        let config = StoreConfig {
+            version: StoreConfig::CURRENT_VERSION,
+            repository: repository.to_string(),
+            roots: self.roots,
+            languages: self.languages,
+            scope: self.scope,
+            order: self.order,
+            site: self.site,
+        };
         let mut store = Store::new(config);
         store.pages = self.pages.into_iter().map(|p| (p.slug.clone(), p)).collect();
         store.requirements = self.requirements.into_iter().map(|r| (r.slug.clone(), r)).collect();

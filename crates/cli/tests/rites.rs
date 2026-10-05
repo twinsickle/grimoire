@@ -33,7 +33,19 @@ fn this_repository_is_worked_on_in_the_setup_a_team_uses() {
     // daemon that reads from it; follows its log across a restart; stops it; and signs its person in with a
     // token made inside the container.
     let dev = read("scripts/dev.mjs");
-    for phrase in ["\"compose.yaml\"", "\"compose.fast.yaml\"", "GRIMOIRE_DEV_SERVER", ".grimoire.toml", "[\"up\", \"--detach\", \"--build\", \"server\"]", "[\"logs\", \"--follow\"", "follow(start(server))", "[\"stop\", \"server\"]", "[\"exec\", \"-T\", \"server\", \"grimoire\", \"token\", \"add\", name,", "[\"login\"]", "refused this machine"] {
+    for phrase in [
+        "\"compose.yaml\"",
+        "\"compose.fast.yaml\"",
+        "GRIMOIRE_DEV_SERVER",
+        ".grimoire.toml",
+        "[\"up\", \"--detach\", \"--build\", \"server\"]",
+        "[\"logs\", \"--follow\"",
+        "follow(start(server))",
+        "[\"stop\", \"server\"]",
+        "[\"exec\", \"-T\", \"server\", \"grimoire\", \"token\", \"add\", name,",
+        "[\"login\"]",
+        "refused this machine",
+    ] {
         assert!(dev.contains(phrase), "scripts/dev.mjs holds {phrase:?}");
     }
     let (server, rest) = (dev.find("follow(start(server))").unwrap(), dev.find("processes.forEach(start)").unwrap());

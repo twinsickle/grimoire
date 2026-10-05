@@ -127,7 +127,15 @@ mod tests {
             std::fs::create_dir_all(repo).unwrap();
             std::fs::write(repo.join(location::PROJECT_FILE), format!("store = {}\n", toml::Value::String(store_dir.to_string_lossy().to_string()))).unwrap();
         }
-        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: location::repository_string(&main).unwrap(), roots: Roots::new("overview", "rites"), languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: location::repository_string(&main).unwrap(),
+            roots: Roots::new("overview", "rites"),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        };
         super::super::write_all(&store_dir, &Store::new(config), false).unwrap();
         (store_dir, main, wt)
     }
@@ -149,7 +157,20 @@ mod tests {
         assert_eq!(others(&store_dir), std::slice::from_ref(&wt_at));
         // Each its own current ticket: the main's in current.json, the other's here, neither touching the other.
         let (mut store, _) = super::super::load(&store_dir).unwrap();
-        store.tickets.insert("0001".into(), grimoire_core::model::Ticket { slug: "0001".into(), title: "T".into(), kind: grimoire_core::model::TicketKind::Change, priority: grimoire_core::model::Priority::Later, status: grimoire_core::model::Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+        store.tickets.insert(
+            "0001".into(),
+            grimoire_core::model::Ticket {
+                slug: "0001".into(),
+                title: "T".into(),
+                kind: grimoire_core::model::TicketKind::Change,
+                priority: grimoire_core::model::Priority::Later,
+                status: grimoire_core::model::Status::Active,
+                touches: vec![],
+                relies_on: vec![],
+                body: "b".into(),
+                decision: None,
+            },
+        );
         super::super::persist(&store_dir, &store, &grimoire_core::ops::Changed::Ticket("0001".into())).unwrap();
         set_current(&store_dir, &wt_at, Some("0001")).unwrap();
         let (mut seen, mut malformed) = super::super::load(&store_dir).unwrap();

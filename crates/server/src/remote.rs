@@ -422,7 +422,14 @@ fn reread(copy_dir: &Path, state: &mut State) {
 /// A tool's error object, as a server sent it, as the error it is.
 fn tool_error(v: &Value) -> ToolError {
     let message = v["message"].as_str().unwrap_or("the server gave no reason").to_string();
-    let details = || v["details"].as_array().into_iter().flatten().map(|d| FieldError { field: d["field"].as_str().unwrap_or_default().to_string(), reason: d["reason"].as_str().unwrap_or_default().to_string() }).collect();
+    let details = || {
+        v["details"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|d| FieldError { field: d["field"].as_str().unwrap_or_default().to_string(), reason: d["reason"].as_str().unwrap_or_default().to_string() })
+            .collect()
+    };
     match v["error"].as_str() {
         Some("not_found") => ToolError::NotFound { message },
         Some("invalid") => ToolError::Invalid { message, details: details() },

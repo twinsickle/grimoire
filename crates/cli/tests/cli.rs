@@ -36,7 +36,8 @@ struct Project {
     _tmp: tempfile::TempDir,
 }
 
-const CONTRACTED: &str = "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Offer a.\",\"criteria\":[{\"id\":\"exports-a\",\"statement\":\"The module exports a function named a.\"}]}\n//! ```\npub fn a() {}\n";
+const CONTRACTED: &str =
+    "//! # Module contract\n//!\n//! ```json\n//! {\"purpose\":\"Offer a.\",\"criteria\":[{\"id\":\"exports-a\",\"statement\":\"The module exports a function named a.\"}]}\n//! ```\npub fn a() {}\n";
 
 /// A repository with two modules and no contracts, initialised with a store
 /// beside it.
@@ -180,11 +181,7 @@ fn only_init_writes_the_repository() {
             std::fs::File::options().write(true).open(p.repo.join(at)).unwrap().set_modified(past).unwrap();
         }
     }
-    let reported: BTreeSet<String> = String::from_utf8_lossy(&init.stdout)
-        .lines()
-        .filter_map(|l| l.strip_prefix("wrote   "))
-        .map(|l| relative(&p.repo, l.split(": ").next().unwrap_or(l)))
-        .collect();
+    let reported: BTreeSet<String> = String::from_utf8_lossy(&init.stdout).lines().filter_map(|l| l.strip_prefix("wrote   ")).map(|l| relative(&p.repo, l.split(": ").next().unwrap_or(l))).collect();
     // The whole integration, as req:cli-repository-untouched names it.
     let integration: BTreeSet<String> = [
         ".grimoire.toml",
@@ -395,7 +392,8 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
     // A write from the checkout goes through the library to the server.
     let filed = team(&t.checkout.repo, &home, None, &["tool", "file_ticket", r#"{"title":"From the library","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
-    let (_, board) = http(t.port, &format!("POST /api/board HTTP/1.0\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}", t.port, t.reader));
+    let (_, board) =
+        http(t.port, &format!("POST /api/board HTTP/1.0\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}", t.port, t.reader));
     assert!(board.contains("From the library"), "the server holds it: {board}");
 }
 
@@ -409,7 +407,11 @@ fn init_sets_a_project_up_in_one_command() {
     // A repository with contracted modules, one in a group of its own, and no store yet.
     let p = bare_repo();
     std::fs::create_dir_all(p.repo.join("src").join("area")).unwrap();
-    std::fs::write(p.repo.join("src").join("area").join("b.rs"), CONTRACTED.replace("Offer a.", "Offer b.").replace("exports-a", "exports-b").replace("named a.", "named b.").replace("fn a()", "fn b()")).unwrap();
+    std::fs::write(
+        p.repo.join("src").join("area").join("b.rs"),
+        CONTRACTED.replace("Offer a.", "Offer b.").replace("exports-a", "exports-b").replace("named a.", "named b.").replace("fn a()", "fn b()"),
+    )
+    .unwrap();
     let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
     assert!(init.status.success() && text(&init).contains("wrote") && text(&init).contains("requirement(s)"), "{}", text(&init));
     let outline: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "outline", r#"{"depth":1,"pages_only":true}"#]).stdout).unwrap();
@@ -458,7 +460,9 @@ fn a_teams_server_serves_its_library() {
     let _server = Serving(grimoire().args(["serve", "--shared", "--library", &library.to_string_lossy(), "--listen", "127.0.0.1:0"]).spawn().unwrap());
     let port = marked_port(&library.join("shop"));
     marked_port(&library.join("ledger"));
-    let ask = |path: &str, token: &str| http(port, &format!("POST {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"));
+    let ask = |path: &str, token: &str| {
+        http(port, &format!("POST {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}"))
+    };
     // Each grimoire admits its own token and refuses the other's; the bare routes are no grimoire's.
     assert_eq!(ask("/g/shop/api/status", &shop).0, 200);
     assert_eq!(ask("/g/ledger/api/status", &ledger).0, 200);
@@ -473,7 +477,9 @@ fn a_teams_server_serves_its_library() {
     assert_eq!(ask("/g/shop/api/board", &ledger).0, 403);
     assert_eq!(ask("/g/shop/api/prune", &ledger).0, 403);
     let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#;
-    let mcp = |token: &str| crossed(format!("POST /g/shop/mcp HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{init}", init.len()));
+    let mcp = |token: &str| {
+        crossed(format!("POST /g/shop/mcp HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {token}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{init}", init.len()))
+    };
     assert_eq!((mcp(&ledger), mcp(&shop)), (403, 200), "MCP is shop's alone");
     // A team's server lets no command take a store back: there is no release route on it.
     let (_, released) = ask("/library/release", &shop);
@@ -561,14 +567,24 @@ fn a_library_serves_the_site_it_names() {
     let refused = grimoire().args(["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site", "127.0.0.1:0"]).output().unwrap();
     assert!(!refused.status.success() && text(&refused).contains("--site-of"), "{}", text(&refused));
     // A grimoire named without a site to serve it on, or without a library, is refused too.
-    for args in [vec!["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site-of", "shop"], vec!["serve", "--shared", "--listen", "127.0.0.1:0", "--site", "127.0.0.1:0", "--site-of", "shop"]] {
+    for args in [
+        vec!["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site-of", "shop"],
+        vec!["serve", "--shared", "--listen", "127.0.0.1:0", "--site", "127.0.0.1:0", "--site-of", "shop"],
+    ] {
         let refused = grimoire().args(&args).output().unwrap();
         assert!(!refused.status.success() && text(&refused).contains("--site-of"), "{args:?}: {}", text(&refused));
     }
-    let get = |port: u16, path: &str| http(port, &format!("GET {path} HTTP/1.0
+    let get = |port: u16, path: &str| {
+        http(
+            port,
+            &format!(
+                "GET {path} HTTP/1.0
 Host: 127.0.0.1:{port}
 
-"));
+"
+            ),
+        )
+    };
     // Named, it is that grimoire's site, with no token asked.
     let site = free();
     let shop = Serving(grimoire().args(["serve", "--shared", "--library", &lib, "--listen", "127.0.0.1:0", "--site", &format!("127.0.0.1:{site}"), "--site-of", "shop"]).spawn().unwrap());
@@ -642,8 +658,13 @@ fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
     assert!(code == 400 && refused["error"] == "invalid" && why.contains("2 checkouts") && why.contains("`checkout`"), "{refused}");
     assert_eq!(refused["details"][0]["field"], "checkout", "an invalid error naming the field, as a tool's is: {refused}");
     // A caller the trust step refuses meets that refusal first, and learns nothing of the checkouts.
-    let (code, foreign) = post(port, "/g/repo/api/find", r#"{"query":"x"}"#, "Origin: https://elsewhere.example
-");
+    let (code, foreign) = post(
+        port,
+        "/g/repo/api/find",
+        r#"{"query":"x"}"#,
+        "Origin: https://elsewhere.example
+",
+    );
     assert!(code == 403 && !foreign.contains(&wt_at) && !foreign.contains("checkouts"), "{foreign}");
     // The bare routes are the daemon's own grimoire, chosen the same way.
     assert_eq!(ask("/api/find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": wt_at })).1["nodes"].as_array().map(Vec::len), Some(1));
@@ -763,7 +784,9 @@ fn a_store_of_its_own_serves_every_checkout() {
         let (code, answer) = post(port, &format!("/g/solo/api/{tool}"), &input.to_string(), "");
         (code, serde_json::from_str::<serde_json::Value>(&answer).unwrap_or_default())
     };
-    let find = |checkout: &Path| ask("find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": checkout.join("src").to_string_lossy() })).1["nodes"].as_array().map(Vec::len);
+    let find = |checkout: &Path| {
+        ask("find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": checkout.join("src").to_string_lossy() })).1["nodes"].as_array().map(Vec::len)
+    };
     // Its first call, naming a directory in it, adds it to the store and is answered from its code.
     assert_eq!(find(&wt), Some(1), "the worktree's own code");
     assert_eq!(find(&p.repo), Some(0), "the main checkout's");
@@ -859,7 +882,10 @@ fn the_library_follows_what_the_machine_holds() {
     marked_port(&test_home().join("stores").join("shop"));
     let library = |at: &str| -> Vec<String> {
         let (_, status) = post(port, &format!("{at}/api/status"), "{}", "");
-        serde_json::from_str::<serde_json::Value>(&status).ok().and_then(|s| s["library"].as_array().map(|l| l.iter().filter_map(|g| g["name"].as_str().map(str::to_string)).collect())).unwrap_or_default()
+        serde_json::from_str::<serde_json::Value>(&status)
+            .ok()
+            .and_then(|s| s["library"].as_array().map(|l| l.iter().filter_map(|g| g["name"].as_str().map(str::to_string)).collect()))
+            .unwrap_or_default()
     };
     let answers = |name: &str| post(port, &format!("/g/{name}/api/status"), "{}", "").0 == 200;
     assert_eq!(library(""), ["shop"]);
@@ -1157,7 +1183,13 @@ fn serve(p: &Project) -> (Serving, u16) {
 
 /// Every file under a directory with its bytes, to see nothing changed.
 fn contents(dir: &Path) -> Vec<(String, Vec<u8>)> {
-    files(dir).into_iter().map(|f| { let bytes = std::fs::read(&f).unwrap_or_default(); (f, bytes) }).collect()
+    files(dir)
+        .into_iter()
+        .map(|f| {
+            let bytes = std::fs::read(&f).unwrap_or_default();
+            (f, bytes)
+        })
+        .collect()
 }
 
 const A_TICKET: &str = r#"{"title":"T","kind":"change","priority":"later","body":"b"}"#;
@@ -1735,13 +1767,25 @@ fn a_checkout_works_against_a_teams_server() {
     assert!(!wrong.status.success() && text(&wrong).contains("refused the token") && !home.join("credentials.json").exists(), "{}", text(&wrong));
     let login = {
         use std::io::Write;
-        let mut child = grimoire().arg("login").current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        let mut child = grimoire()
+            .arg("login")
+            .current_dir(&p.repo)
+            .env("GRIMOIRE_HOME", &home)
+            .env_remove("GRIMOIRE_TOKEN")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
         writeln!(child.stdin.take().unwrap(), "{ana}").unwrap();
         child.wait_with_output().unwrap()
     };
     assert!(login.status.success() && text(&login).contains("signed in"), "{}", text(&login));
     let kept = std::fs::read_to_string(home.join("credentials.json")).unwrap();
-    assert!(kept.contains(&address) && kept.contains(&ana) && !files(&p.repo).iter().any(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains(&ana))), "kept under the server's address, and nowhere in the repository");
+    assert!(
+        kept.contains(&address) && kept.contains(&ana) && !files(&p.repo).iter().any(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains(&ana))),
+        "kept under the server's address, and nowhere in the repository"
+    );
     // The check runs with no daemon here: the server's intent, this checkout's code.
     let check = team(&p.repo, &home, None, &["check"]);
     assert!(check.status.success() && text(&check).contains("finding(s)"), "{}", text(&check));
@@ -2027,7 +2071,10 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
     let slug = ticket.trim_start_matches("ticket:").to_string();
     tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
     // The proposal names a criterion this code does not have yet.
-    tool("put_requirement", r#"{"slug":"proposed","title":"Proposed","statement":"It SHALL offer b.","scenarios":[{"title":"t","given":"g","when":"w","then":"t"}],"covered_by":["criterion:src/b#exports-b"]}"#);
+    tool(
+        "put_requirement",
+        r#"{"slug":"proposed","title":"Proposed","statement":"It SHALL offer b.","scenarios":[{"title":"t","given":"g","when":"w","then":"t"}],"covered_by":["criterion:src/b#exports-b"]}"#,
+    );
     let open = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
     // The pipeline: signed in by the environment with a read-only token, nothing kept, no current ticket.
     let ci = p.dir.join("pipeline-home");

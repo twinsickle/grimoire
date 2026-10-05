@@ -16,7 +16,8 @@ pub struct ToolDef {
 }
 
 pub fn definitions() -> Vec<ToolDef> {
-    let reference = json!({ "type": "string", "description": "A node reference of the form kind:id, e.g. page:overview, req:ready-only, module:crates/core/src/model, criterion:<module>#<id>, ticket:phase-62" });
+    let reference =
+        json!({ "type": "string", "description": "A node reference of the form kind:id, e.g. page:overview, req:ready-only, module:crates/core/src/model, criterion:<module>#<id>, ticket:phase-62" });
     let refs = json!({ "type": "array", "items": reference });
     let date = json!({ "type": "string", "description": "ISO date YYYY-MM-DD" });
     let decision = json!({ "type": "object", "required": ["text"], "properties": { "text": { "type": "string" }, "date": date }, "additionalProperties": false });
@@ -70,8 +71,8 @@ pub fn definitions() -> Vec<ToolDef> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::{call, TOOL_NAMES};
     use crate::tools::fixtures::state;
+    use crate::tools::{call, TOOL_NAMES};
 
     /// # Test contract
     ///

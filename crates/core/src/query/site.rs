@@ -127,7 +127,18 @@ mod tests {
         config.site = vec!["extra".into(), "nope".into(), "git-readiness".into()];
         let site = site(&g, &config, None);
         // Named by the grimoire root's title, and nothing else of it.
-        assert_eq!(site.name.as_deref(), Some(g.get(&Reference::page(s.config.roots.grimoire.as_ref().unwrap())).map(|n| match n { Node::Page(p) => p.title.clone(), _ => unreachable!() }).unwrap().as_str()));
+        assert_eq!(
+            site.name.as_deref(),
+            Some(
+                g.get(&Reference::page(s.config.roots.grimoire.as_ref().unwrap()))
+                    .map(|n| match n {
+                        Node::Page(p) => p.title.clone(),
+                        _ => unreachable!(),
+                    })
+                    .unwrap()
+                    .as_str()
+            )
+        );
         let shown: Vec<(&str, usize)> = site.pages.iter().map(|p| (p.slug.as_str(), p.depth)).collect();
         assert_eq!(shown, vec![("git-readiness", 0), ("extra", 0)], "git-readiness is linked from the root, so first; once, though extra links it too");
         // The first page in full when none is asked for.
@@ -161,6 +172,10 @@ mod tests {
         let none = super::site(&g, &s.config, None);
         assert!(none.pages.is_empty() && none.shown.is_none() && none.name.is_some());
         assert_eq!(super::site(&g, &StoreConfig { roots: vec![].into(), ..s.config.clone() }, None).name, None, "no root, no name");
-        assert_eq!(super::site(&g, &StoreConfig { roots: vec!["missing".into(), s.config.roots.grimoire.clone().unwrap()].into(), ..s.config.clone() }, None).name, None, "a grimoire root that names no page gives no name, not the rites' title");
+        assert_eq!(
+            super::site(&g, &StoreConfig { roots: vec!["missing".into(), s.config.roots.grimoire.clone().unwrap()].into(), ..s.config.clone() }, None).name,
+            None,
+            "a grimoire root that names no page gives no name, not the rites' title"
+        );
     }
 }

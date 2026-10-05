@@ -486,14 +486,22 @@ const RECORD_DIRS: [&str; 5] = ["pages", "requirements", "tickets", store_io::ST
 /// The files a store directory may hold beside its record folders. Anything
 /// else, or one of these of the wrong type, means the path is not only a
 /// store, and deleting it would take something else with it.
-const STORE_FILES: [&str; 8] = [store_io::CONFIG_FILE, store_io::BASELINE_FILE, store_io::SERVE_FILE, store_io::CURRENT_FILE, store_io::checkouts::CHECKOUTS_FILE, store_io::tokens::TOKENS_FILE, store_io::tokens::TOKENS_LOCK, store_io::LOCK_FILE];
+const STORE_FILES: [&str; 8] = [
+    store_io::CONFIG_FILE,
+    store_io::BASELINE_FILE,
+    store_io::SERVE_FILE,
+    store_io::CURRENT_FILE,
+    store_io::checkouts::CHECKOUTS_FILE,
+    store_io::tokens::TOKENS_FILE,
+    store_io::tokens::TOKENS_LOCK,
+    store_io::LOCK_FILE,
+];
 
 /// Whether a name in a record folder is one store_io writes: `<slug>.json`,
 /// or the `.<slug>.json.tmp-<pid>` a write left behind.
 fn is_record_file_name(name: &str) -> bool {
     let record = |n: &str| n.strip_suffix(".json").is_some_and(grimoire_core::store::is_slug);
-    record(name)
-        || name.strip_prefix('.').and_then(|n| n.rsplit_once(".tmp-")).is_some_and(|(r, pid)| record(r) && !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
+    record(name) || name.strip_prefix('.').and_then(|n| n.rsplit_once(".tmp-")).is_some_and(|(r, pid)| record(r) && !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Why `store` may not be deleted on behalf of `repo`, if it may not: it is
@@ -737,7 +745,9 @@ fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
     match &store {
         Some(store) if delete_store && leftover => {
             if store.exists() {
-                std::fs::remove_dir_all(store).map_err(|e| anyhow::anyhow!("the integration is removed, but not what is left of the store at {}: {e}. .grimoire.toml is kept, so running uninstall again finishes the rest", store.display()))?;
+                std::fs::remove_dir_all(store).map_err(|e| {
+                    anyhow::anyhow!("the integration is removed, but not what is left of the store at {}: {e}. .grimoire.toml is kept, so running uninstall again finishes the rest", store.display())
+                })?;
             }
             println!("removed store {} (what a deletion stopped part way had left)", store.display());
         }
@@ -746,7 +756,8 @@ fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
             if let Some(why) = refuse_store_deletion(store, &repo, false)? {
                 bail!("the integration is removed, but not the store: {why}. .grimoire.toml is kept, so running uninstall again finishes the rest");
             }
-            delete_store_dir(store, lock.take()).map_err(|e| anyhow::anyhow!("the integration is removed, but the store was not fully deleted: {e}. .grimoire.toml is kept, so running uninstall again finishes the rest"))?;
+            delete_store_dir(store, lock.take())
+                .map_err(|e| anyhow::anyhow!("the integration is removed, but the store was not fully deleted: {e}. .grimoire.toml is kept, so running uninstall again finishes the rest"))?;
             println!("removed store {}", store.display());
         }
         Some(copy) if on_server => println!("kept    this checkout's copy of the server's intent at {}", copy.display()),
@@ -773,7 +784,8 @@ fn main() -> anyhow::Result<()> {
             let rt = tokio::runtime::Runtime::new()?;
             // A team's library: the stores under a directory, with no checkout here (req:server-library).
             if let Some(dir) = shared_library {
-                let options = grimoire_server::ServeOptions { store_dir: dir.clone(), port, ui_dir, shared, listen, server: None, site, library: None, shared_library: Some(dir), site_of, checkout: None };
+                let options =
+                    grimoire_server::ServeOptions { store_dir: dir.clone(), port, ui_dir, shared, listen, server: None, site, library: None, shared_library: Some(dir), site_of, checkout: None };
                 return rt.block_on(grimoire_server::serve(options));
             }
             // Started in a checkout and given no store, the daemon serves the machine's library,
@@ -790,7 +802,19 @@ fn main() -> anyhow::Result<()> {
             };
             // A store of its own is served as the checkout serve runs in sees it; a --store given names no checkout.
             let checkout = if shared || server.is_some() { None } else { target.checkout };
-            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir: target.store_dir, port, ui_dir, shared, listen, server, site, library, shared_library: None, site_of: None, checkout }))
+            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions {
+                store_dir: target.store_dir,
+                port,
+                ui_dir,
+                shared,
+                listen,
+                server,
+                site,
+                library,
+                shared_library: None,
+                site_of: None,
+                checkout,
+            }))
         }
         Command::Token { command } => token(command),
         Command::Login { server, token } => team::login(server.as_deref(), token),
@@ -958,7 +982,8 @@ fn main() -> anyhow::Result<()> {
             // a daemon serves it, which then takes init's one write, the adopt, itself.
             let created = !store_dir.join(store_io::CONFIG_FILE).exists();
             let held = if created && empty {
-                let empty = grimoire_core::Store::new(grimoire_core::StoreConfig { site: vec![],
+                let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
+                    site: vec![],
                     version: grimoire_core::StoreConfig::CURRENT_VERSION,
                     repository: repo_str.clone(),
                     // Both roots named, with no page yet: the check says which pages to put.

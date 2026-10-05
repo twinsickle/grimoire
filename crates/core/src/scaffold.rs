@@ -148,7 +148,12 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
     for g in &groups {
         let slug = group_slug[g].clone();
         let (title, body) = if g.is_empty() {
-            ("Overview".to_string(), format!("Skeleton built from the module contracts of `{repository}`. Refine it: the story pages below say what belongs in each, and the area pages under architecture hold no intent yet."))
+            (
+                "Overview".to_string(),
+                format!(
+                    "Skeleton built from the module contracts of `{repository}`. Refine it: the story pages below say what belongs in each, and the area pages under architecture hold no intent yet."
+                ),
+            )
         } else {
             (title_of(g), format!("Modules under `{g}/`."))
         };
@@ -298,7 +303,16 @@ mod tests {
         // The conventions are the rites' first page: how things are written is work.
         assert_eq!(s.pages["rites"].links, vec![Reference::page("conventions")]);
         let conventions = &s.pages["conventions"].body;
-        for clause in ["naming", "pages and decisions", "contracts", "commits", "code style", "A convention a tool checks stays here", "what the code must do or how it is built belongs in the grimoire", "under constraints"] {
+        for clause in [
+            "naming",
+            "pages and decisions",
+            "contracts",
+            "commits",
+            "code style",
+            "A convention a tool checks stays here",
+            "what the code must do or how it is built belongs in the grimoire",
+            "under constraints",
+        ] {
             assert!(conventions.contains(clause), "the conventions' prompt says {clause:?}: {conventions}");
         }
         assert!(!s.pages.values().any(|p| p.links.contains(&Reference::page("rites"))), "a root, linked from nothing");

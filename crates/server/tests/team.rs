@@ -46,10 +46,29 @@ fn ticket(slug: &str, status: Status) -> Ticket {
 fn host() -> Host {
     let tmp = tempfile::Builder::new().prefix("grimoire-team-host-").tempdir().unwrap();
     let store = tmp.path().join("store");
-    let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/a/checkout/on/another/machine".into(), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() };
+    let config = StoreConfig {
+        site: vec![],
+        version: StoreConfig::CURRENT_VERSION,
+        repository: "C:/a/checkout/on/another/machine".into(),
+        roots: vec!["overview".into()].into(),
+        languages: vec!["rust".into()],
+        scope: Scope::default(),
+        order: Default::default(),
+    };
     let mut s = Store::new(config);
     s.pages.insert("overview".into(), Page { slug: "overview".into(), title: "Overview".into(), body: "What it is.".into(), links: vec![Reference::req("says-a"), Reference::module("src/a")] });
-    s.requirements.insert("says-a".into(), Requirement { slug: "says-a".into(), title: "It says a".into(), statement: "It SHALL say a.".into(), scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: "w".into(), then: "t".into() }], covered_by: vec![Reference::criterion("src/a", "says")], decisions: vec![], retired: false });
+    s.requirements.insert(
+        "says-a".into(),
+        Requirement {
+            slug: "says-a".into(),
+            title: "It says a".into(),
+            statement: "It SHALL say a.".into(),
+            scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: "w".into(), then: "t".into() }],
+            covered_by: vec![Reference::criterion("src/a", "says")],
+            decisions: vec![],
+            retired: false,
+        },
+    );
     for (slug, status) in [("0001", Status::Open), ("0002", Status::Open), ("0003", Status::Active)] {
         s.tickets.insert(slug.into(), ticket(slug, status));
     }
@@ -223,7 +242,10 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     let adopted = d.call("adopt", json!({ "reason": "inherited" })).unwrap();
     let on_server = store_io::load(&h.store).unwrap().0.baseline.unwrap();
     assert_eq!(adopted["baseline"]["count"].as_u64().unwrap() as usize, on_server.findings.len());
-    assert!(on_server.findings.len() > truth && on_server.findings.iter().any(|f| f.r#ref.to_string().starts_with("module:") || f.r#ref.to_string().starts_with("criterion:")), "what only code shows is in it: {seen}");
+    assert!(
+        on_server.findings.len() > truth && on_server.findings.iter().any(|f| f.r#ref.to_string().starts_with("module:") || f.r#ref.to_string().starts_with("criterion:")),
+        "what only code shows is in it: {seen}"
+    );
     // The decision written, the ticket waits; landed by name, the close is answered with what the machine's start shows.
     assert_eq!(d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap()["node"]["status"], "landing");
     let landed = d.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap();
@@ -393,7 +415,10 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
     let before = store_io::load(&m.copy).unwrap().0;
     // A teammate has retitled a ticket this machine has not fetched; this machine changes its priority.
     // The server takes the write and does not answer again.
-    let gone = Server::new(&takes_one_write_and_goes(json!({ "node": { "ref": "ticket:0001", "title": "Retitled by a teammate", "priority": "high" }, "warnings": [], "baselined": 0 })), Some(h.writer.clone()));
+    let gone = Server::new(
+        &takes_one_write_and_goes(json!({ "node": { "ref": "ticket:0001", "title": "Retitled by a teammate", "priority": "high" }, "warnings": [], "baselined": 0 })),
+        Some(h.writer.clone()),
+    );
     let mut loaded = grimoire_server::load(&m.copy).unwrap();
     let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "update_ticket", json!({ "ref": "ticket:0001", "priority": "high" }), "2026-10-03").unwrap();
     // The write was made, so it is answered, with the server's answer: an error would invite it a second time.

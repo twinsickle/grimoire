@@ -184,17 +184,20 @@ pub fn ticket_cycles(g: &Graph) -> BTreeMap<Reference, Vec<Reference>> {
             }
         }
         if seen.contains(start) {
-            let members: Vec<Reference> = seen.into_iter().filter(|r| {
-                // A member of start's loop also reaches start.
-                let mut s: BTreeSet<Reference> = BTreeSet::new();
-                let mut st = next(r);
-                while let Some(x) = st.pop() {
-                    if s.insert(x.clone()) {
-                        st.extend(next(&x));
+            let members: Vec<Reference> = seen
+                .into_iter()
+                .filter(|r| {
+                    // A member of start's loop also reaches start.
+                    let mut s: BTreeSet<Reference> = BTreeSet::new();
+                    let mut st = next(r);
+                    while let Some(x) = st.pop() {
+                        if s.insert(x.clone()) {
+                            st.extend(next(&x));
+                        }
                     }
-                }
-                s.contains(start)
-            }).collect();
+                    s.contains(start)
+                })
+                .collect();
             out.insert(start.clone(), members);
         }
     }
@@ -809,7 +812,17 @@ mod tests {
         g.without_code = true;
         let after = all(&g);
         assert!(!after.iter().any(|f| f.starts_with("dangling-edge criterion:") || f.starts_with("dangling-edge module:") || f.starts_with("unheld ")), "{after:?}");
-        let intent_only: Vec<&String> = before.iter().filter(|f| !(f.starts_with("dangling-edge criterion:") || f.starts_with("dangling-edge module:") || f.starts_with("dangling-edge test:") || f.starts_with("dangling-edge file:") || f.starts_with("dangling-edge decl:") || f.starts_with("unheld "))).collect();
+        let intent_only: Vec<&String> = before
+            .iter()
+            .filter(|f| {
+                !(f.starts_with("dangling-edge criterion:")
+                    || f.starts_with("dangling-edge module:")
+                    || f.starts_with("dangling-edge test:")
+                    || f.starts_with("dangling-edge file:")
+                    || f.starts_with("dangling-edge decl:")
+                    || f.starts_with("unheld "))
+            })
+            .collect();
         assert_eq!(after.iter().collect::<Vec<_>>(), intent_only, "nothing else is left out");
         assert!(dangling_from(&g, &Reference::req("ready-only-with-commit")).is_empty(), "a write's warnings leave it out too");
     }

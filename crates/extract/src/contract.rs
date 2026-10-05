@@ -239,14 +239,30 @@ mod tests {
         assert!(one(r#"{"test":"t","checks":["req:Not A Slug"]}"#).contains("req:<slug>"));
         assert!(one(r#"{"test":"t","checks":["req:foo#bar"]}"#).contains("req:<slug>"), "a requirement is never read as a criterion");
         assert!(one(r#"{"test":"t","checks":["m#Not A Slug"]}"#).contains("module id#criterion id"));
-        assert!(find_tests("# Test contract
+        assert!(
+            find_tests(
+                "# Test contract
 ```json
 {\"test\":\"t\",\"checks\":[\"src/a#b#kept\"]}
-```", 1)[0].test.is_ok(), "a module id may hold #");
-        assert!(find_tests("# Test contract
+```",
+                1
+            )[0]
+            .test
+            .is_ok(),
+            "a module id may hold #"
+        );
+        assert!(
+            find_tests(
+                "# Test contract
 ```json
 {\"test\":\"t\",\"checks\":[\"req:src-boundary\"]}
-```", 1)[0].test.is_ok(), "a requirement may be checked");
+```",
+                1
+            )[0]
+            .test
+            .is_ok(),
+            "a requirement may be checked"
+        );
         assert!(one(r#"{"test":"t"}"#).contains("invalid test contract JSON"));
     }
 
@@ -255,4 +271,3 @@ mod tests {
         assert!(find("Just a doc comment.", 1).is_none());
     }
 }
-

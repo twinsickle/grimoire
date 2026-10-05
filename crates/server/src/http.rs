@@ -167,7 +167,14 @@ async fn run(daemon: Arc<Daemon>, caller: Option<Caller>, refused: Option<access
     }
 }
 
-async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, refused: Option<Extension<access::CheckoutRefused>>, Path(tool): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
+async fn call_post(
+    State(daemon): State<Arc<Daemon>>,
+    caller: Option<Extension<Caller>>,
+    refused: Option<Extension<access::CheckoutRefused>>,
+    Path(tool): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     // A form can post a body spelled as JSON with a form content type, and a
     // browser sends a form without asking first; JSON cannot be sent that way.
     let json_body = headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|ct| ct.split(';').next().is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json")));
@@ -191,7 +198,13 @@ async fn call_post(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<C
 
 /// GET form for convenience: each query value is parsed as JSON when it is,
 /// otherwise taken as a string, so `?ref=page:overview&depth=3` works.
-async fn call_get(State(daemon): State<Arc<Daemon>>, caller: Option<Extension<Caller>>, refused: Option<Extension<access::CheckoutRefused>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
+async fn call_get(
+    State(daemon): State<Arc<Daemon>>,
+    caller: Option<Extension<Caller>>,
+    refused: Option<Extension<access::CheckoutRefused>>,
+    Path(tool): Path<String>,
+    Query(q): Query<Vec<(String, String)>>,
+) -> Response {
     // A write always takes a POST with a JSON body: a GET is the easiest
     // request for another site to forge.
     if grimoire_core::tools::is_write(&tool) {

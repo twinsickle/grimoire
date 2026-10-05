@@ -59,22 +59,15 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Board {
     let kinds = f.kinds.unwrap_or(&default_kinds);
     let narrowed = |t: &&Ticket| f.priority.is_none_or(|p| p.contains(&t.priority)) && f.touching.is_none_or(|x| t.touches.contains(x) || t.relies_on.contains(x));
     let tickets: Vec<&Ticket> = g.tickets().filter(|t| status.contains(&t.status) && kinds.contains(&t.kind)).filter(narrowed).collect();
-    let tickets = ordered(g, tickets)
-        .into_iter()
-        .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)), followed_by: None })
-        .collect();
+    let tickets = ordered(g, tickets).into_iter().map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)), followed_by: None }).collect();
     // Gaps and questions a change that is not closed relies on are attached to it.
     let attached: HashSet<&Reference> = g.tickets().filter(|t| t.kind == TicketKind::Change && t.status != Status::Closed).flat_map(|t| t.relies_on.iter()).collect();
-    let unattached = g
-        .tickets()
-        .filter(|t| t.kind != TicketKind::Change && t.status != Status::Closed)
-        .filter(|t| !attached.contains(&Reference::ticket(&t.slug)))
-        .filter(narrowed)
-        .collect();
+    let unattached = g.tickets().filter(|t| t.kind != TicketKind::Change && t.status != Status::Closed).filter(|t| !attached.contains(&Reference::ticket(&t.slug))).filter(narrowed).collect();
     let unattached = ordered(g, unattached).into_iter().map(ticket_summary).collect();
     let mut closed: Vec<&Ticket> = g.tickets().filter(|t| t.status == Status::Closed).filter(narrowed).collect();
     closed.sort_by_key(|t| std::cmp::Reverse(newest_decision(t)));
-    let closed = closed.into_iter().take(f.closed).map(|t| BoardTicket { summary: ticket_summary(t), waits_on: None, followed_by: (t.kind != TicketKind::Change).then(|| followed_by(g, t)) }).collect();
+    let closed =
+        closed.into_iter().take(f.closed).map(|t| BoardTicket { summary: ticket_summary(t), waits_on: None, followed_by: (t.kind != TicketKind::Change).then(|| followed_by(g, t)) }).collect();
     Board { tickets, unattached, closed }
 }
 
@@ -233,7 +226,11 @@ mod tests {
         let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 0 });
         let work = b.tickets.iter().find(|t| t.summary.r#ref.id == "work").expect("listed");
         let waits: Vec<(String, Option<Status>)> = work.waits_on.as_ref().expect("a change").iter().map(|w| (w.r#ref.id.clone(), w.status)).collect();
-        assert_eq!(waits, vec![("q".to_string(), Some(Status::Open)), ("g-done".to_string(), Some(Status::Closed)), ("g-waits".to_string(), Some(Status::Landing))], "gaps and questions only, in relies_on order");
+        assert_eq!(
+            waits,
+            vec![("q".to_string(), Some(Status::Open)), ("g-done".to_string(), Some(Status::Closed)), ("g-waits".to_string(), Some(Status::Landing))],
+            "gaps and questions only, in relies_on order"
+        );
         // Only q still holds it back: a landing answer is answered, waiting for this change.
         let unanswered: Vec<&str> = work.waits_on.as_ref().expect("a change").iter().filter(|w| matches!(w.status, Some(Status::Open | Status::Active))).map(|w| w.r#ref.id.as_str()).collect();
         assert_eq!(unanswered, vec!["q"]);

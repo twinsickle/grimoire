@@ -20,10 +20,7 @@ pub enum ToolError {
     #[error("{message}")]
     NotFound { message: String },
     #[error("{message}")]
-    Invalid {
-        message: String,
-        details: Vec<FieldError>,
-    },
+    Invalid { message: String, details: Vec<FieldError> },
     #[error("{message}")]
     Conflict {
         message: String,
@@ -123,7 +120,11 @@ pub fn propose<T>(store: &mut Store, ticket: &str, how: Proposing, op: impl FnOn
     let (out, changed) = op(&mut work)?;
     let mut proposal = store.proposals.get(ticket).cloned().unwrap_or_else(|| Proposal::new(ticket));
     if how == Proposing::Partial {
-        let stale: Vec<FieldError> = changed_refs(&changed).into_iter().filter(|r| record_moved(store, &proposal, r)).map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; get it as the truth now has it and put it again under the ticket")).collect();
+        let stale: Vec<FieldError> = changed_refs(&changed)
+            .into_iter()
+            .filter(|r| record_moved(store, &proposal, r))
+            .map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; get it as the truth now has it and put it again under the ticket"))
+            .collect();
         if !stale.is_empty() {
             return Err(ToolError::conflict_with("the truth moved under this proposal's record since it was proposed; get it as the truth now has it and put it again under the ticket", stale));
         }
@@ -288,7 +289,10 @@ pub fn apply_proposal(store: &mut Store, ticket: &str) -> Changed {
 pub fn target_ticket(store: &Store, given: Option<&str>) -> Result<String, ToolError> {
     match given.map(|g| g.strip_prefix("ticket:").unwrap_or(g).to_string()).or_else(|| store.current.clone()) {
         Some(t) => Ok(t),
-        None => Err(ToolError::invalid("name the ticket this change belongs to: `ticket` is absent and no ticket is current (start one, or pass ticket)", vec![FieldError::new("ticket", "absent, and no ticket is current")])),
+        None => Err(ToolError::invalid(
+            "name the ticket this change belongs to: `ticket` is absent and no ticket is current (start one, or pass ticket)",
+            vec![FieldError::new("ticket", "absent, and no ticket is current")],
+        )),
     }
 }
 
@@ -644,17 +648,7 @@ pub fn next_ticket_id(store: &Store) -> String {
 
 pub fn file_ticket(store: &mut Store, t: NewTicket) -> Result<(Ticket, Changed), ToolError> {
     let slug = next_ticket_id(store);
-    let ticket = Ticket {
-        slug,
-        title: t.title,
-        kind: t.kind,
-        priority: t.priority,
-        status: Status::Open,
-        touches: t.touches,
-        relies_on: t.relies_on,
-        body: t.body,
-        decision: None,
-    };
+    let ticket = Ticket { slug, title: t.title, kind: t.kind, priority: t.priority, status: Status::Open, touches: t.touches, relies_on: t.relies_on, body: t.body, decision: None };
     invalid_if(validate_ticket(&ticket), "ticket")?;
     store.tickets.insert(ticket.slug.clone(), ticket.clone());
     Ok((ticket.clone(), Changed::Ticket(ticket.slug)))
@@ -991,7 +985,12 @@ mod tests {
         let mut s = store();
         let r = Reference::page("git-readiness");
         let before = s.pages["git-readiness"].clone();
-        let (p, _) = patch_page(&mut s, &r, PagePatch { add_links: vec![Reference::page("orphan"), Reference::req("stale")], remove_links: vec![Reference::req("nope"), Reference::module("src/a/ready")], ..Default::default() }).unwrap();
+        let (p, _) = patch_page(
+            &mut s,
+            &r,
+            PagePatch { add_links: vec![Reference::page("orphan"), Reference::req("stale")], remove_links: vec![Reference::req("nope"), Reference::module("src/a/ready")], ..Default::default() },
+        )
+        .unwrap();
         assert_eq!(p.title, before.title);
         assert_eq!(p.body, before.body);
         // stale was already present: not duplicated; ready removed; orphan appended.
@@ -1105,7 +1104,8 @@ mod tests {
         let q = &s.proposals["later-1"].pages["orphan"];
         assert_eq!((q.record.body.as_str(), q.base.clone()), ("proposed", Some(crate::fingerprint::of_record(&before))));
         // The next write sees the proposal's own view and keeps the base; a new record carries no base; a deletion is a mark.
-        let (p, _) = propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &Reference::page("orphan"), PagePatch { add_links: vec![Reference::page("overview")], ..Default::default() })).unwrap();
+        let (p, _) =
+            propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &Reference::page("orphan"), PagePatch { add_links: vec![Reference::page("overview")], ..Default::default() })).unwrap();
         assert_eq!((p.body.as_str(), p.links.len()), ("proposed", 1));
         assert_eq!(s.proposals["later-1"].pages["orphan"].base, Some(crate::fingerprint::of_record(&before)));
         propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![] })).unwrap();
@@ -1193,7 +1193,10 @@ mod tests {
         let orphan = s.pages["orphan"].clone();
         // later-1 proposes a change to orphan, a new page linking it, and a deletion of git-readiness.
         propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { body: "proposed".into(), ..orphan.clone() })).unwrap();
-        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::page("orphan"), Reference::page("git-readiness")] })).unwrap();
+        propose(&mut s, "later-1", Proposing::Whole, |w| {
+            put_page(w, Page { slug: "aim".into(), title: "Aim".into(), body: "b".into(), links: vec![Reference::page("orphan"), Reference::page("git-readiness")] })
+        })
+        .unwrap();
         propose(&mut s, "later-1", Proposing::Partial, |w| delete_node(w, &Reference::page("git-readiness")).map(|c| ((), c))).unwrap();
         s.config.site = vec!["orphan".into(), "lost".into(), "overview".into()];
         let (_, changed) = rename_node(&mut s, &Reference::page("orphan"), "lost").unwrap();
@@ -1228,7 +1231,20 @@ mod tests {
         assert_eq!(s.current, None);
         assert!(s.proposals.contains_key("later-1"), "another ticket's proposal stays");
         // Deleting a ticket that is not current leaves the current one.
-        s.tickets.insert("gap-2".into(), Ticket { slug: "gap-2".into(), title: "G".into(), kind: TicketKind::Gap, priority: Priority::Later, status: Status::Open, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+        s.tickets.insert(
+            "gap-2".into(),
+            Ticket {
+                slug: "gap-2".into(),
+                title: "G".into(),
+                kind: TicketKind::Gap,
+                priority: Priority::Later,
+                status: Status::Open,
+                touches: vec![],
+                relies_on: vec![],
+                body: "b".into(),
+                decision: None,
+            },
+        );
         s.current = Some("later-1".into());
         assert!(matches!(delete_node(&mut s, &Reference::ticket("gap-2")).unwrap(), Changed::Deleted(_)));
         assert_eq!(s.current.as_deref(), Some("later-1"));

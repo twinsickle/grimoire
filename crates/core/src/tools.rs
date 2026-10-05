@@ -79,7 +79,25 @@ pub fn proposes(name: &str) -> bool {
 }
 
 pub fn is_write(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "file_ticket" | "update_ticket" | "start_ticket" | "close_ticket" | "land_ticket" | "delete_node" | "rename_node" | "adopt" | "configure" | "reorder")
+    matches!(
+        name,
+        "put_page"
+            | "patch_page"
+            | "put_requirement"
+            | "record_decision"
+            | "supersede"
+            | "retire_node"
+            | "file_ticket"
+            | "update_ticket"
+            | "start_ticket"
+            | "close_ticket"
+            | "land_ticket"
+            | "delete_node"
+            | "rename_node"
+            | "adopt"
+            | "configure"
+            | "reorder"
+    )
 }
 
 /// The tools a daemon serving several checkouts of a grimoire answers with no `checkout` named:
@@ -181,7 +199,8 @@ mod tests {
         let page = &s.store().proposals["later-1"].pages["aim"].record;
         assert_eq!((page.title.as_str(), page.body.as_str(), page.links[0].to_string()), ("Aim", "**Why.** b", "page:overview".to_string()));
         // Strings at any depth: a requirement's scenarios.
-        let req = json!({ "slug": "r", "title": "R", "statement": "It SHALL hold.\n", "scenarios": [{ "title": " t", "given": "g ", "when": "w", "then": "t\t" }], "covered_by": [], "ticket": "later-1" });
+        let req =
+            json!({ "slug": "r", "title": "R", "statement": "It SHALL hold.\n", "scenarios": [{ "title": " t", "given": "g ", "when": "w", "then": "t\t" }], "covered_by": [], "ticket": "later-1" });
         call(&mut s, "put_requirement", req, "2026-09-30").unwrap();
         let r = &s.store().proposals["later-1"].requirements["r"].record;
         assert_eq!((r.statement.as_str(), r.scenarios[0].title.as_str(), r.scenarios[0].given.as_str(), r.scenarios[0].then.as_str()), ("It SHALL hold.", "t", "g", "t"));

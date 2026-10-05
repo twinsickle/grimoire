@@ -213,11 +213,7 @@ impl Adapter for RustAdapter {
 /// found before any use in it: `mod graph;` may follow `use graph::Graph;`.
 fn declared_in(scope: Node, src: &[u8]) -> Vec<String> {
     let mut cursor = scope.walk();
-    scope
-        .children(&mut cursor)
-        .filter(|c| c.kind() == "mod_item")
-        .filter_map(|c| c.child_by_field_name("name").and_then(|n| n.utf8_text(src).ok()).map(str::to_string))
-        .collect()
+    scope.children(&mut cursor).filter(|c| c.kind() == "mod_item").filter_map(|c| c.child_by_field_name("name").and_then(|n| n.utf8_text(src).ok()).map(str::to_string)).collect()
 }
 
 struct Walker<'a> {
@@ -332,10 +328,13 @@ impl<'a> Walker<'a> {
             "scoped_identifier" => {
                 let prefixes = n.child_by_field_name("path").map(|p| self.flatten(p)).unwrap_or_else(|| vec![vec![]]);
                 let name = n.child_by_field_name("name").map(|c| self.text(c)).unwrap_or_default();
-                prefixes.into_iter().map(|mut p| {
-                    p.push(name.clone());
-                    p
-                }).collect()
+                prefixes
+                    .into_iter()
+                    .map(|mut p| {
+                        p.push(name.clone());
+                        p
+                    })
+                    .collect()
             }
             "scoped_use_list" => {
                 let prefixes = n.child_by_field_name("path").map(|p| self.flatten(p)).unwrap_or_else(|| vec![vec![]]);
@@ -385,10 +384,7 @@ mod tests {
     use super::*;
 
     fn adapter() -> RustAdapter {
-        RustAdapter::with_crates(vec![
-            Crate { name: "grimoire-core".into(), dir: "crates/core".into() },
-            Crate { name: "grimoire-extract".into(), dir: "crates/extract".into() },
-        ])
+        RustAdapter::with_crates(vec![Crate { name: "grimoire-core".into(), dir: "crates/core".into() }, Crate { name: "grimoire-extract".into(), dir: "crates/extract".into() }])
     }
 
     /// # Test contract
@@ -492,7 +488,11 @@ mod tests { use crate::nope; fn t() {} }
         // A module the file declares is local, even when the use comes first.
         assert!(p.imports.contains(&vec!["crates/core/src/git/ready/loader/Load".to_string(), "crates/core/src/git/ready/loader".to_string(), "crates/core/src/git/ready".to_string()]));
         // Inside an inline module, its own declarations and module path.
-        assert!(p.imports.contains(&vec!["crates/core/src/git/ready/inner/b/X".to_string(), "crates/core/src/git/ready/inner/b".to_string(), "crates/core/src/git/ready/inner".to_string()]), "{:?}", p.imports);
+        assert!(
+            p.imports.contains(&vec!["crates/core/src/git/ready/inner/b/X".to_string(), "crates/core/src/git/ready/inner/b".to_string(), "crates/core/src/git/ready/inner".to_string()]),
+            "{:?}",
+            p.imports
+        );
         assert!(p.imports.iter().any(|c| c[0] == "crates/core/src/git/ready/inner/b/Y"), "self is the inline module");
         assert!(!p.imports.iter().any(|c| c[0] == "crates/core/src/git/ready/b/X"), "not the file's scope");
         // std, and names the file does not declare, are external crates: nothing,

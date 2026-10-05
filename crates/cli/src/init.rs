@@ -37,10 +37,7 @@ pub struct Harness {
     pub guidance: &'static str,
 }
 
-pub const HARNESSES: [Harness; 2] = [
-    Harness { skill_dir: ".claude/skills/grimoire", guidance: "CLAUDE.md" },
-    Harness { skill_dir: ".agents/skills/grimoire", guidance: "AGENTS.md" },
-];
+pub const HARNESSES: [Harness; 2] = [Harness { skill_dir: ".claude/skills/grimoire", guidance: "CLAUDE.md" }, Harness { skill_dir: ".agents/skills/grimoire", guidance: "AGENTS.md" }];
 
 pub const MCP_REL: &str = ".mcp.json";
 pub const CODEX_REL: &str = ".codex/config.toml";
@@ -59,9 +56,15 @@ pub fn section(harness: &Harness) -> String {
 pub enum Wrote {
     Written(PathBuf),
     /// Written, and still needing something of the person, which `note` says.
-    Noted { path: PathBuf, note: String },
+    Noted {
+        path: PathBuf,
+        note: String,
+    },
     /// Already present and not Grimoire's to overwrite; `note` says what to add by hand.
-    Skipped { path: PathBuf, note: String },
+    Skipped {
+        path: PathBuf,
+        note: String,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -236,8 +239,8 @@ fn eol_of(text: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::guidance::{MARK_END, MARK_START};
+    use super::*;
 
     /// A fresh folder, unique however many tests run at once, removed when dropped.
     pub(super) fn temp() -> tempfile::TempDir {
@@ -337,9 +340,12 @@ mod tests {
         let codex: toml_edit::DocumentMut = std::fs::read_to_string(repo.join(CODEX_REL)).unwrap().parse().unwrap();
         assert_eq!(codex["mcp_servers"]["grimoire"]["url"].as_str(), Some("http://127.0.0.1:4343/g/shop/mcp"));
         // Nothing outside the repository: every path written is in it, and Codex's trust is left to the person.
-        let paths: Vec<&PathBuf> = wrote.iter().map(|w| match w {
-            Wrote::Written(p) | Wrote::Noted { path: p, .. } | Wrote::Skipped { path: p, .. } => p,
-        }).collect();
+        let paths: Vec<&PathBuf> = wrote
+            .iter()
+            .map(|w| match w {
+                Wrote::Written(p) | Wrote::Noted { path: p, .. } | Wrote::Skipped { path: p, .. } => p,
+            })
+            .collect();
         assert!(paths.iter().all(|p| p.starts_with(repo)), "{paths:?}");
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Noted { path, note } if path.ends_with(CODEX_REL) && note.contains("trusted"))));
     }
@@ -369,23 +375,8 @@ mod tests {
     /// ```
     #[test]
     fn installed_texts_name_no_project() {
-        let repo_only = [
-            "bacon",
-            "web/",
-            "npm ",
-            "npx ",
-            "crates/",
-            "Grimoire's own repository",
-            "Tailwind",
-            "Playwright",
-            "cargo install",
-        ];
-        for (name, text) in [
-            ("SKILL.md", SKILL_MD),
-            ("contracts.md", CONTRACTS_MD),
-            ("changes.md", CHANGES_MD),
-            ("guidance-section.md", GUIDANCE_MD),
-        ] {
+        let repo_only = ["bacon", "web/", "npm ", "npx ", "crates/", "Grimoire's own repository", "Tailwind", "Playwright", "cargo install"];
+        for (name, text) in [("SKILL.md", SKILL_MD), ("contracts.md", CONTRACTS_MD), ("changes.md", CHANGES_MD), ("guidance-section.md", GUIDANCE_MD)] {
             for token in repo_only {
                 if let Some(at) = text.find(token) {
                     let line = text[..at].matches('\n').count() + 1;
@@ -425,12 +416,7 @@ mod tests {
     /// ```
     #[test]
     fn installed_texts_list_no_pages() {
-        for (name, text) in [
-            ("SKILL.md", SKILL_MD),
-            ("contracts.md", CONTRACTS_MD),
-            ("changes.md", CHANGES_MD),
-            ("guidance-section.md", GUIDANCE_MD),
-        ] {
+        for (name, text) in [("SKILL.md", SKILL_MD), ("contracts.md", CONTRACTS_MD), ("changes.md", CHANGES_MD), ("guidance-section.md", GUIDANCE_MD)] {
             for paragraph in text.split("\n\n") {
                 let lower = paragraph.to_lowercase();
                 let named: Vec<&str> = grimoire_core::scaffold::STORY.iter().map(|(slug, _, _)| *slug).filter(|slug| lower.contains(slug)).collect();
@@ -468,7 +454,12 @@ mod tests {
     fn the_skill_says_how_to_name_a_checkout() {
         let flat = SKILL_MD.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(flat.contains("Pass `checkout`, your working directory as an absolute path, with every call"), "the skill says to name the checkout");
-        assert!(flat.contains("Changed instructions reach your MCP client when it reconnects") && flat.contains("a new tool or a changed field may reach it only in a new session") && flat.contains("call over HTTP"), "the skill says a reconnect may not bring changed tools");
+        assert!(
+            flat.contains("Changed instructions reach your MCP client when it reconnects")
+                && flat.contains("a new tool or a changed field may reach it only in a new session")
+                && flat.contains("call over HTTP"),
+            "the skill says a reconnect may not bring changed tools"
+        );
     }
 
     /// # Test contract
@@ -525,5 +516,4 @@ mod tests {
         out.sort();
         out
     }
-
 }

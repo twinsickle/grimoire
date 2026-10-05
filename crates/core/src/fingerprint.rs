@@ -52,10 +52,14 @@ pub fn all(g: &Graph) -> BTreeMap<Reference, String> {
             Node::File(f) => f.digest.clone(),
             Node::Test(t) => of_json(t),
             Node::Module(m) => {
-                let digests: Vec<&str> = m.files.iter().filter_map(|f| match g.get(&Reference::file(f)) {
-                    Some(Node::File(file)) => Some(file.digest.as_str()),
-                    _ => None,
-                }).collect();
+                let digests: Vec<&str> = m
+                    .files
+                    .iter()
+                    .filter_map(|f| match g.get(&Reference::file(f)) {
+                        Some(Node::File(file)) => Some(file.digest.as_str()),
+                        _ => None,
+                    })
+                    .collect();
                 of_text(&digests.join("\n"))
             }
             Node::Decl(_) => continue,
@@ -80,12 +84,7 @@ pub fn unnamed(touches: &[Reference], start: &BTreeMap<String, String>, now: &BT
     let mut all: Vec<&Reference> = at_start.keys().chain(now.keys()).collect();
     all.sort();
     all.dedup();
-    all.into_iter()
-        .filter(|r| matches!(r.kind, Kind::Page | Kind::Req | Kind::Module))
-        .filter(|r| !touches.contains(r))
-        .filter(|r| at_start.get(*r).copied() != now.get(*r))
-        .cloned()
-        .collect()
+    all.into_iter().filter(|r| matches!(r.kind, Kind::Page | Kind::Req | Kind::Module)).filter(|r| !touches.contains(r)).filter(|r| at_start.get(*r).copied() != now.get(*r)).cloned().collect()
 }
 
 #[cfg(test)]

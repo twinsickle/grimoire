@@ -40,7 +40,11 @@ pub fn find(stores: &Path, copies: &Path, default: &Grimoire) -> Found {
     }
     for store_dir in candidates {
         let shown = store_dir.display().to_string();
-        let Some(main) = std::fs::read_to_string(store_dir.join(store_io::CONFIG_FILE)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|c| c["repository"].as_str().map(str::to_string)) else {
+        let Some(main) = std::fs::read_to_string(store_dir.join(store_io::CONFIG_FILE))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|c| c["repository"].as_str().map(str::to_string))
+        else {
             found.skipped.push(format!("{shown}: its grimoire.json names no repository"));
             continue;
         };

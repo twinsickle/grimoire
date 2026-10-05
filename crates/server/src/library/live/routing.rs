@@ -79,11 +79,8 @@ impl Live {
 /// The routes of the library: each grimoire's API and MCP at `/g/<name>/`,
 /// looked up as each request arrives, and the release a command asks for.
 pub fn routes(live: Arc<Live>) -> Router {
-    let grimoires = Router::new()
-        .route("/g/{name}/api/{*rest}", any(to_grimoire))
-        .route("/g/{name}/mcp", any(to_grimoire_mcp))
-        .route("/g/{name}/mcp/{*rest}", any(to_grimoire))
-        .with_state(live.clone());
+    let grimoires =
+        Router::new().route("/g/{name}/api/{*rest}", any(to_grimoire)).route("/g/{name}/mcp", any(to_grimoire_mcp)).route("/g/{name}/mcp/{*rest}", any(to_grimoire)).with_state(live.clone());
     // Only a machine's library is asked to let a store go: a team's server has no uninstall beside it.
     match live.policy.clone() {
         Some(policy) => grimoires.merge(Router::new().route("/library/release", post(release)).with_state(live).layer(middleware::from_fn_with_state(policy, access::admit))),
@@ -327,7 +324,16 @@ mod tests {
         let other = Arc::new(Daemon::open(&worktree.store_dir).unwrap().0);
         {
             let mut held = live.held.lock().unwrap();
-            let shelved = Shelved { store_dir: worktree.store_dir.clone(), repo: worktree.repo.clone(), canon: canonical(&worktree.repo), team: true, daemon: other.clone(), routes: http::api(other, Arc::new(access::Local)), lock: None, watcher: None };
+            let shelved = Shelved {
+                store_dir: worktree.store_dir.clone(),
+                repo: worktree.repo.clone(),
+                canon: canonical(&worktree.repo),
+                team: true,
+                daemon: other.clone(),
+                routes: http::api(other, Arc::new(access::Local)),
+                lock: None,
+                watcher: None,
+            };
             held.served.insert(("shop".into(), worktree.repo.clone()), shelved);
         }
         let repo = |g: &Grimoire| store_io::repository_string(&g.repo).unwrap();
@@ -354,9 +360,15 @@ mod tests {
             _ => panic!("refused"),
         };
         let message = why(live.choose("shop", None, false));
-        assert!(message.contains("2 checkouts") && message.contains(&main.repo.display().to_string()) && message.contains(&worktree.repo.display().to_string()) && message.contains("`checkout`"), "{message}");
+        assert!(
+            message.contains("2 checkouts") && message.contains(&main.repo.display().to_string()) && message.contains(&worktree.repo.display().to_string()) && message.contains("`checkout`"),
+            "{message}"
+        );
         // A client whose tools cannot name one is told to start a new session, or to call over HTTP.
-        assert!(message.contains("offer no `checkout` field") && message.contains("new session") && message.contains("a reconnect may not") && message.contains("POST /g/shop/api/<tool>"), "{message}");
+        assert!(
+            message.contains("offer no `checkout` field") && message.contains("new session") && message.contains("a reconnect may not") && message.contains("POST /g/shop/api/<tool>"),
+            "{message}"
+        );
         assert_eq!(repository_of(at(live.choose("shop", None, true)), None).await, repo(&main), "the default's");
         // A directory no checkout holds is refused, naming them.
         let message = why(live.choose("shop", Some(&named(root)), false));
@@ -371,7 +383,16 @@ mod tests {
         let solo = Arc::new(Daemon::open(&ledger.store_dir).unwrap().0);
         {
             let mut held = live.held.lock().unwrap();
-            let shelved = Shelved { store_dir: ledger.store_dir.clone(), repo: ledger.repo.clone(), canon: canonical(&ledger.repo), team: false, daemon: solo.clone(), routes: http::api(solo, Arc::new(access::Local)), lock: None, watcher: None };
+            let shelved = Shelved {
+                store_dir: ledger.store_dir.clone(),
+                repo: ledger.repo.clone(),
+                canon: canonical(&ledger.repo),
+                team: false,
+                daemon: solo.clone(),
+                routes: http::api(solo, Arc::new(access::Local)),
+                lock: None,
+                watcher: None,
+            };
             held.served.insert(("ledger".into(), ledger.repo.clone()), shelved);
         }
         assert!(live.choose("ledger", None, false).is_ok(), "one checkout needs no naming");

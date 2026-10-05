@@ -75,11 +75,7 @@ impl Extraction {
             match &f.contract {
                 Some(Ok(c)) if m.purpose.is_none() => {
                     m.purpose = Some(c.purpose.clone());
-                    m.criteria = c
-                        .criteria
-                        .iter()
-                        .map(|cc| Criterion { module: f.module.clone(), id: cc.id.clone(), statement: cc.statement.clone() })
-                        .collect();
+                    m.criteria = c.criteria.iter().map(|cc| Criterion { module: f.module.clone(), id: cc.id.clone(), statement: cc.statement.clone() }).collect();
                     m.contract_at = Some((f.path.clone(), f.contract_line.unwrap_or(1)));
                     m.contract_error = None;
                 }
@@ -94,10 +90,7 @@ impl Extraction {
                 _ => {}
             }
             raw_imports.entry(f.module.clone()).or_default().extend(f.imports.iter().cloned());
-            out_files.insert(
-                f.path.clone(),
-                File { path: f.path.clone(), module: f.module.clone(), language: f.language.clone(), decls: f.decls.clone(), digest: f.digest.clone() },
-            );
+            out_files.insert(f.path.clone(), File { path: f.path.clone(), module: f.module.clone(), language: f.language.clone(), decls: f.decls.clone(), digest: f.digest.clone() });
         }
 
         for m in modules.values_mut() {
@@ -139,10 +132,7 @@ pub(crate) mod fixtures {
     use super::*;
 
     pub fn contract(purpose: &str, criteria: &[(&str, &str)]) -> Option<Result<Contract, String>> {
-        Some(Ok(Contract {
-            purpose: purpose.into(),
-            criteria: criteria.iter().map(|(id, s)| ContractCriterion { id: id.to_string(), statement: s.to_string() }).collect(),
-        }))
+        Some(Ok(Contract { purpose: purpose.into(), criteria: criteria.iter().map(|(id, s)| ContractCriterion { id: id.to_string(), statement: s.to_string() }).collect() }))
     }
 
     pub fn file(path: &str, module: &str, imports: &[&[&str]], contract: Option<Result<Contract, String>>) -> FileExtraction {
@@ -169,7 +159,12 @@ pub(crate) mod fixtures {
 
     /// The per-file records `extraction` joins.
     pub fn extraction_files() -> Vec<FileExtraction> {
-        let mut ready = file("src/a/ready.rs", "src/a/ready", &[&["src/a/layout/thing", "src/a/layout"], &["std/fs"]], contract("Decide readiness.", &[("guarantee", "Ready only with a commit."), ("reads-only", "Never writes.")]));
+        let mut ready = file(
+            "src/a/ready.rs",
+            "src/a/ready",
+            &[&["src/a/layout/thing", "src/a/layout"], &["std/fs"]],
+            contract("Decide readiness.", &[("guarantee", "Ready only with a commit."), ("reads-only", "Never writes.")]),
+        );
         ready.tests = vec![Test { file: "src/a/ready.rs".into(), name: "ready-needs-a-commit".into(), line: 20, checks: vec!["src/a/ready#guarantee".into()] }];
         let files = vec![
             ready,

@@ -130,10 +130,12 @@ mod tests {
         // The library's URL, a grimoire's path in it, is init's too; a path init never writes is not.
         let library = with_codex_server(own, "http://127.0.0.1:4242/g/shop/mcp").unwrap();
         assert_eq!(without_codex_server(&library).unwrap().as_deref(), Some(own));
-        let elsewhere = format!("{own}
+        let elsewhere = format!(
+            "{own}
 [mcp_servers.grimoire]
 url = \"http://127.0.0.1:4242/other/mcp\"
-");
+"
+        );
         assert!(without_codex_server(&elsewhere).unwrap_err().contains("by hand"));
         assert_eq!(without_codex_server(own).unwrap(), None);
         // A server of the person's own in init's shape, last in the file, is not init's: its url is not one init writes.

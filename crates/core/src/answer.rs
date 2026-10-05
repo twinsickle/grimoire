@@ -374,9 +374,7 @@ pub fn typescript() -> String {
     visit_answers(&mut c);
     // What a tool answers when it refuses: the other half of every answer.
     c.visit::<crate::ops::ToolError>();
-    let mut out = String::from(
-        "// Generated from the Rust answer types by crates/core/src/answer.rs.\n// Do not edit: `cargo test -p grimoire-core --test typescript -- --ignored` rewrites it.\n\n",
-    );
+    let mut out = String::from("// Generated from the Rust answer types by crates/core/src/answer.rs.\n// Do not edit: `cargo test -p grimoire-core --test typescript -- --ignored` rewrites it.\n\n");
     for decl in c.decls.values() {
         out.push_str("export ");
         out.push_str(decl.trim_end());

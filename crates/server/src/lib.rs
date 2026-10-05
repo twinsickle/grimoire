@@ -258,7 +258,12 @@ async fn serve_shared_library(dir: PathBuf, opts: ServeOptions) -> anyhow::Resul
     let bare = axum::Router::new().route("/api/{*rest}", axum::routing::any(no_grimoire_here)).route("/mcp", axum::routing::any(no_grimoire_here));
     let app = http::with_ui(library::live::routes(live.clone()).merge(bare), http::Ui::Shared);
     let names = live.names();
-    tracing::info!("team library {}: {} at /g/<name>, intent only, each behind its own tokens, kept current every {}s", dir.display(), if names.is_empty() { "no store yet".to_string() } else { names.join(", ") }, library::live::REFRESH.as_secs());
+    tracing::info!(
+        "team library {}: {} at /g/<name>, intent only, each behind its own tokens, kept current every {}s",
+        dir.display(),
+        if names.is_empty() { "no store yet".to_string() } else { names.join(", ") },
+        library::live::REFRESH.as_secs()
+    );
     tracing::info!("listening on http://{addr}; put a proxy in front for HTTPS");
     axum::serve(listener, app).with_graceful_shutdown(shutdown()).await?;
     Ok(())

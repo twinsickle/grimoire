@@ -63,16 +63,7 @@ impl Kind {
         matches!(self, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test)
     }
 
-    pub const ALL: [Kind; 8] = [
-        Kind::Page,
-        Kind::Req,
-        Kind::Ticket,
-        Kind::Module,
-        Kind::Criterion,
-        Kind::File,
-        Kind::Decl,
-        Kind::Test,
-    ];
+    pub const ALL: [Kind; 8] = [Kind::Page, Kind::Req, Kind::Ticket, Kind::Module, Kind::Criterion, Kind::File, Kind::Decl, Kind::Test];
 }
 
 impl fmt::Display for Kind {

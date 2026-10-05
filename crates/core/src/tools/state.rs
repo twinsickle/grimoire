@@ -85,7 +85,9 @@ impl State {
         let Some(ticket) = ticket else { return Ok(self.graph()) };
         match self.store.tickets.get(ticket) {
             None => return Err(crate::ops::ToolError::not_found(&crate::model::Reference::ticket(ticket))),
-            Some(t) if !t.status.is_live() => return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: only a ticket being worked has a proposal to read", t.status.name()))),
+            Some(t) if !t.status.is_live() => {
+                return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: only a ticket being worked has a proposal to read", t.status.name())))
+            }
             _ => {}
         }
         if self.view.as_ref().is_none_or(|(t, _)| t != ticket) {

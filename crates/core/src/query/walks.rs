@@ -46,7 +46,9 @@ fn says_of(g: &Graph, r: &Reference) -> Option<String> {
             }
             Some(out)
         }
-        Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Landing => t.decision.as_ref().map(|d| format!("Answered {}, waiting for the change that applies it: {}", d.date, d.text)),
+        Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Landing => {
+            t.decision.as_ref().map(|d| format!("Answered {}, waiting for the change that applies it: {}", d.date, d.text))
+        }
         _ => None,
     }
 }
@@ -110,7 +112,8 @@ pub fn intent_of(g: &Graph, nodes: &[Reference]) -> Vec<RestsOn> {
         let title = g.get(r).map(Node::title).unwrap_or_else(|| absent_title(g, r));
         out.push(RestsOn { r#ref: r.clone(), title, via: vec![], decisions: decisions_of(g, r), says: says_of(g, r) });
         if let Some(Node::Module(m)) = g.get(r) {
-            let mut reqs: Vec<Reference> = m.criteria.iter().flat_map(|c| g.inbound_with(&Reference::criterion(&m.id, &c.id), Relation::CoveredBy).map(|e| e.from.clone()).collect::<Vec<_>>()).collect();
+            let mut reqs: Vec<Reference> =
+                m.criteria.iter().flat_map(|c| g.inbound_with(&Reference::criterion(&m.id, &c.id), Relation::CoveredBy).map(|e| e.from.clone()).collect::<Vec<_>>()).collect();
             reqs.sort();
             reqs.dedup();
             for q in reqs.into_iter().filter(|q| listed.insert(q.clone())) {
@@ -200,11 +203,7 @@ pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
             queue.push_back(e.from.clone());
         }
     }
-    let mut tickets: Vec<&Ticket> = g
-        .tickets()
-        .filter(|t| t.status != Status::Closed)
-        .filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x)))
-        .collect();
+    let mut tickets: Vec<&Ticket> = g.tickets().filter(|t| t.status != Status::Closed).filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x))).collect();
     tickets.sort_by(|a, b| a.slug.cmp(&b.slug));
     RestsOnMe { nodes, tickets: tickets.into_iter().map(ticket_summary).collect() }
 }
@@ -348,7 +347,14 @@ mod tests {
         answered.decision = Some(Decision::new("2026-10-04", "Fix it so."));
         store.tickets.insert(answered.slug.clone(), answered);
         store.tickets.insert("unanswered".into(), crate::graph::fixtures::ticket("unanswered", TicketKind::Gap, Priority::Next, Status::Open, &[], &[]));
-        let t = crate::graph::fixtures::ticket("work", TicketKind::Change, Priority::Next, Status::Open, &["req:ready-only-with-commit", "page:git-readiness", "module:src/a/ready"], &["ticket:answered", "ticket:unanswered", "ticket:old"]);
+        let t = crate::graph::fixtures::ticket(
+            "work",
+            TicketKind::Change,
+            Priority::Next,
+            Status::Open,
+            &["req:ready-only-with-commit", "page:git-readiness", "module:src/a/ready"],
+            &["ticket:answered", "ticket:unanswered", "ticket:old"],
+        );
         store.tickets.insert(t.slug.clone(), t);
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::ticket("work"), None);

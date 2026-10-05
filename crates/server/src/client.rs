@@ -309,7 +309,9 @@ mod tests {
         store_io::write_serving(dir, port).unwrap();
         assert_eq!(probe(dir, "C:/repo"), Probe::None);
         // The marker says where the daemon listens; the loopback and every-address are reached on this machine.
-        for (bound, reached) in [("127.0.0.1:4300", "127.0.0.1:4300"), ("0.0.0.0:4300", "127.0.0.1:4300"), ("192.0.2.7:4300", "192.0.2.7:4300"), ("[::]:4300", "[::1]:4300"), ("[::1]:4300", "[::1]:4300")] {
+        for (bound, reached) in
+            [("127.0.0.1:4300", "127.0.0.1:4300"), ("0.0.0.0:4300", "127.0.0.1:4300"), ("192.0.2.7:4300", "192.0.2.7:4300"), ("[::]:4300", "[::1]:4300"), ("[::1]:4300", "[::1]:4300")]
+        {
             store_io::write_serving_at(dir, bound.parse().unwrap()).unwrap();
             assert_eq!(store_io::read_serving(dir).unwrap().addr(), reached.parse().unwrap(), "{bound}");
         }

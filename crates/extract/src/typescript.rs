@@ -318,7 +318,13 @@ impl<'a> Walker<'a> {
                     }
                     let name = self.text(name_node);
                     let is_fn = d.child_by_field_name("value").is_some_and(|v| matches!(v.kind(), "arrow_function" | "function_expression"));
-                    let kind = if is_fn { "function" } else if is_const { "const" } else { "variable" };
+                    let kind = if is_fn {
+                        "function"
+                    } else if is_const {
+                        "const"
+                    } else {
+                        "variable"
+                    };
                     self.decl(prefix, &name, kind, d);
                 }
             }

@@ -478,7 +478,15 @@ mod tests {
     /// ```
     #[test]
     fn config_rules() {
-        let config = |version: u32, roots: Vec<String>| StoreConfig { site: vec![], version, repository: "C:/repo".into(), roots: roots.into(), languages: vec![], scope: Scope::default(), order: Default::default() };
+        let config = |version: u32, roots: Vec<String>| StoreConfig {
+            site: vec![],
+            version,
+            repository: "C:/repo".into(),
+            roots: roots.into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
         assert!(validate_config(&config(StoreConfig::TRIMMED_ON_READ, vec!["overview".into()])).is_empty(), "version 1 is read, to be migrated");
@@ -513,14 +521,32 @@ mod tests {
         let untrimmed = |errors: Vec<FieldError>, field: &str| errors.iter().any(|e| e.field == field && e.reason == "must not begin or end with whitespace");
         assert!(untrimmed(validate_page(&page(" Goal")), "title"));
         assert!(untrimmed(validate_page(&Page { body: "b\n".into(), ..page("Goal") }), "body"));
-        let mut req = Requirement { slug: "r".into(), title: "R".into(), statement: "S ".into(), scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: " w".into(), then: "t".into() }], covered_by: vec![], decisions: vec![Decision::new("2026-09-30", "why\n")], retired: false };
+        let mut req = Requirement {
+            slug: "r".into(),
+            title: "R".into(),
+            statement: "S ".into(),
+            scenarios: vec![Scenario { title: "t".into(), given: "g".into(), when: " w".into(), then: "t".into() }],
+            covered_by: vec![],
+            decisions: vec![Decision::new("2026-09-30", "why\n")],
+            retired: false,
+        };
         let errors = validate_requirement(&req);
         assert!(untrimmed(errors.clone(), "statement") && untrimmed(errors.clone(), "scenarios[0].when") && untrimmed(errors, "decisions[0].text"));
         req.statement = "S".into();
         req.scenarios[0].when = "w".into();
         req.decisions[0].text = "why".into();
         assert!(validate_requirement(&req).is_empty());
-        let ticket = |body: String| Ticket { slug: "t".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Open, touches: vec![], relies_on: vec![], body, decision: None };
+        let ticket = |body: String| Ticket {
+            slug: "t".into(),
+            title: "T".into(),
+            kind: TicketKind::Change,
+            priority: Priority::Next,
+            status: Status::Open,
+            touches: vec![],
+            relies_on: vec![],
+            body,
+            decision: None,
+        };
         assert!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX))).is_empty());
         assert_eq!(validate_ticket(&ticket("x".repeat(TICKET_BODY_MAX + 1)))[0].field, "body");
     }
@@ -618,10 +644,19 @@ mod tests {
         assert!(validate_page(&linking("page:goal ")).iter().any(|e| e.field == "links"));
         assert!(validate_page(&linking("module:src/a")).is_empty());
         assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
-        let order = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Order { next: vec!["0055 ".into()], ..Default::default() } };
+        let order = StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Order { next: vec!["0055 ".into()], ..Default::default() },
+        };
         assert_eq!(validate_config(&order)[0].field, "order.next");
         // A baseline finding's check, and a start's ticket and fingerprints.
-        let baseline: Baseline = serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();
+        let baseline: Baseline =
+            serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();
         assert_eq!(validate_baseline(&baseline)[0].field, "findings[0].check");
         let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into() };
         assert!(validate_start(&start("page:goal", "f1")).is_empty());
@@ -629,7 +664,15 @@ mod tests {
         assert!(!validate_start(&start("page:goal", " f1")).is_empty(), "an untrimmed fingerprint");
         assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default() }).is_empty());
         // A decision supersedes each earlier one once.
-        let mut req = Requirement { slug: "r".into(), title: "R".into(), statement: "S".into(), scenarios: vec![], covered_by: vec![], decisions: vec![Decision::new("2026-09-01", "a"), Decision::new("2026-09-02", "b"), Decision { supersedes: vec![1, 2], ..Decision::new("2026-09-03", "c") }], retired: false };
+        let mut req = Requirement {
+            slug: "r".into(),
+            title: "R".into(),
+            statement: "S".into(),
+            scenarios: vec![],
+            covered_by: vec![],
+            decisions: vec![Decision::new("2026-09-01", "a"), Decision::new("2026-09-02", "b"), Decision { supersedes: vec![1, 2], ..Decision::new("2026-09-03", "c") }],
+            retired: false,
+        };
         assert!(validate_requirement(&req).is_empty());
         req.decisions[2].supersedes = vec![1, 1];
         assert!(validate_requirement(&req).iter().any(|e| e.reason == "names each earlier decision once"));
@@ -646,12 +689,7 @@ mod tests {
     /// ```
     #[test]
     fn page_link_kinds() {
-        let p = Page {
-            slug: "p".into(),
-            title: "P".into(),
-            body: "b".into(),
-            links: vec![Reference::ticket("x"), Reference::page("q"), Reference::page("q")],
-        };
+        let p = Page { slug: "p".into(), title: "P".into(), body: "b".into(), links: vec![Reference::ticket("x"), Reference::page("q"), Reference::page("q")] };
         let e = validate_page(&p);
         assert_eq!(e.len(), 2);
     }

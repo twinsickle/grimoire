@@ -16,7 +16,10 @@ mod location;
 mod lock;
 pub mod tokens;
 
-pub use location::{copies_dir, copy_dir, credentials_file, default_name, find_home, find_named, find_project, project_at, refuse_inside, repository_string, server_address, server_grimoire, slashed, store_for_repo, stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE};
+pub use location::{
+    copies_dir, copy_dir, credentials_file, default_name, find_home, find_named, find_project, project_at, refuse_inside, repository_string, server_address, server_grimoire, slashed, store_for_repo,
+    stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE,
+};
 pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
 
 #[derive(Debug, thiserror::Error)]
@@ -202,7 +205,9 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
                 Ok(s) if s.ticket == stem && validate_start(&s).is_empty() => {
                     store.starts.insert(stem, s);
                 }
-                Ok(s) if s.ticket == stem => malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_start(&s).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") }),
+                Ok(s) if s.ticket == stem => {
+                    malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_start(&s).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") })
+                }
                 Ok(s) => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("file is named `{stem}` but its ticket is `{}`", s.ticket) }),
                 Err(reason) => malformed.push(Malformed { path: rel(store_dir, &path), reason }),
             }
@@ -215,7 +220,9 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
             match read_record::<Proposal>(&path, trim) {
                 Ok(p) if p.ticket != stem => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("file is named `{stem}` but its ticket is `{}`", p.ticket) }),
-                Ok(p) if !validate_proposal(&p).is_empty() => malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_proposal(&p).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") }),
+                Ok(p) if !validate_proposal(&p).is_empty() => {
+                    malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_proposal(&p).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") })
+                }
                 // A proposal belongs to an active or landing ticket; one left behind by a ticket that is gone or closed is not read as intent.
                 Ok(p) if !active(&store, &p.ticket) => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("names ticket `{}`, which is neither active nor landing", p.ticket) }),
                 Ok(p) => {
@@ -553,7 +560,10 @@ mod tests {
         write(CONFIG_FILE, serde_json::json!({"version": 1, "repository": repo.to_string_lossy(), "roots": ["goal"], "languages": ["rust"]}));
         write("pages/goal.json", serde_json::json!({"slug": "goal", "title": "Goal", "body": "What it is.\n", "links": []}));
         write("pages/plan.json", serde_json::json!({"slug": "plan", "title": "Plan", "body": "Steps.", "links": []}));
-        write("tickets/0001.json", serde_json::json!({"slug": "0001", "title": "T ", "kind": "change", "priority": "next", "status": "open", "touches": [], "relies_on": [], "body": "b", "decision": null}));
+        write(
+            "tickets/0001.json",
+            serde_json::json!({"slug": "0001", "title": "T ", "kind": "change", "priority": "next", "status": "open", "touches": [], "relies_on": [], "body": "b", "decision": null}),
+        );
         // A record the old build accepted that fails another rule now: it stays malformed, but loses its stray whitespace too.
         write("requirements/r.json", serde_json::json!({"slug": "r", "title": "R", "statement": "S\n", "scenarios": [], "covered_by": [], "decisions": [{"date": "2026-02-31", "text": "why"}]}));
         // Read: nothing lost, every string trimmed in memory.
@@ -588,7 +598,15 @@ mod tests {
     fn a_whole_store_that_would_not_load_is_not_written() {
         let tmp = temp();
         let dir = tmp.path();
-        let config = StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into()].into(), languages: vec!["rust ".into()], scope: Scope::default(), order: Default::default() };
+        let config = StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["goal".into()].into(),
+            languages: vec!["rust ".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+        };
         let store = Store::new(config);
         assert!(matches!(write_all(&dir.join("store"), &store, false), Err(StoreIoError::Invalid(..))));
         assert!(!dir.join("store").exists(), "nothing written");
@@ -615,8 +633,23 @@ mod tests {
         v1.config.version = StoreConfig::TRIMMED_ON_READ;
         assert!(refused(&v1), "version 1 is only read, never written");
         // A proposal under another key, one that would not load, one naming a ticket that is not active, and a current ticket that is not active.
-        let active = Ticket { slug: "0001".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Later, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None };
-        let proposal = |ticket: &str, title: &str| Proposal { ticket: ticket.into(), pages: [("goal".to_string(), Proposed { record: Page { slug: "goal".into(), title: title.into(), body: "b".into(), links: vec![] }, base: Some("f".into()) })].into(), requirements: Default::default(), deleted: Default::default() };
+        let active = Ticket {
+            slug: "0001".into(),
+            title: "T".into(),
+            kind: TicketKind::Change,
+            priority: Priority::Later,
+            status: Status::Active,
+            touches: vec![],
+            relies_on: vec![],
+            body: "b".into(),
+            decision: None,
+        };
+        let proposal = |ticket: &str, title: &str| Proposal {
+            ticket: ticket.into(),
+            pages: [("goal".to_string(), Proposed { record: Page { slug: "goal".into(), title: title.into(), body: "b".into(), links: vec![] }, base: Some("f".into()) })].into(),
+            requirements: Default::default(),
+            deleted: Default::default(),
+        };
         let mut with_ticket = good.clone();
         with_ticket.tickets.insert("0001".into(), active.clone());
         let mut pk = with_ticket.clone();
@@ -674,18 +707,39 @@ mod tests {
     #[test]
     fn a_rename_stopped_anywhere_is_valid_and_completes() {
         let page = |slug: &str, links: &[&str]| Page { slug: slug.into(), title: slug.into(), body: "b".into(), links: links.iter().map(|l| l.parse().unwrap()).collect() };
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["goal".into(), "vision".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["goal".into(), "vision".into()].into(),
+            languages: vec!["rust".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         // vision links itself, so the rename moves a link inside the record it moves.
         for p in [page("goal", &["page:vision"]), page("vision", &["page:vision", "page:goal"]), page("plan", &["page:goal", "page:vision"])] {
             store.pages.insert(p.slug.clone(), p);
         }
         let ticket: Ticket = serde_json::from_value(serde_json::json!({"slug": "0001", "title": "T", "kind": "change", "priority": "next", "status": "active", "touches": ["page:vision"], "relies_on": ["page:goal"], "body": "b", "decision": null})).unwrap();
         store.tickets.insert(ticket.slug.clone(), ticket);
-        store.baseline = Some(serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-requirement", "ref": "page:vision"}]})).unwrap());
+        store.baseline =
+            Some(serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-requirement", "ref": "page:vision"}]})).unwrap());
         store.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:vision".to_string(), "f".to_string()), ("page:goal".to_string(), "g".to_string())].into() });
         // The ticket's proposal holds a changed vision resting on the truth's, and a new page linking both the old and the new slug.
         let base = grimoire_core::fingerprint::of_record(&store.pages["vision"]);
-        store.proposals.insert("0001".into(), Proposal { ticket: "0001".into(), pages: [("vision".to_string(), Proposed { record: page("vision", &["page:goal"]), base: Some(base) }), ("draft".to_string(), Proposed { record: page("draft", &["page:vision", "page:aim"]), base: None })].into(), requirements: Default::default(), deleted: Default::default() });
+        store.proposals.insert(
+            "0001".into(),
+            Proposal {
+                ticket: "0001".into(),
+                pages: [
+                    ("vision".to_string(), Proposed { record: page("vision", &["page:goal"]), base: Some(base) }),
+                    ("draft".to_string(), Proposed { record: page("draft", &["page:vision", "page:aim"]), base: None }),
+                ]
+                .into(),
+                requirements: Default::default(),
+                deleted: Default::default(),
+            },
+        );
         let vision: Reference = "page:vision".parse().unwrap();
         let rename = |s: &mut Store| match grimoire_core::ops::rename_node(s, &vision, "aim").unwrap().1 {
             Changed::Many(steps) => steps,
@@ -695,7 +749,11 @@ mod tests {
         let steps = rename(&mut done);
         assert!(matches!(steps.last(), Some(Changed::Deleted(r)) if *r == vision), "the old record goes last");
         let p = &done.proposals["0001"];
-        assert_eq!((p.pages["aim"].record.links.clone(), p.pages["draft"].record.links.clone()), (vec![Reference::page("goal")], vec![Reference::page("aim")]), "the proposal is renamed with it, a link kept once");
+        assert_eq!(
+            (p.pages["aim"].record.links.clone(), p.pages["draft"].record.links.clone()),
+            (vec![Reference::page("goal")], vec![Reference::page("aim")]),
+            "the proposal is renamed with it, a link kept once"
+        );
         assert_eq!(p.pages["aim"].base, Some(grimoire_core::fingerprint::of_record(&done.pages["aim"])), "its base follows the renamed truth");
         // The store on disk after the original rename stopped after `first` steps and a rerun after `second`.
         let on_disk = |first: usize, rerun: Option<(&Store, &[Changed], usize)>| {
@@ -730,7 +788,11 @@ mod tests {
             }
         };
         let finished = |s: &Store, at: &str| {
-            assert_eq!((&s.pages, &s.tickets, &s.config.roots, &s.baseline, &s.starts, &s.proposals), (&done.pages, &done.tickets, &done.config.roots, &done.baseline, &done.starts, &done.proposals), "{at}");
+            assert_eq!(
+                (&s.pages, &s.tickets, &s.config.roots, &s.baseline, &s.starts, &s.proposals),
+                (&done.pages, &done.tickets, &done.config.roots, &done.baseline, &done.starts, &done.proposals),
+                "{at}"
+            );
         };
         for first in 0..=steps.len() {
             let at = format!("stopped after {first}");
@@ -765,12 +827,21 @@ mod tests {
     fn round_trip_and_malformed() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec!["rust".into()], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec!["rust".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
         write_all(dir, &store, false).unwrap();
         assert!(matches!(write_all(dir, &store, false), Err(StoreIoError::Exists(_))));
         std::fs::write(dir.join("pages").join("bad.json"), "{ not json").unwrap();
-        std::fs::write(dir.join("tickets").join("t.json"), r#"{"slug":"other","title":"T","kind":"change","priority":"next","status":"open","touches":[],"relies_on":[],"body":"b","decision":null}"#).unwrap();
+        std::fs::write(dir.join("tickets").join("t.json"), r#"{"slug":"other","title":"T","kind":"change","priority":"next","status":"open","touches":[],"relies_on":[],"body":"b","decision":null}"#)
+            .unwrap();
         let (loaded, malformed) = load(dir).unwrap();
         assert_eq!(loaded.pages.len(), 1);
         assert_eq!(malformed.len(), 2);
@@ -781,8 +852,23 @@ mod tests {
         assert!(!dir.join("pages").join("overview.json").exists());
         // A proposal and the current ticket round-trip for an active ticket, and are malformed when they name none.
         let mut store = loaded.clone();
-        store.tickets.insert("0001".into(), Ticket { slug: "0001".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Later, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
-        store.proposals.insert("0001".into(), Proposal { ticket: "0001".into(), pages: Default::default(), requirements: Default::default(), deleted: [("page:overview".to_string(), "f".to_string())].into() });
+        store.tickets.insert(
+            "0001".into(),
+            Ticket {
+                slug: "0001".into(),
+                title: "T".into(),
+                kind: TicketKind::Change,
+                priority: Priority::Later,
+                status: Status::Active,
+                touches: vec![],
+                relies_on: vec![],
+                body: "b".into(),
+                decision: None,
+            },
+        );
+        store
+            .proposals
+            .insert("0001".into(), Proposal { ticket: "0001".into(), pages: Default::default(), requirements: Default::default(), deleted: [("page:overview".to_string(), "f".to_string())].into() });
         store.current = Some("0001".into());
         persist(dir, &store, &Changed::Many(vec![Changed::Ticket("0001".into()), Changed::Proposed("0001".into()), Changed::Current])).unwrap();
         let (back, malformed) = load(dir).unwrap();
@@ -818,7 +904,15 @@ mod tests {
     fn tolerates_a_byte_order_mark() {
         let tmp = temp();
         let dir = tmp.path();
-        let store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() });
+        let store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         write_all(dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&cfg).unwrap();
@@ -835,7 +929,15 @@ mod tests {
     fn baseline_round_trips_and_a_broken_one_is_collected() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
             reason: "adopted at init".into(),
@@ -873,7 +975,15 @@ mod tests {
     fn config_persists_its_scope() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         write_all(dir, &store, false).unwrap();
         let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
         assert!(!text.contains("scope"), "an empty scope is not written");
@@ -892,7 +1002,15 @@ mod tests {
     fn writes_leave_no_partial_file() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
         write_all(dir, &store, false).unwrap();
         let path = dir.join("pages").join("big.json");
         let reader = {
@@ -931,8 +1049,29 @@ mod tests {
     fn a_start_is_written_and_removed() {
         let tmp = temp();
         let dir = tmp.path();
-        let mut store = Store::new(StoreConfig { site: vec![], version: StoreConfig::CURRENT_VERSION, repository: "C:/repo".into(), roots: vec!["overview".into()].into(), languages: vec![], scope: Scope::default(), order: Default::default() });
-        store.tickets.insert("0040".into(), Ticket { slug: "0040".into(), title: "T".into(), kind: TicketKind::Change, priority: Priority::Next, status: Status::Active, touches: vec![], relies_on: vec![], body: "b".into(), decision: None });
+        let mut store = Store::new(StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+        });
+        store.tickets.insert(
+            "0040".into(),
+            Ticket {
+                slug: "0040".into(),
+                title: "T".into(),
+                kind: TicketKind::Change,
+                priority: Priority::Next,
+                status: Status::Active,
+                touches: vec![],
+                relies_on: vec![],
+                body: "b".into(),
+                decision: None,
+            },
+        );
         store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
         write_all(dir, &store, false).unwrap();
         persist(dir, &store, &Changed::Started("0040".into())).unwrap();

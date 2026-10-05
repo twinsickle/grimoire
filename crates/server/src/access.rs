@@ -120,11 +120,7 @@ fn from_another_site(headers: &HeaderMap, host: &str, schemes: &[&str]) -> Optio
 
 /// `localhost`, `127.0.0.1` or `[::1]`, with or without a port.
 fn is_loopback(host: &str) -> bool {
-    let name = if let Some(rest) = host.strip_prefix('[') {
-        rest.split(']').next().map(|n| format!("[{n}]")).unwrap_or_default()
-    } else {
-        host.split(':').next().unwrap_or("").to_string()
-    };
+    let name = if let Some(rest) = host.strip_prefix('[') { rest.split(']').next().map(|n| format!("[{n}]")).unwrap_or_default() } else { host.split(':').next().unwrap_or("").to_string() };
     matches!(name.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "[::1]")
 }
 
@@ -212,20 +208,27 @@ mod tests {
         let seen: Arc<Mutex<Option<Option<Caller>>>> = Arc::default();
         let handler_saw = seen.clone();
         let app = axum::Router::new()
-            .route("/x", axum::routing::get(move |caller: Option<axum::Extension<Caller>>| async move {
-                *handler_saw.lock().unwrap() = Some(caller.map(|axum::Extension(c)| c));
-                "ran"
-            }))
+            .route(
+                "/x",
+                axum::routing::get(move |caller: Option<axum::Extension<Caller>>| async move {
+                    *handler_saw.lock().unwrap() = Some(caller.map(|axum::Extension(c)| c));
+                    "ran"
+                }),
+            )
             .layer(axum::middleware::from_fn_with_state(policy, admit));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move { axum::serve(listener, app).await });
         let answer = tokio::task::spawn_blocking(move || {
             let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-            write!(s, "GET /x HTTP/1.0
+            write!(
+                s,
+                "GET /x HTTP/1.0
 Host: 127.0.0.1
 
-").unwrap();
+"
+            )
+            .unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).unwrap();
             out
@@ -283,7 +286,11 @@ Host: 127.0.0.1
         let bearer = |t: &str| format!("Bearer {t}");
         // Admitted by the token, to what the token says, whatever name the request was addressed to.
         assert_eq!(policy.admit(&headers(&[("host", "grimoire.example"), ("authorization", &bearer(&ana))])), Ok(Caller { who: "ana".into(), access: Access::ReadWrite }));
-        assert_eq!(policy.admit(&headers(&[("host", "grimoire.example"), ("origin", "https://grimoire.example"), ("sec-fetch-site", "same-origin"), ("authorization", &bearer(&reader))])), Ok(Caller { who: "reader".into(), access: Access::Read }), "the daemon's own origin, behind a proxy");
+        assert_eq!(
+            policy.admit(&headers(&[("host", "grimoire.example"), ("origin", "https://grimoire.example"), ("sec-fetch-site", "same-origin"), ("authorization", &bearer(&reader))])),
+            Ok(Caller { who: "reader".into(), access: Access::Read }),
+            "the daemon's own origin, behind a proxy"
+        );
         // A page on another site is refused though it carries a token that is held.
         assert!(policy.admit(&headers(&[("host", "grimoire.example"), ("origin", "https://elsewhere.example"), ("authorization", &bearer(&reader))])).unwrap_err().contains("origin"));
         assert!(policy.admit(&headers(&[("host", "grimoire.example"), ("sec-fetch-site", "cross-site"), ("authorization", &bearer(&ana))])).unwrap_err().contains("another site"));

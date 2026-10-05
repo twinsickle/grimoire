@@ -16,6 +16,6 @@ pub use board::{board, related_tickets, Board, BoardFilter, BoardTicket};
 pub use coverage::{module_coverage, requirement_coverage, requirements_covering, tests_checking, CoveringCriterion, CriterionCoverage, ModuleSummary};
 pub use lookup::{find, summary, ticket_summary, view, EdgeView, NodeView, Summary};
 pub use outline::{outline, Outline, Rollup, Tree};
-pub use source::{module_source, source_annotations, Annotation, AnnotationKind, Linked};
 pub use site::{site, Site, SiteEntry, SitePage, SiteRequirement};
+pub use source::{module_source, source_annotations, Annotation, AnnotationKind, Linked};
 pub use walks::{intent_of, rests_on, rests_on_me, Affected, RestsOn, RestsOnMe};

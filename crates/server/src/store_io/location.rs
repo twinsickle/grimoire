@@ -70,7 +70,8 @@ impl Home {
 /// with no trailing slash. Anything else is refused, with why.
 pub fn server_address(given: &str) -> Result<String, String> {
     let address = given.trim();
-    let (scheme, rest) = address.split_once("://").filter(|(scheme, _)| matches!(*scheme, "http" | "https")).ok_or_else(|| format!("`{given}` is not a server's address: it starts with http:// or https://"))?;
+    let (scheme, rest) =
+        address.split_once("://").filter(|(scheme, _)| matches!(*scheme, "http" | "https")).ok_or_else(|| format!("`{given}` is not a server's address: it starts with http:// or https://"))?;
     let rest = rest.trim_end_matches('/');
     if rest.is_empty() || rest.starts_with('/') || rest.chars().any(char::is_whitespace) {
         return Err(format!("`{given}` is not a server's address: it names no host"));
@@ -203,7 +204,11 @@ pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
 /// Write `.grimoire.toml` into a repository whose grimoire a team's server holds.
 pub fn write_project_file_for_server(repo: &Path, address: &str, name: &str) -> Result<PathBuf, StoreIoError> {
     let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names this project's grimoire and the server that holds it.\nname = {}\nserver = {}\n", toml::Value::String(name.to_string()), toml::Value::String(address.to_string()));
+    let text = format!(
+        "# Written once by `grimoire init`. Names this project's grimoire and the server that holds it.\nname = {}\nserver = {}\n",
+        toml::Value::String(name.to_string()),
+        toml::Value::String(address.to_string())
+    );
     std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
     Ok(f)
 }
@@ -211,7 +216,11 @@ pub fn write_project_file_for_server(repo: &Path, address: &str, name: &str) -> 
 /// Write `.grimoire.toml` into a repository.
 pub fn write_project_file(repo: &Path, store: &str, name: &str) -> Result<PathBuf, StoreIoError> {
     let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names this project's grimoire and the store that holds it.\nname = {}\nstore = {}\n", toml::Value::String(name.to_string()), toml::Value::String(store.to_string()));
+    let text = format!(
+        "# Written once by `grimoire init`. Names this project's grimoire and the store that holds it.\nname = {}\nstore = {}\n",
+        toml::Value::String(name.to_string()),
+        toml::Value::String(store.to_string())
+    );
     std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
     Ok(f)
 }
@@ -358,17 +367,37 @@ mod tests {
         write_project_file(&dir, "../stores/billing", "billing").unwrap();
         assert_eq!(find_named(&dir).unwrap().2, "billing");
         // Before names: the store's bare name, else the folder's, made slugs.
-        assert_eq!(name("store = \"Ledger\"
-").unwrap(), "ledger");
-        assert_eq!(name("store = \"../stores/ledger\"
-").unwrap(), "billing-service");
-        assert_eq!(name("server = \"https://grimoire.example\"
-").unwrap(), "billing-service");
+        assert_eq!(
+            name(
+                "store = \"Ledger\"
+"
+            )
+            .unwrap(),
+            "ledger"
+        );
+        assert_eq!(
+            name(
+                "store = \"../stores/ledger\"
+"
+            )
+            .unwrap(),
+            "billing-service"
+        );
+        assert_eq!(
+            name(
+                "server = \"https://grimoire.example\"
+"
+            )
+            .unwrap(),
+            "billing-service"
+        );
         assert_eq!(default_name(&dir), "billing-service");
         // A name that is not a slug is refused, saying so.
-        match name("name = \"My Shop\"
+        match name(
+            "name = \"My Shop\"
 store = \"shop\"
-") {
+",
+        ) {
             Err(StoreIoError::BadProjectFile(_, why)) => assert!(why.contains("not a slug"), "{why}"),
             other => panic!("{other:?}"),
         }
@@ -413,7 +442,12 @@ store = \"shop\"
         assert!(refused("server = \"grimoire.example\"\n").contains("http://"));
         assert!(refused("server = \"https://\"\n").contains("no host"));
         assert!(refused("server = 4242\n").contains("not a string"));
-        for (given, kept) in [("http://127.0.0.1:4242", "http://127.0.0.1:4242"), (" https://grimoire.example/team/ ", "https://grimoire.example/team"), ("https://grimoire.example/g/shop/", "https://grimoire.example/g/shop"), ("https://host/proxy/g/shop", "https://host/proxy/g/shop")] {
+        for (given, kept) in [
+            ("http://127.0.0.1:4242", "http://127.0.0.1:4242"),
+            (" https://grimoire.example/team/ ", "https://grimoire.example/team"),
+            ("https://grimoire.example/g/shop/", "https://grimoire.example/g/shop"),
+            ("https://host/proxy/g/shop", "https://host/proxy/g/shop"),
+        ] {
             assert_eq!(server_address(given).unwrap(), kept);
         }
         // A grimoire of a library is named last, by a slug, and an address carries no query or fragment.

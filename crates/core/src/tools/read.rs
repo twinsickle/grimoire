@@ -252,7 +252,15 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
         .filter(|q| changes(store, p, &Reference::page(&q.record.slug)))
         .map(|q| {
             let truth = store.pages.get(&q.record.slug);
-            let differs = truth.map(|t| [("title", t.title != q.record.title), ("body", t.body != q.record.body), ("links", t.links != q.record.links)].into_iter().filter(|(_, d)| *d).map(|(f, _)| f.to_string()).collect()).unwrap_or_default();
+            let differs = truth
+                .map(|t| {
+                    [("title", t.title != q.record.title), ("body", t.body != q.record.body), ("links", t.links != q.record.links)]
+                        .into_iter()
+                        .filter(|(_, d)| *d)
+                        .map(|(f, _)| f.to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
             Draft { r#ref: Reference::page(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
         })
         .collect();
@@ -264,11 +272,18 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
             let truth = store.requirements.get(&q.record.slug);
             let differs = truth
                 .map(|t| {
-                    [("title", t.title != q.record.title), ("statement", t.statement != q.record.statement), ("scenarios", t.scenarios != q.record.scenarios), ("covered_by", t.covered_by != q.record.covered_by), ("decisions", t.decisions != q.record.decisions), ("retired", t.retired != q.record.retired)]
-                        .into_iter()
-                        .filter(|(_, d)| *d)
-                        .map(|(f, _)| f.to_string())
-                        .collect()
+                    [
+                        ("title", t.title != q.record.title),
+                        ("statement", t.statement != q.record.statement),
+                        ("scenarios", t.scenarios != q.record.scenarios),
+                        ("covered_by", t.covered_by != q.record.covered_by),
+                        ("decisions", t.decisions != q.record.decisions),
+                        ("retired", t.retired != q.record.retired),
+                    ]
+                    .into_iter()
+                    .filter(|(_, d)| *d)
+                    .map(|(f, _)| f.to_string())
+                    .collect()
                 })
                 .unwrap_or_default();
             Draft { r#ref: Reference::req(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
@@ -403,8 +418,10 @@ mod tests {
         // No reader: the caller cannot read files.
         let e = call(&mut s, "source", json!({ "ref": "criterion:src/a/ready#guarantee" }), "2026-09-29").unwrap_err();
         assert!(matches!(e, ToolError::StoreUnavailable { .. }), "{e:?}");
-        let text = (1..=25).map(|n| format!("line {n}")).collect::<Vec<_>>().join("
-");
+        let text = (1..=25).map(|n| format!("line {n}")).collect::<Vec<_>>().join(
+            "
+",
+        );
         s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", text.clone())])));
         let out = call(&mut s, "source", json!({ "ref": "criterion:src/a/ready#guarantee" }), "2026-09-29").unwrap().output;
         assert_eq!(out["file"], "file:src/a/ready.rs");
@@ -476,7 +493,9 @@ mod tests {
         assert_eq!(orphan_says(&mut s, json!({ "ref": "ticket:later-1", "ticket": "later-1" })), Some(json!("proposed")));
         assert_ne!(orphan_says(&mut s, json!({ "ref": "ticket:later-1" })), Some(json!("proposed")));
         // Every read takes it: a few of the rest.
-        for (name, input) in [("find", json!({ "query": "orphan" })), ("outline", json!({ "depth": 1 })), ("rests_on", json!({ "ref": "page:orphan" })), ("coverage", json!({ "ref": "module:src/a/ready" }))] {
+        for (name, input) in
+            [("find", json!({ "query": "orphan" })), ("outline", json!({ "depth": 1 })), ("rests_on", json!({ "ref": "page:orphan" })), ("coverage", json!({ "ref": "module:src/a/ready" }))]
+        {
             let mut with = input.clone();
             with["ticket"] = json!("later-1");
             assert!(call(&mut s, name, with, "2026-10-02").is_ok(), "{name}");
