@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: open, route and mark each grimoire it holds, find them again every few seconds, and let one go when it goes or while a command deletes its store.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store with the same checkout; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, and once stopped, refresh takes nothing."},{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp is answered by the routes of a checkout the library holds of the grimoire by that name as the request arrives, the default's included, with the path the grimoire's own routes expect, its body passed on as it came but for a GET's, which carries nothing, and none of the library's own path parameters; a name the library does not hold is answered not_found."},{"id":"checkout-registered","statement":"A request whose checkout names a directory in no served checkout of the grimoire, whose nearest project file names this grimoire's store of its own, is answered by that checkout, which the library adds to the store's checkouts through the store's writer and serves as a view beside the others, sharing their lock, one at a time with refresh and with any other such request, so a checkout is opened once, and never while its store is held back; a directory whose project file names another store, a server or no grimoire of that name is refused as before, and nothing is added."},{"id":"checkout-chosen","statement":"The checkout a request is answered by is the one its `checkout` names, read from the JSON body of a POST to /api/<tool>, from the arguments of an MCP tools/call, every tools/call of a batch naming the same one, or from the query of any other request: the served checkout of the grimoire that is or holds that directory, the deepest when several do, compared as canonical paths, a directory that does not exist as its deepest existing folder's; with none named, the grimoire's one checkout, or, for status, the tools list, the event stream, the export, the prune and every MCP message but a tools/call, the default's when it is a checkout of the grimoire and else the first."},{"id":"checkout-refused","statement":"A request naming no checkout to a grimoire served for several, but those answered without one, and a request naming a directory no served checkout of the grimoire is or holds, are refused, as are a batch's calls naming different checkouts: the request is handed to the grimoire's first checkout's routes marked CheckoutRefused, so its caller is admitted or refused at that trust step first, and the refusal is then answered as a tool's own invalid error is, its details naming `checkout`, over the API as that error and over MCP as a tool-level error result; the message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock; a checkout of a store of its own whose other checkouts are still served leaves the marker, and the lock is released once the last of them lets it go."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."}]}
+//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: open, route and mark each grimoire it holds, find them again every few seconds, and let one go when it goes or while a command deletes its store.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store with the same checkout; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, and once stopped, refresh takes nothing."},{"id":"routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp is answered by the routes of a checkout the library holds of the grimoire by that name as the request arrives, the default's included, with the path the grimoire's own routes expect, its body passed on as it came but for a GET's, which carries nothing, and none of the library's own path parameters; a name the library does not hold is answered not_found."},{"id":"checkout-registered","statement":"A request whose checkout names a directory whose nearest project file names this grimoire, in a checkout not served yet, is answered by that checkout once it is served: one of a store of its own is added to the store's checkouts through the store's writer and served as a view beside the others, sharing their lock; one of a team's grimoire this daemon serves, the same server's, has its copy of the server's intent made and is served, and when that cannot be done the request is refused saying why and what to run there; none is taken for a caller the grimoire's trust step would refuse; one at a time with refresh and with any other such request, so a checkout is opened once, and never while its store is held back; a directory whose project file names another store, a server or no grimoire of that name is refused as before, and nothing is added."},{"id":"checkout-chosen","statement":"The checkout a request is answered by is the one its `checkout` names, read from the JSON body of a POST to /api/<tool>, from the arguments of an MCP tools/call, every tools/call of a batch naming the same one, or from the query of any other request: the served checkout whose project file is nearest above that directory, found from the directory as the system resolves it, a directory that does not exist as its nearest existing folder's, and naming this grimoire at the store or copy that checkout is served from, so a checkout kept inside another is its own and the outer one never answers for it, and the project file is looked up before the library is held; with none named, the grimoire's one checkout, or, for status, the tools list, the event stream, the export, the prune and every MCP message but a tools/call, the default's when it is a checkout of the grimoire and else the first."},{"id":"checkout-refused","statement":"A request naming no checkout to a grimoire served for several, but those answered without one, and a request naming a directory no served checkout of the grimoire is or holds, are refused, as are a batch's calls naming different checkouts: the request is handed to the grimoire's first checkout's routes marked CheckoutRefused, so its caller is admitted or refused at that trust step first, and the refusal is then answered as a tool's own invalid error is, its details naming `checkout`, over the API as that error and over MCP as a tool-level error result; the message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock; a checkout of a store of its own whose other checkouts are still served leaves the marker, and the lock is released once the last of them lets it go."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -241,51 +241,41 @@ impl Live {
                 return self.open_beside(g, &first, lock);
             }
         }
+        match self.open_alone(g) {
+            Ok(shelved) => Some(shelved),
+            Err(why) => {
+                self.say(&g.name, &format!("not served: {why}"));
+                None
+            }
+        }
+    }
+
+    /// Take a grimoire no other checkout of which is served: its lock, its daemon, a watcher on
+    /// its checkout, its marker, and its server followed when it is a copy of one; or why not.
+    fn open_alone(&self, g: &Grimoire) -> Result<Shelved, String> {
         let lock = match &g.server {
             Some(_) => remote::lock_copy(&g.store_dir),
             None => store_io::lock(&g.store_dir),
         };
-        let lock = match lock {
-            Ok(lock) => lock,
-            Err(e) => {
-                self.say(&g.name, &format!("not served: another process holds it: {e}"));
-                return None;
-            }
-        };
+        let lock = lock.map_err(|e| format!("another process holds it: {e}"))?;
         let opened = match &g.server {
             Some(address) => store_io::credentials_file().map_err(|e| e.to_string()).and_then(|credentials| Daemon::open_remote(&g.store_dir, &g.repo, remote::Server::signed_in(address, &credentials)).map_err(|e| e.to_string())),
             None => Daemon::open(&g.store_dir).map_err(|e| e.to_string()),
         };
-        let daemon = match opened {
-            Ok((daemon, errors)) => {
-                for e in &errors {
-                    self.say(&g.name, &e.to_string());
-                }
-                Arc::new(daemon)
-            }
-            Err(e) => {
-                self.say(&g.name, &format!("not served: it could not be opened: {e}"));
-                return None;
-            }
-        };
-        // A grimoire nobody watches would answer from a graph that goes stale: not served at all.
-        let watcher = match watch::start(daemon.clone()) {
-            Ok(w) => w,
-            Err(e) => {
-                self.say(&g.name, &format!("not served: its checkout could not be watched: {e}"));
-                return None;
-            }
-        };
-        // Marked before it is routed: a grimoire commands cannot find would leave them refused by its lock.
-        if let Err(e) = daemon.mark_serving_in(self.addr, &format!("/g/{}", g.name)) {
-            self.say(&g.name, &format!("not served: its store could not be marked as served: {e}"));
-            return None;
+        let (daemon, errors) = opened.map_err(|e| format!("it could not be opened: {e}"))?;
+        for e in &errors {
+            self.say(&g.name, &e.to_string());
         }
+        let daemon = Arc::new(daemon);
+        // A grimoire nobody watches would answer from a graph that goes stale: not served at all.
+        let watcher = watch::start(daemon.clone()).map_err(|e| format!("its checkout could not be watched: {e}"))?;
+        // Marked before it is routed: a grimoire commands cannot find would leave them refused by its lock.
+        daemon.mark_serving_in(self.addr, &format!("/g/{}", g.name)).map_err(|e| format!("its store could not be marked as served: {e}"))?;
         if g.server.is_some() {
             remote::follow(&daemon);
         }
         let routes = http::api(daemon.clone(), self.policy_for(&g.store_dir));
-        Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: g.server.is_some(), daemon, routes, lock: Some(Arc::new(lock)), watcher: Some(watcher) })
+        Ok(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: g.server.is_some(), daemon, routes, lock: Some(Arc::new(lock)), watcher: Some(watcher) })
     }
 
     /// Take another checkout of a store this library serves already: its view of the store beside
@@ -321,47 +311,76 @@ impl Live {
         Some(Shelved { store_dir: g.store_dir.clone(), repo: g.repo.clone(), canon: canonical(&g.repo), team: false, daemon, routes, lock, watcher: Some(watcher) })
     }
 
-    /// Serve the checkout holding `dir` beside the grimoire `name`'s store of its own, adding it
-    /// to the store's checkouts, when its project file names that very store: whether it is
-    /// served now. A team's grimoire, and a directory in no such checkout, are left as they are.
-    fn take_checkout(&self, name: &str, dir: &str) -> bool {
+    /// Serve the checkout `dir` is in, by its nearest project file, when that file names the
+    /// grimoire `name` and the checkout is not served yet: a checkout of a store of its own is
+    /// added to the store's checkouts and served beside the others; one of a team's grimoire has
+    /// its copy of the server's intent made, as a command run there would, and is served. Whether
+    /// it is served now, or why it could not be.
+    fn take_checkout(&self, name: &str, dir: &str) -> Took {
         // One at a time with refresh and with each other, so a checkout is never opened twice.
         let _one = self.refreshing.lock().expect("refresh lock");
         if self.stopped.load(Ordering::SeqCst) {
-            return false;
+            return Took::NotOurs;
         }
-        let Ok((repo, store_io::Home::Store(store_dir), named)) = store_io::find_named(Path::new(dir)) else { return false };
+        let Ok((repo, home, named)) = store_io::find_named(Path::new(dir)) else { return Took::NotOurs };
         if named != name {
-            return false;
+            return Took::NotOurs;
         }
-        let first = self.held.lock().expect("library lock").served.iter().find(|((n, _), s)| n == name && !s.team && same(&s.store_dir, &store_dir)).map(|(_, s)| s.daemon.clone());
-        let Some(first) = first else { return false };
-        match first.register_checkout(&repo) {
-            Ok(true) => tracing::info!("library: `{name}`: added the checkout {} to its store", repo.display()),
-            Ok(false) => {}
-            Err(e) => {
-                self.say(name, &format!("the checkout {} is not served: {e}", repo.display()));
-                return false;
+        let g = match home {
+            store_io::Home::Store(store_dir) => {
+                let first = self.held.lock().expect("library lock").served.iter().find(|((n, _), s)| n == name && !s.team && same(&s.store_dir, &store_dir)).map(|(_, s)| s.daemon.clone());
+                let Some(first) = first else { return Took::NotOurs };
+                match first.register_checkout(&repo) {
+                    Ok(true) => tracing::info!("library: `{name}`: added the checkout {} to its store", repo.display()),
+                    Ok(false) => {}
+                    Err(e) => return Took::Failed(format!("this checkout, {}, of the grimoire `{name}` could not be added to its store: {e}", repo.display())),
+                }
+                Grimoire { name: name.to_string(), store_dir, repo: repo.clone(), server: None }
             }
+            // A worktree of a team's grimoire this daemon serves: its own copy of the same server's intent.
+            store_io::Home::Server { address, copy } => {
+                let ours = self.held.lock().expect("library lock").served.iter().any(|((n, _), s)| n == name && s.daemon.server.as_ref().is_some_and(|srv| srv.address == address));
+                if !ours {
+                    return Took::NotOurs;
+                }
+                Grimoire { name: name.to_string(), store_dir: copy, repo: repo.clone(), server: Some(address) }
+            }
+        };
+        if self.held.lock().expect("library lock").served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &repo)) {
+            return Took::Served;
         }
-        let g = Grimoire { name: name.to_string(), store_dir: store_dir.clone(), repo: repo.clone(), server: None };
+        let shelved = match g.server {
+            Some(_) => match self.open_alone(&g) {
+                Ok(shelved) => shelved,
+                Err(why) => {
+                    return Took::Failed(format!(
+                        "this checkout, {}, of the grimoire `{name}` is not served: its copy of the server's intent could not be made: {why}. Run `grimoire check` in it, after `grimoire login` if this machine is not signed in",
+                        repo.display()
+                    ))
+                }
+            },
+            None => match self.open(&g) {
+                Some(shelved) => shelved,
+                None => return Took::Failed(format!("this checkout, {}, of the grimoire `{name}` could not be served; the daemon's log says why", repo.display())),
+            },
+        };
         let mut held = self.held.lock().expect("library lock");
-        if held.served.values().any(|s| same(&s.store_dir, &store_dir) && same_checkout(&s.repo, &repo)) {
-            return true;
-        }
-        drop(held);
-        let Some(shelved) = self.open(&g) else { return false };
-        held = self.held.lock().expect("library lock");
-        if self.stopped.load(Ordering::SeqCst) || held.held_back.iter().any(|r| same(r, &store_dir)) {
+        if self.stopped.load(Ordering::SeqCst) || held.held_back.iter().any(|r| same(r, &g.store_dir)) {
             drop(held);
             shelved.let_go();
-            return false;
+            return Took::NotOurs;
         }
         tracing::info!("library: serving `{name}` from {} at /g/{name}", repo.display());
         held.served.insert((name.to_string(), repo), shelved);
         drop(held);
         self.tell();
-        true
+        Took::Served
+    }
+
+    /// Whether the grimoire `name`'s trust step would admit a request with these headers.
+    fn admits(&self, name: &str, headers: &axum::http::HeaderMap) -> bool {
+        let store_dir = self.held.lock().expect("library lock").served.iter().find(|((n, _), _)| n == name).map(|(_, s)| s.store_dir.clone());
+        store_dir.is_some_and(|dir| self.policy_for(&dir).admit(headers).is_ok())
     }
 
     /// Take one grimoire of a team's server: its lock and its daemon, which holds
@@ -484,17 +503,28 @@ impl Live {
     /// none does (req:machine-checkouts). `lenient`: a call answered without one, by the default's
     /// checkout when it is one of the grimoire's, else the first.
     fn choose(&self, name: &str, checkout: Option<&str>, lenient: bool) -> Result<Key, Refusal> {
+        let checkout = checkout.map(str::trim).filter(|c| !c.is_empty());
+        // The checkout a directory is in: its nearest project file, found from the directory as the
+        // system resolves it, so a link into a checkout is that checkout's; looked up before the
+        // library is held, so a slow path holds up no other call.
+        let nearest = checkout.and_then(|dir| store_io::find_named(&canonical(Path::new(dir))).ok()).map(|(root, home, named)| (canonical(&root), home, named));
         let held = self.held.lock().expect("library lock");
         let ours: Vec<(&Key, &Shelved)> = held.served.iter().filter(|((n, _), _)| n == name).collect();
         let Some(&(first_key, _)) = ours.first() else {
             return Err(Refusal::NotFound(format!("this daemon's library holds no grimoire `{name}`")));
         };
         let list = || ours.iter().map(|(_, s)| s.repo.display().to_string()).collect::<Vec<_>>().join(", ");
-        match checkout.map(str::trim).filter(|c| !c.is_empty()) {
+        match checkout {
             Some(dir) => {
-                let asked = canonical(Path::new(dir));
-                // The deepest checkout that is or holds the directory: a worktree may be kept inside its main checkout.
-                match ours.iter().filter(|(_, s)| asked.starts_with(&s.canon)).max_by_key(|(_, s)| s.canon.components().count()) {
+                // The checkout whose project file is nearest above the directory, and names this grimoire
+                // at the store or copy that checkout is served from: a worktree kept inside its main
+                // checkout is its own, and an outer checkout never answers for it.
+                let names_it = |s: &Shelved, home: &store_io::Home| match home {
+                    store_io::Home::Store(store) => same(store, &s.store_dir),
+                    store_io::Home::Server { copy, .. } => same(copy, &s.store_dir),
+                };
+                let found = nearest.as_ref().filter(|(_, _, named)| named == name).and_then(|(root, home, _)| ours.iter().find(|(_, s)| s.canon == *root && names_it(s, home)));
+                match found {
                     Some((key, _)) => Ok((*key).clone()),
                     None => Err(refused(format!("`{dir}` is no checkout of the grimoire `{name}` served here, whose checkouts are {}; name your working directory as `checkout`", list()))),
                 }
@@ -567,6 +597,16 @@ async fn to_grimoire(State(live): State<Arc<Live>>, UrlPath((name, rest)): UrlPa
 
 async fn to_grimoire_mcp(State(live): State<Arc<Live>>, UrlPath(name): UrlPath<String>, req: Request) -> Response {
     forward(&live, &name, "/mcp", req).await
+}
+
+/// What became of a checkout a call named that was not served.
+enum Took {
+    /// Served now, or already.
+    Served,
+    /// No checkout of this grimoire this daemon could serve: the call is refused as naming none.
+    NotOurs,
+    /// A checkout of this grimoire that could not be served, and why.
+    Failed(String),
 }
 
 /// Why no checkout answers a request.
@@ -688,14 +728,17 @@ pub(crate) async fn forward(live: &Arc<Live>, name: &str, path: &str, req: Reque
     };
     let calls = asked(path, query.as_deref(), &bytes);
     let mut chosen = one_checkout(live, name, &calls);
-    // A directory in a checkout of a store of its own not served yet: added to the store and served, then chosen (req:store-checkouts).
-    if matches!(chosen, Err(Refusal::Invalid(_))) {
+    // A directory in a checkout not served yet: served, then chosen (req:machine-checkouts), but only for a
+    // caller this grimoire admits; any other meets the trust step, as a refusal does.
+    if matches!(chosen, Err(Refusal::Invalid(_))) && live.admits(name, &parts.headers) {
         let dirs: Vec<String> = calls.iter().filter_map(|(c, _)| c.clone()).collect();
         if !dirs.is_empty() {
             let (owner, grimoire) = (live.clone(), name.to_string());
-            let took = tokio::task::spawn_blocking(move || dirs.iter().any(|dir| owner.take_checkout(&grimoire, dir))).await.unwrap_or(false);
-            if took {
+            let took = tokio::task::spawn_blocking(move || dirs.iter().map(|dir| owner.take_checkout(&grimoire, dir)).collect::<Vec<Took>>()).await.unwrap_or_default();
+            if took.iter().any(|t| matches!(t, Took::Served)) {
                 chosen = one_checkout(live, name, &calls);
+            } else if let Some(Took::Failed(why)) = took.into_iter().find(|t| matches!(t, Took::Failed(_))) {
+                chosen = Err(refused(why));
             }
         }
     }
@@ -829,6 +872,8 @@ mod tests {
         // `shop`, the daemon's own, and a worktree of it kept inside it, served as two checkouts of one team's grimoire.
         let main = project(root, "shop");
         let worktree = project(&main.repo, "wt");
+        // A worktree of `shop`: its project file names the grimoire `shop`, at the store it is served from.
+        std::fs::write(worktree.repo.join(store_io::PROJECT_FILE), format!("name = \"shop\"\nstore = {}\n", toml::Value::String(worktree.store_dir.to_string_lossy().to_string()))).unwrap();
         let _locks = (store_io::lock(&main.store_dir).unwrap(), store_io::lock(&worktree.store_dir).unwrap());
         let daemon = Arc::new(Daemon::open(&main.store_dir).unwrap().0);
         let live = Live::new(Grimoire { server: Some("http://team".into()), ..main.clone() }, daemon, 4299, Arc::new(access::Local), root.join("none"), root.join("none"));
@@ -884,7 +929,7 @@ mod tests {
         // A directory in another project's checkout is no checkout of this store: refused, and nothing taken.
         let message = why(live.choose("ledger", Some(&named(&main.repo)), false));
         assert!(message.contains("is no checkout of the grimoire `ledger`"), "{message}");
-        assert!(!live.take_checkout("ledger", &named(&main.repo)), "its project file names another store");
+        assert!(matches!(live.take_checkout("ledger", &named(&main.repo)), Took::NotOurs), "its project file names another store");
         assert!(matches!(live.choose("audit", None, true), Err(Refusal::NotFound(_))));
     }
 

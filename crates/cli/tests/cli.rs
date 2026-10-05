@@ -694,6 +694,58 @@ fn store_io_project_file() -> &'static str {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live#checkout-chosen", "crates/server/src/library/live#checkout-registered", "req:machine-checkouts"]}
+/// ```
+#[test]
+fn a_teams_worktree_inside_its_checkout_is_its_own() {
+    // A team's checkout, signed in and served, and a worktree kept inside it, as Claude Code keeps one,
+    // with its own committed project file and code of its own, that has run nothing.
+    let t = team_fixture(None);
+    let home = t.checkout.dir.join("home");
+    let main = &t.checkout.repo;
+    assert!(team(main, &home, None, &["login", "--token", &t.writer]).status.success());
+    assert!(team(main, &home, None, &["check"]).status.success());
+    // The main checkout's code leaves its worktrees out, as this repository's would once a nested checkout is skipped.
+    std::fs::write(main.join(".gitignore"), "worktrees/\n").unwrap();
+    let nested = |name: &str| {
+        let wt = main.join("worktrees").join(name);
+        std::fs::create_dir_all(wt.join("src")).unwrap();
+        for f in ["Cargo.toml", "src/a.rs", ".grimoire.toml"] {
+            std::fs::copy(main.join(f), wt.join(f)).unwrap();
+        }
+        std::fs::write(wt.join("src").join("lib.rs"), "pub mod a;\npub fn only_in_the_worktree() {}\n").unwrap();
+        wt
+    };
+    let wt = nested("wt");
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(main).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+    let ask = |tool: &str, input: serde_json::Value| {
+        let (code, answer) = post(port, &format!("/g/repo/api/{tool}"), &input.to_string(), "");
+        (code, serde_json::from_str::<serde_json::Value>(&answer).unwrap_or_default())
+    };
+    eventually("the main checkout is served", || ask("status", serde_json::json!({})).0 == 200);
+    // Its first call, naming a directory in it, is answered by the worktree itself: its copy made, its code read.
+    let (code, found) = ask("find", serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": wt.join("src").to_string_lossy() }));
+    assert_eq!((code, found["nodes"].as_array().map(Vec::len)), (200, Some(1)), "the worktree's code, not the main checkout's: {found}");
+    let (_, status) = ask("status", serde_json::json!({ "checkout": wt.to_string_lossy() }));
+    assert_eq!(status["repository"], grimoire_server::store_io::repository_string(&wt).unwrap(), "{status}");
+    // A caller the trust step refuses takes no checkout, the server up: a page on another site gets the 403, and nothing is served.
+    let wt3 = nested("wt3");
+    let (code, _) = post(port, "/g/repo/api/find", &serde_json::json!({ "query": "x", "checkout": wt3.to_string_lossy() }).to_string(), "Origin: https://elsewhere.example\r\n");
+    assert_eq!(code, 403);
+    let (_, status) = ask("status", serde_json::json!({}));
+    assert!(!status["library"].to_string().contains("wt3"), "{status}");
+    // With the server away a worktree's copy cannot be made: refused saying so, never answered by the main checkout.
+    drop(t._server);
+    let wt2 = nested("wt2");
+    let (code, refused) = ask("find", serde_json::json!({ "query": "x", "checkout": wt2.to_string_lossy() }));
+    let why = refused["message"].as_str().unwrap_or_default();
+    assert!(code == 400 && why.contains("could not be made") && why.contains("cannot be reached") && why.contains("grimoire check"), "the reason, and what to run: {refused}");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
