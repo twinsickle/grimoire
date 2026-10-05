@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the landing. The guidance section, the Codex configuration and the uninstall plan each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"landing-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire land, so a commit lands the ticket waiting on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the daemon's URL to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; it says how the work is done is in the rites, the grimoire's second root, to be read before working, that a rule of work belongs there and never in the file, and that the rest of the file is the project's own; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."}]}
+//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the landing. The guidance section, the Codex configuration and the uninstall plan each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"landing-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire land, so a commit lands the ticket waiting on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; it says how the work is done is in the rites, the grimoire's second root, to be read before working, that a rule of work belongs there and never in the file, and that the rest of the file is the project's own; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -101,8 +101,8 @@ pub fn hooks() -> [(&'static str, String, &'static str); 2] {
 
 /// Write the integration into `repo`: `plan_install`, then apply it.
 #[cfg(test)]
-pub fn install(repo: &Path, port: u16) -> Result<Vec<Wrote>, InitError> {
-    plan_install(repo, port)?.apply()
+pub fn install(repo: &Path, port: u16, name: &str) -> Result<Vec<Wrote>, InitError> {
+    plan_install(repo, port, name)?.apply()
 }
 
 /// An install worked out in full: every file of the integration with its
@@ -116,7 +116,8 @@ pub struct Install {
 /// Work out the integration for `repo`, reading only. `.grimoire.toml` is
 /// written by the caller (store_io) since it is the store's concern, after
 /// this has succeeded.
-pub fn plan_install(repo: &Path, port: u16) -> Result<Install, InitError> {
+pub fn plan_install(repo: &Path, port: u16, name: &str) -> Result<Install, InitError> {
+    let url = mcp_url(port, name);
     let read = |path: &Path| -> Result<String, InitError> {
         if path.is_file() {
             std::fs::read_to_string(path).map_err(io(path))
@@ -142,12 +143,12 @@ pub fn plan_install(repo: &Path, port: u16) -> Result<Install, InitError> {
 
     // .mcp.json: merge our server in, keep everything else.
     let mcp = repo.join(MCP_REL);
-    let text = with_mcp_server(&read(&mcp)?, port).map_err(|e| InitError::BadJson(mcp.clone(), e))?;
+    let text = with_mcp_server(&read(&mcp)?, &url).map_err(|e| InitError::BadJson(mcp.clone(), e))?;
     texts.push((mcp, text, None));
 
     // .codex/config.toml: our server spliced in, every other byte as it was.
     let codex = repo.join(CODEX_REL);
-    let text = with_codex_server(&read(&codex)?, port).map_err(|e| InitError::BadToml(codex.clone(), e))?;
+    let text = with_codex_server(&read(&codex)?, &url).map_err(|e| InitError::BadToml(codex.clone(), e))?;
     texts.push((codex, text, Some(CODEX_TRUST)));
     Ok(Install { repo: repo.to_path_buf(), texts })
 }
@@ -199,8 +200,14 @@ impl Install {
     }
 }
 
+/// Where an agent reaches the project's grimoire: its path in the library of
+/// the daemon on this machine's `port` (req:machine-library).
+pub fn mcp_url(port: u16, name: &str) -> String {
+    format!("http://127.0.0.1:{port}/g/{name}/mcp")
+}
+
 /// `existing` .mcp.json with the grimoire server set and everything else kept as data.
-fn with_mcp_server(existing: &str, port: u16) -> Result<String, String> {
+fn with_mcp_server(existing: &str, url: &str) -> Result<String, String> {
     let mut doc: Value = if existing.trim().is_empty() { json!({}) } else { serde_json::from_str(existing).map_err(|e| e.to_string())? };
     let Some(root) = doc.as_object_mut() else {
         return Err("top level is not an object".into());
@@ -208,7 +215,7 @@ fn with_mcp_server(existing: &str, port: u16) -> Result<String, String> {
     let Some(servers) = root.entry("mcpServers").or_insert_with(|| json!({})).as_object_mut() else {
         return Err("mcpServers is not an object".into());
     };
-    servers.insert("grimoire".into(), json!({ "type": "http", "url": format!("http://127.0.0.1:{port}/mcp") }));
+    servers.insert("grimoire".into(), json!({ "type": "http", "url": url }));
     let mut text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
     text.push('\n');
     Ok(text)
@@ -251,7 +258,7 @@ mod tests {
 
         std::fs::write(repo.join("CLAUDE.md"), "# My project\n\nUse tabs.\n").unwrap();
 
-        let wrote = install(repo, 4343).unwrap();
+        let wrote = install(repo, 4343, "shop").unwrap();
         // Three skill files per harness, two guidance files, .mcp.json, .codex/config.toml, the two hooks.
         assert_eq!(wrote.len(), 12);
         // The check before a commit and the landing after it, each quiet when grimoire is not on the path.
@@ -278,13 +285,13 @@ mod tests {
 
         let mcp: Value = serde_json::from_str(&std::fs::read_to_string(repo.join(MCP_REL)).unwrap()).unwrap();
         assert_eq!(mcp["mcpServers"]["other"]["command"], "x");
-        assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4343/mcp");
+        assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4343/g/shop/mcp");
 
         let hook = std::fs::read_to_string(repo.join(HOOK_REL)).unwrap();
         assert!(hook.contains("exec grimoire check"));
 
         // Second run: idempotent, hook recognised as ours, one section not two.
-        let again = install(repo, 4343).unwrap();
+        let again = install(repo, 4343, "shop").unwrap();
         assert!(again.iter().all(|w| matches!(w, Wrote::Written(_) | Wrote::Noted { .. })));
         let claude = std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap();
         assert_eq!(claude.matches(MARK_START).count(), 1);
@@ -300,7 +307,7 @@ mod tests {
     fn each_guidance_file_names_its_own_skill() {
         let tmp = temp();
         let repo = tmp.path();
-        install(repo, 4242).unwrap();
+        install(repo, 4242, "shop").unwrap();
         let claude = std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap();
         let agents = std::fs::read_to_string(repo.join("AGENTS.md")).unwrap();
         assert!(claude.contains("`.claude/skills/grimoire/SKILL.md`") && !claude.contains(".agents/"), "{claude}");
@@ -318,7 +325,7 @@ mod tests {
     fn every_harness_gets_the_skill_and_the_tools() {
         let tmp = temp();
         let repo = tmp.path();
-        let wrote = install(repo, 4343).unwrap();
+        let wrote = install(repo, 4343, "shop").unwrap();
         for harness in &HARNESSES {
             for (rel, text) in SKILL_FILES {
                 let on_disk = std::fs::read_to_string(repo.join(format!("{}/{rel}", harness.skill_dir))).unwrap();
@@ -326,9 +333,9 @@ mod tests {
             }
         }
         let mcp: Value = serde_json::from_str(&std::fs::read_to_string(repo.join(MCP_REL)).unwrap()).unwrap();
-        assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4343/mcp");
+        assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4343/g/shop/mcp");
         let codex: toml_edit::DocumentMut = std::fs::read_to_string(repo.join(CODEX_REL)).unwrap().parse().unwrap();
-        assert_eq!(codex["mcp_servers"]["grimoire"]["url"].as_str(), Some("http://127.0.0.1:4343/mcp"));
+        assert_eq!(codex["mcp_servers"]["grimoire"]["url"].as_str(), Some("http://127.0.0.1:4343/g/shop/mcp"));
         // Nothing outside the repository: every path written is in it, and Codex's trust is left to the person.
         let paths: Vec<&PathBuf> = wrote.iter().map(|w| match w {
             Wrote::Written(p) | Wrote::Noted { path: p, .. } | Wrote::Skipped { path: p, .. } => p,
@@ -349,7 +356,7 @@ mod tests {
         std::fs::create_dir_all(repo.join(".codex")).unwrap();
         std::fs::write(repo.join(CODEX_REL), "mcp_servers = { docs = { url = \"x\" } }\n").unwrap();
         let before = walk(repo);
-        assert!(matches!(install(repo, 4242), Err(InitError::BadToml(..))));
+        assert!(matches!(install(repo, 4242, "shop"), Err(InitError::BadToml(..))));
         assert_eq!(walk(repo), before, "nothing is written before every file's text is known");
     }
 
@@ -478,7 +485,7 @@ mod tests {
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
         std::fs::write(repo.join(HOOK_REL), "#!/bin/sh\nnpm test\n").unwrap();
-        let wrote = install(repo, 4242).unwrap();
+        let wrote = install(repo, 4242, "shop").unwrap();
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { .. })));
         assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), "#!/bin/sh\nnpm test\n");
     }
@@ -487,7 +494,7 @@ mod tests {
     fn no_git_is_a_note_not_an_error() {
         let tmp = temp();
         let repo = tmp.path();
-        let wrote = install(repo, 4242).unwrap();
+        let wrote = install(repo, 4242, "shop").unwrap();
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { note, .. } if note.contains("not a git repository"))));
     }
 

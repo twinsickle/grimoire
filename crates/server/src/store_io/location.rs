@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise."}]}
+//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"project-name","statement":"A project file's grimoire is named by its `name`, which must be a slug or the file is refused; with none, by its store when that is a bare name, and otherwise by its repository folder's name, each made a slug; init writes the name it is given or that folder name, before the store or server."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -109,32 +109,68 @@ pub fn copy_dir(address: &str, repo: &Path) -> Result<PathBuf, StoreIoError> {
 /// directory holding it and what it names: a store, resolved, or a server
 /// with this checkout's copy of its intent.
 pub fn find_home(start: &Path) -> Result<(PathBuf, Home), StoreIoError> {
+    find_named(start).map(|(dir, home, _)| (dir, home))
+}
+
+/// The same, with the grimoire's name (req:project-name).
+pub fn find_named(start: &Path) -> Result<(PathBuf, Home, String), StoreIoError> {
     let mut dir = Some(start.to_path_buf());
     while let Some(d) = dir {
-        let f = d.join(PROJECT_FILE);
-        if f.is_file() {
-            let text = std::fs::read_to_string(&f).map_err(|e| StoreIoError::Io(f.clone(), e))?;
-            let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| StoreIoError::BadProjectFile(f.clone(), e.to_string()))?;
-            let bad = |why: String| StoreIoError::BadProjectFile(f.clone(), why);
-            let named = |key: &str| match doc.get(key) {
-                None => Ok(None),
-                Some(v) => v.as_str().map(Some).ok_or_else(|| bad(format!("`{key}` is not a string"))),
-            };
-            let home = match (named("store")?, named("server")?) {
-                (Some(store), None) => Home::Store(store_for_repo(store, &d)?),
-                (None, Some(server)) => {
-                    let address = server_address(server).map_err(bad)?;
-                    let copy = copy_dir(&address, &d)?;
-                    Home::Server { address, copy }
-                }
-                (Some(_), Some(_)) => return Err(bad("names both `store` and `server`: a project's grimoire is in one or the other".into())),
-                (None, None) => return Err(bad("names neither `store` nor `server`".into())),
-            };
-            return Ok((d, home));
+        if let Some((home, name)) = project_at(&d)? {
+            return Ok((d, home, name));
         }
         dir = d.parent().map(Path::to_path_buf);
     }
     Err(StoreIoError::NoProjectFile(start.to_path_buf()))
+}
+
+/// What the `.grimoire.toml` in `d` itself names, and its grimoire's name;
+/// none when `d` holds no project file. The name is the file's `name`, else
+/// the store's when that is a bare name, else the folder's, each a slug.
+pub fn project_at(d: &Path) -> Result<Option<(Home, String)>, StoreIoError> {
+    let f = d.join(PROJECT_FILE);
+    if !f.is_file() {
+        return Ok(None);
+    }
+    let text = std::fs::read_to_string(&f).map_err(|e| StoreIoError::Io(f.clone(), e))?;
+    let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| StoreIoError::BadProjectFile(f.clone(), e.to_string()))?;
+    let bad = |why: String| StoreIoError::BadProjectFile(f.clone(), why);
+    let named = |key: &str| match doc.get(key) {
+        None => Ok(None),
+        Some(v) => v.as_str().map(Some).ok_or_else(|| bad(format!("`{key}` is not a string"))),
+    };
+    let home = match (named("store")?, named("server")?) {
+        (Some(store), None) => Home::Store(store_for_repo(store, d)?),
+        (None, Some(server)) => {
+            let address = server_address(server).map_err(bad)?;
+            let copy = copy_dir(&address, d)?;
+            Home::Server { address, copy }
+        }
+        (Some(_), Some(_)) => return Err(bad("names both `store` and `server`: a project's grimoire is in one or the other".into())),
+        (None, None) => return Err(bad("names neither `store` nor `server`".into())),
+    };
+    let name = match named("name")? {
+        Some(name) if grimoire_core::store::is_slug(name) => name.to_string(),
+        Some(name) => return Err(bad(format!("`name` is `{name}`, which is not a slug: lowercase letters and digits joined by single dashes"))),
+        None => match named("store")?.filter(|s| is_bare_name(s)) {
+            Some(store) => grimoire_core::scaffold::slugify(store),
+            None => default_name(d),
+        },
+    };
+    Ok(Some((home, name)))
+}
+
+/// The name a grimoire gets when none is given: its repository folder's, made a slug.
+pub fn default_name(repo: &Path) -> String {
+    let folder = repo.canonicalize().ok().and_then(|c| c.file_name().map(|n| n.to_string_lossy().to_string()));
+    grimoire_core::scaffold::slugify(&folder.or_else(|| repo.file_name().map(|n| n.to_string_lossy().to_string())).unwrap_or_default())
+}
+
+/// Whether a store argument is a bare name, one plain component, rather than a path.
+fn is_bare_name(arg: &str) -> bool {
+    let p = Path::new(arg);
+    let mut parts = p.components();
+    !p.is_absolute() && matches!((parts.next(), parts.next()), (Some(std::path::Component::Normal(_)), None)) && !arg.contains(['/', '\\'])
 }
 
 /// Walk up from `start` to the nearest `.grimoire.toml` and return the
@@ -146,17 +182,17 @@ pub fn find_project(start: &Path) -> Result<(PathBuf, PathBuf), StoreIoError> {
 }
 
 /// Write `.grimoire.toml` into a repository whose grimoire a team's server holds.
-pub fn write_project_file_for_server(repo: &Path, address: &str) -> Result<PathBuf, StoreIoError> {
+pub fn write_project_file_for_server(repo: &Path, address: &str, name: &str) -> Result<PathBuf, StoreIoError> {
     let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names the server that holds this project's grimoire.\nserver = {}\n", toml::Value::String(address.to_string()));
+    let text = format!("# Written once by `grimoire init`. Names this project's grimoire and the server that holds it.\nname = {}\nserver = {}\n", toml::Value::String(name.to_string()), toml::Value::String(address.to_string()));
     std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
     Ok(f)
 }
 
 /// Write `.grimoire.toml` into a repository.
-pub fn write_project_file(repo: &Path, store: &str) -> Result<PathBuf, StoreIoError> {
+pub fn write_project_file(repo: &Path, store: &str, name: &str) -> Result<PathBuf, StoreIoError> {
     let f = repo.join(PROJECT_FILE);
-    let text = format!("# Written once by `grimoire init`. Names the store that holds this project's grimoire.\nstore = {}\n", toml::Value::String(store.to_string()));
+    let text = format!("# Written once by `grimoire init`. Names this project's grimoire and the store that holds it.\nname = {}\nstore = {}\n", toml::Value::String(name.to_string()), toml::Value::String(store.to_string()));
     std::fs::write(&f, text).map_err(|e| StoreIoError::Io(f.clone(), e))?;
     Ok(f)
 }
@@ -169,11 +205,9 @@ pub fn write_project_file(repo: &Path, store: &str) -> Result<PathBuf, StoreIoEr
 /// they pointed it).
 pub fn store_for_repo(arg: &str, repo: &Path) -> Result<PathBuf, StoreIoError> {
     let p = Path::new(arg);
-    let mut parts = p.components();
-    let a_name = matches!((parts.next(), parts.next()), (Some(std::path::Component::Normal(_)), None)) && !arg.contains(['/', '\\']);
     if p.is_absolute() {
         Ok(p.to_path_buf())
-    } else if a_name {
+    } else if is_bare_name(arg) {
         Ok(stores_dir()?.join(arg))
     } else {
         Ok(repo.join(arg))
@@ -278,13 +312,47 @@ mod tests {
         let dir = tmp.path();
         let nested = dir.join("a").join("b");
         std::fs::create_dir_all(&nested).unwrap();
-        write_project_file(dir, "my-store").unwrap();
+        write_project_file(dir, "my-store", "my-store").unwrap();
         let (root, store) = find_project(&nested).unwrap();
         assert_eq!(root, dir);
         assert!(store.ends_with("my-store"));
-        write_project_file(dir, "./local-store").unwrap();
+        write_project_file(dir, "./local-store", "local").unwrap();
         let (_, store) = find_project(&nested).unwrap();
         assert_eq!(store, dir.join("./local-store"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-project-names-its-grimoire", "checks": ["crates/server/src/store_io/location#project-name"]}
+    /// ```
+    #[test]
+    fn a_project_names_its_grimoire() {
+        let tmp = temp();
+        let dir = tmp.path().join("Billing Service");
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = |text: &str| {
+            std::fs::write(dir.join(PROJECT_FILE), text).unwrap();
+            find_named(&dir).map(|(_, _, name)| name)
+        };
+        // Written by init, read back as given.
+        write_project_file(&dir, "../stores/billing", "billing").unwrap();
+        assert_eq!(find_named(&dir).unwrap().2, "billing");
+        // Before names: the store's bare name, else the folder's, made slugs.
+        assert_eq!(name("store = \"Ledger\"
+").unwrap(), "ledger");
+        assert_eq!(name("store = \"../stores/ledger\"
+").unwrap(), "billing-service");
+        assert_eq!(name("server = \"https://grimoire.example\"
+").unwrap(), "billing-service");
+        assert_eq!(default_name(&dir), "billing-service");
+        // A name that is not a slug is refused, saying so.
+        match name("name = \"My Shop\"
+store = \"shop\"
+") {
+            Err(StoreIoError::BadProjectFile(_, why)) => assert!(why.contains("not a slug"), "{why}"),
+            other => panic!("{other:?}"),
+        }
     }
 
     /// # Test contract
@@ -299,7 +367,7 @@ mod tests {
         let nested = dir.join("a");
         std::fs::create_dir_all(&nested).unwrap();
         // A server, kept without its trailing slash, and found from anywhere below.
-        write_project_file_for_server(dir, &server_address("https://grimoire.example/").unwrap()).unwrap();
+        write_project_file_for_server(dir, &server_address("https://grimoire.example/").unwrap(), "shop").unwrap();
         let (root, home) = find_home(&nested).unwrap();
         let Home::Server { address, copy } = home.clone() else { panic!("{home:?}") };
         assert_eq!((root.as_path(), address.as_str()), (dir, "https://grimoire.example"));

@@ -128,7 +128,7 @@ pub fn open(team: &Team, server: &Server, fresh: bool) -> anyhow::Result<Opened>
     } else if let client::Probe::Serving(addr) = client::probe(&team.copy, &repository) {
         // The daemon serving this checkout holds the copy and keeps it synced: what it knows of the
         // server is what this command says, never a server taken to be there because nobody asked.
-        let answered = client::call_at(addr, "status", &json!({}));
+        let answered = client::call_to(&addr, "status", &json!({}));
         if fresh && !matches!(&answered, Ok((true, s)) if s["server"]["reachable"] == true) && !matches!(&answered, Ok((true, s)) if s["server"]["refused"] == true) {
             return Err(stale(format!("the daemon serving this checkout at {addr} cannot say the server at {} is reachable", team.address)));
         }
@@ -159,7 +159,7 @@ pub fn run_tool(team: &Team, name: &str, input: Value) -> anyhow::Result<Result<
     if team.copy.join(store_io::CONFIG_FILE).is_file() {
         match client::probe(&team.copy, &store_io::repository_string(&team.repo)?) {
             client::Probe::Serving(addr) => {
-                let (ok, v) = client::call_at(addr, name, &input)?;
+                let (ok, v) = client::call_to(&addr, name, &input)?;
                 return Ok(if ok { Ok(v) } else { Err(v) });
             }
             client::Probe::Refused(addr, why) => bail!("a daemon serves this checkout at {addr} and refused this command: {why}"),

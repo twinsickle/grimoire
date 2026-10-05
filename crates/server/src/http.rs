@@ -49,7 +49,14 @@ pub enum Ui {
 struct Built;
 
 pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
-    let mut app = Router::new()
+    with_ui(api(daemon, policy), ui)
+}
+
+/// One grimoire's routes, behind the trust step: the tools, the event stream,
+/// the export, the prune and MCP. A library nests one under `/g/<name>` for
+/// each of its grimoires (req:machine-library).
+pub fn api(daemon: Arc<Daemon>, policy: Arc<dyn Policy>) -> Router {
+    Router::new()
         .route("/api/tools", get(list_tools))
         .route("/api/events", get(events))
         .route("/api/export", get(export))
@@ -59,7 +66,11 @@ pub fn router(daemon: Arc<Daemon>, ui: Ui, policy: Arc<dyn Policy>) -> Router {
         .nest_service("/mcp", crate::mcp::service(daemon))
         // Everything above passes the trust step first; the UI's files below are
         // served to any navigation, so a link to the UI from elsewhere opens it.
-        .layer(middleware::from_fn_with_state(policy, access::admit));
+        .layer(middleware::from_fn_with_state(policy, access::admit))
+}
+
+/// `app` with the interface served beside it, for anything its routes do not answer.
+pub fn with_ui(mut app: Router, ui: Ui) -> Router {
     match ui {
         Ui::Dir(dir) => {
             let index = dir.join("index.html");

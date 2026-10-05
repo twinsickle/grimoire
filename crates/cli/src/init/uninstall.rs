@@ -230,7 +230,7 @@ model = \"o4\"
 ";
         std::fs::create_dir_all(repo.join(".codex")).unwrap();
         std::fs::write(repo.join(CODEX_REL), codex_own).unwrap();
-        install(repo, 4242).unwrap();
+        install(repo, 4242, "shop").unwrap();
         let undone = uninstall(repo);
         assert_eq!(std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap(), "# My project\n\nUse tabs.\n", "a person's text is back exactly");
         assert!(!repo.join("AGENTS.md").exists(), "a file init created holds nothing else, so it goes");
@@ -289,7 +289,7 @@ model = \"o4\"
         let tmp = temp();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        install(repo, 4242).unwrap();
+        install(repo, 4242, "shop").unwrap();
         uninstall(repo);
         assert!(!repo.join(".mcp.json").exists());
         assert!(!repo.join("CLAUDE.md").exists());
@@ -308,7 +308,7 @@ model = \"o4\"
         let tmp = temp();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        install(repo, 4242).unwrap();
+        install(repo, 4242, "shop").unwrap();
         let before: Vec<_> = walk(repo);
         let plan = plan_uninstall(repo);
         assert_eq!(walk(repo), before, "planning only reads");
@@ -324,7 +324,7 @@ model = \"o4\"
     fn a_failure_part_way_says_what_was_done() {
         let tmp = temp();
         let repo = tmp.path();
-        install(repo, 4242).unwrap();
+        install(repo, 4242, "shop").unwrap();
         let plan = plan_uninstall(repo);
         // A folder where the plan expects to remove init's guidance file: that step fails.
         std::fs::remove_file(repo.join("AGENTS.md")).unwrap();

@@ -15,7 +15,7 @@ mod location;
 mod lock;
 pub mod tokens;
 
-pub use location::{copies_dir, copy_dir, credentials_file, find_home, find_project, refuse_inside, repository_string, server_address, slashed, store_for_repo, stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE};
+pub use location::{copies_dir, copy_dir, credentials_file, default_name, find_home, find_named, find_project, project_at, refuse_inside, repository_string, server_address, slashed, store_for_repo, stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE};
 pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
 
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +61,10 @@ pub struct Serving {
     /// address it bound, or `::1` when it listens on every IPv6 address.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    /// Where in the daemon's library this store's grimoire is served, `/g/<name>`; none
+    /// for a daemon serving it on the bare routes (req:machine-library).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 impl Serving {
@@ -79,6 +83,11 @@ pub fn write_serving(store_dir: &Path, port: u16) -> Result<(), StoreIoError> {
 
 /// Record that this process serves the store at `addr`.
 pub fn write_serving_at(store_dir: &Path, addr: std::net::SocketAddr) -> Result<(), StoreIoError> {
+    write_serving_in(store_dir, addr, None)
+}
+
+/// Record that this process serves the store at `addr`, its grimoire at `path` in the library.
+pub fn write_serving_in(store_dir: &Path, addr: std::net::SocketAddr, path: Option<&str>) -> Result<(), StoreIoError> {
     let ip = addr.ip();
     let host = if ip.is_unspecified() {
         // Every address: reached on this machine by the loopback of the same family.
@@ -86,7 +95,7 @@ pub fn write_serving_at(store_dir: &Path, addr: std::net::SocketAddr) -> Result<
     } else {
         (ip != std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)).then(|| ip.to_string())
     };
-    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port: addr.port(), pid: std::process::id(), host }))
+    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port: addr.port(), pid: std::process::id(), host, path: path.map(str::to_string) }))
 }
 
 /// Remove the marker, if it is still this process's.
@@ -823,7 +832,7 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         write_serving(dir, 4242).unwrap();
-        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id(), host: None }));
+        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id(), host: None, path: None }));
         remove_serving(dir);
         assert!(read_serving(dir).is_none());
         std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();

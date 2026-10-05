@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Splice Grimoire's MCP server into a project's .codex/config.toml, and take it out again, every other byte as it was.","criteria":[{"id":"splice","statement":"with_codex_server changes no byte but the grimoire server's url value, or appends init's table after one line ending of the file's own kind, so comments, other tables and keys, a byte-order mark and CRLF or mixed line endings survive; it refuses a shape it cannot set a url in, an mcp_servers or grimoire entry that is not a table or a grimoire server with no url string, and reads its result back before returning it."},{"id":"own-block-only","statement":"without_codex_server takes out only init's own two lines with a loopback url, last in the file and in either line ending, with the one line ending init put before them, leaving every other byte; any other grimoire server, one the person wrote or extended included, is refused with what to do by hand, and a file with none is reported as having none."}]}
+//! {"purpose":"Splice Grimoire's MCP server into a project's .codex/config.toml, and take it out again, every other byte as it was.","criteria":[{"id":"splice","statement":"with_codex_server changes no byte but the grimoire server's url value, or appends init's table after one line ending of the file's own kind, so comments, other tables and keys, a byte-order mark and CRLF or mixed line endings survive; it refuses a shape it cannot set a url in, an mcp_servers or grimoire entry that is not a table or a grimoire server with no url string, and reads its result back before returning it."},{"id":"own-block-only","statement":"without_codex_server takes out only init's own two lines with a loopback url, at /mcp or at a grimoire's /g/<name>/mcp, last in the file and in either line ending, with the one line ending init put before them, leaving every other byte; any other grimoire server, one the person wrote or extended included, is refused with what to do by hand, and a file with none is reported as having none."}]}
 //! ```
 
 use toml_edit::Item;
@@ -28,10 +28,9 @@ fn codex_url(body: &str) -> Option<String> {
 /// after one line ending; with one, only its url's value is replaced, and
 /// the table keeps its place, its other keys and its comments. A shape init
 /// cannot set a url in is refused, never overwritten.
-pub fn with_codex_server(existing: &str, port: u16) -> Result<String, String> {
+pub fn with_codex_server(existing: &str, url: &str) -> Result<String, String> {
     let (bom, body) = split_bom(existing);
     let doc = toml_edit::Document::parse(body).map_err(|e| e.to_string())?;
-    let url = format!("http://127.0.0.1:{port}/mcp");
     let text = match doc.get("mcp_servers") {
         None => None,
         Some(Item::Table(servers)) => match servers.get("grimoire") {
@@ -56,7 +55,7 @@ pub fn with_codex_server(existing: &str, port: u16) -> Result<String, String> {
         }
     });
     // What was written must read back as what was meant.
-    if codex_url(split_bom(&text).1).as_deref() != Some(url.as_str()) {
+    if codex_url(split_bom(&text).1).as_deref() != Some(url) {
         return Err("init could not add its server to this file safely; add [mcp_servers.grimoire] by hand".into());
     }
     Ok(text)
@@ -76,9 +75,12 @@ pub fn without_codex_server(existing: &str) -> Result<Option<String>, String> {
     let ours = ["\r\n", "\n"].into_iter().find_map(|eol| {
         let start = format!("{CODEX_HEADER}{eol}url = \"http://127.0.0.1:");
         let at = body.rfind(&start)?;
-        let port = body[at + start.len()..].strip_suffix(eol)?.strip_suffix("/mcp\"")?;
+        let rest = body[at + start.len()..].strip_suffix(eol)?.strip_suffix("/mcp\"")?;
+        // A port, and since the library a grimoire's path in it: `4242`, or `4242/g/<name>`.
+        let (port, path) = rest.split_once('/').map_or((rest, None), |(port, path)| (port, Some(path)));
+        let ours_path = path.is_none_or(|p| p.strip_prefix("g/").is_some_and(grimoire_core::store::is_slug));
         let whole_line = at == 0 || body[..at].ends_with('\n');
-        (whole_line && !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())).then_some((at, eol))
+        (whole_line && ours_path && !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())).then_some((at, eol))
     });
     let Some((at, eol)) = ours else {
         return Err("its grimoire server is not as init wrote it; take out [mcp_servers.grimoire] by hand".into());
@@ -99,32 +101,40 @@ mod tests {
     #[test]
     fn a_codex_config_of_the_projects_own_is_kept() {
         let own = "# the team's Codex settings\nmodel = \"o4\"\n\n[mcp_servers.docs]\ncommand = \"docs-mcp\" # local\n";
-        let once = with_codex_server(own, 4242).unwrap();
+        let once = with_codex_server(own, "http://127.0.0.1:4242/mcp").unwrap();
         assert!(once.starts_with(own), "the person's text is untouched: {once}");
         assert_eq!(once, format!("{own}\n[mcp_servers.grimoire]\nurl = \"http://127.0.0.1:4242/mcp\"\n"));
         // Again, on another port: one server, set in place.
-        let twice = with_codex_server(&once, 4343).unwrap();
+        let twice = with_codex_server(&once, "http://127.0.0.1:4343/mcp").unwrap();
         assert_eq!(twice, once.replace("4242", "4343"));
         // A grimoire server the person wrote keeps its place, its keys and its comments; only the url's value is set.
         let extended = format!("# my server\n[mcp_servers.grimoire]\nurl = \"old\" # keep me\nenabled = false\n\n{own}");
-        let set = with_codex_server(&extended, 4242).unwrap();
+        let set = with_codex_server(&extended, "http://127.0.0.1:4242/mcp").unwrap();
         assert_eq!(set, extended.replace("\"old\"", "\"http://127.0.0.1:4242/mcp\""));
         // and uninstall leaves it, with a note, since it is not as init wrote it.
         assert!(without_codex_server(&set).unwrap_err().contains("by hand"));
         // Dotted keys are a table too.
         let dotted = "mcp_servers.grimoire.url = \"old\"\n";
-        assert_eq!(with_codex_server(dotted, 4242).unwrap(), "mcp_servers.grimoire.url = \"http://127.0.0.1:4242/mcp\"\n");
+        assert_eq!(with_codex_server(dotted, "http://127.0.0.1:4242/mcp").unwrap(), "mcp_servers.grimoire.url = \"http://127.0.0.1:4242/mcp\"\n");
         // Taken out byte for byte, with Windows line endings and a byte-order mark too.
         assert_eq!(without_codex_server(&once).unwrap().as_deref(), Some(own));
         let crlf = format!("\u{feff}{}", own.replace('\n', "\r\n"));
-        assert_eq!(without_codex_server(&with_codex_server(&crlf, 4242).unwrap()).unwrap().as_deref(), Some(crlf.as_str()));
-        assert_eq!(without_codex_server(&with_codex_server("", 4242).unwrap()).unwrap().as_deref(), Some(""));
+        assert_eq!(without_codex_server(&with_codex_server(&crlf, "http://127.0.0.1:4242/mcp").unwrap()).unwrap().as_deref(), Some(crlf.as_str()));
+        assert_eq!(without_codex_server(&with_codex_server("", "http://127.0.0.1:4242/mcp").unwrap()).unwrap().as_deref(), Some(""));
         // Mixed line endings, a bare LF inside a string of a CRLF file, and no final line ending: every byte kept.
         for odd in ["a = 1\r\nb = 2\n", "s = \"\"\"\nx\r\ny\"\"\"\r\nb = 1\r\n", "model = \"o4\""] {
-            let with = with_codex_server(odd, 4242).unwrap();
+            let with = with_codex_server(odd, "http://127.0.0.1:4242/mcp").unwrap();
             assert!(with.starts_with(odd), "{with:?}");
             assert_eq!(without_codex_server(&with).unwrap().as_deref(), Some(odd), "{with:?}");
         }
+        // The library's URL, a grimoire's path in it, is init's too; a path init never writes is not.
+        let library = with_codex_server(own, "http://127.0.0.1:4242/g/shop/mcp").unwrap();
+        assert_eq!(without_codex_server(&library).unwrap().as_deref(), Some(own));
+        let elsewhere = format!("{own}
+[mcp_servers.grimoire]
+url = \"http://127.0.0.1:4242/other/mcp\"
+");
+        assert!(without_codex_server(&elsewhere).unwrap_err().contains("by hand"));
         assert_eq!(without_codex_server(own).unwrap(), None);
         // A server of the person's own in init's shape, last in the file, is not init's: its url is not one init writes.
         let theirs = format!("{own}\n[mcp_servers.grimoire]\nurl = \"https://example.internal/mcp\"\n");
@@ -134,7 +144,7 @@ mod tests {
         assert_eq!(without_codex_server(&edited).unwrap(), Some(own.replacen("model = \"o4\"\n", "model = \"o4\"\r\n", 1)));
         // Shapes init cannot set a url in are refused, not overwritten.
         for refused in ["mcp_servers = 1\n", "mcp_servers = { docs = { url = \"x\" } }\n", "[mcp_servers]\ngrimoire = \"x\"\n", "[mcp_servers.grimoire]\ncommand = \"x\"\n"] {
-            assert!(with_codex_server(refused, 4242).is_err(), "{refused:?}");
+            assert!(with_codex_server(refused, "http://127.0.0.1:4242/mcp").is_err(), "{refused:?}");
         }
     }
 }

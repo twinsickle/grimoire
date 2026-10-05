@@ -106,6 +106,11 @@ enum Command {
         /// The port the daemon will serve on; written into .mcp.json.
         #[arg(long, default_value_t = 4242)]
         port: u16,
+        /// The grimoire's name, the same on every machine, which the MCP entry's URL
+        /// carries: /g/<name>/mcp. Defaults to the name the project file already
+        /// holds, else the repository folder's, made a slug.
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Remove exactly what init wrote, and nothing of yours. The store is kept
     /// unless --delete-store is given.
@@ -267,7 +272,7 @@ fn run_tool(target: &Target, name: &str, input: Value, held: Option<&store_io::S
     let (store, _) = store_io::load(store_dir)?;
     match client::probe(store_dir, &store.config.repository) {
         client::Probe::Serving(addr) => {
-            let (ok, v) = client::call_at(addr, name, &input)?;
+            let (ok, v) = client::call_to(&addr, name, &input)?;
             return Ok(if ok { Ok(v) } else { Err(v) });
         }
         // A daemon serves the store and will not let this command in: say so, and never go round it.
@@ -462,8 +467,8 @@ fn refuse_store_deletion(store: &Path, repo: &Path) -> anyhow::Result<Option<Str
     if s.config.repository != repo_str {
         return Ok(Some(format!("store {} belongs to repository {}, not {repo_str}", real.display(), s.config.repository)));
     }
-    if let Some(port) = grimoire_server::client::serving(&real, &s.config.repository) {
-        return Ok(Some(format!("a daemon is serving store {} on port {port}; stop it first", real.display())));
+    if let Some(at) = grimoire_server::client::serving(&real, &s.config.repository) {
+        return Ok(Some(format!("a daemon is serving store {} at {at}; stop it first", real.display())));
     }
     if real.join(store_io::SERVE_FILE).exists() {
         return Ok(Some(format!("store {} is marked as served ({}); stop its daemon, or remove the marker if none runs", real.display(), store_io::SERVE_FILE)));
@@ -627,6 +632,12 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Serve { store, port, ui_dir, shared, listen, site } => {
+            // Started in a checkout and given no store, the daemon serves the machine's library,
+            // this checkout's grimoire first; given one, that store alone (req:machine-library).
+            let library = match (&store, shared) {
+                (None, false) => Some(store_io::find_named(&cwd()?)?.2),
+                _ => None,
+            };
             let target = target(store.as_deref())?;
             // On a project that names a server, the daemon serves this checkout's copy of the server's intent.
             let server = match target.team {
@@ -634,7 +645,7 @@ fn main() -> anyhow::Result<()> {
                 None => None,
             };
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir: target.store_dir, port, ui_dir, shared, listen, server, site }))
+            rt.block_on(grimoire_server::serve(grimoire_server::ServeOptions { store_dir: target.store_dir, port, ui_dir, shared, listen, server, site, library }))
         }
         Command::Token { command } => token(command),
         Command::Login { server, token } => team::login(server.as_deref(), token),
@@ -773,17 +784,26 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Command::Init { repo, store, server, languages, port } => {
+        Command::Init { repo, store, server, languages, port, name } => {
             let languages: Vec<String> = languages.iter().map(|l| l.trim().to_string()).collect();
             let repo = repo.unwrap_or(cwd()?);
             let repo_str = canonical(&repo)?;
+            // The grimoire's name: the one given, else the one a project file here already holds, else the folder's.
+            let name = match name {
+                Some(n) if grimoire_core::store::is_slug(&n) => n,
+                Some(n) => bail!("the name `{n}` is not a slug: lowercase letters and digits joined by single dashes"),
+                None => match store_io::project_at(&repo) {
+                    Ok(Some((_, n))) => n,
+                    _ => store_io::default_name(&repo),
+                },
+            };
             // An address that is not one stops init before anything is written.
             let server = server.as_deref().map(store_io::server_address).transpose().map_err(anyhow::Error::msg)?;
             // Everything init will write, worked out first: a file it cannot merge into stops it before the store or .grimoire.toml.
-            let integration = init::plan_install(&repo, port)?;
+            let integration = init::plan_install(&repo, port, &name)?;
             // A team's server holds the grimoire: the project file names it, and no store is made here.
             if let Some(address) = server {
-                let f = store_io::write_project_file_for_server(&repo, &address)?;
+                let f = store_io::write_project_file_for_server(&repo, &address, &name)?;
                 println!("wrote   {}", f.display());
                 for w in integration.apply()? {
                     match w {
@@ -830,7 +850,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 lock
             };
-            let f = store_io::write_project_file(&repo, &store)?;
+            let f = store_io::write_project_file(&repo, &store, &name)?;
             println!("wrote   {}", f.display());
             for w in integration.apply()? {
                 match w {

@@ -11,6 +11,23 @@ use std::time::{Duration, Instant};
 
 const BIN: &str = env!("CARGO_BIN_EXE_grimoire");
 
+/// The binary, with a data directory of the test's own unless the test sets
+/// one: a daemon serves the machine's library, and no test may reach the real
+/// one, or another test's. Each test runs on a thread of its own.
+fn grimoire() -> Command {
+    let mut c = Command::new(BIN);
+    c.env("GRIMOIRE_HOME", test_home());
+    c
+}
+
+/// The data directory this test's commands use.
+fn test_home() -> PathBuf {
+    thread_local! {
+        static HOME: tempfile::TempDir = tempfile::Builder::new().prefix("grimoire-cli-home-").tempdir().unwrap();
+    }
+    HOME.with(|home| home.path().to_path_buf())
+}
+
 struct Project {
     dir: PathBuf,
     repo: PathBuf,
@@ -44,7 +61,7 @@ fn uninitialised() -> Project {
 }
 
 fn run(cwd: &Path, args: &[&str]) -> Output {
-    Command::new(BIN).args(args).current_dir(cwd).output().unwrap()
+    grimoire().args(args).current_dir(cwd).output().unwrap()
 }
 
 fn text(o: &Output) -> String {
@@ -290,7 +307,7 @@ impl Drop for Serving {
 fn writes_go_through_a_serving_daemon() {
     let (p, _) = project();
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let _daemon = Serving(Command::new(BIN).args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(30);
     while !p.store.join("serve.json").is_file() {
         assert!(Instant::now() < deadline, "the daemon never marked the store");
@@ -344,6 +361,109 @@ fn check_and_the_lint_tool_report_the_same_findings() {
     let lint: serde_json::Value = serde_json::from_slice(&lint.stdout).unwrap();
     assert!(check["new"].as_u64().unwrap() > 0 && check["findings"].as_array().unwrap().len() > check["new"].as_u64().unwrap() as usize);
     assert_eq!(check, lint, "a hook and an agent see the same findings and the same verdict");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#library", "crates/server/src/library#named-by-checkouts"]}
+/// ```
+#[test]
+fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
+    // A teammate's checkout of a team's project, signed in, its copy of the server's intent made by a first check.
+    let t = team_fixture(None);
+    let home = t.checkout.dir.join("home");
+    assert!(team(&t.checkout.repo, &home, None, &["login", "--token", &t.writer]).status.success());
+    let check = team(&t.checkout.repo, &home, None, &["check"]);
+    assert!(check.status.success(), "{}", text(&check));
+    let named = std::fs::read_to_string(t.checkout.repo.join(".grimoire.toml")).unwrap();
+    let grimoire_name = named.lines().find_map(|l| l.strip_prefix("name = ")).unwrap().trim_matches('"').to_string();
+    // On the same machine, a project with a store of its own, where the daemon is started.
+    let local = bare_repo();
+    assert!(team(&local.repo, &home, None, &["init", "--store", "local", "--name", "local"]).status.success());
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&local.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+    let copies = home.join("copies");
+    let copy = std::fs::read_dir(&copies).unwrap().flatten().map(|e| e.path()).find(|p| p.join("grimoire.json").is_file()).expect("the checkout's copy");
+    marked_port(&copy);
+    // The copy is served at its grimoire's path, answering for the teammate's checkout, signed in with their token.
+    let (code, status) = post(port, &format!("/g/{grimoire_name}/api/status"), "{}", "");
+    assert_eq!(code, 200, "{status}");
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["repository"], grimoire_server::store_io::repository_string(&t.checkout.repo).unwrap());
+    assert_eq!(status["server"]["reachable"], true, "{status}");
+    // A write from the checkout goes through the library to the server.
+    let filed = team(&t.checkout.repo, &home, None, &["tool", "file_ticket", r#"{"title":"From the library","kind":"change","priority":"later","body":"b"}"#]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let (_, board) = http(t.port, &format!("POST /api/board HTTP/1.0\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}", t.port, t.reader));
+    assert!(board.contains("From the library"), "the server holds it: {board}");
+}
+
+/// One request to the daemon on `port`: the status code and the body.
+fn post(port: u16, path: &str, body: &str, extra_headers: &str) -> (u16, String) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    write!(s, "POST {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n{extra_headers}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let mut answer = String::new();
+    s.read_to_string(&mut answer).unwrap();
+    let code = answer.split_whitespace().nth(1).unwrap().parse().unwrap();
+    (code, answer.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default())
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "one-daemon-serves-the-machines-library", "checks": ["crates/server/src#library", "req:project-name"]}
+/// ```
+#[test]
+fn one_daemon_serves_the_machines_library() {
+    // Two projects on one machine, each with a store of its own named by its project file.
+    let (shop, ledger) = (bare_repo(), bare_repo());
+    assert!(run(&shop.repo, &["init", "--store", "shop", "--name", "shop"]).status.success());
+    let init = run(&ledger.repo, &["init", "--store", "ledger-store", "--name", "ledger"]);
+    assert!(init.status.success(), "{}", text(&init));
+    let project = std::fs::read_to_string(ledger.repo.join(".grimoire.toml")).unwrap();
+    assert!(project.contains("name = \"ledger\""), "{project}");
+    let mcp: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(ledger.repo.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4242/g/ledger/mcp");
+    // A third, whose store another daemon already serves on its own.
+    let audit = bare_repo();
+    assert!(run(&audit.repo, &["init", "--store", "audit", "--name", "audit"]).status.success());
+    let audit_store = test_home().join("stores").join("audit");
+    let _other = Serving(grimoire().args(["serve", "--store", "audit", "--port", "0"]).current_dir(&audit.repo).spawn().unwrap());
+    let held_by = marked_port(&audit_store);
+    // One daemon, started in the first.
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&shop.repo).spawn().unwrap());
+    let ledger_store = test_home().join("stores").join("ledger-store");
+    marked_port(&ledger_store);
+    // Each marker names the grimoire's path, the default's too; the held one is left to its own daemon.
+    let path_of = |store: &Path| serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(store.join("serve.json")).unwrap()).unwrap()["path"].clone();
+    assert_eq!(path_of(&test_home().join("stores").join("shop")), "/g/shop");
+    assert_eq!(path_of(&ledger_store), "/g/ledger");
+    assert_eq!((marked_port(&audit_store), path_of(&audit_store)), (held_by, serde_json::Value::Null), "the other daemon still holds `audit`");
+    let (_, body) = post(port, "/g/audit/api/status", "{}", "");
+    assert!(!body.contains("\"repository\""), "the library does not answer for a grimoire another process holds: {body}");
+    let repository = |status: &str| serde_json::from_str::<serde_json::Value>(status).unwrap()["repository"].as_str().unwrap_or_default().to_string();
+    let named = |repo: &Path| grimoire_server::store_io::repository_string(repo).unwrap();
+    // The bare routes and /g/shop are the first's; /g/ledger the second's.
+    for (path, repo) in [("/api/status", &shop.repo), ("/g/shop/api/status", &shop.repo), ("/g/ledger/api/status", &ledger.repo)] {
+        let (code, body) = post(port, path, "{}", "");
+        assert_eq!(code, 200, "{path}: {body}");
+        assert_eq!(repository(&body), named(repo), "{path}");
+    }
+    // A command in the second sends its write to the daemon, at the second's path.
+    let filed = run(&ledger.repo, &["tool", "file_ticket", r#"{"title":"Through the library","kind":"change","priority":"later","body":"b"}"#]);
+    assert!(filed.status.success(), "{}", text(&filed));
+    let (_, board) = post(port, "/g/ledger/api/board", r#"{"priority":["later"]}"#, "");
+    assert!(board.contains("Through the library"), "the daemon holds the write, so it went through it: {board}");
+    let (_, theirs) = post(port, "/api/board", r#"{"priority":["later"]}"#, "");
+    assert!(!theirs.contains("Through the library"), "and not into the first's grimoire");
+    // MCP answers at the grimoire's own path.
+    let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}"#;
+    let (code, _) = post(port, "/g/ledger/mcp", init, "Accept: application/json, text/event-stream\r\n");
+    assert_eq!(code, 200, "MCP is served at /g/ledger/mcp");
 }
 
 /// A repository before init: its files, and where its store will go.
@@ -437,7 +557,7 @@ fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
 
     // A store a daemon is serving: refused, and nothing removed.
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let _daemon = Serving(Command::new(BIN).args(["serve", "--port", &port.to_string()]).current_dir(&a.repo).spawn().unwrap());
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&a.repo).spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(30);
     while !a.store.join("serve.json").is_file() {
         assert!(Instant::now() < deadline, "the daemon never marked the store");
@@ -517,7 +637,7 @@ fn uninstall_finds_the_project_from_below_and_refuses_a_broken_project_file() {
 /// A daemon serving `p`'s store, once it has marked it.
 fn serve(p: &Project) -> (Serving, u16) {
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let daemon = Serving(Command::new(BIN).args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
+    let daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&p.repo).spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(30);
     while !p.store.join("serve.json").is_file() {
         assert!(Instant::now() < deadline, "the daemon never marked the store");
@@ -965,7 +1085,7 @@ fn a_store_is_served_for_a_team_behind_tokens() {
     // Served shared: the repository the store records plays no part.
     std::fs::remove_dir_all(p.repo.join("src")).unwrap();
     // The port is left to the system, and the marker records the one it got.
-    let _daemon = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let _daemon = Serving(grimoire().args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(30);
     while !p.store.join("serve.json").is_file() {
         assert!(Instant::now() < deadline, "the shared daemon never marked the store");
@@ -981,12 +1101,12 @@ fn a_store_is_served_for_a_team_behind_tokens() {
     assert_eq!(status_of(port, "POST", "/api/file_ticket", &bearer(&check), A_TICKET), 403, "read-only");
     assert_eq!(status_of(port, "POST", "/api/board", &bearer(&check), "{}"), 200);
     // A command beside the daemon sends its token and is answered by it; without one it is not let through.
-    let via = Command::new(BIN).args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env("GRIMOIRE_TOKEN", &ana).output().unwrap();
+    let via = grimoire().args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env("GRIMOIRE_TOKEN", &ana).output().unwrap();
     assert!(via.status.success(), "{}", text(&via));
-    let without = Command::new(BIN).args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
+    let without = grimoire().args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
     assert!(!without.status.success() && text(&without).contains("refused this command") && text(&without).contains("GRIMOIRE_TOKEN"), "{}", text(&without));
     // A read without a token is refused the same way: it does not go round the daemon to a repository that is not there.
-    let read = Command::new(BIN).args(["tool", "--store", &store, "board"]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
+    let read = grimoire().args(["tool", "--store", &store, "board"]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
     assert!(!read.status.success() && text(&read).contains("refused this command"), "{}", text(&read));
     // It holds the store's lock like any daemon: a second one is refused.
     let second = run(&host, &["serve", "--shared", "--store", &store, "--port", "0"]);
@@ -1011,7 +1131,7 @@ fn a_store_with_tokens_is_deleted_under_their_lock() {
     assert!(p.store.join("tokens.json").is_file() && p.store.join("tokens.lock").is_file());
     // While a token command holds the tokens' lock, the deletion waits for it and removes nothing.
     let held = grimoire_server::store_io::tokens::lock(&p.store).unwrap();
-    let mut uninstall = Command::new(BIN).args(["uninstall", "--delete-store"]).current_dir(&p.repo).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    let mut uninstall = grimoire().args(["uninstall", "--delete-store"]).current_dir(&p.repo).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
     std::thread::sleep(Duration::from_millis(700));
     assert!(uninstall.try_wait().unwrap().is_none(), "the deletion waits for the tokens' lock");
     assert!(p.store.join("tokens.json").is_file() && p.store.join("grimoire.json").is_file());
@@ -1033,7 +1153,7 @@ fn a_store_with_tokens_is_deleted_under_their_lock() {
 fn the_marker_names_the_port_really_listened_on() {
     // A daemon on a person's machine, its port left to the system.
     let (p, _) = project();
-    let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).spawn().unwrap());
+    let _daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&p.repo).spawn().unwrap());
     let deadline = Instant::now() + Duration::from_secs(30);
     while !p.store.join("serve.json").is_file() {
         assert!(Instant::now() < deadline, "the daemon never marked the store");
@@ -1051,7 +1171,7 @@ fn the_marker_names_the_port_really_listened_on() {
 /// One command in a checkout of a team's project: Grimoire's own files under
 /// `home`, and signed in only as `token` says, whatever this machine has set.
 fn team(cwd: &Path, home: &Path, token: Option<&str>, args: &[&str]) -> Output {
-    let mut c = Command::new(BIN);
+    let mut c = grimoire();
     c.args(args).current_dir(cwd).env("GRIMOIRE_HOME", home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::null());
     if let Some(t) = token {
         c.env("GRIMOIRE_TOKEN", t);
@@ -1084,7 +1204,7 @@ fn a_checkout_works_against_a_teams_server() {
     std::fs::create_dir_all(&host).unwrap();
     let made = |name: &str| String::from_utf8_lossy(&run(&host, &["token", "add", name, "--store", &store]).stdout).trim().to_string();
     let (ana, pipeline, again) = (made("ana"), made("pipeline"), made("ana-again"));
-    let mut server = Some(Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap()));
+    let mut server = Some(Serving(grimoire().args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap()));
     let port = marked_port(&origin.store);
     let address = format!("http://127.0.0.1:{port}");
     // A teammate's checkout of the same code, with Grimoire's own files kept apart from this machine's.
@@ -1106,7 +1226,7 @@ fn a_checkout_works_against_a_teams_server() {
     assert!(!wrong.status.success() && text(&wrong).contains("refused the token") && !home.join("credentials.json").exists(), "{}", text(&wrong));
     let login = {
         use std::io::Write;
-        let mut child = Command::new(BIN).arg("login").current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        let mut child = grimoire().arg("login").current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
         writeln!(child.stdin.take().unwrap(), "{ana}").unwrap();
         child.wait_with_output().unwrap()
     };
@@ -1142,7 +1262,7 @@ fn a_checkout_works_against_a_teams_server() {
     assert_eq!(status_of(port, "POST", "/api/get", &bearer, r#"{"ref":"page:aim"}"#), 200, "applied to the server's truth");
     // A daemon in the checkout serves its copy with its code, and a command beside it goes through it.
     {
-        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+        let _daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
         let local = marked_port(&copy);
         assert_eq!(status_of(local, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
         let status = team(&p.repo, &home, None, &["tool", "status"]);
@@ -1183,7 +1303,7 @@ fn a_checkout_works_against_a_teams_server() {
     // With the checkout's daemon running and holding the copy, a command asks it, and says the same.
     let _ = std::fs::remove_file(copy.join("serve.json"));
     {
-        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+        let _daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
         marked_port(&copy);
         let beside = team(&p.repo, &home, None, &["check"]);
         assert!(text(&beside).contains("cannot be reached") && text(&beside).contains("as of") && text(&beside).contains("finding(s)"), "{}", text(&beside));
@@ -1223,7 +1343,7 @@ fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
     std::fs::create_dir_all(&host).unwrap();
     let writer = String::from_utf8_lossy(&run(&host, &["token", "add", "pipeline", "--store", &store]).stdout).trim().to_string();
     let reader = String::from_utf8_lossy(&run(&host, &["token", "add", "reader", "--read-only", "--store", &store]).stdout).trim().to_string();
-    let server = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let server = Serving(grimoire().args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
     let port = marked_port(&origin.store);
     let checkout = uninitialised();
     let home = checkout.dir.join("home");
@@ -1273,7 +1393,7 @@ fn the_main_line_prunes_a_teams_baseline() {
     assert_eq!(baseline_count(&t.origin.store), adopted - 3);
     // With a daemon serving the pipeline's checkout, the main line still reads the server, never that daemon's copy.
     let copy = {
-        let _daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &t.writer).spawn().unwrap());
+        let _daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &t.writer).spawn().unwrap());
         let deadline = Instant::now() + Duration::from_secs(30);
         let copy = loop {
             if let Some(c) = std::fs::read_dir(ci.join("copies")).ok().and_then(|mut d| d.next()).and_then(Result::ok) {
@@ -1381,7 +1501,7 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
     std::fs::create_dir_all(&host).unwrap();
     let ana = String::from_utf8_lossy(&run(&host, &["token", "add", "ana", "--store", &store]).stdout).trim().to_string();
     let pipeline = String::from_utf8_lossy(&run(&host, &["token", "add", "pipeline", "--read-only", "--store", &store]).stdout).trim().to_string();
-    let _server = Serving(Command::new(BIN).args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
+    let _server = Serving(grimoire().args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0"]).current_dir(&host).spawn().unwrap());
     let address = format!("http://127.0.0.1:{}", marked_port(&origin.store));
     let p = uninitialised();
     let home = p.dir.join("home");
@@ -1430,7 +1550,7 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
         assert!(!held.status.success() && text(&held).contains("another process holds") && !text(&held).contains("req:proposed"), "{}", text(&held));
     }
     // A daemon serving the runner's checkout keeps the copy current: while it says the server answers, a named check reads it.
-    let ci_daemon = Serving(Command::new(BIN).args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &pipeline).spawn().unwrap());
+    let ci_daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&p.repo).env("GRIMOIRE_HOME", &ci).env("GRIMOIRE_TOKEN", &pipeline).spawn().unwrap());
     marked_port(&ci_copy);
     let beside = check(&["--ticket", &slug]);
     assert!(!beside.status.success() && text(&beside).contains("req:proposed"), "{}", text(&beside));
