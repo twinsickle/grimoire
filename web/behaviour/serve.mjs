@@ -69,7 +69,8 @@ function run(args, input, cwd = repo) {
   return r.stdout;
 }
 
-grimoire("init", "--store", store);
+// Empty, not the skeleton init writes by default: the fixture's own records fill it.
+grimoire("init", "--store", store, "--empty");
 const records = JSON.parse(readFileSync(join(here, "fixture", "store.json"), "utf8"));
 const tool = (name, input) => JSON.parse(grimoire("tool", name, JSON.stringify(input)));
 
@@ -135,7 +136,7 @@ tool("put_page", { slug: "detached", title: "Detached heads", body: "Proposed by
 const ledger = join(dir, "ledger");
 mkdirSync(join(ledger, "src"), { recursive: true });
 writeFileSync(join(ledger, "README.md"), "The ledger: a second grimoire in the fixture's library.\n");
-run(["init", "--store", "ledger", "--name", "ledger"], undefined, ledger);
+run(["init", "--store", "ledger", "--name", "ledger", "--empty"], undefined, ledger);
 
 // A team's: the seeded store is served shared, and the fixture's checkout
 // becomes one that names that server, signed in, as a teammate's is.

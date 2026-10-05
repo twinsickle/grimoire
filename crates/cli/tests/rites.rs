@@ -32,5 +32,5 @@ fn this_repository_is_worked_on_in_the_setup_a_team_uses() {
     // The setup of one person with a store and no server is held by tests, this repository no longer
     // being worked in it: the command line's own, and the browser tests' fixture, which init gives a store.
     assert!(read("crates/cli/tests/cli.rs").contains("\"init\", \"--store\""));
-    assert!(read("web/behaviour/serve.mjs").contains("grimoire(\"init\", \"--store\", store)"));
+    assert!(read("web/behaviour/serve.mjs").contains("grimoire(\"init\", \"--store\", store"));
 }

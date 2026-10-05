@@ -40,8 +40,8 @@ A release binary carries the web UI inside it: `sh scripts/release` builds it.
 ## Using it on a project
 
 ```
-grimoire scaffold --repo <path> --store <name>   # skeleton store from the module contracts
-grimoire init --repo <path> --store <name>       # install the integration into the repository
+grimoire init --repo <path> --store <name>       # make the store (a skeleton from the module contracts) and install the integration
+grimoire scaffold --repo <path> --store <name>   # build a skeleton store on its own, before init; --force rebuilds one, replacing it
 grimoire uninstall [--delete-store]              # remove exactly what init wrote; keep the store unless asked
 grimoire check                                   # the lints, for hooks and CI; exit 1 on findings
 grimoire serve --port 4242                       # the daemon: the UI, /api/<tool>, /mcp, /api/events

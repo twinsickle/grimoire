@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { goneOf, idOf, kindOf, libraryShown, localId, serverAway, type AnyNode } from "./types";
+import { goneOf, idOf, kindOf, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -21,6 +21,21 @@ afterEach(() => vi.unstubAllGlobals());
  * {"test": "an-address-names-its-grimoire", "checks": ["web/src/api#grimoire-base"]}
  * ```
  */
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-missing-root-says-which-is-missing", "checks": ["web/src/types#missing-root"]}
+ * ```
+ */
+test("a root named but not written is told apart from no root named", () => {
+  const unwritten = missingRoot("overview");
+  expect(unwritten).toContain("`overview` has no page yet");
+  expect(unwritten).toContain("put a page `overview`");
+  expect(unwritten).not.toContain("configure");
+  for (const none of [null, undefined, ""]) expect(missingRoot(none)).toContain("configure");
+});
+
 /**
  * # Test contract
  *

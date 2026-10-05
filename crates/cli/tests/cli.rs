@@ -399,6 +399,45 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
     assert!(board.contains("From the library"), "the server holds it: {board}");
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-sets-a-project-up-in-one-command", "checks": ["crates/cli/src#init-scaffolds", "req:init-scaffolds"]}
+/// ```
+#[test]
+fn init_sets_a_project_up_in_one_command() {
+    // A repository with contracted modules, one in a group of its own, and no store yet.
+    let p = bare_repo();
+    std::fs::create_dir_all(p.repo.join("src").join("area")).unwrap();
+    std::fs::write(p.repo.join("src").join("area").join("b.rs"), CONTRACTED.replace("Offer a.", "Offer b.").replace("exports-a", "exports-b").replace("named a.", "named b.").replace("fn a()", "fn b()")).unwrap();
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success() && text(&init).contains("wrote") && text(&init).contains("requirement(s)"), "{}", text(&init));
+    let outline: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "outline", r#"{"depth":1,"pages_only":true}"#]).stdout).unwrap();
+    let root = &outline["roots"][0];
+    assert_eq!(root["ref"], "page:overview", "{outline}");
+    let story: Vec<&str> = root["children"].as_array().unwrap().iter().map(|c| c["ref"].as_str().unwrap()).collect();
+    assert_eq!(story, ["page:goal", "page:guarantees", "page:glossary", "page:architecture", "page:constraints"]);
+    let req: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "find", r#"{"query":"exports a function named","kinds":["req"]}"#]).stdout).unwrap();
+    assert_eq!(req["nodes"].as_array().unwrap().len(), 2, "a requirement for each module's criterion: {req}");
+    // The module's group has a page of its own, under architecture.
+    let architecture: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "get", r#"{"ref":"page:architecture"}"#]).stdout).unwrap();
+    assert!(architecture["node"]["links"].as_array().unwrap().iter().any(|l| l == "page:src-area"), "{architecture}");
+    // What the skeleton leaves to do, criteria no test checks and requirements with no scenario, is the baseline.
+    assert!(baseline_count(&p.store) > 0, "the skeleton's findings are adopted");
+    // Run again, the store is left as it is: a page a person removed stays removed.
+    let pages = || std::fs::read_dir(p.store.join("pages")).unwrap().count();
+    let before = pages();
+    std::fs::remove_file(p.store.join("pages").join("glossary.json")).unwrap();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    assert_eq!(pages(), before - 1, "init scaffolds only a store it creates");
+    // Asked for an empty store, it names the roots and writes no page.
+    let q = bare_repo();
+    assert!(run(&q.repo, &["init", "--store", &q.store.to_string_lossy(), "--empty"]).status.success());
+    assert_eq!(std::fs::read_dir(q.store.join("pages")).map(|d| d.count()).unwrap_or(0), 0);
+    let config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(q.store.join("grimoire.json")).unwrap()).unwrap();
+    assert_eq!((config["roots"]["grimoire"].clone(), config["roots"]["rites"].clone()), (serde_json::json!("overview"), serde_json::json!("rites")), "both roots named: {config}");
+}
+
 /// Wait until `ok` holds, up to thirty seconds.
 fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -1408,7 +1447,10 @@ struct TeamFixture {
 }
 
 fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
-    let (origin, _) = project();
+    // An empty store, roots named and no page, so the server's intent shows exactly those two findings.
+    let origin = uninitialised();
+    let init = run(&origin.repo, &["init", "--store", &origin.store.to_string_lossy(), "--empty"]);
+    assert!(init.status.success(), "{}", text(&init));
     if let Some(languages) = languages {
         let path = origin.store.join("grimoire.json");
         let mut config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
@@ -1501,7 +1543,7 @@ fn the_main_line_prunes_a_teams_baseline() {
     assert_eq!(baseline_count(&t.origin.store), adopted - 3);
     assert_eq!(status_of(t.port, "POST", "/api/prune", &bearer(&t.writer), &stranger(&digest(t.port))), 200);
     // Told only of a finding it never held, every entry goes but what the server's own intent still shows: its
-    // two roots, which init named and no page yet carries; none is added.
+    // two roots, which the empty store names and no page yet carries; none is added.
     let left: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(t.origin.store.join("baseline.json")).unwrap()).unwrap();
     let checks: Vec<&str> = left["findings"].as_array().unwrap().iter().map(|f| f["check"].as_str().unwrap()).collect();
     assert_eq!(checks, ["missing-grimoire-root", "missing-rites-root"]);

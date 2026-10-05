@@ -11,7 +11,7 @@ import { api, useQuery } from "../api";
 import { Badge, ErrorBox, Folded, KindTag, card, empty, mono } from "../components";
 import { useTabTitle } from "../title";
 import { DraftNotice } from "./Node";
-import { idOf, kindOf, localId, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
+import { idOf, kindOf, localId, missingRoot, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
 /** Deep enough to reach every page, so the rail is every page of the outline. */
 const ALL = 64;
@@ -22,6 +22,8 @@ export type At = { root: true } | { page: Ref } | { unplaced: true };
 /** Read the grimoire: a rail of every page, and the root, a page or the unplaced modules beside it. */
 export function HomeView({ at }: { at: At }) {
   const { data, error } = useQuery(() => api.outline({ depth: ALL, pages_only: true }), []);
+  // Which root the config names, for when the outline has none to show.
+  const status = useQuery(() => api.status(), []);
   // ?ticket= reads a page as that ticket's proposal would leave it; the rail stays the truth's.
   const [params] = useSearchParams();
   const ticket = params.get("ticket") ?? undefined;
@@ -31,7 +33,12 @@ export function HomeView({ at }: { at: At }) {
   if (!data) return <><TabTitle subject={named} /><p className="text-fg-dim">Loading…</p></>;
   // The grimoire's root is at /; the rites' is read by selecting it. With no grimoire root, / says so rather than show the rites as home.
   const first = data.roots.find((r) => !r.rites);
-  if (!first) return <><TabTitle subject={named} /><p className={empty}>No grimoire root. The check says how to name one with configure.</p></>;
+  if (!first) {
+    // Which case it is comes from status: said only once status has answered, its error shown if it failed.
+    if (status.error) return <><TabTitle subject={named} /><ErrorBox error={status.error} /></>;
+    if (!status.data) return <><TabTitle subject={named} /><p className="text-fg-dim">Loading…</p></>;
+    return <><TabTitle subject={named} /><p className={empty}>{missingRoot(status.data.roots.grimoire)}</p></>;
+  }
   const path = "page" in at ? pathIn(data.roots, at.page) : null;
   // The rail marks the one entry the pane shows: the path to it, since a page linked twice appears twice.
   const selected = "unplaced" in at ? "unplaced" : "root" in at ? trailOf([first]) : path ? trailOf(path) : "";
