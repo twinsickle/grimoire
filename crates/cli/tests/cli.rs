@@ -441,7 +441,7 @@ fn init_sets_a_project_up_in_one_command() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/cli/src#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
+/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
 /// ```
 #[test]
 fn a_teams_server_serves_its_library() {
@@ -597,7 +597,7 @@ Host: 127.0.0.1:{port}
 /// # Test contract
 ///
 /// ```json
-/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-by-checkouts", "crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/server/src/library/live#checkout-chosen", "crates/server/src/library/live#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
+/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-by-checkouts", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
@@ -694,7 +694,7 @@ fn store_io_project_file() -> &'static str {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live#checkout-chosen", "crates/server/src/library/live#checkout-registered", "req:machine-checkouts"]}
+/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live#checkout-registered", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_teams_worktree_inside_its_checkout_is_its_own() {
@@ -745,7 +745,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
@@ -843,7 +843,7 @@ fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
+/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn the_library_follows_what_the_machine_holds() {
