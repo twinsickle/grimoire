@@ -53,8 +53,30 @@ impl Store {
                     }
                 }
             }
+            // Its edits to other tickets' references, on the tickets they edit; one since closed or gone takes none.
+            for (slug, q) in &p.tickets {
+                if let Some(t) = s.tickets.get_mut(slug).filter(|t| t.status != Status::Closed) {
+                    t.touches = q.record.touches.clone();
+                    t.relies_on = q.record.relies_on.clone();
+                }
+            }
         }
         s
+    }
+
+    /// For each ticket whose references a proposal would change at its
+    /// close, the tickets proposing it, in slug order: an edit equal to the
+    /// truth's lists, or to a ticket since closed or gone, changes nothing.
+    pub fn ticket_drafts(&self) -> BTreeMap<String, Vec<String>> {
+        let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for p in self.proposals.values() {
+            for (slug, q) in &p.tickets {
+                if self.tickets.get(slug).is_some_and(|t| t.status != Status::Closed && TicketReferences::of(t) != q.record) {
+                    out.entry(slug.clone()).or_default().push(p.ticket.clone());
+                }
+            }
+        }
+        out
     }
 }
 
@@ -341,6 +363,14 @@ pub fn validate_proposal(p: &Proposal) -> Vec<FieldError> {
             _ => e.push(FieldError::new("deleted", format!("`{key}` is not a page or requirement reference"))),
         }
         check_required(&mut e, &format!("deleted[{key}]"), print);
+    }
+    for (key, q) in &p.tickets {
+        check_slug(&mut e, &format!("tickets[{key}]"), key);
+        check_refs(&mut e, &format!("tickets[{key}].touches"), &q.record.touches, None);
+        check_refs(&mut e, &format!("tickets[{key}].relies_on"), &q.record.relies_on, None);
+        if let Some(b) = &q.base {
+            check_required(&mut e, &format!("tickets[{key}].base"), b);
+        }
     }
     e
 }

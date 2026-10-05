@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, so every query and lint answers over a branch's own intent when asked to."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, and each ticket whose references it edits with the references the edit holds, so every query and lint answers over a branch's own intent when asked to; such a graph names as judged that ticket and the tickets it edits, and the truth's graph names none."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -112,6 +112,13 @@ pub struct Graph {
     pub test_errors: Vec<TestError>,
     /// The order set within each priority band, for the board.
     pub order: Order,
+    /// The tickets whose references the lint judges: none on the truth's
+    /// graph; read with a ticket, that ticket and those whose references its
+    /// proposal edits, since a ticket's references are its proposal state.
+    pub judged: HashSet<String>,
+    /// For each ticket whose references a proposal would change, the tickets
+    /// proposing it.
+    pub drafted: BTreeMap<String, Vec<String>>,
 }
 
 impl Graph {
@@ -122,6 +129,9 @@ impl Graph {
         let mut g = Graph::build(&store.applied(ticket), extraction, malformed);
         // Judged against the truth itself: with its own proposal laid on top, a ticket's records never look moved.
         g.landing_moved = crate::ops::landing_moved(store);
+        g.drafted = store.ticket_drafts();
+        // Its references, and those its edits leave other tickets with, are what this reading judges.
+        g.judged = std::iter::once(ticket.to_string()).chain(store.proposals.get(ticket).into_iter().flat_map(|p| p.tickets.keys().cloned())).collect();
         g
     }
 
@@ -134,6 +144,7 @@ impl Graph {
             baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
             order: store.config.order.clone(),
             landing_moved: crate::ops::landing_moved(store),
+            drafted: store.ticket_drafts(),
             ..Default::default()
         };
 

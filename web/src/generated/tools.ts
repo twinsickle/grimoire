@@ -17,7 +17,12 @@ export type BaselineSummary = { date: string, reason: string, count: number, };
 
 export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, closed: Array<BoardTicket>, };
 
-export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
+export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, 
+/**
+ * The tickets whose proposals would change this ticket's references:
+ * what it touches and relies on here is the truth's, and an edit waits.
+ */
+drafts?: Array<Ref>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
 
 export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, };
 
@@ -117,7 +122,7 @@ export type Page = { slug: string, title: string, body: string, links: Array<Ref
 
 export type Priority = "next" | "high" | "later";
 
-export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, };
+export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, tickets: Array<Draft>, };
 
 export type Ref = string;
 

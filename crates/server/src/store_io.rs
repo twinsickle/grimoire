@@ -649,6 +649,7 @@ mod tests {
             pages: [("goal".to_string(), Proposed { record: Page { slug: "goal".into(), title: title.into(), body: "b".into(), links: vec![] }, base: Some("f".into()) })].into(),
             requirements: Default::default(),
             deleted: Default::default(),
+            tickets: Default::default(),
         };
         let mut with_ticket = good.clone();
         with_ticket.tickets.insert("0001".into(), active.clone());
@@ -738,6 +739,7 @@ mod tests {
                 .into(),
                 requirements: Default::default(),
                 deleted: Default::default(),
+                tickets: Default::default(),
             },
         );
         let vision: Reference = "page:vision".parse().unwrap();
@@ -866,9 +868,16 @@ mod tests {
                 decision: None,
             },
         );
-        store
-            .proposals
-            .insert("0001".into(), Proposal { ticket: "0001".into(), pages: Default::default(), requirements: Default::default(), deleted: [("page:overview".to_string(), "f".to_string())].into() });
+        store.proposals.insert(
+            "0001".into(),
+            Proposal {
+                ticket: "0001".into(),
+                pages: Default::default(),
+                requirements: Default::default(),
+                deleted: [("page:overview".to_string(), "f".to_string())].into(),
+                tickets: Default::default(),
+            },
+        );
         store.current = Some("0001".into());
         persist(dir, &store, &Changed::Many(vec![Changed::Ticket("0001".into()), Changed::Proposed("0001".into()), Changed::Current])).unwrap();
         let (back, malformed) = load(dir).unwrap();

@@ -78,6 +78,12 @@ pub fn proposes(name: &str) -> bool {
     matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "delete_node")
 }
 
+/// The writes that take `ticket`: those that change intent, and update_ticket,
+/// whose edits to another ticket's references wait in a change's proposal.
+pub fn takes_ticket(name: &str) -> bool {
+    proposes(name) || name == "update_ticket"
+}
+
 pub fn is_write(name: &str) -> bool {
     matches!(
         name,
