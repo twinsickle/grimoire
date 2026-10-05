@@ -47,7 +47,10 @@ it created in `warnings`. Every warning is work to do now.
   `file:<path>`, `decl:<path>#<decl path>`. **`find` before every reference
   you write**, in `touches`, `relies_on`, `links` and `covered_by`. A wrong
   guess comes back as a dangling warning; a guess that names the wrong node
-  does not.
+  does not. A reference names a node of this project's own grimoire, never
+  another project's: what another system promises is written here as a
+  requirement of this project's own, held by its own test against that
+  system, and prose may link to the other project's site.
 - **Slugs** are `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 64 characters.
 - **Two roots.** Every grimoire has two, named in its config: the
   **grimoire**, what the project is and must do, its requirements carried
