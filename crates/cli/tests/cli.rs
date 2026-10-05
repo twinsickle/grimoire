@@ -399,6 +399,75 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
     assert!(board.contains("From the library"), "the server holds it: {board}");
 }
 
+/// Wait until `ok` holds, up to thirty seconds.
+fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !ok() {
+        assert!(Instant::now() < deadline, "{what}, within thirty seconds");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
+/// ```
+#[test]
+fn the_library_follows_what_the_machine_holds() {
+    // A daemon already serving the machine's library, started in `shop`, and a store another daemon holds.
+    let (shop, audit) = (bare_repo(), bare_repo());
+    assert!(run(&shop.repo, &["init", "--store", "shop", "--name", "shop"]).status.success());
+    assert!(run(&audit.repo, &["init", "--store", "audit", "--name", "audit"]).status.success());
+    let audit_store = test_home().join("stores").join("audit");
+    let other = Serving(grimoire().args(["serve", "--store", "audit", "--port", "0"]).current_dir(&audit.repo).spawn().unwrap());
+    marked_port(&audit_store);
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&shop.repo).spawn().unwrap());
+    marked_port(&test_home().join("stores").join("shop"));
+    let library = |at: &str| -> Vec<String> {
+        let (_, status) = post(port, &format!("{at}/api/status"), "{}", "");
+        serde_json::from_str::<serde_json::Value>(&status).ok().and_then(|s| s["library"].as_array().map(|l| l.iter().filter_map(|g| g["name"].as_str().map(str::to_string)).collect())).unwrap_or_default()
+    };
+    let answers = |name: &str| post(port, &format!("/g/{name}/api/status"), "{}", "").0 == 200;
+    assert_eq!(library(""), ["shop"]);
+    // A project made while it runs is served with nothing restarted, init says so, and every grimoire's status lists it.
+    let ledger = bare_repo();
+    let init = run(&ledger.repo, &["init", "--store", "ledger", "--name", "ledger", "--port", &port.to_string()]);
+    assert!(init.status.success() && text(&init).contains("serves it within seconds"), "{}", text(&init));
+    eventually("ledger is served", || answers("ledger"));
+    assert_eq!((library(""), library("/g/ledger")), (vec!["ledger".to_string(), "shop".to_string()], vec!["ledger".to_string(), "shop".to_string()]));
+    // A store another process held is taken once it is let go.
+    drop(other);
+    eventually("audit is served once its own daemon stops", || answers("audit"));
+    // A project file that renames its grimoire: let go under the old name, served under the new.
+    let project = ledger.repo.join(".grimoire.toml");
+    std::fs::write(&project, std::fs::read_to_string(&project).unwrap().replace("name = \"ledger\"", "name = \"books\"")).unwrap();
+    eventually("the renamed grimoire is served by its new name", || answers("books") && !answers("ledger"));
+    // A store released for deletion is held back until the command is done with it, then taken again.
+    let release = |done: bool| post(port, "/library/release", &serde_json::json!({ "store": audit_store.to_string_lossy(), "done": done }).to_string(), "");
+    let (code, answer) = release(false);
+    assert!(code == 200 && answer.contains("\"released\":true"), "{answer}");
+    assert!(!answers("audit"));
+    std::thread::sleep(Duration::from_secs(5));
+    assert!(!answers("audit"), "held back across refreshes while the command holds it");
+    release(true);
+    eventually("audit is served again once the command is done", || answers("audit"));
+    // Deleting a store the library serves: the library lets it go, and it is deleted;
+    // made again at once in the same place, it is served again.
+    let books_store = test_home().join("stores").join("ledger");
+    let out = run(&ledger.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success() && text(&out).contains("released store"), "{}", text(&out));
+    assert!(!books_store.exists());
+    assert_eq!(post(port, "/g/books/api/status", "{}", "").0, 404, "a name the library no longer holds is not found");
+    assert!(run(&ledger.repo, &["init", "--store", "ledger", "--name", "books"]).status.success());
+    eventually("a store made again where one was deleted is served", || answers("books"));
+    // The daemon's own grimoire is not let go: its deletion is refused, and nothing removed.
+    let out = run(&shop.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success() && text(&out).contains("stop it first"), "{}", text(&out));
+    assert!(test_home().join("stores").join("shop").join("grimoire.json").is_file() && shop.repo.join(".grimoire.toml").is_file());
+}
+
 /// One request to the daemon on `port`: the status code and the body.
 fn post(port: u16, path: &str, body: &str, extra_headers: &str) -> (u16, String) {
     use std::io::{Read, Write};

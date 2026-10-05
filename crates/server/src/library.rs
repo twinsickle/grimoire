@@ -4,6 +4,8 @@
 //! {"purpose":"Find the grimoires a machine's library serves: those its checkouts name, among the stores and the copies of a server's intent kept on it.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; so is one whose name the default checkout's grimoire or an earlier one already holds, the reason naming both checkouts, and the default checkout's own grimoire is never returned."}]}
 //! ```
 
+pub mod live;
+
 use std::path::{Path, PathBuf};
 
 use crate::store_io::{self, Home};

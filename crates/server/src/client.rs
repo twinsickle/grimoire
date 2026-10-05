@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself.","criteria":[{"id":"defers-to-daemon","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository; a marker nobody answers, or one answered for another repository, is ignored; a daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon; the daemon is asked at the address its marker records, and at the path of the store's grimoire in its library when the marker records one, both to probe and to call, the loopback of the same family when it listens on every address; and a call carries GRIMOIRE_TOKEN as a bearer token when it is set."}]}
+//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself; and ask a daemon's library to let a store go for deletion, and to take it again after.","criteria":[{"id":"defers-to-daemon","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository; a marker nobody answers, or one answered for another repository, is ignored; a daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon; the daemon is asked at the address its marker records, and at the path of the store's grimoire in its library when the marker records one, both to probe and to call, the loopback of the same family when it listens on every address; and a call carries GRIMOIRE_TOKEN as a bearer token when it is set."},{"id":"release","statement":"release asks the daemon at an address to let a store go from its library and answers whether it did; release_done tells it the command is done with the store, so its library may take it again."}]}
 //! ```
 
 use std::io::{Read, Write};
@@ -90,9 +90,29 @@ pub fn call_to(at: &At, tool: &str, input: &Value) -> Result<(bool, Value), Clie
     Ok(((200..300).contains(&code), value))
 }
 
+/// Ask the daemon at `addr` to let go of `store_dir` from its machine's library,
+/// so it can be deleted: true when it did, false when it serves it as its own
+/// grimoire or not at all.
+pub fn release(addr: SocketAddr, store_dir: &Path) -> Result<bool, ClientError> {
+    let input = serde_json::json!({ "store": store_dir.to_string_lossy() });
+    let (code, answer) = post(addr, "/library/release", &input)?;
+    Ok((200..300).contains(&code) && answer["released"] == true)
+}
+
+/// Tell the daemon at `addr` that the command which asked for `store_dir`'s
+/// release is done with it, deleted or not: its library may take it again.
+pub fn release_done(addr: SocketAddr, store_dir: &Path) -> Result<(), ClientError> {
+    let input = serde_json::json!({ "store": store_dir.to_string_lossy(), "done": true });
+    post(addr, "/library/release", &input).map(|_| ())
+}
+
 /// One call: the status code and the JSON body.
 fn exchange(at: &At, tool: &str, input: &Value) -> Result<(u16, Value), ClientError> {
-    let (addr, path) = (at.addr, at.path.as_str());
+    post(at.addr, &format!("{}/api/{tool}", at.path), input)
+}
+
+/// One POST of `input` to `path` on the daemon at `addr`: the status code and the JSON body.
+fn post(addr: SocketAddr, path: &str, input: &Value) -> Result<(u16, Value), ClientError> {
     let port = addr.port();
     let io = |e| ClientError::Io(port, e);
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).map_err(io)?;
@@ -103,7 +123,7 @@ fn exchange(at: &At, tool: &str, input: &Value) -> Result<(u16, Value), ClientEr
     // sends a chunked body, so the answer is everything up to EOF.
     // A shared daemon admits a caller by token; a local one ignores the header.
     let token = std::env::var(TOKEN_ENV).ok().filter(|t| !t.trim().is_empty()).map(|t| format!("Authorization: Bearer {}\r\n", t.trim())).unwrap_or_default();
-    let request = format!("POST {path}/api/{tool} HTTP/1.0\r\nHost: {}\r\n{token}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", addr, body.len());
+    let request = format!("POST {path} HTTP/1.0\r\nHost: {}\r\n{token}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", addr, body.len());
     stream.write_all(request.as_bytes()).map_err(io)?;
     let mut answer = Vec::new();
     stream.read_to_end(&mut answer).map_err(io)?;

@@ -662,10 +662,11 @@ pub fn follow(daemon: &Arc<Daemon>) {
                 drop(d);
                 for line in BufReader::new(stream).lines() {
                     let Ok(line) = line else { break };
+                    // Asked on every line, a keep-alive too, so a daemon let go of is followed no longer.
+                    let Some(d) = daemon.upgrade() else { return };
                     if !line.starts_with("data:") {
                         continue;
                     }
-                    let Some(d) = daemon.upgrade() else { return };
                     if let Err(e) = d.sync_now() {
                         tracing::warn!("{e}");
                     }
