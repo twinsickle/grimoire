@@ -108,9 +108,10 @@ it created in `warnings`. Every warning is work to do now.
   `references/changes.md`; read it before a ticket that touches a module.
 - **If the daemon is rebuilt while you work**, the tools drop out during
   each rebuild. Write the grimoire before editing code; retry a refused call
-  after a moment, never edit the store instead. A new tool or changed
-  instructions reach your MCP client only when it reconnects; call over
-  HTTP until then, and say so.
+  after a moment, never edit the store instead. Changed instructions reach
+  your MCP client when it reconnects, but a new tool or a changed field may
+  reach it only in a new session, since a client may keep the tools it was
+  first given. Until then call over HTTP, and say so.
 - **A `check` that fails for no sensible reason**: compare `status`'s
   `version` and `supported_languages` with the store's `languages`. A stale
   installed binary is the usual cause.
