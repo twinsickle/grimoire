@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, file_ticket and update_ticket add reprioritised, the tickets whose priority the write moved beyond the one asked, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed and settled, the gaps and questions that closed with it, or with when: landed the findings as its proposal leaves them, no such list and settled empty, land_ticket answers whether a ticket landed, what its close answers when one did, and the changes still landing, update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what changed that it never touched, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"settles","statement":"A change closed by close_ticket or land_ticket settles the answers it relies on as closed; a change deleted, or one whose relies_on update_ticket shortens, settles the answers it relied on and no longer does as gone, with why; each persists what the settle changed after the write's own changes."},{"id":"reprioritised","statement":"file_ticket keeps pace for the ticket it filed and update_ticket for the ticket it edited, from the priority it had, after settling any answers the edit dropped; each answers the tickets keep_pace moved as reprioritised, with their priorities as they now are, and persists them after the write's own changes."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node as it now exists, the findings the write created and what changed for the caller to persist.","criteria":[{"id":"write-responses","statement":"Every write answers with the node as it now exists, but for land_ticket when no ticket was waiting, which answers with none; put_page, patch_page, put_requirement, file_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, a ticket write judging them as lint does with no ticket, over the store's current ticket's proposal when there is one and the truth when there is none, file_ticket and update_ticket add reprioritised, the tickets whose priority the write moved beyond the one asked, start_ticket adds rests_on and related, close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed and settled, the gaps and questions that closed with it, or with when: landed the findings as its proposal leaves them, no such list and settled empty, land_ticket answers whether a ticket landed, what its close answers when one did, and the changes still landing, update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened, record_decision and supersede answer with the requirement alone, retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones, delete_node returns the deleted reference and the new dangling edges left behind with the same count, adopt returns the new baseline's date, reason and count with the count it replaced, and configure returns the config with the count of findings now new."},{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what changed that it never touched, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"ticket-named","statement":"A write that changes intent (put_page, patch_page, put_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) lands in the proposal of the ticket its input names, else the store's current ticket, and is refused as invalid with neither; only these writes take ticket, any other write refusing it as a field it does not know, and delete_node of a ticket refuses it; it answers with the node as the proposal holds it, and close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, else applies it before closing."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"settles","statement":"A change closed by close_ticket or land_ticket settles the answers it relies on as closed; a change deleted, or one whose relies_on update_ticket shortens, settles the answers it relied on and no longer does as gone, with why; each persists what the settle changed after the write's own changes."},{"id":"reprioritised","statement":"file_ticket keeps pace for the ticket it filed and update_ticket for the ticket it edited, from the priority it had, after settling any answers the edit dropped; each answers the tickets keep_pace moved as reprioritised, with their priorities as they now are, and persists them after the write's own changes."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
 //! ```
 
 use serde::Deserialize;
@@ -142,9 +142,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             let (moved, more) = ops::keep_pace(state.store_mut(), &node.slug, None);
             let reprioritised = tickets(state, &moved);
             let changed = if moved.is_empty() { changed } else { Changed::Many(vec![changed, more]) };
-            let g = state.graph();
-            let node = query::view(g, &r).expect("just written");
-            let (warnings, baselined) = split_new(lint::written(g, &r));
+            let node = query::view(state.graph(), &r).expect("just written");
+            let (warnings, baselined) = ticket_warnings(state, &r);
             answer(name, Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised) }, Some(changed))
         }
         "update_ticket" => {
@@ -184,9 +183,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             }
             let reprioritised = Some(tickets(state, &moved));
             let changed = if changes.len() == 1 { changes.remove(0) } else { Changed::Many(changes) };
-            let g = state.graph();
-            let node = query::view(g, &i.r#ref).expect("just written");
-            let (warnings, baselined) = split_new(lint::written(g, &i.r#ref));
+            let node = query::view(state.graph(), &i.r#ref).expect("just written");
+            let (warnings, baselined) = ticket_warnings(state, &i.r#ref);
             answer(name, Written { node, warnings, baselined, settled, reopened, reprioritised }, Some(changed))
         }
         "start_ticket" => {
@@ -413,6 +411,16 @@ fn written(name: &str, state: &mut State, view: Option<&str>, r: &Reference, cha
     answer(name, Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: None }, Some(changed))
 }
 
+/// A ticket write's findings, judged over the branch `lint` judges with no
+/// ticket: the current ticket's proposal when there is one, else the truth,
+/// so a warning agrees with the check that runs next.
+fn ticket_warnings(state: &mut State, r: &Reference) -> (Vec<lint::Finding>, usize) {
+    let current = state.current();
+    // The write is made by now, so an error here would leave memory ahead of the disk; none can come.
+    let g = state.graph_for(current.as_deref()).expect("the current ticket is active or landing: the store refuses any other, and a settle that closes it clears it");
+    split_new(lint::written(g, r))
+}
+
 /// What a change relies on, which includes the answers it applies; none for
 /// any other node, whose edit or deletion settles no answer.
 fn applies(state: &State, r: &Reference) -> Option<Vec<Reference>> {
@@ -522,6 +530,44 @@ mod tests {
         assert!(board.output["tickets"].as_array().unwrap().iter().any(|t| t["ref"] == "ticket:0001"));
         let e = call(&mut s, "file_ticket", json!({ "slug": "x", "title": "New", "kind": "change", "priority": "high", "body": "x" }), "2026-09-27").unwrap_err();
         assert!(e.to_string().contains("no longer takes a slug"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-ticket-write-warns-as-lint-would", "checks": ["crates/core/src/tools/write#write-responses"]}
+    /// ```
+    #[test]
+    fn a_ticket_write_warns_as_lint_would() {
+        let mut s = state();
+        let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
+        call(&mut s, "put_requirement", json!({ "slug": "only-proposed", "title": "P", "statement": "It SHALL hold.", "scenarios": scenario, "covered_by": [], "ticket": "later-1" }), "2026-10-04").unwrap();
+        let file = |s: &mut State| {
+            let out = call(s, "file_ticket", json!({ "title": "Names it", "kind": "change", "priority": "later", "touches": ["req:only-proposed", "req:nowhere"], "body": "x" }), "2026-10-04").unwrap();
+            let warned: Vec<String> = out.output["warnings"].as_array().unwrap().iter().map(|w| w["edge"]["to"].as_str().unwrap_or_default().to_string()).collect();
+            let lint = call(s, "lint", json!({ "kinds": ["dangling"] }), "2026-10-04").unwrap();
+            let slug = out.output["node"]["slug"].as_str().unwrap().to_string();
+            let flagged: Vec<String> = lint.output["findings"].as_array().unwrap().iter().filter(|f| f["ref"] == format!("ticket:{slug}")).map(|f| f["edge"]["to"].as_str().unwrap_or_default().to_string()).collect();
+            let sorted = |mut v: Vec<String>| {
+                v.sort();
+                v
+            };
+            (sorted(warned), sorted(flagged))
+        };
+        // With the proposing ticket current, only what nothing holds dangles: the write and lint agree.
+        s.store_mut().current = Some("later-1".into());
+        let (warned, flagged) = file(&mut s);
+        assert_eq!(warned, vec!["req:nowhere".to_string()]);
+        assert_eq!(warned, flagged, "the write warns of what lint reports");
+        // With no current ticket both judge the truth, which holds neither.
+        s.store_mut().current = None;
+        let (warned, flagged) = file(&mut s);
+        assert_eq!(warned, vec!["req:nowhere".to_string(), "req:only-proposed".to_string()]);
+        assert_eq!(warned, flagged);
+        // update_ticket judges the same way.
+        s.store_mut().current = Some("later-1".into());
+        let out = call(&mut s, "update_ticket", json!({ "ref": "ticket:0002", "touches": ["req:only-proposed"] }), "2026-10-04").unwrap();
+        assert!(out.output["warnings"].as_array().unwrap().is_empty(), "{}", out.output["warnings"]);
     }
 
     /// # Test contract
