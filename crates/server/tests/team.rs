@@ -259,6 +259,35 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-close-is-judged-with-the-languages-the-server-now-reads", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server"]}
+/// ```
+#[test]
+fn a_close_is_judged_with_the_languages_the_server_now_reads() {
+    let h = host();
+    let m = machine();
+    std::fs::write(
+        m.repo.join("src").join("b.ts"),
+        "export function b() {}
+",
+    )
+    .unwrap();
+    let d = m.open(h.as_writer());
+    // Started while the grimoire reads Rust alone: the TypeScript module is not in the graph.
+    d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    d.call("update_ticket", json!({ "ref": "ticket:0001", "touches": ["module:src/b"] })).unwrap();
+    assert!(d.call("get", json!({ "ref": "module:src/b" })).is_err());
+    // A teammate has the server read TypeScript too, and this copy has not heard of it.
+    h.daemon.call("configure", json!({ "languages": ["rust", "typescript"] })).unwrap();
+    // The close is judged with the languages the server now reads: the module it touched is there, and changed.
+    let closed = d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } })).unwrap();
+    let edge = closed["node"]["out"].as_array().unwrap().iter().find(|e| e["ref"] == "module:src/b").cloned().unwrap();
+    assert!(!edge["title"].is_null(), "judged with TypeScript read, the module it touched is in the graph: {closed}");
+    assert!(d.call("get", json!({ "ref": "module:src/b" })).is_ok());
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-is-the-checkouts"]}
 /// ```
 #[test]

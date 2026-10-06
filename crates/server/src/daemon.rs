@@ -277,7 +277,7 @@ impl Daemon {
             }
             drop(state);
             if let Some(languages) = languages {
-                member.reextract_all(&languages);
+                let _ = member.reextract_all(&languages);
             }
             let _ = member.events.send(Event::Store { tool: "checkout".to_string(), changed: vec!["*".to_string()] });
         }
@@ -512,7 +512,7 @@ impl Daemon {
             if !self.shared && state.store().config.languages != languages {
                 let now = state.store().config.languages.clone();
                 drop(state);
-                self.reextract_all(&now);
+                let _ = self.reextract_all(&now);
                 // configure answered with the count of new findings under the
                 // old extraction; answer with the one the new languages give.
                 let mut state = self.state.lock().expect("state lock");
@@ -542,7 +542,8 @@ impl Daemon {
 
     /// Replace the extractor with one for `languages` and extract the whole
     /// repository again, as on opening.
-    pub(crate) fn reextract_all(&self, languages: &[String]) {
+    /// Whether it did: a repository that could not be read leaves the extraction as it was.
+    pub(crate) fn reextract_all(&self, languages: &[String]) -> bool {
         let extractor = Extractor::for_languages(&self.repo, languages);
         let extracted = match extractor.extract_all() {
             Ok((files, errors)) => {
@@ -553,7 +554,7 @@ impl Daemon {
             }
             Err(e) => {
                 tracing::error!("re-extracting for languages {languages:?} failed: {e}");
-                return;
+                return false;
             }
         };
         let mut files = self.files.lock().expect("files lock");
@@ -562,6 +563,7 @@ impl Daemon {
         *self.extractor.write().expect("extractor lock") = extractor;
         tracing::info!("languages are now {languages:?}; re-extracted {} file(s)", files.len());
         let _ = self.events.send(Event::Graph { changed: vec!["*".to_string()] });
+        true
     }
 
     /// Bring the extraction up to the checkout's files as they are on disk now, without waiting for
@@ -641,7 +643,7 @@ impl Daemon {
         // A nested checkout's marker appeared or went: where this checkout's code ends moved, so all of it is read again.
         if paths.iter().any(|p| self.extractor.read().expect("extractor lock").is_boundary(p)) {
             let languages = self.state.lock().expect("state lock").store().config.languages.clone();
-            self.reextract_all(&languages);
+            let _ = self.reextract_all(&languages);
             let mut state = self.state.lock().expect("state lock");
             if self.prune(&mut state) {
                 self.hand_on(state);
