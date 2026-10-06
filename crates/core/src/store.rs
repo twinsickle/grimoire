@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -256,6 +256,9 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
     }
     check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion]));
     for (i, d) in r.decisions.iter().enumerate() {
+        if d.withdrawn {
+            e.push(FieldError::new(&format!("decisions[{i}].withdrawn"), "only a closed change's decision is withdrawn"));
+        }
         check_decision(&mut e, &format!("decisions[{i}]"), d);
         // A decision supersedes only earlier ones, by position from 1.
         if d.supersedes.iter().any(|&p| p == 0 || p as usize > i) {
@@ -296,6 +299,10 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
             // A ticket has one decision, so there is nothing earlier for it to supersede.
             if !d.supersedes.is_empty() {
                 e.push(FieldError::new("decision.supersedes", "a ticket's one decision supersedes nothing"));
+            }
+            // Withdrawn is how a change closes with nothing applied: only a closed change's (req:tool-withdraw-ticket).
+            if d.withdrawn && (t.status != Status::Closed || t.kind != TicketKind::Change) {
+                e.push(FieldError::new("decision.withdrawn", "only a closed change is withdrawn"));
             }
         }
         (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is landing or closed")),
@@ -451,6 +458,26 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "only-a-closed-change-is-withdrawn", "checks": ["crates/core/src/store#withdrawn-decision"]}
+    /// ```
+    #[test]
+    fn only_a_closed_change_is_withdrawn() {
+        use crate::graph::fixtures::ticket;
+        let withdrawn = |mut t: Ticket| {
+            t.decision.as_mut().unwrap().withdrawn = true;
+            validate_ticket(&t).iter().any(|e| e.field == "decision.withdrawn")
+        };
+        assert!(!withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Closed, &[], &[])));
+        assert!(withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Landing, &[], &[])));
+        assert!(withdrawn(ticket("g", TicketKind::Gap, Priority::Later, Status::Closed, &[], &[])));
+        let mut r = crate::graph::fixtures::store().requirements.values().next().unwrap().clone();
+        r.decisions = vec![Decision { withdrawn: true, ..Decision::new("2026-10-06", "No.") }];
+        assert!(validate_requirement(&r).iter().any(|e| e.field.ends_with(".withdrawn")));
+    }
 
     /// # Test contract
     ///

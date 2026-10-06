@@ -283,9 +283,9 @@ mod tests {
         start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
         assert_eq!(s.current.as_deref(), Some("phase-62"));
         assert_eq!(target_ticket(&s, None).unwrap(), "phase-62");
-        close_ticket(&mut s, &Reference::ticket("later-1"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![], adopted: false }).unwrap();
+        close_ticket(&mut s, &Reference::ticket("later-1"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![], adopted: false, withdrawn: false }).unwrap();
         assert_eq!(s.current.as_deref(), Some("phase-62"), "closing another ticket leaves it");
-        close_ticket(&mut s, &Reference::ticket("phase-62"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![], adopted: false }).unwrap();
+        close_ticket(&mut s, &Reference::ticket("phase-62"), Decision { date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![], adopted: false, withdrawn: false }).unwrap();
         assert_eq!(s.current, None);
     }
 

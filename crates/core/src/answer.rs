@@ -278,6 +278,16 @@ pub struct Deleted {
     pub reopened: Option<Vec<Summary>>,
 }
 
+/// `withdraw_ticket`: the change as closed, with nothing of it applied, and the answers it was
+/// waiting to apply that closed, another change having applied them, or reopened.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Withdrawn {
+    pub node: NodeView,
+    pub settled: Vec<Summary>,
+    pub reopened: Vec<Summary>,
+}
+
 /// `source`: a node's file, its text, the node's line, and what the graph attaches to the file.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -337,6 +347,7 @@ answers! {
     Configured => ["configure"],
     Adopted => ["adopt"],
     Deleted => ["delete_node"],
+    Withdrawn => ["withdraw_ticket"],
 }
 
 /// The UI's generated TypeScript: every type the answers and the tool error

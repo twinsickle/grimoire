@@ -267,6 +267,14 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    question whose answer needs no work, close at once, without `when`. A
    gap or question whose answer needs work takes `when: landed` and closes
    when the changes relying on it land (see the resolve sequence).
+
+   A change reconsidered and no longer to be made, before or after its
+   decision was written, a landing the truth moved under among them, is
+   not closed but withdrawn: `withdraw_ticket { "ref", "decision" }`, the
+   decision saying why. Nothing of its proposal is applied; it closes
+   marked withdrawn, and an answer it was to apply reopens unless another
+   change applied it. Withdrawing is the person's call, laid out like any
+   question; never withdraw a change to make a check pass.
 6. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
    `landing` ticket the commit closes it where the post-commit hook is

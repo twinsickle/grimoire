@@ -42,7 +42,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 28] = [
+pub const TOOL_NAMES: [&str; 29] = [
     "find",
     "get",
     "outline",
@@ -65,6 +65,7 @@ pub const TOOL_NAMES: [&str; 28] = [
     "start_ticket",
     "close_ticket",
     "land_ticket",
+    "withdraw_ticket",
     "delete_node",
     "rename_node",
     "adopt",
@@ -98,6 +99,7 @@ pub fn is_write(name: &str) -> bool {
             | "start_ticket"
             | "close_ticket"
             | "land_ticket"
+            | "withdraw_ticket"
             | "delete_node"
             | "rename_node"
             | "adopt"
@@ -114,7 +116,7 @@ pub fn answers_any_checkout(name: &str) -> bool {
 
 /// The writes that cannot be taken back by another write: a deletion, and a close or landing, which applies a proposal and discards the ticket's body.
 pub fn is_destructive(name: &str) -> bool {
-    matches!(name, "delete_node" | "close_ticket" | "land_ticket")
+    matches!(name, "delete_node" | "close_ticket" | "land_ticket" | "withdraw_ticket")
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.

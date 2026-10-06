@@ -482,7 +482,7 @@ function Row({ t, open, onToggle, move }: { t: BoardTicket; open: boolean; onTog
           )}
           {!isChange && <span className={BAND_COLOR[t.priority ?? "later"]}>{t.priority}</span>}
         </span>
-        <span className="justify-self-end">{t.status && <StatusTag s={t.status} />}</span>
+        <span className="justify-self-end">{t.status && <StatusTag s={t.status} withdrawn={t.withdrawn} />}</span>
       </div>
       {isChange && (t.waits_on?.length ?? 0) > 0 && <WaitLines waits={t.waits_on ?? []} />}
       {open && <Ticket t={t} />}

@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
+ * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
  * ```
  */
 
@@ -126,7 +126,9 @@ export function PriorityTag({ p }: { p: Priority }) {
 
 const STATUS_COLOR: Record<Status, string> = { open: "text-fg-dim", active: "text-accent", landing: "text-warn", closed: "text-fg-faint" };
 
-export function StatusTag({ s }: { s: Status }) {
+/** A ticket's status; a closed change that was withdrawn reads as withdrawn, nothing of it applied (req:tool-withdraw-ticket). */
+export function StatusTag({ s, withdrawn }: { s: Status; withdrawn?: boolean }) {
+  if (s === "closed" && withdrawn) return <span className="text-fg-faint italic">withdrawn</span>;
   return <span className={STATUS_COLOR[s]}>{s}</span>;
 }
 
@@ -141,7 +143,7 @@ export function TicketRow({ t }: { t: Summary }) {
         <div className={`text-fg-faint ${mono}`}>{idOf(t.ref)}</div>
       </td>
       <td className={`${cell} text-fg-dim`}>{t.kind}</td>
-      <td className={cell}>{t.status && <StatusTag s={t.status} />}</td>
+      <td className={cell}>{t.status && <StatusTag s={t.status} withdrawn={t.withdrawn} />}</td>
     </tr>
   );
 }

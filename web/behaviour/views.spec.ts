@@ -908,7 +908,9 @@ test("every node kind has a page", async ({ page }) => {
   for (const { path } of nodes) {
     await page.goto(path);
     await expect(page.locator("h1"), path).toBeVisible();
-    await expect(page.locator("main"), path).not.toContainText("does not exist");
+    // The node itself is found; a reason quoting what does not exist, as an advisory's does, is not this.
+    const ref = decodeURIComponent(path.slice("/n/".length));
+    await expect(page.locator("main"), path).not.toContainText(`${ref} does not exist`);
   }
   await expect(page.locator("main")).toContainText("Checks");
 });
@@ -1670,4 +1672,27 @@ test("a page opened while the daemon cannot be reached says so in each of its vi
     await expect(page.locator("header"), path).toContainText("daemon not answering · retrying");
     await expect(page.locator("body"), path).not.toContainText("JSON");
   }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-withdrawn-change-reads-as-withdrawn", "checks": ["web/src/components#withdrawn-tag"]}
+ * ```
+ */
+test("a withdrawn change reads as withdrawn on its page and in the cauldron, apart from one that landed", async ({ page }) => {
+  // Last of all: a ticket it closes would push the fixture's own out of the recently closed that earlier specs read.
+  // A change of the spec's own, filed and withdrawn through the tools.
+  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Count bytes too", kind: "change", priority: "later", touches: [], body: "Reconsidered before it began." });
+  await tool(page, "withdraw_ticket", { ref: filed.node.ref, decision: { text: "Bytes are not what anyone counts." } });
+  await page.goto(`/n/${encodeURIComponent(filed.node.ref)}`);
+  await expect(page.locator("main").getByText("withdrawn", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toContainText("withdrawn: nothing of it was applied");
+  await page.goto("/cauldron");
+  await page.getByRole("button", { name: /^Closed/ }).click();
+  const row = page.locator(`#closed li[data-ticket='${filed.node.ref}']`);
+  await expect(row).toContainText("withdrawn");
+  // A change that landed still reads as closed.
+  await expect(page.locator("#closed li[data-ticket='ticket:0010']")).not.toContainText("withdrawn");
 });

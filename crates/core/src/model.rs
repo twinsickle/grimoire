@@ -279,11 +279,16 @@ pub struct Decision {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub adopted: bool,
+    // A change's decision to withdraw it: closed with nothing of it applied, since it is no
+    // longer to be made (req:tool-withdraw-ticket). Only on a closed change's decision.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub withdrawn: bool,
 }
 
 impl Decision {
     pub fn new(date: impl Into<String>, text: impl Into<String>) -> Self {
-        Decision { date: date.into(), text: text.into(), supersedes: Vec::new(), adopted: false }
+        Decision { date: date.into(), text: text.into(), supersedes: Vec::new(), adopted: false, withdrawn: false }
     }
 }
 

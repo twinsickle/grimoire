@@ -24,7 +24,7 @@ export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summa
  * The tickets whose proposals would change this ticket's references:
  * what it touches and relies on here is the truth's, and an edit waits.
  */
-drafts?: Array<Ref>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
+drafts?: Array<Ref>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
 export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, };
 
@@ -44,7 +44,7 @@ export type Decision = { date: string, text: string,
  * record this one replaces. A position never changes, since decisions
  * are only appended, so it is the decision's id.
  */
-supersedes?: Array<number>, adopted?: boolean, };
+supersedes?: Array<number>, adopted?: boolean, withdrawn?: boolean, };
 
 export type Decl = { path: string, kind: string, line: number, 
 /**
@@ -175,7 +175,7 @@ export type StillNamed = { test: Ref, file: string, line: number, };
 
 export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, };
 
-export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, };
+export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
 export type Test = { file: string, name: string, line: number, checks: Array<string>, };
 
@@ -207,6 +207,8 @@ checks: Array<string>,
  * a constraint that names no criterion.
  */
 tests: number, rollup: Rollup, rites: boolean, children: Array<Tree>, };
+
+export type Withdrawn = { node: NodeView, settled: Array<Summary>, reopened: Array<Summary>, };
 
 export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
 
@@ -240,4 +242,5 @@ export type ToolAnswers = {
   configure: Configured;
   adopt: Adopted;
   delete_node: Deleted;
+  withdraw_ticket: Withdrawn;
 };

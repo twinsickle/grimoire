@@ -221,11 +221,11 @@ function Ticket({ n, proposal, gone }: { n: TicketNode; proposal?: ProposalView;
   return (
     <>
       <p>
-        <PriorityTag p={n.priority} /> · <span className="text-fg-dim">{n.kind}</span> · <StatusTag s={n.status} />
+        <PriorityTag p={n.priority} /> · <span className="text-fg-dim">{n.kind}</span> · <StatusTag s={n.status} withdrawn={n.decision?.withdrawn} />
       </p>
       {n.body && <Markdown text={n.body} />}
       {/* A landing ticket's decision is written, not in force: it closes when its change lands. */}
-      {n.decision && <Decision date={n.decision.date} text={n.decision.text} label={n.status === "landing" ? "written, waiting for its change to land" : undefined} />}
+      {n.decision && <Decision date={n.decision.date} text={n.decision.text} label={n.status === "landing" ? "written, waiting for its change to land" : n.decision.withdrawn ? "withdrawn: nothing of it was applied" : undefined} />}
       {n.status !== "closed" && (
         <div className={card}>
           <h3 className="mb-2">Next step</h3>
