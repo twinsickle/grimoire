@@ -3,6 +3,8 @@
 
 export type Adopted = { baseline: BaselineSummary, replaced: number | null, };
 
+export type Advisory = { from: OtherWork, finding: Finding, };
+
 export type Affected = { ref: Ref, title: string, relation: Relation, };
 
 export type Annotation = { line: number, ref: Ref, kind: AnnotationKind, title: string, 
@@ -89,7 +91,7 @@ export type LibraryEntry = { name: string, repository: string, };
 
 export type Linked = { ref: Ref, title: string | null, };
 
-export type LintAnswer = { findings: Array<Finding>, counts: { [key in string]: number }, new: number, without_code: boolean, };
+export type LintAnswer = { findings: Array<Finding>, advisories: Array<Advisory>, counts: { [key in string]: number }, new: number, without_code: boolean, };
 
 export type Module = { id: string, files: Array<string>, purpose: string | null, criteria: Array<Criterion>, imports: Array<string>, 
 /**
@@ -115,6 +117,8 @@ export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } 
 export type NodesAnswer = { nodes: Array<Summary>, };
 
 export type Order = { next?: Array<string>, high?: Array<string>, later?: Array<string>, };
+
+export type OtherWork = { "kind": "since_base" } | { "kind": "ticket", ticket: string, title: string, };
 
 export type Outline = { roots: Array<Tree>, unplaced: Array<Tree>, without_code: boolean, };
 

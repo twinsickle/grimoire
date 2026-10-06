@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use super::{answer, parse, Outcome, RefIn, SourceError, State, SOURCE_LIMIT, SOURCE_LINES};
 use crate::answer::*;
-use crate::lint::{self, Rule};
+use crate::lint::Rule;
 use crate::model::*;
 use crate::ops::ToolError;
 use crate::query::{self, BoardFilter};
@@ -144,12 +144,9 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 kinds: Option<Vec<Rule>>,
             }
             let i: In = parse(input)?;
-            let g = state.graph_for(view)?;
             let rules = i.kinds.unwrap_or_else(|| Rule::ALL.to_vec());
-            let findings = lint::lint(g, &rules);
-            let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
-            let without_code = g.without_code;
-            answer(name, LintAnswer { findings, counts, new, without_code }, None)
+            let lint = state.lint(view, &rules)?;
+            answer(name, lint, None)
         }
         "module_source" => {
             let i: RefIn = parse(input)?;

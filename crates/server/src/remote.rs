@@ -591,6 +591,7 @@ impl Daemon {
             events,
             kin: Arc::default(),
             main: true,
+            base: Mutex::new((None, None)),
         };
         Ok((daemon, loaded.extract_errors))
     }

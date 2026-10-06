@@ -188,6 +188,42 @@ test("the header shows new findings as a warning and inherited ones dimmed", asy
  * # Test contract
  *
  * ```json
+ * {"test": "header-shows-other-work-apart", "checks": ["web/src/App#header-advisories"]}
+ * ```
+ */
+test("the header shows what other work may conflict apart from the findings, not as a warning", async ({ page }) => {
+  const lint = await tool<{ advisories: unknown[] }>(page, "lint");
+  expect(lint.advisories.length, "the fixture's landing ticket proposes a criterion its code lacks").toBeGreaterThan(0);
+  await page.goto("/cauldron");
+  const conflicts = page.locator("header").getByText(`${lint.advisories.length} may conflict`);
+  await expect(conflicts).toBeVisible();
+  await expect(conflicts).not.toHaveClass(/text-bad/);
+  await expect(conflicts).toHaveAttribute("title", /does not fail the check/);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-node-shows-other-work-on-it", "checks": ["web/src/views/Node#advisories-shown"]}
+ * ```
+ */
+test("a node's page lists the other work that may conflict with it, naming the ticket", async ({ page }) => {
+  type Advisory = { from: { kind: string; ticket?: string }; finding: { ref: string } };
+  const lint = await tool<{ advisories: Advisory[] }>(page, "lint");
+  const on = lint.advisories.find((a) => a.finding.ref === "req:ready-writes-nothing" && a.from.kind === "ticket");
+  expect(on, "the landing ticket's repointed requirement").toBeTruthy();
+  await page.goto("/n/req%3Aready-writes-nothing");
+  await expect(page.getByRole("heading", { name: "Other work may conflict" })).toBeVisible();
+  const item = page.locator("li", { hasText: "criterion:src/ready#not-written-yet" });
+  await expect(item.locator(`a[href$="/n/${encodeURIComponent(`ticket:${on!.from.ticket}`)}"]`)).toBeVisible();
+  await expect(item).not.toHaveClass(/text-bad/);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "search-finds-and-enter-opens", "checks": ["web/src/App#search-is-find"]}
  * ```
  */

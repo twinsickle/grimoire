@@ -93,6 +93,8 @@ pub struct TicketsAnswer {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LintAnswer {
     pub findings: Vec<Finding>,
+    // What other work causes, shown apart and never counted as new (req:check-own-work).
+    pub advisories: Vec<crate::advisories::Advisory>,
     pub counts: BTreeMap<String, usize>,
     pub new: usize,
     // True on a daemon that holds no code, where findings only code can show are left out.

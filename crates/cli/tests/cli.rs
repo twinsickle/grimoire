@@ -360,6 +360,62 @@ fn check_and_the_lint_tool_report_the_same_findings() {
     assert_eq!(check, lint, "a hook and an agent see the same findings and the same verdict");
 }
 
+/// Run git in `dir` as a test's author, and fail the test when it fails.
+fn git(dir: &Path, args: &[&str]) {
+    let out =
+        Command::new("git").arg("-C").arg(dir).args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/nonexistent"]).args(args).output().unwrap();
+    assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-branch-is-judged-by-its-own-work", "checks": ["crates/cli/src#check-own-work"]}
+/// ```
+#[test]
+fn a_branch_is_judged_by_its_own_work() {
+    let (p, _) = project();
+    git(&p.repo, &["init", "-q", "-b", "main"]);
+    git(&p.repo, &["add", "-A"]);
+    git(&p.repo, &["commit", "-q", "-m", "start"]);
+    // A branch is cut; then the main line lands a requirement covered by a criterion only its code declares.
+    git(&p.repo, &["branch", "feature"]);
+    let filed: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "file_ticket", r#"{"title":"b lands","kind":"change","priority":"next","body":"b"}"#]).stdout).unwrap();
+    let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
+    assert!(run(&p.repo, &["tool", "start_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).status.success());
+    let req = r#"{"slug":"b-exports","title":"b exports b","statement":"The module b SHALL export b.","scenarios":[{"title":"b","given":"b","when":"b","then":"b"}],"covered_by":["criterion:src/b#exports-b"]}"#;
+    assert!(run(&p.repo, &["tool", "put_requirement", req]).status.success());
+    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{ticket}","decision":{{"text":"b lands"}}}}"#)]);
+    assert!(close.status.success(), "{}", text(&close));
+    std::fs::write(p.repo.join("src").join("b.rs"), CONTRACTED.replace("exports-a", "exports-b")).unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+    git(&p.repo, &["add", "-A"]);
+    git(&p.repo, &["commit", "-q", "-m", "b lands"]);
+    // On the branch, cut before it: the requirement's missing criterion landed since its base, and is shown, not failed.
+    git(&p.repo, &["checkout", "-q", "feature"]);
+    let check = run(&p.repo, &["check"]);
+    assert!(check.status.success(), "{}", text(&check));
+    assert!(text(&check).contains("landed on the main line since this branch's base") && text(&check).contains("req:b-exports"), "{}", text(&check));
+    let json: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["check", "--json"]).stdout).unwrap();
+    assert_eq!((json["new"].as_u64(), json["advisories"][0]["from"]["kind"].as_str()), (Some(0), Some("since_base")), "{json}");
+    let lint: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "lint"]).stdout).unwrap();
+    assert_eq!(json, lint, "the check and the lint tool answer alike, advisories included");
+    // A pipeline's gate on the main line takes no base.
+    assert!(!run(&p.repo, &["check", "--main-line"]).status.success());
+    // The branch's own work still fails: a criterion it adds that no requirement names.
+    std::fs::write(p.repo.join("src").join("c.rs"), CONTRACTED.replace("exports-a", "exports-c")).unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod c;\n").unwrap();
+    let check = run(&p.repo, &["check"]);
+    assert!(!check.status.success() && text(&check).contains("criterion:src/c#exports-c"), "{}", text(&check));
+    // On the main line there is no base: the same truth judged as before.
+    std::fs::remove_file(p.repo.join("src").join("c.rs")).unwrap();
+    git(&p.repo, &["checkout", "-q", "--", "."]);
+    git(&p.repo, &["checkout", "-q", "main"]);
+    let check = run(&p.repo, &["check", "--json"]);
+    let json: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert!(json["advisories"].as_array().unwrap().iter().all(|a| a["from"]["kind"] != "since_base"), "{json}");
+}
+
 /// # Test contract
 ///
 /// ```json
@@ -2080,7 +2136,9 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
     let ci = p.dir.join("pipeline-home");
     let check = |args: &[&str]| team(&p.repo, &ci, Some(&pipeline), &[&["check"][..], args].concat());
     let truth = check(&[]);
-    assert!(truth.status.success() && !text(&truth).contains("req:proposed"), "no ticket named is judged against the truth: {}", text(&truth));
+    // The proposal's requirement is no finding of the truth's; the ticket being worked shows it only as other work.
+    let findings = text(&truth).split("may conflict").next().unwrap_or_default().to_string();
+    assert!(truth.status.success() && !findings.contains("req:proposed"), "no ticket named is judged against the truth: {}", text(&truth));
     for named in [slug.as_str(), ticket.as_str()] {
         let judged = check(&["--ticket", named]);
         assert!(!judged.status.success() && text(&judged).contains("req:proposed") && text(&judged).contains("criterion:src/b#exports-b"), "judged against the proposal: {}", text(&judged));

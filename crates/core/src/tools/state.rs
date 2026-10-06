@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name and repository, in name order; a state told nothing answers with no name and an empty library."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"advisories","statement":"lint judges the graph read with the ticket it is given and answers its findings and advisories: those advisories::own moves out against the truth alone judged over the base's code when a base is set, and those advisories::others gives for every other ticket active or landing, judged over this state's code, its counts and new taken from the findings that stay; set_base sets or clears the base's code."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name and repository, in name order; a state told nothing answers with no name and an empty library."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -32,6 +32,8 @@ impl Default for Build {
 pub struct State {
     pub(super) store: Store,
     extraction: Extraction,
+    /// The code this checkout's branch was cut from, when it has a base (req:check-own-work).
+    base: Option<Extraction>,
     malformed: Vec<Malformed>,
     pub(super) build: Build,
     graph: Option<Graph>,
@@ -72,7 +74,7 @@ pub const SOURCE_LINES: usize = 20_000;
 
 impl State {
     pub fn new(store: Store, extraction: Extraction, malformed: Vec<Malformed>) -> Self {
-        State { store, extraction, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None, library: None, shares_checkouts: false }
+        State { store, extraction, base: None, malformed, build: Build::default(), graph: None, view: None, source: None, without_code: false, server: None, library: None, shares_checkouts: false }
     }
     /// The store's current ticket, the one last started.
     pub fn current(&self) -> Option<String> {
@@ -98,6 +100,37 @@ impl State {
         }
         Ok(&self.view.as_ref().expect("just built").1)
     }
+    /// Set or clear the code this checkout's branch was cut from.
+    pub fn set_base(&mut self, base: Option<Extraction>) {
+        self.base = base;
+    }
+
+    /// The `lint` answer for the graph read with `ticket`: the findings this checkout's work causes,
+    /// and as advisories what other work causes, intent landed since the base and each other ticket
+    /// being worked (req:check-own-work).
+    pub fn lint(&mut self, ticket: Option<&str>, rules: &[crate::lint::Rule]) -> Result<crate::answer::LintAnswer, crate::ops::ToolError> {
+        use crate::{advisories, lint};
+        let findings = lint::lint(self.graph_for(ticket)?, rules);
+        let without_code = self.without_code;
+        let base = self.base.as_ref().map(|b| {
+            let mut g = Graph::build(&self.store, b, &self.malformed);
+            self.flag_languages(&mut g);
+            g.without_code = without_code;
+            lint::lint(&g, rules)
+        });
+        let (findings, mut advisories) = advisories::own(findings, base.as_deref(), &self.store, ticket);
+        let truth = lint::lint(self.graph(), rules);
+        let others = advisories::others(&self.store, ticket, &truth, &findings, |t| {
+            let mut g = Graph::with_proposal(&self.store, t, &self.extraction, &self.malformed);
+            self.flag_languages(&mut g);
+            g.without_code = without_code;
+            lint::lint(&g, rules)
+        });
+        advisories.extend(others);
+        let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
+        Ok(crate::answer::LintAnswer { findings, advisories, counts, new, without_code })
+    }
+
     fn build_graph(&self, store: &Store) -> Graph {
         let mut g = Graph::build(store, &self.extraction, &self.malformed);
         self.flag_languages(&mut g);
@@ -243,6 +276,36 @@ mod tests {
         let mut u = unknown_build;
         u.store_mut().config.languages = vec!["typescript".into()];
         assert!(call(&mut u, "lint", json!({ "kinds": ["malformed"] }), "2026-09-28").unwrap().output["findings"].as_array().unwrap().is_empty(), "an unknown build flags nothing");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "lint-answers-what-other-work-causes-apart", "checks": ["crates/core/src/tools/state#advisories"]}
+    /// ```
+    #[test]
+    fn lint_answers_what_other_work_causes_apart() {
+        let mut s = State::new(store(), extraction(), vec![]);
+        let dangling = json!({ "kinds": ["dangling"] });
+        // With no base, req:stale's missing criterion is this checkout's finding.
+        let lint = call(&mut s, "lint", dangling.clone(), "2026-10-06").unwrap().output;
+        assert_eq!((lint["new"].as_u64(), lint["advisories"].as_array().map(Vec::len)), (Some(1), Some(0)), "{lint}");
+        // The base's code lacks the criterion too: not this checkout's doing.
+        s.set_base(Some(extraction()));
+        let lint = call(&mut s, "lint", dangling.clone(), "2026-10-06").unwrap().output;
+        assert_eq!((lint["new"].as_u64(), lint["counts"]["dangling"].as_u64()), (Some(0), Some(0)), "{lint}");
+        assert_eq!(lint["advisories"][0]["from"]["kind"], "since_base");
+        assert_eq!(lint["advisories"][0]["finding"]["ref"], "req:stale");
+        // Another ticket being worked, whose proposal deletes the page req:stale's page links: what it would bring.
+        s.set_base(None);
+        s.store_mut().tickets.get_mut("phase-62").unwrap().status = crate::model::Status::Active;
+        crate::ops::propose(s.store_mut(), "phase-62", crate::ops::Proposing::Partial, |w| crate::ops::delete_node(w, &crate::model::Reference::page("orphan")).map(|c| ((), c))).unwrap();
+        s.store_mut().pages.get_mut("git-readiness").unwrap().links.push("page:orphan".parse().unwrap());
+        let lint = call(&mut s, "lint", dangling, "2026-10-06").unwrap().output;
+        let from: Vec<String> =
+            lint["advisories"].as_array().unwrap().iter().map(|a| format!("{} {}", a["from"]["ticket"].as_str().unwrap_or(""), a["finding"]["ref"].as_str().unwrap_or(""))).collect();
+        assert_eq!(from, vec!["phase-62 page:git-readiness"], "{lint}");
+        assert_eq!(lint["new"].as_u64(), Some(1), "an advisory never counts as new");
     }
 
     /// # Test contract

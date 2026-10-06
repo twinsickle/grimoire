@@ -26,6 +26,9 @@ pub enum Event {
     Graph { changed: Vec<String> },
 }
 
+/// The base a daemon last read, by commit and languages, and when git was last asked for it.
+pub(crate) type BaseSeen = (Option<(String, Vec<String>)>, Option<std::time::Instant>);
+
 pub struct Daemon {
     pub store_dir: PathBuf,
     /// The repository the store describes; empty for a shared daemon, which has none beside it.
@@ -43,6 +46,9 @@ pub struct Daemon {
     pub(crate) kin: Arc<Kin>,
     /// Serving the store's main checkout, the only one that prunes its baseline.
     pub main: bool,
+    /// The commit and languages whose code the state holds as this checkout's base, and when that was last
+    /// asked, so a `lint` asks git again only now and then and re-reads the code only when either moved.
+    pub(crate) base: Mutex<BaseSeen>,
 }
 
 /// The daemons serving one store of its own, one per checkout: their writes are taken one at a
@@ -189,7 +195,19 @@ impl Daemon {
 
     fn from_loaded(store_dir: &Path, repo: PathBuf, extractor: Extractor, files: BTreeMap<String, FileExtraction>, state: State, kin: Arc<Kin>, main: bool) -> Daemon {
         let (events, _) = broadcast::channel(256);
-        Daemon { store_dir: store_dir.to_path_buf(), repo, shared: false, server: None, extractor: RwLock::new(extractor), files: Mutex::new(files), state: Mutex::new(state), events, kin, main }
+        Daemon {
+            store_dir: store_dir.to_path_buf(),
+            repo,
+            shared: false,
+            server: None,
+            extractor: RwLock::new(extractor),
+            files: Mutex::new(files),
+            state: Mutex::new(state),
+            events,
+            kin,
+            main,
+            base: Mutex::new((None, None)),
+        }
     }
 
     /// Open `checkout`'s view of the store this daemon serves, beside it: the same store, under the
@@ -310,6 +328,7 @@ impl Daemon {
             events,
             kin: Arc::default(),
             main: true,
+            base: Mutex::new((None, None)),
         })
     }
 
@@ -415,6 +434,36 @@ impl Daemon {
 
     /// Run one tool for a caller that gave a token of its own: on a project that names a
     /// server, its write is sent to the server signed in as that caller, not as the daemon.
+    /// Give the state the code this checkout's branch was cut from, when that commit moved: none on the
+    /// main line, outside git, and on a daemon that holds no code.
+    fn refresh_base(&self) {
+        // Asked of git at most every few seconds: a lint follows every event, and a branch switched is seen soon enough.
+        const ASK_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
+        let mut held = self.base.lock().expect("base lock");
+        if held.1.is_some_and(|at| at.elapsed() < ASK_EVERY) {
+            return;
+        }
+        held.1 = Some(std::time::Instant::now());
+        let commit = if self.shared { None } else { crate::base::base_commit(&self.repo) };
+        // The base's code depends on the languages read as much as on the commit.
+        let languages = self.state.lock().expect("state lock").store().config.languages.clone();
+        let wanted = commit.map(|c| (c, languages));
+        if held.0 == wanted {
+            return;
+        }
+        let code = wanted.as_ref().and_then(|(c, languages)| match crate::base::base_code(&self.repo, c, languages) {
+            Ok(code) => Some(code),
+            Err(e) => {
+                tracing::warn!("the base {c} could not be read, so findings are judged as before: {e}");
+                None
+            }
+        });
+        // A base that could not be read is not remembered as read: the next lint tries it again.
+        let read = code.is_some();
+        self.state.lock().expect("state lock").set_base(code);
+        held.0 = if read { wanted } else { None };
+    }
+
     pub fn call_as(&self, name: &str, input: Value, token: Option<String>) -> Result<Value, ToolError> {
         // On a project that names a server, a write goes to the server.
         if let Some(server) = self.server.as_ref().filter(|_| tools::is_write(name)) {
@@ -422,6 +471,11 @@ impl Daemon {
                 Some(token) => self.call_through(&server.as_token(token), name, input),
                 None => self.call_through(server, name, input),
             };
+        }
+        // A lint tells this checkout's own work from what landed since its base: the base read first,
+        // outside the state's lock, and again only when it moved (req:check-own-work).
+        if name == "lint" {
+            self.refresh_base();
         }
         let today = store_io::today();
         // A token the server refused may have been replaced since, by the person signing in again: asked again first.

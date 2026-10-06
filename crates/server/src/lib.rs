@@ -5,6 +5,7 @@
 //! ```
 
 pub mod access;
+pub mod base;
 pub mod client;
 pub mod daemon;
 pub mod http;

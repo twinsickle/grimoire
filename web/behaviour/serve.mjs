@@ -113,6 +113,10 @@ under("Add the new work", () => {
 for (const { land, ref } of tickets) {
   if (land) {
     tool("start_ticket", { ref });
+    // Its proposal names a criterion the fixture's code lacks: other work that may conflict, once
+    // another ticket is current, shown in the header and on the requirement's page.
+    const named = tool("get", { ref: "req:ready-writes-nothing" }).node;
+    tool("put_requirement", { slug: named.slug, title: named.title, statement: named.statement, scenarios: named.scenarios, covered_by: [...named.covered_by, "criterion:src/ready#not-written-yet"], ticket: ref });
     tool("close_ticket", { ref, decision: { text: land, date: "2026-01-16" }, when: "landed" });
   }
 }

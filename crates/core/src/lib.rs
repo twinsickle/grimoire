@@ -10,6 +10,7 @@
 //! the graph; [`ops`] write the store; [`export`] hands a store's intent to a machine; [`scaffold`] builds a store from
 //! contracts; [`tools`] dispatches all of it by name over JSON.
 
+pub mod advisories;
 pub mod answer;
 pub mod export;
 pub mod extraction;

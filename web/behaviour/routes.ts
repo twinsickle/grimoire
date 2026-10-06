@@ -15,6 +15,8 @@ export const ROUTES: Route[] = [
   { name: "unplaced", path: "/unplaced", content: "main h1" },
   { name: "cauldron", path: "/cauldron", content: "section[id^='band-']" },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
+  // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
+  { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "main h2:has-text('Other work may conflict')" },
   { name: "node-ticket", path: node("ticket:0006"), content: "section[aria-label='What this ticket rests on']" },
   // A closed ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
   { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='What this ticket rests on']" },

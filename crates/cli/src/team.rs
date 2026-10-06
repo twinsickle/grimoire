@@ -175,6 +175,12 @@ pub fn run_tool(team: &Team, name: &str, input: Value) -> anyhow::Result<Result<
         }
         remote::write_through(&server, &team.copy, &mut opened.loaded.state, name, input, &today).map(|(output, _)| output)
     } else {
+        // A lint is the check's answer, judged by this checkout's own work (req:check-own-work).
+        if name == "lint" {
+            if let Err(e) = grimoire_server::base::give(&mut opened.loaded.state, &opened.loaded.repo) {
+                eprintln!("warning: {e}");
+            }
+        }
         grimoire_core::tools::call(&mut opened.loaded.state, name, input, &today).map(|out| out.output)
     };
     match result {

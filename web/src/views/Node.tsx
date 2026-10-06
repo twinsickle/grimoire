@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count, a decision recorded as an adoption marked so and a requirement whose decisions there are all adoptions marked described; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; the references of a ticket that is not closed are links as before, since the check reports those."}]}
+ * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count, a decision recorded as an adoption marked so and a requirement whose decisions there are all adoptions marked described; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; the references of a ticket that is not closed are links as before, since the check reports those."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
  * ```
  */
 
@@ -618,8 +618,40 @@ function Edges({ title, edges, gone }: { title: string; edges: { ref: Ref; relat
 
 function Findings({ ref }: { ref: Ref }) {
   const { data } = useQuery(() => api.lint(), []);
-  const mine = data?.findings.filter((f) => f.ref === ref || f.edge?.to === ref) ?? [];
-  if (mine.length === 0) return null;
+  const about = (f: { ref: Ref; edge?: { to: Ref } }) => f.ref === ref || f.edge?.to === ref;
+  const mine = data?.findings.filter(about) ?? [];
+  // Other work's, shown apart and never as a warning (req:check-own-work).
+  const others = data?.advisories.filter((a) => about(a.finding)) ?? [];
+  if (mine.length === 0 && others.length === 0) return null;
+  return (
+    <>
+      {mine.length > 0 && <FindingList findings={mine} />}
+      {others.length > 0 && (
+        <>
+          <h2>Other work may conflict</h2>
+          <ul className={list}>
+            {others.map((a, i) => (
+              <li key={i} className="text-fg-dim">
+                <div className="text-xs text-fg-faint">
+                  {a.from.kind === "ticket" ? (
+                    <>
+                      <RefLink ref={`ticket:${a.from.ticket}`} title={a.from.title} /> would bring this when it lands
+                    </>
+                  ) : (
+                    "Landed on the main line since this branch's base: merge the main line"
+                  )}
+                </div>
+                {a.finding.reason}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
+  );
+}
+
+function FindingList({ findings: mine }: { findings: { rule: string; reason: string }[] }) {
   return (
     <>
       <h2>Lint findings</h2>
