@@ -89,6 +89,10 @@ it created in `warnings`. Every warning is work to do now.
   supersession, retirement or deletion builds on the proposal's copy of the
   record; when the truth moved under it, the write is refused as a
   `conflict`: `get` the record and put it whole again under the ticket.
+  When the truth moves under a record your ticket already proposes, your
+  checkout's check says so at once, as `proposal-moved` on the ticket
+  naming each record: `get` it and propose it again, or ask the person
+  whether to withdraw the ticket.
   Every read takes `ticket` too and then answers as that proposal would
   leave the graph; `lint` with none uses the current ticket, so a branch is
   judged against its own intent. The baseline, the config, the board's
