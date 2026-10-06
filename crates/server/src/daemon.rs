@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket or land_ticket, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held file whose text's digest matches, extracts each that differs or appeared, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close or landing as store_unavailable, judging nothing."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"source-reader","statement":"A daemon that holds code gives the source tool a reader over its repository that reads only a relative path inside it, refusing an absolute path, a drive or UNC prefix, a .. component, or a path that resolves outside the repository through a link; it reads no more than the limit it is given, reporting a larger file as too large before reading it, drops a byte-order mark, replaces invalid UTF-8, and never writes."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -465,6 +465,11 @@ impl Daemon {
     }
 
     pub fn call_as(&self, name: &str, input: Value, token: Option<String>) -> Result<Value, ToolError> {
+        // A close or a landing judges the code as it is on disk, not as the watcher last reported it,
+        // before a write sent to a team's server too, whose answer is judged over this checkout's code.
+        if matches!(name, "close_ticket" | "land_ticket") {
+            self.catch_up()?;
+        }
         // On a project that names a server, a write goes to the server.
         if let Some(server) = self.server.as_ref().filter(|_| tools::is_write(name)) {
             return match token {
@@ -557,6 +562,74 @@ impl Daemon {
         *self.extractor.write().expect("extractor lock") = extractor;
         tracing::info!("languages are now {languages:?}; re-extracted {} file(s)", files.len());
         let _ = self.events.send(Event::Graph { changed: vec!["*".to_string()] });
+    }
+
+    /// Bring the extraction up to the checkout's files as they are on disk now, without waiting for
+    /// the watcher, before a close or a landing judges the code (req:daemon-catches-up-before-judging).
+    /// The walk is what reading the whole checkout would read, its ignore rules and the checkouts
+    /// nested in it heeded, so the extraction becomes exactly that: a file whose text's digest matches
+    /// the one held is kept, one that differs or appeared is extracted, and every other held file goes,
+    /// one that can no longer be read as text among them, as a whole reading would leave it out.
+    /// A checkout that cannot be walked is an error: nothing is judged over code not known to be current.
+    pub(crate) fn catch_up(&self) -> Result<(), ToolError> {
+        if self.shared {
+            return Ok(());
+        }
+        // The files before the extractor, in the order every other reading takes them.
+        let _one = self.kin.write.lock().expect("kin write lock");
+        let mut files = self.files.lock().expect("files lock");
+        let extractor = self.extractor.read().expect("extractor lock");
+        let walked = extractor.walk().map_err(|e| ToolError::unavailable(format!("the checkout could not be read to judge its code as it is now, so nothing was judged: {e}")))?;
+        let mut changed = Vec::new();
+        for rel in &walked {
+            let full = self.repo.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+            // Read once: the text compared is the text extracted when it differs.
+            let text = std::fs::read(&full).map_err(|e| e.to_string()).and_then(|bytes| String::from_utf8(bytes).map_err(|_| "it is not UTF-8".to_string()));
+            let adapter = extractor.adapter_for(rel);
+            match (text, adapter) {
+                (Ok(text), Some(adapter)) => {
+                    if files.get(rel).is_some_and(|f| f.digest == grimoire_core::fingerprint::of_text(&text)) {
+                        continue;
+                    }
+                    files.insert(rel.clone(), grimoire_extract::extract_source(adapter, rel, &text));
+                    changed.push(rel.clone());
+                }
+                // Left out, as a whole reading leaves out a file it cannot read.
+                (Err(why), _) => {
+                    tracing::warn!("{rel} could not be read: {why}");
+                    if files.remove(rel).is_some() {
+                        changed.push(rel.clone());
+                    }
+                }
+                (Ok(_), None) => {
+                    if files.remove(rel).is_some() {
+                        changed.push(rel.clone());
+                    }
+                }
+            }
+        }
+        let gone: Vec<String> = files.keys().filter(|rel| walked.binary_search(rel).is_err()).cloned().collect();
+        for rel in gone {
+            files.remove(&rel);
+            changed.push(rel);
+        }
+        if changed.is_empty() {
+            return Ok(());
+        }
+        let extraction = Extraction::from_files(files.values());
+        drop(files);
+        drop(extractor);
+        let mut state = self.state.lock().expect("state lock");
+        state.set_extraction(extraction);
+        if self.prune(&mut state) {
+            self.hand_on(state);
+        } else {
+            drop(state);
+        }
+        changed.sort();
+        tracing::info!("caught up before judging: {} file(s) changed on disk since last read: {}", changed.len(), changed.join(", "));
+        let _ = self.events.send(Event::Graph { changed });
+        Ok(())
     }
 
     /// Re-extract the given repository-relative paths (deleted ones are
@@ -778,6 +851,60 @@ mod tests {
         assert_eq!(a["node"]["statement"], "It says a, changed.");
         let b = d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap();
         assert!(b["node"]["decls"].as_array().unwrap().iter().any(|x| x["path"] == "b"), "the unchanged file was not read again");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-close-catches-up-with-the-files-on-disk", "checks": ["crates/server/src/daemon#catches-up", "req:daemon-catches-up-before-judging"]}
+    /// ```
+    #[test]
+    fn a_close_catches_up_with_the_files_on_disk() {
+        let h = Harness::new();
+        let d = h.open();
+        let mut rx = d.subscribe();
+        // Nothing changed: a close reads no file again and rebuilds nothing.
+        d.catch_up().unwrap();
+        assert!(rx.try_recv().is_err(), "nothing to catch up with");
+        // A merge rewrites one file, removes one and adds one, and no watcher has said so.
+        std::fs::write(h.repo.join("src").join("a.rs"), CONTRACTED.replace("It says a.", "It says a, merged.")).unwrap();
+        std::fs::remove_file(h.repo.join("src").join("b.rs")).unwrap();
+        std::fs::write(h.repo.join("src").join("c.rs"), "pub fn c() {}\n").unwrap();
+        // The close judges them: the criterion as merged, the file gone, the new one there.
+        let closed = d.call("close_ticket", json!({ "ref": "ticket:work", "decision": { "text": "Done." } })).unwrap();
+        assert_eq!(closed["node"]["status"], "closed", "{closed}");
+        match rx.try_recv().unwrap() {
+            Event::Graph { mut changed } => {
+                changed.sort();
+                assert_eq!(changed, ["src/a.rs", "src/b.rs", "src/c.rs"]);
+            }
+            other => panic!("expected the catch-up's rebuild first, got {other:?}"),
+        }
+        assert_eq!(d.call("get", json!({ "ref": "criterion:src/a#says" })).unwrap()["node"]["statement"], "It says a, merged.");
+        assert_eq!(d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap_err().code(), "not_found");
+        assert!(d.call("get", json!({ "ref": "file:src/c.rs" })).is_ok());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "catching-up-reads-what-the-whole-checkout-would", "checks": ["crates/server/src/daemon#catches-up", "req:daemon-catches-up-before-judging"]}
+    /// ```
+    #[test]
+    fn catching_up_reads_what_the_whole_checkout_would() {
+        let h = Harness::new();
+        std::fs::create_dir_all(h.repo.join("pkg").join("src")).unwrap();
+        std::fs::write(h.repo.join("pkg").join("src").join("lib.rs"), "pub fn p() {}\n").unwrap();
+        let d = h.open();
+        assert!(d.call("get", json!({ "ref": "file:pkg/src/lib.rs" })).is_ok());
+        // A file newly ignored, and a folder that became a checkout of its own: a whole reading leaves both out.
+        std::fs::write(h.repo.join(".gitignore"), "src/b.rs\n").unwrap();
+        std::fs::write(h.repo.join("pkg").join(".grimoire.toml"), "store = \"elsewhere\"\n").unwrap();
+        d.catch_up().unwrap();
+        assert!(d.call("get", json!({ "ref": "file:src/b.rs" })).is_err(), "an ignored file is not read back in");
+        assert!(d.call("get", json!({ "ref": "file:pkg/src/lib.rs" })).is_err(), "a nested checkout's code is not this checkout's");
+        let fresh = Daemon::open(&h.store).unwrap().0;
+        assert_eq!(d.files.lock().unwrap().keys().collect::<Vec<_>>(), fresh.files.lock().unwrap().keys().collect::<Vec<_>>(), "as a whole reading has it");
     }
 
     /// # Test contract
