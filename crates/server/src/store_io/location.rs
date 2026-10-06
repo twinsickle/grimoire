@@ -23,7 +23,7 @@ fn platform() -> Result<directories::ProjectDirs, StoreIoError> {
     directories::ProjectDirs::from("", "", "grimoire").ok_or(StoreIoError::NoDataDir)
 }
 
-fn data_dir() -> Result<PathBuf, StoreIoError> {
+pub(super) fn data_dir() -> Result<PathBuf, StoreIoError> {
     match home() {
         Some(home) => Ok(home),
         None => Ok(platform()?.data_dir().to_path_buf()),

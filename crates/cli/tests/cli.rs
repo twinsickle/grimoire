@@ -1110,6 +1110,61 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "init-takes-up-a-store-whose-deletion-is-queued", "checks": ["crates/cli/src#queues-deletion", "crates/server/src#queued-not-served", "req:store-deletion-queued"]}
+/// ```
+#[test]
+fn init_takes_up_a_store_whose_deletion_is_queued() {
+    let (p, _) = project();
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(text(&out).contains("queued  deletion of store"), "{}", text(&out));
+    // Queued, it is not served, and the marker serve wrote before asking the queue is gone. Its repository
+    // names it again, as when a person puts the project file back, so nothing carries the deletion out first.
+    drop(held);
+    std::fs::write(p.repo.join(".grimoire.toml"), format!("store = '{}'\n", p.store.display())).unwrap();
+    let out = run(&p.dir, &["serve", "--store", &p.store.to_string_lossy(), "--port", "0"]);
+    assert!(!out.status.success() && text(&out).contains("queued for deletion"), "{}", text(&out));
+    assert!(!p.store.join("serve.json").exists(), "{}", text(&out));
+    // Taken up again before anything carried the deletion out: cancelled, and the store kept with its records.
+    let out = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("cancelled the queued deletion"), "{}", text(&out));
+    let out = run(&p.repo, &["check"]);
+    assert!(!text(&out).contains("whose deletion was queued"), "{}", text(&out));
+    assert!(p.store.join("grimoire.json").is_file());
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src#queues-deletion", "crates/cli/src#uninstall-store", "crates/cli/src#takes-the-lock", "req:store-deletion-queued"]}
+/// ```
+#[test]
+fn a_held_store_is_queued_for_deletion_and_deleted_later() {
+    let (p, _) = project();
+    // Another process holds the store's lock, as a library slow to let go would.
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("queued  deletion of store"), "{}", text(&out));
+    assert!(!p.repo.join(".grimoire.toml").exists(), "the project file goes as usual");
+    assert!(p.store.join("grimoire.json").is_file(), "the store waits while it is held");
+    // Still held: the next command leaves it queued and says nothing of it.
+    let out = run(&p.dir, &["check"]);
+    assert!(!text(&out).contains("whose deletion was queued"), "{}", text(&out));
+    assert!(p.store.exists());
+    // Let go: the next command carries the deletion out, whatever it is.
+    drop(held);
+    let out = run(&p.dir, &["check"]);
+    assert!(text(&out).contains("whose deletion was queued"), "{}", text(&out));
+    assert!(!p.store.exists(), "{}", text(&out));
+    let out = run(&p.dir, &["check"]);
+    assert!(!text(&out).contains("whose deletion was queued"), "said once: {}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "a-refused-codex-config-stops-init-before-anything-is-written", "checks": ["crates/cli/src/init#merge-not-clobber"]}
 /// ```
 #[test]
@@ -1308,28 +1363,6 @@ fn a_cli_writer_beside_a_holder_is_refused() {
     assert!(baseline_count(&p.store) < adopted, "with the lock free, check prunes what was fixed");
     let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
-}
-
-/// # Test contract
-///
-/// ```json
-/// {"test": "a-locked-store-is-not-deleted", "checks": ["crates/cli/src#uninstall-store", "crates/cli/src#takes-the-lock"]}
-/// ```
-#[test]
-fn a_locked_store_is_not_deleted() {
-    let p = bare_repo();
-    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
-    let held = grimoire_server::store_io::lock(&p.store).unwrap();
-    let before = files(&p.repo);
-    let out = run(&p.repo, &["uninstall", "--delete-store"]);
-    assert!(!out.status.success());
-    assert!(text(&out).contains("Nothing was removed") && text(&out).contains("in use"), "{}", text(&out));
-    assert_eq!(files(&p.repo), before, "a refusal changes nothing");
-    assert!(p.store.join("grimoire.json").is_file());
-    drop(held);
-    let out = run(&p.repo, &["uninstall", "--delete-store"]);
-    assert!(out.status.success(), "{}", text(&out));
-    assert!(!p.store.exists(), "the store goes, lock file and all: {}", text(&out));
 }
 
 /// # Test contract

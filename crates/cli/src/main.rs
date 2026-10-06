@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, token, login, logout, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither active nor landing, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then prints the findings of the intent and code that prune judged, as check does, and says how many entries went, on standard error under --json; it exits non-zero when there are new findings or the prune failed; on a store of the project's own it does what check does."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, or on a project that names a server and with no ticket given that a ticket lands on the main line, names the tickets still landing; on a project that names a server, once a ticket it named has landed, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went; it exits non-zero when a landing was refused, when a landing taken on a team could not then prune, saying the ticket landed, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."},{"id":"token","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked; token revoke removes one by name and fails when there is none; token list prints each name and what it may do; each finds its store as every command does, refusing a project that names a server unless --store names the store, and takes the tokens' own lock, never the store's, so it works while a daemon serves; a command run with GRIMOIRE_TOKEN set sends it to the daemon it calls, and one the daemon refuses says so and does not go round it."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it or names a server, whose store here is this checkout's copy of the server's intent; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, on a project that names a server keeps the checkout's copy of the server's intent and refuses --delete-store before removing anything, the store being the server's, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, a daemon serving it in its machine's library being asked to let it go once every other check has passed and told when uninstall is done with it, however it ends, its own default being refused, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check, and the tokens' lock while it removes: under them the records and the tokens go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock files, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock files and empty record folders, a rerun removes and finishes."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check, or from the moment a daemon's library has let the store go, to the store's removal; refused, it writes nothing. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists and this checkout's .grimoire.toml names this store, it adds this checkout to the store's checkouts instead, itself under the lock or through the daemon serving the store, saying it did; when the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."},{"id":"init-server","statement":"init with --server writes .grimoire.toml naming the server, as its address is kept, and installs the integration, creating no store and adopting nothing; it takes --store or --server and never both, and refuses an address that is not one before writing anything. The grimoire it names is the one --name gives, else the one the address carries in /g/<name>, else the repository folder's."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."},{"id":"init-scaffolds","statement":"init, creating a store, writes into it the skeleton scaffold would write for the repository in the languages given, or with --empty a store whose roots are named and which holds no page, and says what it made, before adopting; a store that already exists is left as it is, and init with --server makes no store."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, token, login, logout, scaffold, init, uninstall or tool.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither active nor landing, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then prints the findings of the intent and code that prune judged, as check does, and says how many entries went, on standard error under --json; it exits non-zero when there are new findings or the prune failed; on a store of the project's own it does what check does."},{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, or on a project that names a server and with no ticket given that a ticket lands on the main line, names the tickets still landing; on a project that names a server, once a ticket it named has landed, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went; it exits non-zero when a landing was refused, when a landing taken on a team could not then prune, saying the ticket landed, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."},{"id":"token","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked; token revoke removes one by name and fails when there is none; token list prints each name and what it may do; each finds its store as every command does, refusing a project that names a server unless --store names the store, and takes the tokens' own lock, never the store's, so it works while a daemon serves; a command run with GRIMOIRE_TOKEN set sends it to the daemon it calls, and one the daemon refuses says so and does not go round it."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it or names a server, whose store here is this checkout's copy of the server's intent; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"uninstall-store","statement":"uninstall finds the project from the nearest .grimoire.toml above the working directory, or the --repo directory's own, refusing a malformed one; it keeps the store unless asked, printing where it is, on a project that names a server keeps the checkout's copy of the server's intent and refuses --delete-store before removing anything, the store being the server's, and removes .grimoire.toml last of all, after the store when it deletes one, so a failure part way leaves it for a rerun. With --delete-store it removes the store only when the store is not the repository, an ancestor of it or a root, holds nothing a store does not, its record folders included, names this repository, and is neither answered for by a daemon nor marked as served, a daemon serving it in its machine's library being asked to let it go once every other check has passed and told when uninstall is done with it, however it ends, its own default being refused, checking all before removing anything and again just before the deletion, refusing a store inside its repository, and holding the store's lock from the first check, and the tokens' lock while it removes: under them the records and the tokens go first and grimoire.json last, so a store stopped part way still loads for a rerun, then the lock files, and the folder once the lock is released. What a deletion stopped after grimoire.json went leaves, no folder or one holding only the lock files and empty record folders, a rerun removes and finishes."},{"id":"queues-deletion","statement":"uninstall --delete-store, every check passed but the store's lock held by another, queues the store's deletion in the machine's deletions folder in place of refusing, holding the queue while it asks again whether a daemon marks the store as served and queues, before removing anything, then removes the integration and the project file and says the deletion is queued and when it happens; every command but init with a store, when it starts, carries out the queued deletions, saying what became of each but those still held; init with a store cancels a queued deletion of that store before writing anything, saying so, and only then carries out the others."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check, or from the moment a daemon's library has let the store go, to the store's removal; refused, it writes nothing, but uninstall --delete-store, which queues the deletion when another holds the lock. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"init-repoints","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store; when the recorded repository still exists and this checkout's .grimoire.toml names this store, it adds this checkout to the store's checkouts instead, itself under the lock or through the daemon serving the store, saying it did; when the project file names another store, it refuses with the reason and changes nothing. The same folder spelt differently, by case or through a link, is this checkout, not a move; the repository is recorded as its canonical path, a share as //server/share."},{"id":"init-server","statement":"init with --server writes .grimoire.toml naming the server, as its address is kept, and installs the integration, creating no store and adopting nothing; it takes --store or --server and never both, and refuses an address that is not one before writing anything. The grimoire it names is the one --name gives, else the one the address carries in /g/<name>, else the repository folder's."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."},{"id":"init-scaffolds","statement":"init, creating a store, writes into it the skeleton scaffold would write for the repository in the languages given, or with --empty a store whose roots are named and which holds no page, and says what it made, before adopting; a store that already exists is left as it is, and init with --server makes no store."}]}
 //! ```
 
 mod init;
@@ -15,6 +15,7 @@ use grimoire_core::lint::{self, Rule};
 use grimoire_core::scaffold;
 use grimoire_core::Extraction;
 use grimoire_extract::Extractor;
+use grimoire_server::store_io::deletions;
 use grimoire_server::{client, store_io};
 use serde_json::{json, Value};
 
@@ -510,30 +511,6 @@ fn canonical(p: &Path) -> anyhow::Result<String> {
     Ok(store_io::slashed(&c.to_string_lossy()))
 }
 
-/// The folders of a store that hold one file per record.
-const RECORD_DIRS: [&str; 5] = ["pages", "requirements", "tickets", store_io::STARTS_DIR, store_io::PROPOSALS_DIR];
-
-/// The files a store directory may hold beside its record folders. Anything
-/// else, or one of these of the wrong type, means the path is not only a
-/// store, and deleting it would take something else with it.
-const STORE_FILES: [&str; 8] = [
-    store_io::CONFIG_FILE,
-    store_io::BASELINE_FILE,
-    store_io::SERVE_FILE,
-    store_io::CURRENT_FILE,
-    store_io::checkouts::CHECKOUTS_FILE,
-    store_io::tokens::TOKENS_FILE,
-    store_io::tokens::TOKENS_LOCK,
-    store_io::LOCK_FILE,
-];
-
-/// Whether a name in a record folder is one store_io writes: `<slug>.json`,
-/// or the `.<slug>.json.tmp-<pid>` a write left behind.
-fn is_record_file_name(name: &str) -> bool {
-    let record = |n: &str| n.strip_suffix(".json").is_some_and(grimoire_core::store::is_slug);
-    record(name) || name.strip_prefix('.').and_then(|n| n.rsplit_once(".tmp-")).is_some_and(|(r, pid)| record(r) && !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
-}
-
 /// Why `store` may not be deleted on behalf of `repo`, if it may not: it is
 /// the repository, holds it, is a root, holds anything a store does not,
 /// names another repository, or a daemon is serving it.
@@ -548,25 +525,8 @@ fn refuse_store_deletion(store: &Path, repo: &Path, in_library: bool) -> anyhow:
     if here.starts_with(&real) {
         return Ok(Some(format!("{} is the repository or holds it", real.display())));
     }
-    // Each entry by its own type, a link never followed: a folder where a file belongs, or the reverse, is not the store's.
-    for e in std::fs::read_dir(&real)? {
-        let e = e?;
-        let (name, kind) = (e.file_name().to_string_lossy().to_string(), e.file_type()?);
-        let ours = if kind.is_dir() { RECORD_DIRS.contains(&name.as_str()) } else { kind.is_file() && STORE_FILES.contains(&name.as_str()) };
-        if !ours {
-            return Ok(Some(format!("{} holds `{name}`, which is not part of a store", real.display())));
-        }
-    }
-    // The record folders hold records, and at most a temporary file a write left; nothing else.
-    for dir in RECORD_DIRS {
-        let Ok(entries) = std::fs::read_dir(real.join(dir)) else { continue };
-        for e in entries {
-            let e = e?;
-            let name = e.file_name().to_string_lossy().to_string();
-            if !e.file_type()?.is_file() || !is_record_file_name(&name) {
-                return Ok(Some(format!("{} holds `{dir}/{name}`, which is not part of a store", real.display())));
-            }
-        }
+    if let Some(why) = deletions::not_only_a_store(&real)? {
+        return Ok(Some(why));
     }
     let (s, _) = store_io::load(&real)?;
     if let Err(e) = store_io::refuse_inside(&real, Path::new(&s.config.repository)) {
@@ -649,70 +609,20 @@ impl Drop for Released {
     }
 }
 
-/// Whether `store` is what `delete_store_dir` leaves when it stops after
-/// removing grimoire.json: no folder at all, or one holding nothing but the
-/// lock file and empty record folders. Such a folder has no records left to
-/// protect and no grimoire.json to say whose it was, so a rerun removes it.
-fn deletion_leftover(store: &Path) -> anyhow::Result<bool> {
-    if !store.exists() {
-        return Ok(true);
-    }
-    if !store.is_dir() || store.join(store_io::CONFIG_FILE).exists() {
-        return Ok(false);
-    }
-    for e in std::fs::read_dir(store)? {
-        let e = e?;
-        let name = e.file_name().to_string_lossy().to_string();
-        let empty_records = RECORD_DIRS.contains(&name.as_str()) && e.path().is_dir() && std::fs::read_dir(e.path())?.next().is_none();
-        if name != store_io::LOCK_FILE && name != store_io::tokens::TOKENS_LOCK && !empty_records {
-            return Ok(false);
+/// Carry out the store deletions queued on this machine whose stores nothing
+/// holds, saying what became of each but those still held (req:store-deletion-queued).
+fn carry_out_deletions() {
+    let Ok(dir) = deletions::deletions_dir() else { return };
+    for outcome in deletions::carry_out(&dir) {
+        match outcome {
+            deletions::Outcome::Deleted(store) => eprintln!("removed store {}, whose deletion was queued", store.display()),
+            deletions::Outcome::Named(store) => {
+                eprintln!("kept store {} for now: its repository still names it; its deletion stays queued until the repository no longer does, or init cancels it", store.display())
+            }
+            deletions::Outcome::Kept(store, why) => eprintln!("warning: the queued deletion of store {} is not carried out: {why}", store.display()),
+            deletions::Outcome::Held(_) => {}
         }
     }
-    Ok(true)
-}
-
-/// Delete a store directory its caller holds the lock of. Under the lock:
-/// the records and everything else first, grimoire.json last, so a failure
-/// part way leaves a store a rerun can load and finish; then the lock file
-/// itself, while still held, so no daemon can open it after. Released, the
-/// folder last, since a process cannot remove a folder holding a file it has
-/// open. A daemon starting after the records are gone finds no grimoire.json
-/// and takes no lock.
-fn delete_store_dir(store: &Path, lock: Option<store_io::StoreLock>) -> anyhow::Result<()> {
-    // The tokens' lock too, after the store's: a token command waits, and then finds no store.
-    // There is none to take when a deletion stopped after grimoire.json went, which leaves no
-    // tokens to change; any other failure to take it stops the deletion before anything is removed.
-    let tokens_lock = match store_io::tokens::lock(store) {
-        Ok(held) => Some(held),
-        Err(store_io::StoreIoError::NotAStore(_)) => None,
-        Err(e) => return Err(e.into()),
-    };
-    let keep_for_last = [store_io::CONFIG_FILE, store_io::LOCK_FILE, store_io::tokens::TOKENS_LOCK];
-    for e in std::fs::read_dir(store)? {
-        let path = e?.path();
-        if path.file_name().is_some_and(|n| keep_for_last.iter().any(|k| n == *k)) {
-            continue;
-        }
-        if path.is_dir() {
-            std::fs::remove_dir_all(&path)?;
-        } else {
-            std::fs::remove_file(&path)?;
-        }
-    }
-    std::fs::remove_file(store.join(store_io::CONFIG_FILE))?;
-    // Released before its file goes, since a process cannot remove a file it holds open and locked.
-    drop(tokens_lock);
-    let tokens_lock_file = store.join(store_io::tokens::TOKENS_LOCK);
-    if tokens_lock_file.exists() {
-        std::fs::remove_file(&tokens_lock_file)?;
-    }
-    let lock_file = store.join(store_io::LOCK_FILE);
-    if lock_file.exists() {
-        std::fs::remove_file(&lock_file)?;
-    }
-    drop(lock);
-    std::fs::remove_dir(store)?;
-    Ok(())
 }
 
 /// Remove what init wrote. Without `--repo`, the project is the nearest
@@ -746,16 +656,32 @@ fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
     let mut leftover = false;
     // A store a daemon's library let go of, handed back however uninstall ends.
     let mut _released = None;
+    // Where the store's deletion was queued, and why the store's lock could not be taken, when it was.
+    let mut queued_at: Option<(PathBuf, String)> = None;
     if delete_store {
         let Some(store) = &store else { bail!("{} names no store, so there is none to delete; nothing was removed", repo.display()) };
-        if deletion_leftover(store)? {
+        if deletions::leftover(store)? {
             leftover = true;
         } else {
             if let Some(why) = refuse_store_deletion(store, &repo, true)? {
                 bail!("not deleting the store: {why}. Nothing was removed");
             }
             _released = release_from_library(store)?;
-            lock = Some(store_io::lock(store).map_err(|e| anyhow::anyhow!("not deleting the store: {e}. Nothing was removed"))?);
+            // Held still, every check passed: the deletion is queued and happens once nothing holds it (req:store-deletion-queued).
+            // Under the queue's lock, a daemon's marker asked again there: a serve starting marks the store before it asks the
+            // queue under the same lock, so one of the two always sees the other.
+            let queue = deletions::hold(&deletions::deletions_dir()?)?;
+            lock = match store_io::lock(store) {
+                Ok(held) => Some(held),
+                Err(e @ store_io::StoreIoError::Locked(..)) => {
+                    if let Some(why) = refuse_store_deletion(store, &repo, true)? {
+                        bail!("not deleting the store: {why}. Nothing was removed");
+                    }
+                    queued_at = Some((queue.queue(store, &canonical(&repo)?)?, e.to_string()));
+                    None
+                }
+                Err(e) => bail!("not deleting the store: {e}. Nothing was removed"),
+            };
         }
     }
     let plan = init::plan_uninstall(&repo);
@@ -781,12 +707,16 @@ fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
             }
             println!("removed store {} (what a deletion stopped part way had left)", store.display());
         }
+        Some(store) if delete_store && queued_at.is_some() => {
+            let (record, why) = queued_at.as_ref().expect("queued");
+            println!("queued  deletion of store {}: {why}. It is deleted once nothing holds it, by the daemon's library or the next grimoire command ({})", store.display(), record.display());
+        }
         Some(store) if delete_store => {
             // Checked again at the last moment, under the lock taken before the first check.
             if let Some(why) = refuse_store_deletion(store, &repo, false)? {
                 bail!("the integration is removed, but not the store: {why}. .grimoire.toml is kept, so running uninstall again finishes the rest");
             }
-            delete_store_dir(store, lock.take())
+            deletions::delete(store, lock.take())
                 .map_err(|e| anyhow::anyhow!("the integration is removed, but the store was not fully deleted: {e}. .grimoire.toml is kept, so running uninstall again finishes the rest"))?;
             println!("removed store {}", store.display());
         }
@@ -808,6 +738,10 @@ fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Result<()> {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())).with_target(false).init();
+    // Not under init, which may be taking up again a store whose deletion is queued: it cancels that first.
+    if !matches!(cli.command, Command::Init { server: None, .. }) {
+        carry_out_deletions();
+    }
 
     match cli.command {
         Command::Serve { store, port, ui_dir, shared, listen, site, library: shared_library, site_of } => {
@@ -1015,6 +949,11 @@ fn main() -> anyhow::Result<()> {
             // Resolved as the project file it writes will resolve it, a relative path against the repository.
             let store_dir = store_io::store_for_repo(&store, &repo)?;
             store_io::refuse_inside(&store_dir, &repo)?;
+            // Taken up again: a deletion queued for this store is cancelled before anything is written (req:store-deletion-queued).
+            if deletions::cancel(&deletions::deletions_dir()?, &store_dir)? {
+                println!("cancelled the queued deletion of store {}", store_dir.display());
+            }
+            carry_out_deletions();
             // The store's lock for the whole run, from creating the store to adopting, unless
             // a daemon serves it, which then takes init's one write, the adopt, itself.
             let created = !store_dir.join(store_io::CONFIG_FILE).exists();

@@ -12,6 +12,7 @@ use grimoire_core::store::{validate_baseline, validate_config, validate_page, va
 use grimoire_core::{Malformed, Store};
 
 pub mod checkouts;
+pub mod deletions;
 mod location;
 mod lock;
 pub mod tokens;
