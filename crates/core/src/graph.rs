@@ -116,6 +116,9 @@ pub struct Graph {
     /// graph; read with a ticket, that ticket and those whose references its
     /// proposal edits, since a ticket's references are its proposal state.
     pub judged: HashSet<String>,
+    /// The ticket the graph is read with, none for the truth's: a finding only its owner can mend,
+    /// as a landing whose truth moved, is judged on this one alone (req:lint-landing-moved).
+    pub read_with: Option<String>,
     /// For each ticket whose references a proposal would change, the tickets
     /// proposing it.
     pub drafted: BTreeMap<String, Vec<String>>,
@@ -131,12 +134,14 @@ impl Graph {
         g.landing_moved = crate::ops::landing_moved(store);
         g.drafted = store.ticket_drafts();
         // Its references, and those its edits leave other tickets with, are what this reading judges.
+        g.read_with = Some(ticket.to_string());
         g.judged = std::iter::once(ticket.to_string()).chain(store.proposals.get(ticket).into_iter().flat_map(|p| p.tickets.keys().cloned())).collect();
         g
     }
 
     pub fn build(store: &Store, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
         let mut g = Graph {
+            read_with: None,
             roots: store.config.roots.list().into_iter().cloned().collect(),
             named_roots: store.config.roots.clone(),
             malformed: malformed.to_vec(),
