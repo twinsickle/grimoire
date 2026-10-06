@@ -977,7 +977,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-rename-keeps-decisions-and-rewrites-references", "checks": ["crates/core/src/ops#rename"]}
+    /// {"test": "a-rename-keeps-decisions-and-rewrites-references", "checks": ["crates/core/src/ops/rename#rename"]}
     /// ```
     #[test]
     fn a_rename_keeps_decisions_and_rewrites_references() {
@@ -1144,7 +1144,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-edit-to-another-ticket-waits-in-its-change", "checks": ["crates/core/src/tools/write#ticket-references", "crates/core/src/ops#proposal-writes", "crates/core/src/ops#close-applies-proposal", "crates/core/src/tools/write#settles", "crates/core/src/tools/read#ticket-view", "crates/core/src/query/board#board"]}
+    /// {"test": "an-edit-to-another-ticket-waits-in-its-change", "checks": ["crates/core/src/tools/write#ticket-references", "crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/tools/write#settles", "crates/core/src/tools/read#ticket-view", "crates/core/src/query/board#board"]}
     /// ```
     #[test]
     fn an_edit_to_another_ticket_waits_in_its_change() {
@@ -1207,7 +1207,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-change-waits-to-land-and-the-landing-closes-it", "checks": ["crates/core/src/tools/write#lands", "crates/core/src/tools/write#land-answers", "crates/core/src/ops#closes-when-landed", "crates/core/src/tools/read#ticket-view"]}
+    /// {"test": "a-change-waits-to-land-and-the-landing-closes-it", "checks": ["crates/core/src/tools/write#lands", "crates/core/src/tools/write#land-answers", "crates/core/src/ops/tickets#closes-when-landed", "crates/core/src/tools/read#ticket-view"]}
     /// ```
     #[test]
     fn a_change_waits_to_land_and_the_landing_closes_it() {
@@ -1270,7 +1270,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-answer-waits-for-the-change-that-applies-it", "checks": ["crates/core/src/ops#closes-when-landed", "crates/core/src/ops#settles-answers", "crates/core/src/ops#proposal-writes", "crates/core/src/ops#delete-node", "crates/core/src/tools/write#settles", "crates/core/src/tools/write#land-answers", "crates/core/src/tools/write#write-responses"]}
+    /// {"test": "an-answer-waits-for-the-change-that-applies-it", "checks": ["crates/core/src/ops/tickets#closes-when-landed", "crates/core/src/ops/tickets#settles-answers", "crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops#delete-node", "crates/core/src/tools/write#settles", "crates/core/src/tools/write#land-answers", "crates/core/src/tools/write#write-responses"]}
     /// ```
     #[test]
     fn an_answer_waits_for_the_change_that_applies_it() {
@@ -1344,7 +1344,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-change-keeps-pace-with-what-it-relies-on", "checks": ["crates/core/src/ops#priority-follows", "crates/core/src/tools/write#reprioritised", "crates/core/src/tools/write#write-responses"]}
+    /// {"test": "a-change-keeps-pace-with-what-it-relies-on", "checks": ["crates/core/src/ops/tickets#priority-follows", "crates/core/src/tools/write#reprioritised", "crates/core/src/tools/write#write-responses"]}
     /// ```
     #[test]
     fn a_change_keeps_pace_with_what_it_relies_on() {
@@ -1413,7 +1413,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-reopened-answer-is-cut-to-the-body-limit", "checks": ["crates/core/src/ops#settles-answers"]}
+    /// {"test": "a-reopened-answer-is-cut-to-the-body-limit", "checks": ["crates/core/src/ops/tickets#settles-answers"]}
     /// ```
     #[test]
     fn a_reopened_answer_is_cut_to_the_body_limit() {
