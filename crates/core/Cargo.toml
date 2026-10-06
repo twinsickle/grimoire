@@ -22,6 +22,7 @@ ts = ["dep:ts-rs"]
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
 thiserror = { workspace = true }
 ts-rs = { version = "12", optional = true, features = ["serde-compat", "no-serde-warnings"] }
 

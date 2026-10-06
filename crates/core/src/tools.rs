@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."},{"id":"schema-errors","statement":"An input that does not match a tool's schema is refused as invalid naming the path of the field it is about, in the message and in details, as scenarios[0].title, a missing or unknown field named beneath the path it was met at; and a field the tool does not know is answered with the fields the dispatcher takes beside the tool's own, checkout for every tool and ticket for a read and for a write that takes it."}]}
 //! ```
 
 use serde::Deserialize;
@@ -34,8 +34,42 @@ fn answer<A: Answer>(name: &str, a: A, changed: Option<Changed>) -> Result<Outco
     Ok(Outcome { output: to_value(&a), changed })
 }
 
+/// Parse a tool's input, saying where it does not match: the path of the field, as `scenarios[0].title`,
+/// in the message and in `details`.
 fn parse<T: for<'de> Deserialize<'de>>(input: Value) -> Result<T, ToolError> {
-    serde_json::from_value(input).map_err(|e| ToolError::invalid(format!("input does not match the tool's schema: {e}"), vec![]))
+    serde_path_to_error::deserialize(input).map_err(|e| {
+        let reason = e.inner().to_string();
+        let at = field_path(&e.path().to_string(), &reason);
+        match at {
+            Some(at) => ToolError::invalid(format!("input does not match the tool's schema at `{at}`: {reason}"), vec![crate::store::FieldError::new(&at, reason)]),
+            None => ToolError::invalid(format!("input does not match the tool's schema: {reason}"), vec![]),
+        }
+    })
+}
+
+/// The path of the field an error is about: where it was met, and for a missing or unknown field
+/// the field itself beneath it; none at the input's own top with no field named.
+fn field_path(path: &str, reason: &str) -> Option<String> {
+    let path = if path == "." || path == "?" { "" } else { path };
+    let named = ["missing field `", "unknown field `"].iter().find_map(|lead| reason.strip_prefix(lead)).and_then(|rest| rest.split('`').next());
+    match (path, named) {
+        ("", None) => None,
+        ("", Some(field)) => Some(field.to_string()),
+        (path, Some(field)) if !path.ends_with(&format!(".{field}")) && path != field => Some(format!("{path}.{field}")),
+        (path, _) => Some(path.to_string()),
+    }
+}
+
+/// The fields every tool takes beside its own, which the dispatcher takes off before it parses:
+/// said with a field the tool does not know, since the tool's own list leaves them out.
+fn with_dispatcher_fields(name: &str, e: ToolError) -> ToolError {
+    match e {
+        ToolError::Invalid { message, details } if message.contains("unknown field `") => {
+            let also = if !is_write(name) || takes_ticket(name) { "`checkout` and `ticket`" } else { "`checkout`" };
+            ToolError::Invalid { message: format!("{message}; {name} also takes {also}"), details }
+        }
+        other => other,
+    }
 }
 
 fn to_value<T: serde::Serialize>(v: &T) -> Value {
@@ -125,13 +159,14 @@ pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Res
     if let Some(o) = input.as_object_mut() {
         o.remove("checkout");
     }
-    if is_write(name) {
+    let answered = if is_write(name) {
         // Every string a write stores is trimmed here, once, so no write tool can forget.
         crate::store::trim_strings(&mut input);
         write::call(state, name, input, today)
     } else {
         read::call(state, name, input)
-    }
+    };
+    answered.map_err(|e| with_dispatcher_fields(name, e))
 }
 
 #[derive(Deserialize)]
@@ -147,7 +182,69 @@ fn take_ticket(input: &mut Value) -> Result<Option<String>, ToolError> {
     match input.as_object_mut().and_then(|o| o.remove("ticket")) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.strip_prefix("ticket:").unwrap_or(&s).to_string())),
-        Some(other) => Err(ToolError::invalid(format!("`ticket` must be a ticket slug or reference, not {other}"), vec![])),
+        Some(other) => Err(ToolError::invalid(format!("`ticket` must be a ticket slug or reference, not {other}"), vec![crate::store::FieldError::new("ticket", "not a ticket slug or reference")])),
+    }
+}
+
+#[cfg(test)]
+mod schema_errors {
+    use super::*;
+    use serde_json::json;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-schema-error-names-the-fields-path", "checks": ["crates/core/src/tools#schema-errors"]}
+    /// ```
+    #[test]
+    fn a_schema_error_names_the_fields_path() {
+        let mut s = fixtures::state();
+        let invalid = |r: Result<Outcome, ToolError>| match r {
+            Err(ToolError::Invalid { message, details }) => (message, details.into_iter().map(|d| d.field).collect::<Vec<_>>()),
+            other => panic!("expected invalid, got {other:?}"),
+        };
+        // A scenario without its title: the path says which.
+        let req = json!({ "slug": "r", "title": "R", "statement": "It SHALL.", "scenarios": [{ "given": "g", "when": "w", "then": "t" }], "covered_by": [], "ticket": "later-1" });
+        let (message, fields) = invalid(call(&mut s, "put_requirement", req, "2026-10-06"));
+        assert!(message.contains("`scenarios[0].title`") && message.contains("missing field `title`"), "{message}");
+        assert_eq!(fields, ["scenarios[0].title"]);
+        // A field missing at the top: named alone.
+        let (message, fields) = invalid(call(&mut s, "get", json!({}), "2026-10-06"));
+        assert!(message.contains("at `ref`"), "{message}");
+        assert_eq!(fields, ["ref"]);
+        // A wrong type deep down: the path to it.
+        let req = json!({ "slug": "r", "title": "R", "statement": "It SHALL.", "scenarios": [{ "title": 3, "given": "g", "when": "w", "then": "t" }], "covered_by": [], "ticket": "later-1" });
+        let (message, _) = invalid(call(&mut s, "put_requirement", req, "2026-10-06"));
+        assert!(message.contains("`scenarios[0].title`"), "{message}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-unknown-field-hint-names-the-dispatchers-fields", "checks": ["crates/core/src/tools#schema-errors"]}
+    /// ```
+    #[test]
+    fn the_unknown_field_hint_names_the_dispatchers_fields() {
+        let mut s = fixtures::state();
+        let mut message = |name: &str, input: Value| match call(&mut s, name, input, "2026-10-06") {
+            Err(ToolError::Invalid { message, .. }) => message,
+            other => panic!("expected invalid, got {other:?}"),
+        };
+        let m = message("put_page", json!({ "slug": "p", "title": "P", "body": "b", "links": [], "colour": "red" }));
+        assert!(m.contains("unknown field `colour`") && m.contains("also takes `checkout` and `ticket`"), "{m}");
+        let m = message("get", json!({ "ref": "page:p", "colour": "red" }));
+        assert!(m.contains("also takes `checkout` and `ticket`"), "a read takes ticket too: {m}");
+        // A ticket of the wrong type names the field too.
+        match call(&mut s, "get", json!({ "ref": "page:p", "ticket": 42 }), "2026-10-06") {
+            Err(ToolError::Invalid { details, .. }) => assert_eq!(details.iter().map(|d| d.field.as_str()).collect::<Vec<_>>(), ["ticket"]),
+            other => panic!("expected invalid, got {other:?}"),
+        }
+        let mut message = |name: &str, input: Value| match call(&mut s, name, input, "2026-10-06") {
+            Err(ToolError::Invalid { message, .. }) => message,
+            other => panic!("expected invalid, got {other:?}"),
+        };
+        let m = message("reorder", json!({ "priority": "next", "order": [], "colour": "red" }));
+        assert!(m.contains("also takes `checkout`") && !m.contains("`ticket`"), "{m}");
     }
 }
 

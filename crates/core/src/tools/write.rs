@@ -132,7 +132,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 body: String,
             }
             if input.get("slug").is_some() {
-                return Err(ToolError::invalid("file_ticket no longer takes a slug: the id is generated. Give a title.", vec![]));
+                return Err(ToolError::invalid("file_ticket no longer takes a slug: the id is generated. Give a title.", vec![FieldError::new("slug", "not taken: the id is generated")]));
             }
             let i: In = parse(input)?;
             let t = ops::NewTicket { title: i.title, kind: i.kind, priority: i.priority, touches: i.touches.unwrap_or_default(), relies_on: i.relies_on.unwrap_or_default(), body: i.body };
