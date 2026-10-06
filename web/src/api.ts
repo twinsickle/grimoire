@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, for the grimoire the page's address names, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response whose body is a tool's error is thrown as an ApiError carrying its code and message; a request that fails to connect, or a server error whose body is no tool's error, as a proxy answers while the daemon is away, is thrown as Unreachable, saying the daemon is not answering; any other answer that is not JSON is thrown as an error naming its status and the start of its body; no answer is thrown as a JSON syntax error."},{"id":"names-its-checkout","statement":"Every call and the event stream name a checkout: the one the page's address names as ?checkout=, kept for the tab, else the one the first status answers for, which is learned before any other call is sent or the stream is opened; status itself names it once it is known; a call refused for the checkout it names forgets that checkout, learns it again and is sent once more."},{"id":"stream-reopens","statement":"When the browser closes the event stream for good, as it does when a reconnect is answered with anything but an event stream, it is opened again after a backoff of one second doubling to ten, reset on each opening; every opening counts as an event."},{"id":"away-keeps-data","statement":"useAway is true from a call thrown as Unreachable or an error on the event stream until any answer from the daemon or an opened stream; while it is, a query whose deps are unchanged keeps its last data and reports no error, and a query with no data for its deps reports the Unreachable error."},{"id":"retries-while-away","statement":"While useAway is true, every listener of onEvent, and so every query, is told every two seconds, so the page asks again until the daemon answers whether or not an event comes; once it answers, the retries stop."},{"id":"grimoire-base","statement":"A page opened at /g/<name>/ makes every tool call and opens its event stream under /g/<name>/api/, that grimoire's in the daemon's library; one opened elsewhere uses the bare /api/, the daemon's default grimoire; grimoireBase reads the name only from a leading /g/ followed by a slug."}]}
+ * {"purpose":"Reach the daemon: one function per tool over POST /api/<tool>, for the grimoire the page's address names, one shared event stream, and a query hook that re-runs on every event.","criteria":[{"id":"tools-only","statement":"Every request the UI makes is a tool call by name; there is no UI-only endpoint."},{"id":"one-stream","statement":"The page holds one EventSource however many queries are mounted, so re-fetches are never starved by idle streams."},{"id":"errors-typed","statement":"A non-2xx response whose body is a tool's error is thrown as an ApiError carrying its code and message; a request that fails to connect, or a server error whose body is no tool's error, as a proxy answers while the daemon is away, is thrown as Unreachable, saying the daemon is not answering; any other answer that is not JSON is thrown as an error naming its status and the start of its body; no answer is thrown as a JSON syntax error."},{"id":"names-its-checkout","statement":"Every call and the event stream name a checkout: the one the page's address names as ?checkout=, kept for the tab, else the one the first status answers for, which is learned before any other call is sent or the stream is opened; status itself names it once it is known; a call refused for the checkout it names forgets that checkout, learns it again and is sent once more."},{"id":"stream-reopens","statement":"When the browser closes the event stream for good, as it does when a reconnect is answered with anything but an event stream, it is opened again after a backoff of one second doubling to ten, reset on each opening; every opening counts as an event."},{"id":"away-keeps-data","statement":"useAway is true from a call thrown as Unreachable or an error on the event stream until an answer from the daemon to a request started after the last of them, or an opened stream; an answer to a request already on its way when the daemon went away leaves it true; while it is, a query whose deps are unchanged keeps its last data and reports no error, and a query with no data for its deps reports the Unreachable error."},{"id":"retries-while-away","statement":"While useAway is true, every listener of onEvent, and so every query, is told every two seconds, so the page asks again until the daemon answers whether or not an event comes; once it answers, the retries stop."},{"id":"grimoire-base","statement":"A page opened at /g/<name>/ makes every tool call and opens its event stream under /g/<name>/api/, that grimoire's in the daemon's library; one opened elsewhere uses the bare /api/, the daemon's default grimoire; grimoireBase reads the name only from a leading /g/ followed by a slug."}]}
  * ```
  */
 
@@ -33,6 +33,21 @@ const awayListeners = new Set<() => void>();
 // While it is away, every query is asked again on this timer, so the page recovers even when no event comes.
 let retrying: ReturnType<typeof setInterval> | null = null;
 export const RETRY_MS = 2000;
+// Each request is numbered as it starts. A failure remembers the newest number started by then, and only a request
+// started after it is taken as the daemon answering again: a slow one already on its way when it went away is not.
+let started = 0;
+let failedAt = 0;
+
+/** The daemon did not answer: away, and every request started up to now is from before. */
+function failed() {
+  failedAt = started;
+  setAway(true);
+}
+
+/** The daemon answered request `n`: back, unless that request was already on its way when it went away. */
+function answered(n: number) {
+  if (n > failedAt) setAway(false);
+}
 
 function setAway(now: boolean) {
   if (away === now) return;
@@ -135,6 +150,7 @@ function forgetCheckout() {
 async function callOnce<K extends keyof ToolAnswers>(tool: K, input: unknown): Promise<ToolAnswers[K]> {
   if (checkout === null && tool !== "status") await learnCheckout();
   const named = checkout !== null && typeof input === "object" && input !== null && !Array.isArray(input) ? { ...input, checkout } : input;
+  const n = ++started;
   let res: Response;
   let text: string;
   try {
@@ -145,7 +161,7 @@ async function callOnce<K extends keyof ToolAnswers>(tool: K, input: unknown): P
     });
     text = await res.text();
   } catch (e) {
-    setAway(true);
+    failed();
     throw new Unreachable(e instanceof Error ? e.message : String(e));
   }
   let body: unknown;
@@ -158,13 +174,13 @@ async function callOnce<K extends keyof ToolAnswers>(tool: K, input: unknown): P
   // A server error that is no tool's is the proxy in front of a daemon that is away.
   if (!res.ok && !(parsed && isToolError(body))) {
     if (res.status >= 500) {
-      setAway(true);
+      failed();
       throw new Unreachable(`${res.status}${text.trim() ? `: ${text.trim().slice(0, 80)}` : ""}`);
     }
-    setAway(false);
+    answered(n);
     throw new Error(`${tool} answered ${res.status} with ${text.trim() ? `"${text.trim().slice(0, 120)}"` : "nothing"}, not a tool's answer`);
   }
-  setAway(false);
+  answered(n);
   if (!parsed) throw new Error(`${tool} answered ${res.status} with something that is not JSON: "${text.trim().slice(0, 120)}"`);
   if (!res.ok) throw new ApiError(body as ToolError, res.status);
   return body as ToolAnswers[K];
@@ -230,7 +246,7 @@ function ensureStream() {
   // answers while the daemon restarts, closes the stream for good: open it
   // again, a little later each time, until the daemon is back.
   opened.onerror = () => {
-    setAway(true);
+    failed();
     if (opened.readyState !== EventSource.CLOSED) return;
     stream = null;
     const wait = backoff;

@@ -282,6 +282,42 @@ test("while the daemon is away every listener is told every two seconds, and no 
  * # Test contract
  *
  * ```json
+ * {"test": "a-late-answer-from-before-does-not-say-the-daemon-is-back", "checks": ["web/src/api#away-keeps-data", "web/src/api#retries-while-away"]}
+ * ```
+ */
+test("an answer to a request on its way when the daemon went away does not say it is back; a newer one does", async () => {
+  const api = await freshApi();
+  try {
+    stubStatus();
+    let told = 0;
+    api.onEvent(() => told++);
+    await vi.advanceTimersByTimeAsync(0);
+    // A slow call goes out while the daemon answers, and is still on its way when every other call fails.
+    let finish: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(async () => new Promise<Response>((resolve) => (finish = resolve))));
+    const slow = api.call("lint");
+    await vi.advanceTimersByTimeAsync(0);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 500 })));
+    await expect(api.call("status")).rejects.toBeInstanceOf(api.Unreachable);
+    // The slow one answers late: still away, and still retrying.
+    finish(new Response("{}", { status: 200 }));
+    await slow;
+    vi.advanceTimersByTime(api.RETRY_MS * 2);
+    expect(told, "a late answer from before is not the daemon back").toBe(2);
+    // A request started now is answered: back, and the retries stop.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    await api.call("status");
+    vi.advanceTimersByTime(api.RETRY_MS * 3);
+    expect(told, "a newer answer is").toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "every-call-names-the-pages-checkout", "checks": ["web/src/api#names-its-checkout"]}
  * ```
  */
