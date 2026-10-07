@@ -1,6 +1,7 @@
 // Every route the UI serves, on the behaviour fixture: the grimoire at the
-// root and at a page, the unplaced modules, the cauldron, and one node page of
-// each other kind. The behaviour specs visit them, the visual test
+// root and at a page, the unplaced modules, the cauldron, one node page of
+// each other kind, and the grimoire and cauldron of `ledger`, the empty
+// grimoire beside it in the fixture's library, for the empty states. The behaviour specs visit them, the visual test
 // screenshots them and the shots capture them, so a route added here
 // is covered by all three.
 
@@ -27,4 +28,7 @@ export const ROUTES: Route[] = [
   { name: "node-file", path: node("file:src/ready.rs"), content: "[aria-label='Source of src/ready.rs'] table" },
   { name: "node-decl", path: node("decl:src/ready.rs#ready"), content: "h1" },
   { name: "node-test", path: node("test:src/ready.rs#ready-needs-a-commit"), content: "h1" },
+  // The fixture library's empty grimoire: nothing yet to show, so its views are the empty states.
+  { name: "empty-grimoire", path: "/g/ledger/", content: "[data-empty-state]" },
+  { name: "empty-cauldron", path: "/g/ledger/cauldron", content: "[data-empty-state]" },
 ];

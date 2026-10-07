@@ -495,3 +495,18 @@ test("a ticket's next step is a line for the agent, and an answer waiting or a c
   expect(t("question", "landing")).toBeNull();
   expect(t("gap", "landing")).toBeNull();
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-jingle-is-written-once", "checks": ["web/src/components#empty-state"]}
+ * ```
+ */
+test("the jingle is written once, in the empty state, and only the empty grimoire and cauldron use it", () => {
+  // Every occurrence counted, not only the files holding one.
+  const count = (re: RegExp) => Object.entries(sources).flatMap(([path, text]) => (text.match(re) ?? []).map(() => path));
+  // Written as a string once; the contract names it in prose.
+  expect(count(/["'`]It's almost magic/g)).toEqual(["./components.tsx"]);
+  expect(count(/<EmptyState\b/g).sort()).toEqual(["./views/Board.tsx", "./views/Home.tsx"]);
+});

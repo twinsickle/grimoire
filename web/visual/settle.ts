@@ -12,7 +12,8 @@ import type { Route } from "../behaviour/routes";
 export async function open(page: Page, route: Route): Promise<void> {
   let inFlight = 0;
   let last = Date.now();
-  const isTool = (url: string) => new URL(url).pathname.startsWith("/api/") && !new URL(url).pathname.endsWith("/api/events");
+  // A grimoire of the library is read under /g/<name>/api/, the default one under /api/.
+  const isTool = (url: string) => /^(\/g\/[^/]+)?\/api\//.test(new URL(url).pathname) && !new URL(url).pathname.endsWith("/api/events");
   page.on("request", (r) => {
     if (isTool(r.url())) inFlight++;
   });

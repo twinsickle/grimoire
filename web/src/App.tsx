@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, base, useAway, useQuery } from "./api";
-import { KindTag, mono } from "./components";
+import { BookIcon, CauldronIcon, KindTag, mono } from "./components";
 import { idOf, kindOf, libraryChoices, libraryShown, nodePath, serverAway, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
@@ -68,27 +68,6 @@ function useLitSection(): Section {
   const m = pathname.match(/^\/n\/(.+)$/);
   const ref = m ? decodeURIComponent(m[1]) : "";
   return ref && kindOf(ref) === "ticket" ? "board" : "grimoire";
-}
-
-function BookIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 6.5c-1.6-1.4-3.9-2-7-2v13c3.1 0 5.4.6 7 2 1.6-1.4 3.9-2 7-2v-13c-3.1 0-5.4.6-7 2z" />
-      <path d="M12 6.5v13" />
-    </svg>
-  );
-}
-
-function CauldronIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M6.5 9h11" />
-      <path d="M8 9c-3.6 1.6-4.2 9.5 4 9.5s7.6-7.9 4-9.5" />
-      <path d="M8.3 18l-1 2.3M15.7 18l1 2.3" />
-      <circle cx="10.5" cy="5.6" r="1.2" />
-      <circle cx="14" cy="3.8" r="0.8" />
-    </svg>
-  );
 }
 
 function Tab({ section, lit, children }: { section: Section; lit: Section; children: React.ReactNode }) {

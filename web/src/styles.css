@@ -34,6 +34,12 @@
   --color-syn-function: #7aa2f7;
   --color-syn-meta: #e0af68;
   --radius-md: 6px;
+  /* The empty state's sparkle glints now and then; nothing else in the UI moves on its own. */
+  --animate-twinkle: twinkle 3.2s ease-in-out infinite;
+  @keyframes twinkle {
+    0%, 70%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    82% { opacity: 0.35; transform: scale(0.7) rotate(20deg); }
+  }
   --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

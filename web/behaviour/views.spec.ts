@@ -143,6 +143,58 @@ test("the application is mounted into #root, and the page holds nothing else", a
  * # Test contract
  *
  * ```json
+ * {"test": "almost-magic-only-where-nothing-is-yet", "checks": ["web/src/components#empty-state", "web/src/views/Home#empty-grimoire", "web/src/views/Board#empty-cauldron"]}
+ * ```
+ */
+test("\"It's almost magic\" shows where a whole view has nothing yet, and nowhere else", async ({ page }) => {
+  const jingle = page.getByText("It's almost magic.", { exact: true });
+  // ledger, the empty grimoire of the fixture's library: no pages, so its grimoire view is the empty state, with no rail.
+  await page.goto("/g/ledger/");
+  const empty = page.locator("main [data-empty-state]");
+  await expect(empty).toContainText("has no page yet");
+  await expect(empty.locator("svg").first()).toBeVisible();
+  await expect(empty.locator("code").first()).toBeVisible();
+  await expect(jingle).toHaveCount(1);
+  await expect(page.locator(rail)).toHaveCount(0);
+  // Its cauldron: the filters, then the empty state in place of the bands and the Unsettled section.
+  await page.goto("/g/ledger/cauldron");
+  await expect(page.locator("main h1")).toHaveText("Cauldron");
+  await expect(page.locator("main [data-empty-state]")).toContainText("The cauldron is empty");
+  await expect(jingle).toHaveCount(1);
+  await expect(page.locator("section[id^='band-'], #unattached")).toHaveCount(0);
+  // Unplaced and a page asked for by name in the empty grimoire say what is missing, plainly, with no jingle.
+  for (const path of ["/g/ledger/unplaced", "/g/ledger/n/page%3Aoverview"]) {
+    await page.goto(path);
+    await expect(page.locator("main"), path).toContainText("has no page yet");
+    await expect(page.locator("[data-empty-state]"), path).toHaveCount(0);
+    await expect(jingle, path).toHaveCount(0);
+  }
+  // A change filed and closed in ledger leaves its cauldron empty, and the recently closed still show it when asked for.
+  const ledger = async (name: string, input: object) => (await page.request.post(`/g/ledger/api/${name}`, { data: input })).json();
+  const filed = await ledger("file_ticket", { title: "Brewed and done", kind: "change", priority: "later", touches: [], body: "Closed at once." });
+  await ledger("start_ticket", { ref: filed.node.ref });
+  await ledger("close_ticket", { ref: filed.node.ref, decision: { text: "Done.", date: "2026-01-20" } });
+  await page.goto("/g/ledger/cauldron");
+  await expect(page.locator("main [data-empty-state]")).toContainText("The cauldron is empty");
+  await page.getByRole("button", { name: "Closed", exact: true }).click();
+  await expect(page.locator("#closed")).toContainText("Brewed and done");
+  await expect(jingle).toHaveCount(1);
+  // A grimoire with things in it shows the jingle nowhere: not its views, its node pages, nor a search that finds nothing.
+  for (const { path, content } of ROUTES.filter((r) => !r.path.startsWith("/g/ledger/"))) {
+    await page.goto(path);
+    await page.locator(content).first().waitFor();
+    await expect(page.locator("[data-empty-state]"), path).toHaveCount(0);
+    await expect(jingle, path).toHaveCount(0);
+  }
+  await page.getByPlaceholder("Find a page, requirement, module, ticket…").fill("zzqx-nothing-is-called-this");
+  await page.waitForTimeout(400);
+  await expect(jingle).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "one-tab-is-lit", "checks": ["web/src/App#lit-tab"]}
  * ```
  */

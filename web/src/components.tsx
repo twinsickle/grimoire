@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
+ * {"purpose":"The small shared pieces: the section icons and the empty state that carries Grimoire's jingle, a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"empty-state","statement":"EmptyState draws a whole view that has nothing yet to show: its section's icon drawn large with a sparkle beside it, the direction it is given, a span between backticks set as code, and beneath them Grimoire's jingle, It's almost magic.; it is the one place in the UI the jingle is written."},{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and nowhere else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
  * ```
  */
 
@@ -254,5 +254,79 @@ export function Handoff({ ticket }: { ticket: { ref: Ref; title: string; kind: T
         </p>
       )}
     </div>
+  );
+}
+
+/** The grimoire's book, the header's brand and the tab's icon. */
+export function BookIcon({ size = 18, stroke = 1.8 }: { size?: number; stroke?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 6.5c-1.6-1.4-3.9-2-7-2v13c3.1 0 5.4.6 7 2 1.6-1.4 3.9-2 7-2v-13c-3.1 0-5.4.6-7 2z" />
+      <path d="M12 6.5v13" />
+    </svg>
+  );
+}
+
+/** The cauldron, the view of what can be worked on. */
+export function CauldronIcon({ size = 18, stroke = 1.8 }: { size?: number; stroke?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 9h11" />
+      <path d="M8 9c-3.6 1.6-4.2 9.5 4 9.5s7.6-7.9 4-9.5" />
+      <path d="M8.3 18l-1 2.3M15.7 18l1 2.3" />
+      <circle cx="10.5" cy="5.6" r="1.2" />
+      <circle cx="14" cy="3.8" r="0.8" />
+    </svg>
+  );
+}
+
+/** A four-pointed glint, filled with the current colour. */
+function Sparkle({ size, className }: { size: number; className: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M8 0c.5 4.4 3.6 7.5 8 8-4.4.5-7.5 3.6-8 8-.5-4.4-3.6-7.5-8-8 4.4-.5 7.5-3.6 8-8z" />
+    </svg>
+  );
+}
+
+/** Grimoire's jingle. It belongs to Grimoire's own UI, never to a project's grimoire, and is written here only (req:web-empty-states). */
+export const JINGLE = "It's almost magic.";
+
+/** Text with its backticked spans set as code, since the directions name slugs and tools that way. */
+function Ticked({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("`").map((part, i) =>
+        i % 2 ? (
+          <code key={i} className="font-mono text-fg bg-bg-2 px-1 rounded-sm">
+            {part}
+          </code>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * A whole view with nothing yet to show: its section's icon, what is missing and how it comes, and the
+ * jingle beneath. Only for a view that is empty as a whole and at its start; an empty section of a fuller
+ * view, a search that finds nothing or a list emptied by finishing says what it lacks plainly (req:web-empty-states).
+ */
+export function EmptyState({ icon, text }: { icon: "book" | "cauldron"; text: string }) {
+  const Icon = icon === "book" ? BookIcon : CauldronIcon;
+  return (
+    <section aria-label="Nothing yet" data-empty-state className="flex flex-col items-center text-center max-w-[62ch] mx-auto mt-[10vh] px-4">
+      <span className="relative text-fg-faint mb-5">
+        <Icon size={76} stroke={1} />
+        <Sparkle size={14} className="absolute top-0 -right-2 text-accent motion-safe:animate-twinkle" />
+        <Sparkle size={8} className="absolute top-5 -right-5 text-accent-dim" />
+      </span>
+      <p className="m-0 text-fg-dim leading-relaxed">
+        <Ticked text={text} />
+      </p>
+      <p className="mt-4 mb-0 text-accent italic text-[16px] tracking-[0.015em]">{JINGLE}</p>
+    </section>
   );
 }
