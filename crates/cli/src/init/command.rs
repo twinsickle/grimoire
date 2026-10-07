@@ -182,7 +182,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-canonical-path-is-recorded-absolute", "checks": ["crates/cli/src/init/command#init-repoints", "crates/core/src/store#config-rules"]}
+    /// {"test": "a-canonical-path-is-recorded-absolute", "checks": ["crates/cli/src/init/command#init-repoints", "crates/core/src/store/validate#config-rules"]}
     /// ```
     #[test]
     fn a_canonical_path_is_recorded_absolute() {
