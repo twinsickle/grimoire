@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a language with no grammar comes back as plain lines; the highlighter's HTML is read, never rendered."}]}
+ * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a language with no grammar comes back as plain lines; the highlighter's HTML is read, never rendered."},{"id":"plain","statement":"plain answers a file's text as one line per line of text with no tone and nothing laid out, its text being the line's, only a line feed ending a line, a final one starting none, and the CR before one dropped, without running the highlighter."}]}
  * ```
  */
 
@@ -75,6 +75,18 @@ function toneOf(classes: string): Tone | null {
  */
 export function highlight(text: string, language: string): Token[][] {
   return jsonInComments(tokens(text, language));
+}
+
+/** A file's text as untoned lines, for one too long to highlight: the highlighter never runs. A final line feed ends the last line and starts none, as the daemon counts. */
+export function plain(text: string): Token[][] {
+  const pieces = text.split("\n");
+  const ended = pieces.length > 1 && pieces[pieces.length - 1] === "";
+  if (ended) pieces.pop();
+  return pieces.map((line, i, all) => {
+    // Only the CR before a line feed is dropped; a lone one is text.
+    const own = (i < all.length - 1 || ended) && line.endsWith("\r") ? line.slice(0, -1) : line;
+    return own ? [{ text: own, tone: null }] : [];
+  });
 }
 
 function tokens(text: string, language: string): Token[][] {

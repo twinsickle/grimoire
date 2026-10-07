@@ -1339,6 +1339,60 @@ test("a node's page is what it is, then its graph centred on it, then the rest i
  * # Test contract
  *
  * ```json
+ * {"test": "a-large-file-is-shown-as-an-omen", "checks": ["web/src/views/Node#omens-shown", "web/src/views/Home#marks"]}
+ * ```
+ */
+test("a file past the large-file limit is shown as an omen, dimmed and apart from the findings", async ({ page }) => {
+  // The fixture's limit is ten lines: src/ready.rs is ten, with its tests aside.
+  await page.goto(`/n/${encodeURIComponent("file:src/ready.rs")}`);
+  const omens = page.locator("#omens li");
+  await expect(omens).toHaveCount(1);
+  await expect(omens).toContainText("large-file");
+  await expect(omens).toContainText("10 lines, 32 with its tests");
+  await expect(omens).toHaveClass(/text-fg-dim/);
+  await expect(page.getByRole("heading", { name: "Omens" })).toBeVisible();
+  // Its module's page lists it too, naming the file.
+  await page.goto(`/n/${encodeURIComponent("module:src/ready")}`);
+  await expect(page.locator("#omens li")).toHaveCount(1);
+  await expect(page.locator("#omens a[href='/n/file%3Asrc%2Fready.rs']")).toBeVisible();
+  // A module whose files are not omens shows none.
+  await page.goto(`/n/${encodeURIComponent("module:src")}`);
+  await expect(page.locator("#omens")).toHaveCount(0);
+  // The rail counts it on each page above the module, dimmed, never as a warning.
+  await page.goto("/");
+  const rail = page.locator("nav[aria-label='Pages'] a[href='/n/page%3Areadiness'] [data-omens]");
+  await expect(rail).toHaveText("1 omen");
+  await expect(rail).toHaveClass(/text-fg-faint/);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-file-past-the-plain-limit-is-shown-plain", "checks": ["web/src/views/Node#plain-source"]}
+ * ```
+ */
+test("a file past the plain-file limit is shown plain, its numbers, marks and #L kept", async ({ page }) => {
+  // The fixture's file is short, so its source answer is marked plain, as a long file's would be.
+  await page.route("**/api/source", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), plain: true } });
+  });
+  await page.goto(`/n/${encodeURIComponent("file:src/ready.rs")}#L7`);
+  await expect(page.locator("#plain-note")).toContainText("Shown plain: at 32 lines");
+  const source = page.getByRole("region", { name: "Source of src/ready.rs" });
+  await expect(source.locator("[data-tone]")).toHaveCount(0);
+  // The contract's JSON stays on its one line, as written.
+  expect(await page.locator("tr#L4 td:last-child > div").count()).toBe(1);
+  await expect(page.locator("tr[aria-current='location']")).toHaveAttribute("id", "L7");
+  await expect(source.locator("[data-annotation='contract'] a[href='/n/module%3Asrc%2Fready']")).toBeVisible();
+  await expect(source.locator("[data-annotation='test']")).toHaveCount(2);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-declaration-links-to-its-own-file", "checks": ["web/src/types#reference-helpers"]}
  * ```
  */

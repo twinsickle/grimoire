@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"advisories","statement":"lint judges the graph read with the ticket it is given and answers its findings and advisories: those advisories::own moves out against the truth alone judged over the base's code when a base is set, and those advisories::others gives for every other ticket active or landing, judged over this state's code, its counts and new taken from the findings that stay; set_base sets or clears the base's code."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name, repository and the server it comes from, in name order; a state told nothing answers with no name and an empty library."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"omens","statement":"lint answers the omens of the graph read with the ticket it is given apart from its findings, whatever rules are selected, counting none of them in counts or new."},{"id":"advisories","statement":"lint judges the graph read with the ticket it is given and answers its findings and advisories: those advisories::own moves out against the truth alone judged over the base's code when a base is set, and those advisories::others gives for every other ticket active or landing, judged over this state's code, its counts and new taken from the findings that stay; set_base sets or clears the base's code."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name, repository and the server it comes from, in name order; a state told nothing answers with no name and an empty library."}]}
 //! ```
 
 use crate::extraction::Extraction;
@@ -110,7 +110,8 @@ impl State {
     /// being worked (req:check-own-work).
     pub fn lint(&mut self, ticket: Option<&str>, rules: &[crate::lint::Rule]) -> Result<crate::answer::LintAnswer, crate::ops::ToolError> {
         use crate::{advisories, lint};
-        let findings = lint::lint(self.graph_for(ticket)?, rules);
+        let g = self.graph_for(ticket)?;
+        let (findings, omens) = (lint::lint(g, rules), lint::omens(g));
         let without_code = self.without_code;
         let base = self.base.as_ref().map(|b| {
             let mut g = Graph::build(&self.store, b, &self.malformed);
@@ -128,7 +129,7 @@ impl State {
         });
         advisories.extend(others);
         let (counts, new) = (lint::counts(&findings), lint::new_count(&findings));
-        Ok(crate::answer::LintAnswer { findings, advisories, counts, new, without_code })
+        Ok(crate::answer::LintAnswer { findings, advisories, omens, counts, new, without_code })
     }
 
     fn build_graph(&self, store: &Store) -> Graph {
@@ -306,6 +307,25 @@ mod tests {
             lint["advisories"].as_array().unwrap().iter().map(|a| format!("{} {}", a["from"]["ticket"].as_str().unwrap_or(""), a["finding"]["ref"].as_str().unwrap_or(""))).collect();
         assert_eq!(from, vec!["phase-62 page:git-readiness"], "{lint}");
         assert_eq!(lint["new"].as_u64(), Some(1), "an advisory never counts as new");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "lint-answers-omens-apart", "checks": ["crates/core/src/tools/state#omens", "crates/core/src/tools/read#lint-tool"]}
+    /// ```
+    #[test]
+    fn lint_answers_omens_apart() {
+        let mut s = State::new(store(), extraction(), vec![]);
+        let before = call(&mut s, "lint", json!({}), "2026-10-06").unwrap().output;
+        assert_eq!(before["omens"], json!([]));
+        // Every fixture file has 40 lines: at a limit of 40, the in-scope ones are omens.
+        s.store_mut().config.large_file = Some(40);
+        let after = call(&mut s, "lint", json!({ "kinds": ["dangling"] }), "2026-10-06").unwrap().output;
+        let on: Vec<&str> = after["omens"].as_array().unwrap().iter().map(|o| o["ref"].as_str().unwrap()).collect();
+        assert_eq!(on, vec!["file:src/a/layout.rs", "file:src/a/ready.rs", "file:src/b/unrelated.rs"], "whatever kinds names");
+        let all = call(&mut s, "lint", json!({}), "2026-10-06").unwrap().output;
+        assert_eq!((&all["new"], &all["counts"]), (&before["new"], &before["counts"]), "counted in neither");
     }
 
     /// # Test contract

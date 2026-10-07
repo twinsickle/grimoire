@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes and the page slugs its site shows; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, and optional large-file and plain-file line limits, 1,000 and 5,000 when absent; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -599,6 +599,14 @@ pub struct StoreConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<String>>", optional))]
     pub site: Vec<String>,
+    // A file of this many lines or more, its tests aside, is an omen; DEFAULT_LARGE_FILE when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub large_file: Option<u32>,
+    // A file of more lines than this is shown plain, unhighlighted; DEFAULT_PLAIN_FILE when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub plain_file: Option<u32>,
 }
 
 /// The order a person set within each priority band, as ticket slugs. A
@@ -671,6 +679,20 @@ impl StoreConfig {
     /// rewritten as version 2 by the first writer to take its lock.
     pub const CURRENT_VERSION: u32 = 2;
     pub const TRIMMED_ON_READ: u32 = 1;
+    /// A file of this many lines or more, its tests aside, is an omen when the config names no limit.
+    pub const DEFAULT_LARGE_FILE: u32 = 1_000;
+    /// A file of more lines than this is shown plain when the config names no limit.
+    pub const DEFAULT_PLAIN_FILE: u32 = 5_000;
+
+    /// The large-file limit in force: the config's, or the default.
+    pub fn large_file(&self) -> u32 {
+        self.large_file.unwrap_or(Self::DEFAULT_LARGE_FILE)
+    }
+
+    /// The plain-file limit in force: the config's, or the default.
+    pub fn plain_file(&self) -> u32 {
+        self.plain_file.unwrap_or(Self::DEFAULT_PLAIN_FILE)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -729,6 +751,14 @@ pub struct File {
     /// The fingerprint of the file's text as read.
     #[serde(default)]
     pub digest: String,
+    // Whether its adapter expects this file itself to carry a contract: a test file folded into a module does not.
+    #[serde(default)]
+    pub expects_contract: bool,
+    // How many lines the file has, and how many of them its adapter tells are test code.
+    #[serde(default)]
+    pub lines: u32,
+    #[serde(default)]
+    pub test_lines: u32,
 }
 
 /// A test, from a `# Test contract` block: its name, where the block is, and
@@ -850,6 +880,20 @@ mod tests {
         let c: StoreConfig = serde_json::from_str(r#"{"version":1,"repository":"C:/repo","roots":["overview"],"languages":["rust"]}"#).unwrap();
         assert!(c.scope.is_empty());
         assert!(!serde_json::to_string(&c).unwrap().contains("scope"), "an empty scope is not written");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "line-limits-are-optional-with-defaults", "checks": ["crates/core/src/model#config-record"]}
+    /// ```
+    #[test]
+    fn line_limits_are_optional_with_defaults() {
+        let c: StoreConfig = serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":["rust"]}"#).unwrap();
+        assert_eq!((c.large_file(), c.plain_file()), (1_000, 5_000));
+        assert!(!serde_json::to_string(&c).unwrap().contains("_file"), "an absent limit is not written");
+        let c: StoreConfig = serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":["rust"],"large_file":600}"#).unwrap();
+        assert_eq!((c.large_file(), c.plain_file()), (600, 5_000));
     }
 
     /// # Test contract

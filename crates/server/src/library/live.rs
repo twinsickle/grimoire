@@ -597,6 +597,8 @@ mod tests {
         std::fs::write(repo.join("src").join("lib.rs"), "pub fn a() {}\n").unwrap();
         let store_dir = root.join("stores").join(name);
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: store_io::repository_string(&repo).unwrap(),

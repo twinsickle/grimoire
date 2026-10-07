@@ -1,10 +1,28 @@
 // The source view's highlighting, without a browser.
 
 import { expect, test } from "vitest";
-import { highlight, indentWidth, indented, type Token } from "./highlight";
+import { highlight, indentWidth, indented, plain, type Token } from "./highlight";
 
 const text = (line: Token[]) => line.map((t) => t.text).join("");
 const toneAt = (line: Token[], word: string) => line.find((t) => t.text.includes(word))?.tone;
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "plain-gives-untoned-lines", "checks": ["web/src/highlight#plain"]}
+ * ```
+ */
+test("plain gives one untoned line per line, a contract's JSON left as written", () => {
+  const rs = '//! # Module contract\r\n//! ```json\r\n//! {"purpose":"P.","criteria":[]}\r\n//! ```\r\nfn a() {}\rstill a\n';
+  const lines = plain(rs);
+  expect(lines.map(text)).toEqual(["//! # Module contract", "//! ```json", '//! {"purpose":"P.","criteria":[]}', "//! ```", "fn a() {}\rstill a"]);
+  // A final line feed ends the last line and starts none, as the daemon counts; a CR before it is dropped too.
+  expect(plain("a\r\nb\r\n").map(text)).toEqual(["a", "b"]);
+  expect(plain("a\n\n").map(text)).toEqual(["a", ""]);
+  expect(plain("")).toEqual([[]]);
+  expect(lines.flat().every((t) => t.tone === null)).toBe(true);
+});
 
 /**
  * # Test contract

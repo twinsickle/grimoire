@@ -48,6 +48,8 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
     std::fs::write(repo.join("src").join("lib.rs"), "pub fn s() {}\n").unwrap();
     let store = dir.join("store");
     let config = StoreConfig {
+        large_file: None,
+        plain_file: None,
         site: vec![],
         version: StoreConfig::CURRENT_VERSION,
         repository: repo.to_string_lossy().replace('\\', "/"),
@@ -514,6 +516,8 @@ fn serve_shared() -> (Served, String, String) {
     let tmp = tempfile::Builder::new().prefix("grimoire-shared-").tempdir().unwrap();
     let store = tmp.path().join("store");
     let config = StoreConfig {
+        large_file: None,
+        plain_file: None,
         site: vec![],
         version: StoreConfig::CURRENT_VERSION,
         repository: "C:/a/checkout/on/another/machine".into(),

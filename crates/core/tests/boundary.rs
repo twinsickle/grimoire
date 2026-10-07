@@ -90,6 +90,8 @@ fn every_finding_is_about_connection() {
         ("checks-retired", "a test names a requirement that no longer holds"),
         ("dangling-edge", "a reference leads nowhere"),
         ("landing-moved", "a landing ticket's proposal rests on a truth that moved"),
+        // An omen, not a finding: it fails nothing, and counts lines the extractor read, judging no meaning (req:lint-omens).
+        ("large-file", "a file in the contract scope reaches the large-file limit, its tests aside"),
         ("malformed-file", "a store record cannot be read"),
         ("malformed-test", "a test block cannot be read"),
         ("missing-{which}-root", "a root the config does not name, or names as no page"),

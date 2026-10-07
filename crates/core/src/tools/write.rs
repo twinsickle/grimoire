@@ -823,6 +823,11 @@ mod tests {
         assert_eq!(s.store().config.roots, crate::model::Roots::new("overview", "orphan"));
         call(&mut s, "configure", json!({ "roots": ["orphan"] }), "2026-09-28").unwrap();
         assert_eq!(s.store().config.roots, crate::model::Roots { grimoire: Some("orphan".into()), rites: None }, "a list's missing second is a rites missing");
+        // A line limit is set alone, the others left as they were.
+        call(&mut s, "configure", json!({ "large_file": 600 }), "2026-09-28").unwrap();
+        assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), None));
+        call(&mut s, "configure", json!({ "plain_file": 4000 }), "2026-09-28").unwrap();
+        assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), Some(4000)));
     }
 
     /// # Test contract
@@ -844,6 +849,8 @@ mod tests {
         assert!(detail["field"] == "roots" && detail["reason"].as_str().unwrap().contains("two pages"), "the grimoire and the rites are two pages: {detail}");
         let prefix = call(&mut s, "configure", json!({ "scope": { "include": ["../outside"] } }), "2026-09-28").unwrap_err();
         assert!(serde_json::to_value(&prefix).unwrap()["details"][0]["field"] == "scope.include");
+        let zero = call(&mut s, "configure", json!({ "plain_file": 0 }), "2026-09-28").unwrap_err();
+        assert!(serde_json::to_value(&zero).unwrap()["details"][0]["field"] == "plain_file", "{zero}");
         assert_eq!(s.store().config, before, "nothing changed");
     }
 
@@ -889,6 +896,29 @@ mod tests {
             .output;
         assert_eq!(fresh["warnings"][0]["check"], "no-scenario", "new work is handed over");
         assert_eq!(fresh["baselined"], 0);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-omen-reaches-no-baseline-warning-or-close", "checks": ["crates/core/src/lint#omens"]}
+    /// ```
+    #[test]
+    fn an_omen_reaches_no_baseline_warning_or_close() {
+        let mut s = state();
+        // Every fixture file has 40 lines: at a limit of 40, each file in scope is an omen.
+        s.store_mut().config.large_file = Some(40);
+        let omens = call(&mut s, "lint", json!({}), "2026-10-06").unwrap().output["omens"].as_array().unwrap().len();
+        assert!(omens > 0, "the fixture has omens");
+        let file = |v: &serde_json::Value| v.as_array().unwrap().iter().any(|f| f["ref"].as_str().unwrap_or("").starts_with("file:"));
+        call(&mut s, "adopt", json!({ "reason": "adopted" }), "2026-10-06").unwrap();
+        assert!(!s.store().baseline.as_ref().unwrap().findings.iter().any(|k| k.r#ref.kind == Kind::File), "no baseline holds an omen");
+        // A write and a close on the module whose file is an omen hand none over.
+        let w = call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "touches": ["module:src/a/ready", "file:src/a/ready.rs"] }), "2026-10-06").unwrap().output;
+        assert!(!file(&w["warnings"]), "{w}");
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-10-06").unwrap().output;
+        assert!(!file(&out["findings"]), "{out}");
+        assert_eq!(call(&mut s, "lint", json!({}), "2026-10-06").unwrap().output["omens"].as_array().unwrap().len(), omens, "still reported, apart");
     }
 
     /// # Test contract

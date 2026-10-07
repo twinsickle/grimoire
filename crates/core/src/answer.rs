@@ -95,6 +95,8 @@ pub struct LintAnswer {
     pub findings: Vec<Finding>,
     // What other work causes, shown apart and never counted as new (req:check-own-work).
     pub advisories: Vec<crate::advisories::Advisory>,
+    // Signs that something may be wrong, apart from the findings: never failing, never baselined (req:lint-omens).
+    pub omens: Vec<crate::lint::Omen>,
     pub counts: BTreeMap<String, usize>,
     pub new: usize,
     // True on a daemon that holds no code, where findings only code can show are left out.
@@ -298,6 +300,8 @@ pub struct SourceAnswer {
     pub language: String,
     pub text: String,
     pub focus: u32,
+    // True when the file has more lines than the config's plain-file limit: shown unhighlighted.
+    pub plain: bool,
     pub annotations: Vec<Annotation>,
 }
 

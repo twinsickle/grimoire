@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, and the file's annotations; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -183,12 +183,13 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 Err(SourceError::Unreadable(why)) => return Err(ToolError::unavailable(format!("{} could not be read: {why}", loc.file))),
             };
             let lines = text.lines().count();
+            let plain = lines > g.plain_file as usize;
             if lines > SOURCE_LINES {
                 return Err(ToolError::invalid(format!("{} has {lines} lines, over the {SOURCE_LINES} a source view shows", loc.file), vec![]));
             }
             let focus = if i.r#ref.kind == Kind::File { 1 } else { loc.line };
             let annotations = query::source_annotations(g, &loc.file);
-            answer(name, SourceAnswer { file, language, text, focus, annotations }, None)
+            answer(name, SourceAnswer { file, language, text, focus, plain, annotations }, None)
         }
         "status" => {
             let config = state.store.config.clone();
@@ -455,6 +456,14 @@ mod tests {
         assert!(matches!(call(&mut s, "source", json!({ "ref": "page:overview" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
         assert!(matches!(call(&mut s, "source", json!({ "ref": "decl:src/nope.rs#x" }), "2026-09-29").unwrap_err(), ToolError::NotFound { .. }));
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/layout.rs" }), "2026-09-29").unwrap_err(), ToolError::StoreUnavailable { .. }));
+        // Past the plain-file limit it is shown, marked plain; at it, not.
+        assert_eq!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap().output["plain"], false);
+        s.store_mut().config.plain_file = Some(2);
+        s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", "a\nb\n".into())])));
+        assert_eq!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap().output["plain"], false);
+        s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", "a\nb\nc".into())])));
+        let out = call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap().output;
+        assert_eq!((out["plain"].as_bool(), out["text"].as_str()), (Some(true), Some("a\nb\nc")), "the whole text, marked plain");
         // Too large to show, in bytes or in lines.
         s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", "x".repeat(SOURCE_LIMIT + 1))])));
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));

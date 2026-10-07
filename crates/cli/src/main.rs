@@ -581,6 +581,8 @@ fn main() -> anyhow::Result<()> {
             let created = !store_dir.join(store_io::CONFIG_FILE).exists();
             let held = if created && empty {
                 let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
+                    large_file: None,
+                    plain_file: None,
                     site: vec![],
                     version: grimoire_core::StoreConfig::CURRENT_VERSION,
                     repository: repo_str.clone(),

@@ -268,6 +268,8 @@ mod tests {
             links: links.iter().map(|l| l.parse::<Reference>().unwrap()).collect(),
         };
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec!["goal".into(), "guarantees".into()],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/a/checkout".into(),

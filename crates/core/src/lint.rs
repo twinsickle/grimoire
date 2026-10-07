@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not closed or a test to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node; a ticket's edges only when the graph names that ticket as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the node it wrote judge a ticket's edges whatever the graph."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"pruned-to","statement":"pruned_to gives the stored baseline without the entries a given set of present findings lacks, in their stored order, and nothing when none go or there is no baseline; a present finding the baseline does not hold is never added."},{"id":"unheld","statement":"A requirement that names no criterion and that no test checks by name is uncovered with the check unheld, wherever its page sits, unless it is a rite, held by the work; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not closed whose relies_on leads back to itself through other tickets that are not closed is malformed with the check ticket-cycle, naming the loop, every member of the loop being reported only when the graph names one of them as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the ticket it wrote report its loop whatever the graph."},{"id":"without-code","statement":"On a graph built with no code, an edge to a module, criterion, file, declaration or test is not reported as dangling and no requirement is reported as unheld, since neither can be known there; every finding that intent alone shows is reported as usual."},{"id":"landing-moved","statement":"A ticket whose proposal rests on a truth that has since moved is malformed on the ticket, naming the records that moved, with the check landing-moved when it is landing and proposal-moved when it is active, only on a graph read with that ticket itself, since only its owner can mend it, never on the truth's nor on one read with another ticket, even one whose proposal edits its references; there it is shown as the advisory naming the ticket that its proposal brings."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."},{"id":"rites","statement":"A rite, a requirement under the rites and not under the grimoire, is never reported as unheld, and one that names a criterion in covered_by is malformed with the check rite-names-code, since a rule the code carries belongs under the grimoire."},{"id":"missing-root","statement":"A root the config does not name, or names as a page the graph does not hold, is malformed on file:grimoire.json with the check missing-grimoire-root or missing-rites-root, so the two are told apart, saying which is missing and how to name it."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new, and the omens beside them.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not closed or a test to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node; a ticket's edges only when the graph names that ticket as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the node it wrote judge a ticket's edges whatever the graph."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build has no adapter for is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"pruned-to","statement":"pruned_to gives the stored baseline without the entries a given set of present findings lacks, in their stored order, and nothing when none go or there is no baseline; a present finding the baseline does not hold is never added."},{"id":"unheld","statement":"A requirement that names no criterion and that no test checks by name is uncovered with the check unheld, wherever its page sits, unless it is a rite, held by the work; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not closed whose relies_on leads back to itself through other tickets that are not closed is malformed with the check ticket-cycle, naming the loop, every member of the loop being reported only when the graph names one of them as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the ticket it wrote report its loop whatever the graph."},{"id":"without-code","statement":"On a graph built with no code, an edge to a module, criterion, file, declaration or test is not reported as dangling and no requirement is reported as unheld, since neither can be known there; every finding that intent alone shows is reported as usual."},{"id":"landing-moved","statement":"A ticket whose proposal rests on a truth that has since moved is malformed on the ticket, naming the records that moved, with the check landing-moved when it is landing and proposal-moved when it is active, only on a graph read with that ticket itself, since only its owner can mend it, never on the truth's nor on one read with another ticket, even one whose proposal edits its references; there it is shown as the advisory naming the ticket that its proposal brings."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."},{"id":"rites","statement":"A rite, a requirement under the rites and not under the grimoire, is never reported as unheld, and one that names a criterion in covered_by is malformed with the check rite-names-code, since a rule the code carries belongs under the grimoire."},{"id":"omens","statement":"omens reports, apart from every finding, the signs that something may be wrong rather than that it is, each with its check, the node it is on and a reason, ordered by reference then check; an omen has no rule and no baselined mark and is in no finding list, so it fails nothing and no baseline holds it."},{"id":"large-file","statement":"A file its adapter expects to carry a contract, of a module expected to carry one, whose lines, its test lines aside, number the graph's large-file limit or more is an omen with the check large-file on the file, saying its lines with and without its tests, the limit, and that it is a candidate for splitting along its seams; any other file, a test file folded into its module among them, never is."},{"id":"missing-root","statement":"A root the config does not name, or names as a page the graph does not hold, is malformed on file:grimoire.json with the check missing-grimoire-root or missing-rites-root, so the two are told apart, saying which is missing and how to name it."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -58,6 +58,35 @@ impl Finding {
     fn sort_key(&self) -> (Rule, String, String, String) {
         (self.rule, self.r#ref.to_string(), self.edge.as_ref().map(|e| format!("{}{}", e.relation, e.to)).unwrap_or_default(), self.check.clone())
     }
+}
+
+/// A sign that something may be wrong rather than that it is: reported beside the findings,
+/// never failing anything and never baselined (req:lint-omens).
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Omen {
+    pub check: String,
+    pub r#ref: Reference,
+    pub reason: String,
+}
+
+/// Every omen over the graph, ordered by reference then check.
+pub fn omens(g: &Graph) -> Vec<Omen> {
+    let mut out = Vec::new();
+    for (r, n) in &g.nodes {
+        let Node::File(f) = n else { continue };
+        // Only the grimoire's own code: a file its adapter expects a contract of, in a module the scope covers;
+        // a test file folded into its module, as tests.rs is, is test code whole.
+        let in_scope = f.expects_contract && matches!(g.get(&Reference::module(&f.module)), Some(Node::Module(m)) if m.expects_contract);
+        let code = f.lines.saturating_sub(f.test_lines);
+        if in_scope && code >= g.large_file.max(1) {
+            let tests = if f.test_lines > 0 { format!(", {} with its tests", f.lines) } else { String::new() };
+            let reason = format!("{code} lines{tests}, at or past the large-file limit of {}: a candidate for splitting along its seams", g.large_file.max(1));
+            out.push(Omen { check: "large-file".to_string(), r#ref: r.clone(), reason });
+        }
+    }
+    out.sort_by(|a, b| (a.r#ref.to_string(), &a.check).cmp(&(b.r#ref.to_string(), &b.check)));
+    out
 }
 
 /// Run the selected rules over the whole graph.
@@ -868,6 +897,50 @@ mod tests {
         // With the truth as the proposal was written against, there is nothing to report.
         s.pages.get_mut("orphan").unwrap().body = page.body.clone();
         assert!(found(&s).is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-large-file-is-an-omen-and-fails-nothing", "checks": ["crates/core/src/lint#large-file", "crates/core/src/lint#omens"]}
+    /// ```
+    #[test]
+    fn a_large_file_is_an_omen_and_fails_nothing() {
+        let mut files = crate::extraction::fixtures::extraction_files();
+        let sized = |f: &mut crate::extraction::FileExtraction, lines: u32, test_lines: u32| {
+            f.lines = lines;
+            f.test_lines = test_lines;
+        };
+        // ready: 700 lines, 50 of them tests; layout: 700, 120 of them tests; unrelated: 2,000 but out of scope.
+        sized(&mut files[0], 700, 50);
+        sized(&mut files[1], 700, 120);
+        sized(&mut files[2], 2_000, 0);
+        let mut test = crate::extraction::fixtures::file("tests/it.rs", "tests/it", &[], None);
+        test.expects_contract = false;
+        sized(&mut test, 5_000, 0);
+        files.push(test);
+        // A test file folded into ready's own module, as ready_tests.rs is: test code whole, though its module is in scope.
+        let mut beside = crate::extraction::fixtures::file("src/a/ready_tests.rs", "src/a/ready", &[], None);
+        beside.expects_contract = false;
+        sized(&mut beside, 5_000, 0);
+        files.push(beside);
+        let mut s = crate::graph::fixtures::store();
+        s.config.large_file = Some(600);
+        s.config.scope = Scope { include: vec!["src/a".into()], exclude: vec![] };
+        let x = crate::extraction::Extraction::from_files(&files);
+        let g = Graph::build(&s, &x, &[]);
+        let o = omens(&g);
+        assert_eq!(o.len(), 1, "{o:?}");
+        assert_eq!((o[0].check.as_str(), o[0].r#ref.to_string().as_str()), ("large-file", "file:src/a/ready.rs"));
+        assert_eq!(o[0].reason, "650 lines, 700 with its tests, at or past the large-file limit of 600: a candidate for splitting along its seams");
+        // Never a finding: the check's findings and what is new are the same with or without it.
+        assert!(!lint(&g, &Rule::ALL).iter().any(|f| f.r#ref == o[0].r#ref), "an omen is no finding");
+        // At the limit exactly, it is one; with no limit configured, the default of 1,000 holds.
+        sized(&mut files[1], 600, 0);
+        let g = Graph::build(&s, &crate::extraction::Extraction::from_files(&files), &[]);
+        assert_eq!(omens(&g).iter().map(|o| o.r#ref.to_string()).collect::<Vec<_>>(), vec!["file:src/a/layout.rs", "file:src/a/ready.rs"], "ordered by reference");
+        s.config.large_file = None;
+        assert!(omens(&Graph::build(&s, &crate::extraction::Extraction::from_files(&files), &[])).is_empty());
     }
 
     /// # Test contract

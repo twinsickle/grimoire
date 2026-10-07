@@ -122,6 +122,10 @@ pub struct Graph {
     /// For each ticket whose references a proposal would change, the tickets
     /// proposing it.
     pub drafted: BTreeMap<String, Vec<String>>,
+    /// A file of this many lines or more, its tests aside, is an omen: the config's limit or its default.
+    pub large_file: u32,
+    /// A file of more lines than this is shown plain.
+    pub plain_file: u32,
 }
 
 impl Graph {
@@ -157,6 +161,8 @@ impl Graph {
             order: store.config.order.clone(),
             landing_moved: crate::ops::landing_moved(store),
             drafted: store.ticket_drafts(),
+            large_file: store.config.large_file(),
+            plain_file: store.config.plain_file(),
             ..Default::default()
         };
 
@@ -382,6 +388,8 @@ pub(crate) mod fixtures {
     /// does not exist and has no scenario. Criterion `reads-only` and `stable` are uncovered.
     pub fn store() -> Store {
         let mut s = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),

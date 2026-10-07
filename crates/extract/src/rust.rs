@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
 //! ```
 
 use std::path::Path;
@@ -205,8 +205,40 @@ impl Adapter for RustAdapter {
         // Over the whole tree: the walker skips test bodies, and tests are
         // where test blocks live.
         w.out.comments = crate::slash_comments(tree.root_node(), source.as_bytes(), |k| k == "line_comment" || k == "block_comment");
+        w.out.test_lines = test_lines(tree.root_node(), src);
         w.out
     }
+}
+
+/// The lines of the items at the file's top level marked `#[cfg(test)]`, each from that attribute
+/// to the item's end: the test code a file keeps beside its own.
+fn test_lines(root: Node, src: &[u8]) -> u32 {
+    let mut cursor = root.walk();
+    let mut from: Option<usize> = None;
+    let mut out = 0usize;
+    // The first row not yet counted: items come in order, and two on one row count it once.
+    let mut free = 0usize;
+    for c in root.children(&mut cursor) {
+        match c.kind() {
+            "attribute_item" => {
+                let text: String = c.utf8_text(src).unwrap_or_default().chars().filter(|ch| !ch.is_whitespace()).collect();
+                if text == "#[cfg(test)]" {
+                    from.get_or_insert(c.start_position().row);
+                }
+            }
+            "line_comment" | "block_comment" => {}
+            _ => {
+                if let Some(start) = from.take() {
+                    let (start, end) = (start.max(free), c.end_position().row);
+                    if end >= start {
+                        out += end - start + 1;
+                        free = end + 1;
+                    }
+                }
+            }
+        }
+    }
+    u32::try_from(out).unwrap_or(u32::MAX)
 }
 
 /// The modules a scope (the file, or an inline module's body) declares,
@@ -528,6 +560,24 @@ mod tests { use crate::nope; fn t() {} }
         let src = "//! lead\n//! more\n\n/// doc\nfn a() {}\n/* block\n * two\n */\nfn b() { let s = \"http://not-a-comment\"; }\n";
         let c = adapter().parse(src, "m").comments;
         assert_eq!(c, vec![("lead\nmore\n".to_string(), 1), ("doc\n".to_string(), 4), ("block\ntwo\n".to_string(), 6)]);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "cfg-test-items-are-test-lines", "checks": ["crates/extract/src/rust#test-lines"]}
+    /// ```
+    #[test]
+    fn cfg_test_items_are_test_lines() {
+        // Two marked items, one with a doc comment and a second attribute between, and a function only named like a test.
+        let src = "fn run() {}\n\n#[cfg(test)]\nfn helper() {}\n\nfn tests() {}\n\n#[cfg( test )]\n/// Its tests.\n#[allow(dead_code)]\nmod tests {\n    #[test]\n    fn runs() {}\n}\n";
+        assert_eq!(adapter().parse(src, "m").test_lines, 2 + 7);
+        assert_eq!(adapter().parse("#[cfg(feature = \"x\")]\nmod tests {}\nmod other {}\n", "m").test_lines, 0, "only cfg(test) marks test code");
+        // Two marked items on one row count it once, so test lines never pass the file's lines.
+        let one_row = "fn run() {}\n#[cfg(test)] fn a() {} #[cfg(test)] fn b() {}\n";
+        assert_eq!(adapter().parse(one_row, "m").test_lines, 1);
+        let x = crate::extract_source(&adapter(), "crates/x/src/lib.rs", one_row);
+        assert!(x.test_lines <= x.lines, "{} of {}", x.test_lines, x.lines);
     }
 
     #[test]

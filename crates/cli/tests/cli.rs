@@ -146,6 +146,34 @@ fn an_unsupported_language_is_the_first_line() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "an-omen-is-printed-and-fails-nothing", "checks": ["crates/cli/src/check#check-omens"]}
+/// ```
+#[test]
+fn an_omen_is_printed_and_fails_nothing() {
+    let (p, _) = project();
+    // A three-line limit: src/a.rs, of three lines and two more of tests, is an omen.
+    std::fs::write(p.repo.join("src").join("a.rs"), "pub fn a() {}\n\npub fn b() {}\n#[cfg(test)]\nmod tests {}\n").unwrap();
+    assert!(run(&p.repo, &["check"]).status.success(), "no omen yet at the default limit");
+    let path = p.store.join("grimoire.json");
+    let mut config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    config["large_file"] = serde_json::json!(3);
+    std::fs::write(&path, config.to_string()).unwrap();
+    let check = run(&p.repo, &["check"]);
+    assert!(check.status.success(), "an omen fails nothing: {}", text(&check));
+    let out = String::from_utf8_lossy(&check.stdout).to_string();
+    let omen = out.lines().position(|l| l.starts_with("omen") && l.contains("file:src/a.rs") && l.contains("3 lines, 5 with its tests")).expect(&out);
+    let summary = out.lines().position(|l| l.contains("finding(s):")).expect(&out);
+    assert!(summary < omen, "after the findings: {out}");
+    assert!(out.contains("1 omen(s); they do not fail the check"), "{out}");
+    let json = run(&p.repo, &["check", "--json"]);
+    let answer: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(answer["omens"][0]["ref"], "file:src/a.rs");
+    assert!(!answer["findings"].as_array().unwrap().iter().any(|f| f["ref"] == "file:src/a.rs"), "not a finding");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "the-store-is-found-from-anywhere", "checks": ["crates/cli/src#store-resolution"]}
 /// ```
 #[test]

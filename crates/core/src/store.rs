@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs and its languages non-empty trimmed names; a relative repository is refused."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -90,6 +90,8 @@ impl Default for StoreConfig {
             order: Order::default(),
             languages: Vec::new(),
             site: Vec::new(),
+            large_file: None,
+            plain_file: None,
         }
     }
 }
@@ -418,6 +420,11 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     for p in &c.site {
         check_slug(&mut e, "site", p);
     }
+    for (field, limit) in [("large_file", c.large_file), ("plain_file", c.plain_file)] {
+        if limit == Some(0) {
+            e.push(FieldError::new(field, "a line limit is a positive number of lines"));
+        }
+    }
     for (band, slugs) in [("order.next", &c.order.next), ("order.high", &c.order.high), ("order.later", &c.order.later)] {
         for s in slugs {
             check_slug(&mut e, band, s);
@@ -543,6 +550,8 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            large_file: None,
+            plain_file: None,
         };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
@@ -561,6 +570,11 @@ mod tests {
         }
         let languages = StoreConfig { site: vec![], languages: vec![" rust".into()], ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
         assert_eq!(validate_config(&languages)[0].field, "languages");
+        // A line limit, when given, is a positive number of lines.
+        let limits = |large: Option<u32>, plain: Option<u32>| StoreConfig { large_file: large, plain_file: plain, ..config(StoreConfig::CURRENT_VERSION, vec!["overview".into()]) };
+        assert!(validate_config(&limits(Some(600), Some(1))).is_empty());
+        assert_eq!(validate_config(&limits(Some(0), None))[0].field, "large_file");
+        assert_eq!(validate_config(&limits(None, Some(0)))[0].field, "plain_file");
     }
 
     /// # Test contract
@@ -702,6 +716,8 @@ mod tests {
         assert!(validate_page(&linking("module:src/a")).is_empty());
         assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
         let order = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),

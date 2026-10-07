@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement; then its findings and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. A file's page is its annotated source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
+ * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. A file's page is its annotated source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"plain-source","statement":"A file whose source answer is marked plain is shown with web/src/highlight's plain lines, no tone and no JSON laid out, under a note that it is shown plain because of its length, keeping its numbers, marks, links and #L<n>."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
  * ```
  */
 
@@ -12,7 +12,7 @@ import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
 import { NodeGraph } from "./NodeGraph";
 import { decisionsInForce, isDescribed } from "../decisions";
-import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
+import { TAB, highlight, indentWidth, plain, type Token, type Tone } from "../highlight";
 import {
   Badge,
   ErrorBox,
@@ -89,7 +89,7 @@ export function NodeView() {
         {kind === "file" && <File n={node as FileNode} />}
         {kind === "decl" && <Decl n={node as DeclNode} />}
         {kind === "test" && <TestView n={node as TestNode} />}
-        <Findings ref={ref} />
+        <Findings ref={ref} files={kind === "module" ? (node as ModuleNode).files.map((f) => `file:${f}`) : []} />
       </div>
     </div>
   );
@@ -327,7 +327,9 @@ function File({ n }: { n: FileNode }) {
   const byLine = new Map<number, Annotation[]>();
   for (const a of src.data?.annotations ?? []) byLine.set(a.line, [...(byLine.get(a.line) ?? []), a]);
   const text = src.data?.text;
-  const lines = useMemo(() => (text === undefined ? [] : highlight(text, n.language)), [text, n.language]);
+  // Past the project's plain-file limit the highlighter never runs: it would drag (req:web-annotated-source).
+  const asPlain = src.data?.plain ?? false;
+  const lines = useMemo(() => (text === undefined ? [] : asPlain ? plain(text) : highlight(text, n.language)), [text, n.language, asPlain]);
   return (
     <>
       <p className="text-fg-dim">
@@ -335,6 +337,11 @@ function File({ n }: { n: FileNode }) {
       </p>
       {src.error && <ErrorBox error={src.error} />}
       {!src.data && !src.error && <p className="text-fg-dim">Loading…</p>}
+      {asPlain && (
+        <p className="text-fg-dim" id="plain-note">
+          Shown plain: at {countLines(text ?? "").toLocaleString("en")} lines this file is longer than the project highlights.
+        </p>
+      )}
       {src.data && (
         <div className="bg-bg-1 border border-line rounded-md overflow-x-auto" role="region" aria-label={`Source of ${n.path}`}>
           <table className="border-collapse w-full font-mono text-[12.5px] leading-[1.55]" style={{ tabSize: TAB }}>
@@ -401,6 +408,11 @@ function File({ n }: { n: FileNode }) {
   );
 }
 
+/** How many lines a text has, as the daemon counts them: a final line feed ends the last line and starts none. */
+function countLines(text: string): number {
+  return text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+}
+
 /** A line's tokens as the rows it shows on: one, or several where a contract's JSON is laid out. */
 function rowsOf(tokens: Token[]): Token[][] {
   const rows: Token[][] = [[]];
@@ -463,16 +475,32 @@ function TestView({ n }: { n: TestNode }) {
   );
 }
 
-function Findings({ ref }: { ref: Ref }) {
+function Findings({ ref, files }: { ref: Ref; files: Ref[] }) {
   const { data } = useQuery(() => api.lint(), []);
   const about = (f: { ref: Ref; edge?: { to: Ref } }) => f.ref === ref || f.edge?.to === ref;
   const mine = data?.findings.filter(about) ?? [];
+  // Signs, never failures: on the node, or for a module on one of its files (req:lint-omens).
+  const omens = (data?.omens ?? []).filter((o) => o.ref === ref || files.includes(o.ref));
   // Other work's, shown apart and never as a warning (req:check-own-work).
   const others = data?.advisories.filter((a) => about(a.finding)) ?? [];
-  if (mine.length === 0 && others.length === 0) return null;
+  if (mine.length === 0 && omens.length === 0 && others.length === 0) return null;
   return (
     <>
       {mine.length > 0 && <FindingList findings={mine} />}
+      {omens.length > 0 && (
+        <>
+          <h2>Omens</h2>
+          <ul className={list} id="omens">
+            {omens.map((o) => (
+              <li key={`${o.ref} ${o.check}`} className={`${item} text-fg-dim`}>
+                <span className={rel}>{o.check}</span>
+                {o.ref !== ref && <RefLink ref={o.ref} />}
+                {o.reason}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {others.length > 0 && (
         <>
           <h2>Other work may conflict</h2>

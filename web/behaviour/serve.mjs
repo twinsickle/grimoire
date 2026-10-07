@@ -89,6 +89,8 @@ under("Seed the pages and requirements", () => {
   for (const page of records.pages) tool("put_page", page);
   // More than one root, so the views show every root and not only the first.
   tool("configure", { roots: records.roots });
+  // A large-file limit low enough that src/ready.rs, ten lines with its tests aside, is an omen for the views to show.
+  tool("configure", { large_file: 10 });
   for (const req of records.requirements) tool("put_requirement", req);
 });
 for (const { close, ref } of tickets) {

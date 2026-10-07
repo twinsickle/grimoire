@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages, the grimoire's and then the rites' (or a given page), to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup; and each node is marked rites when it is under the rites and not under the grimoire."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages, the grimoire's and then the rites' (or a given page), to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, its count of omens on or below it, a file's omen counted on its module, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup; and each node is marked rites when it is under the rites and not under the grimoire."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, omens, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::graph::{Graph, Node};
-use crate::lint::{lint, Rule};
+use crate::lint::{lint, omens, Rule};
 use crate::model::*;
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -25,6 +25,8 @@ pub struct Tree {
     pub findings: usize,
     /// How many of `findings` are in the baseline: inherited, not new.
     pub baselined: usize,
+    // The omens on or below the node, a file's counted on its module: signs, never failures.
+    pub omens: usize,
     /// The checks of the findings on this node itself, sorted and distinct,
     /// so a view can say what is wrong and not only how much.
     pub checks: Vec<String>,
@@ -78,11 +80,20 @@ pub fn outline(g: &Graph, depth: usize, root: Option<&Reference>, pages_only: bo
         e.1 += usize::from(f.baselined);
         checks.entry(&f.r#ref).or_default().insert(f.check.as_str());
     }
+    // An omen on a file is counted on its module, the node the trees hold.
+    let mut omens_on: HashMap<Reference, (usize, usize)> = HashMap::new();
+    for o in omens(g) {
+        let on = match g.get(&o.r#ref) {
+            Some(Node::File(f)) => Reference::module(&f.module),
+            _ => o.r#ref.clone(),
+        };
+        omens_on.entry(on).or_default().0 += 1;
+    }
     let roots: Vec<Reference> = match root {
         Some(r) => vec![r.clone()],
         None => g.roots.iter().map(|s| Reference::page(s)).collect(),
     };
-    let on = Findings { count: per_node, checks };
+    let on = Findings { count: per_node, checks, omens: omens_on.iter().map(|(r, n)| (r, *n)).collect() };
     let unplaced = g
         .nodes
         .iter()
@@ -103,6 +114,8 @@ fn in_grimoire(m: &Module) -> bool {
 struct Findings<'a> {
     count: HashMap<&'a Reference, (usize, usize)>,
     checks: HashMap<&'a Reference, BTreeSet<&'a str>>,
+    // Omens per node, in the same shape as count so they sum the same way.
+    omens: HashMap<&'a Reference, (usize, usize)>,
 }
 
 /// The tree at `r` to `depth`; with `pages_only` its children are its pages
@@ -132,10 +145,11 @@ fn tree(g: &Graph, r: &Reference, depth: usize, pages_only: bool, on: &Findings,
     // Findings on or below the node, over the whole subtree regardless of the
     // requested depth, so a shallow outline still shows where the problems are.
     let (findings, baselined) = findings_below(g, r, &on.count, &mut HashSet::new());
+    let (omens, _) = findings_below(g, r, &on.omens, &mut HashSet::new());
     let checks = on.checks.get(r).map(|c| c.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
     let tests = g.inbound_with(r, Relation::Checks).count();
     let rollup = rollup(g, r);
-    Tree { r#ref: r.clone(), title, coverage, findings, baselined, checks, tests, rollup, rites: g.is_rite(r), children }
+    Tree { r#ref: r.clone(), title, coverage, findings, baselined, omens, checks, tests, rollup, rites: g.is_rite(r), children }
 }
 
 /// The rollup of everything at or below `r`, each node once however many
@@ -317,6 +331,29 @@ mod tests {
         let shallow = outline(&g, 0, None, false).roots;
         assert_eq!(shallow[0].findings, t[0].findings);
         assert!(shallow[0].children.is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "omens-are-counted-apart-on-the-files-module", "checks": ["crates/core/src/query/outline#outline", "crates/core/src/query/outline#pages-only"]}
+    /// ```
+    #[test]
+    fn omens_are_counted_apart_on_the_files_module() {
+        // Every fixture file has 40 lines: at a limit of 40, src/a/ready.rs, which git-readiness's module holds, is an omen.
+        let mut s = crate::graph::fixtures::store();
+        s.config.large_file = Some(40);
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let before = outline(&Graph::build(&crate::graph::fixtures::store(), &crate::extraction::fixtures::extraction(), &[]), 64, None, false);
+        let o = outline(&g, 64, None, false);
+        let overview = &o.roots[0];
+        let page = &overview.children[0];
+        let module = page.children.iter().find(|c| c.r#ref == Reference::module("src/a/ready")).expect("linked");
+        assert_eq!((overview.omens, page.omens, module.omens), (1, 1, 1));
+        assert_eq!((overview.findings, overview.baselined), (before.roots[0].findings, before.roots[0].baselined), "an omen is no finding");
+        assert!(module.children.iter().all(|c| c.omens == 0), "on the module, not its criteria");
+        assert_eq!(outline(&g, 64, None, true).roots[0].omens, 1, "the same with pages only");
+        assert!(o.unplaced.iter().all(|u| u.omens == 1), "an unplaced module's file is counted on it too");
     }
 
     /// # Test contract

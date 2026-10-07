@@ -725,6 +725,8 @@ mod tests {
             std::fs::write(repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
             let store = dir.join("store");
             let config = StoreConfig {
+                large_file: None,
+                plain_file: None,
                 site: vec![],
                 version: StoreConfig::CURRENT_VERSION,
                 repository: repo.to_string_lossy().replace('\\', "/"),

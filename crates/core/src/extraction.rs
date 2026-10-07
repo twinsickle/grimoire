@@ -38,6 +38,11 @@ pub struct FileExtraction {
     pub contract: Option<Result<Contract, String>>,
     /// Line of the `# Module contract` heading, when present.
     pub contract_line: Option<u32>,
+    /// How many lines the file has, and how many of them its adapter tells are test code.
+    #[serde(default)]
+    pub lines: u32,
+    #[serde(default)]
+    pub test_lines: u32,
 }
 
 /// The joined view: every module and file the repository declares.
@@ -90,7 +95,19 @@ impl Extraction {
                 _ => {}
             }
             raw_imports.entry(f.module.clone()).or_default().extend(f.imports.iter().cloned());
-            out_files.insert(f.path.clone(), File { path: f.path.clone(), module: f.module.clone(), language: f.language.clone(), decls: f.decls.clone(), digest: f.digest.clone() });
+            out_files.insert(
+                f.path.clone(),
+                File {
+                    path: f.path.clone(),
+                    module: f.module.clone(),
+                    language: f.language.clone(),
+                    decls: f.decls.clone(),
+                    digest: f.digest.clone(),
+                    expects_contract: f.expects_contract,
+                    lines: f.lines,
+                    test_lines: f.test_lines,
+                },
+            );
         }
 
         for m in modules.values_mut() {
@@ -148,6 +165,8 @@ pub(crate) mod fixtures {
             test_errors: Vec::new(),
             contract,
             contract_line: Some(1),
+            lines: 40,
+            test_lines: 0,
         }
     }
 

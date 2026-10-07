@@ -128,6 +128,8 @@ mod tests {
             std::fs::write(repo.join(location::PROJECT_FILE), format!("store = {}\n", toml::Value::String(store_dir.to_string_lossy().to_string()))).unwrap();
         }
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: location::repository_string(&main).unwrap(),

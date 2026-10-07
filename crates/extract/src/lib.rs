@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."}]}
 //! ```
 
 pub mod contract;
@@ -22,6 +22,8 @@ pub struct Parsed {
     /// Every comment in the file, markers stripped, with the 1-based line it
     /// starts on; where test blocks are looked for.
     pub comments: Vec<(String, u32)>,
+    /// How many of the file's lines are test code the adapter can tell apart.
+    pub test_lines: u32,
 }
 
 /// Every comment under `root`, in order, for a language whose comments are
@@ -133,6 +135,8 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         test_errors,
         contract,
         contract_line,
+        lines: u32::try_from(source.lines().count()).unwrap_or(u32::MAX),
+        test_lines: parsed.test_lines,
     }
 }
 
@@ -426,6 +430,27 @@ export class Box {
         assert_eq!(first, grimoire_core::fingerprint::of_text("pub fn a() {}\n"));
         std::fs::write(dir.join("src").join("lib.rs"), "pub fn a() { }\n").unwrap();
         assert_ne!(x.extract_path("src/lib.rs").unwrap().digest, first, "one byte changes it");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "each-file-is-counted-with-its-tests-apart", "checks": ["crates/extract/src#line-count"]}
+    /// ```
+    #[test]
+    fn each_file_is_counted_with_its_tests_apart() {
+        let text = "pub fn a() {}\r\npub fn b() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn t() {}\n}\n";
+        let tmp = temp_repo(&[("src/lib.rs", text.as_bytes())]);
+        let x = Extractor::for_languages(tmp.path(), &["rust".to_string()]);
+        let f = x.extract_path("src/lib.rs").unwrap();
+        assert_eq!((f.lines, f.test_lines), (8, 5), "a CR before a line feed ends no extra line");
+        std::fs::write(
+            tmp.path().join("src").join("lib.rs"),
+            "pub fn a() {}
+",
+        )
+        .unwrap();
+        assert_eq!(x.extract_path("src/lib.rs").unwrap().lines, 1, "counted again as read");
     }
 
     /// # Test contract

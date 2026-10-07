@@ -600,6 +600,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -710,6 +712,8 @@ mod tests {
     fn a_rename_stopped_anywhere_is_valid_and_completes() {
         let page = |slug: &str, links: &[&str]| Page { slug: slug.into(), title: slug.into(), body: "b".into(), links: links.iter().map(|l| l.parse().unwrap()).collect() };
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -831,6 +835,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -915,6 +921,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -940,6 +948,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -986,6 +996,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -1013,6 +1025,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),
@@ -1060,6 +1074,8 @@ mod tests {
         let tmp = temp();
         let dir = tmp.path();
         let mut store = Store::new(StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: "C:/repo".into(),

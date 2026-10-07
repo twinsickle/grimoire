@@ -91,6 +91,8 @@ mod tests {
         assert!(!store_dir.join(LOCK_FILE).exists(), "no lock file in what is not a store");
         drop(lock_new(&store_dir).unwrap());
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: repo.to_string_lossy().into(),
@@ -118,6 +120,8 @@ mod tests {
         // A store that names a repository holding it is refused before a lock file is made.
         let inside = repo.join("store");
         let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
             repository: repo.to_string_lossy().into(),

@@ -47,6 +47,8 @@ fn host() -> Host {
     let tmp = tempfile::Builder::new().prefix("grimoire-team-host-").tempdir().unwrap();
     let store = tmp.path().join("store");
     let config = StoreConfig {
+        large_file: None,
+        plain_file: None,
         site: vec![],
         version: StoreConfig::CURRENT_VERSION,
         repository: "C:/a/checkout/on/another/machine".into(),

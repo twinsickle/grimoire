@@ -108,6 +108,8 @@ impl Slugs {
 /// config so the result is a complete store.
 pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store {
     let mut store = Store::new(StoreConfig {
+        large_file: None,
+        plain_file: None,
         version: StoreConfig::CURRENT_VERSION,
         repository: repository.to_string(),
         roots: Roots::new(ROOT_SLUG, RITES_SLUG),

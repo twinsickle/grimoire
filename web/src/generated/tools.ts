@@ -65,7 +65,7 @@ export type File = { path: string, module: string, language: string, decls: Arra
 /**
  * The fingerprint of the file's text as read.
  */
-digest: string, };
+digest: string, expects_contract: boolean, lines: number, test_lines: number, };
 
 export type Finding = { rule: Rule, 
 /**
@@ -91,7 +91,7 @@ export type LibraryEntry = { name: string, repository: string, server: string | 
 
 export type Linked = { ref: Ref, title: string | null, };
 
-export type LintAnswer = { findings: Array<Finding>, advisories: Array<Advisory>, counts: { [key in string]: number }, new: number, without_code: boolean, };
+export type LintAnswer = { findings: Array<Finding>, advisories: Array<Advisory>, omens: Array<Omen>, counts: { [key in string]: number }, new: number, without_code: boolean, };
 
 export type Module = { id: string, files: Array<string>, purpose: string | null, criteria: Array<Criterion>, imports: Array<string>, 
 /**
@@ -115,6 +115,8 @@ export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Arr
 export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test);
 
 export type NodesAnswer = { nodes: Array<Summary>, };
+
+export type Omen = { check: string, ref: Ref, reason: string, };
 
 export type Order = { next?: Array<string>, high?: Array<string>, later?: Array<string>, };
 
@@ -161,7 +163,7 @@ export type Scope = { include: Array<string>, exclude: Array<string>, };
 
 export type ServerCopy = { address: string, fetched: string | null, reachable: boolean, refused: boolean, };
 
-export type SourceAnswer = { file: Ref, language: string, text: string, focus: number, annotations: Array<Annotation>, };
+export type SourceAnswer = { file: Ref, language: string, text: string, focus: number, plain: boolean, annotations: Array<Annotation>, };
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
@@ -173,7 +175,7 @@ export type StatusAnswer = { repository: string, roots: Roots, languages: Array<
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 
-export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, };
+export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, large_file?: number, plain_file?: number, };
 
 export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
@@ -196,7 +198,7 @@ coverage: number | null, findings: number,
 /**
  * How many of `findings` are in the baseline: inherited, not new.
  */
-baselined: number, 
+baselined: number, omens: number, 
 /**
  * The checks of the findings on this node itself, sorted and distinct,
  * so a view can say what is wrong and not only how much.
