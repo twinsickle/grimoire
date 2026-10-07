@@ -93,7 +93,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * ```
  */
 test("a grimoire of the library is read at its own address, and the header lists its checkouts alone", async ({ page }) => {
-  // The fixture's daemon serves a library of two: its own checkout, `repo`, and `ledger`.
+  // The fixture's daemon serves a library of four: its own checkout, `repo`, and `ledger`, `almanac` and `bestiary`.
   const calls: string[] = [];
   page.on("request", (r) => {
     const path = new URL(r.url()).pathname;
@@ -136,6 +136,86 @@ test("a grimoire of the library is read at its own address, and the header lists
   const goal = await tool<{ node: { title: string } }>(page, "get", { ref: "page:goal" });
   await page.goto("/g/repo/n/page%3Agoal");
   await expect(page.locator("main h1").first()).toContainText(goal.node.title);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#three-views", "web/src/App#where-you-are"]}
+ * ```
+ */
+test("the Library stands the machine's grimoires in a stack for each place they come from, each spine opening its grimoire", async ({ page }) => {
+  // The header's way to every project opens the Library.
+  await page.goto("/g/ledger/cauldron");
+  await page.locator("header button[aria-label^='Where you are']").click();
+  await page.getByRole("dialog", { name: "Checkouts" }).getByRole("link", { name: "All projects" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  // A stack for each place status names, this machine first, each grimoire one spine in name order.
+  const status = await tool<{ library: { name: string; server: string | null }[] }>(page, "status");
+  const places = [...new Set(status.library.map((g) => g.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
+  const stacks = page.locator("[data-stack]");
+  await expect(stacks).toHaveCount(places.length);
+  for (const [i, place] of places.entries()) {
+    const names = [...new Set(status.library.filter((g) => g.server === place).map((g) => g.name))].sort();
+    await expect(stacks.nth(i).locator("[data-spine]")).toHaveText(names);
+    await expect(stacks.nth(i).locator("figcaption")).toHaveText(place === null ? "this machine" : place.replace(/^https?:\/\//, ""));
+  }
+  await expect(page.locator("[data-spine]")).toHaveText(places.flatMap((p) => [...new Set(status.library.filter((g) => g.server === p).map((g) => g.name))].sort()));
+  // Grimoire's own page: no project's pill, tabs or search, and the jingle beneath the stacks.
+  await expect(page.locator("header")).toContainText("Grimoire");
+  await expect(page.locator("header button, header nav, header input")).toHaveCount(0);
+  await expect(page.getByText("It's almost magic.", { exact: true })).toHaveCount(1);
+  // The glint beside it twinkles where motion is allowed, and is still where reduced motion is asked for.
+  const twinkles = () => page.evaluate(() => document.getAnimations().filter((a) => a instanceof CSSAnimation && a.animationName === "twinkle").length);
+  await expect.poll(twinkles).toBe(1);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(twinkles).toBe(0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  // A grimoire served for several checkouts is one spine, marked with their count; one served once is not marked.
+  await page.route("**/api/status", async (route) => {
+    // A request the reload abandons is left alone.
+    const fetched = await route.fetch().catch(() => null);
+    if (!fetched) return;
+    const answer = await fetched.json();
+    const ledgers = answer.library.filter((g: { name: string }) => g.name === "ledger");
+    answer.library.push({ ...ledgers[0], repository: `${ledgers[0].repository}-worktree` });
+    await route.fulfill({ json: answer }).catch(() => {});
+  });
+  await page.reload();
+  await expect(page.locator("[data-spine]", { hasText: "ledger" })).toHaveText("ledger 2 checkouts");
+  await expect(page.locator("[data-spine]", { hasText: "almanac" })).toHaveText("almanac");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.reload();
+  await expect(page.locator("[data-spine]", { hasText: "ledger" })).toHaveText("ledger");
+  // A spine slides out on hover where motion is allowed, and stays still where reduced motion is asked for.
+  const ledger = page.locator("[data-spine]", { hasText: "ledger" });
+  const moved = () => ledger.evaluate((el) => getComputedStyle(el).translate);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await ledger.hover();
+  await page.waitForTimeout(300);
+  expect(await moved()).toBe("none");
+  await page.mouse.move(0, 0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await ledger.hover();
+  await expect.poll(moved).not.toBe("none");
+  // Keyboard focus slides it out too, ringed in the accent colour.
+  await page.mouse.move(0, 0);
+  await ledger.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect.poll(moved).not.toBe("none");
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim());
+  const ring = await ledger.evaluate((el) => [getComputedStyle(el).outlineStyle, getComputedStyle(el).outlineColor]);
+  expect(ring[0]).toBe("solid");
+  expect(ring[1]).toBe(await page.evaluate((c) => { const d = document.createElement("div"); d.style.color = c; document.body.append(d); const rgb = getComputedStyle(d).color; d.remove(); return rgb; }, accent));
+  // Its full name is its title, where a narrow spine cuts it short.
+  await expect(ledger).toHaveAttribute("title", "ledger");
+  // Pressed, it opens that grimoire at its own address.
+  await expect(ledger).toHaveAttribute("href", "/g/ledger/");
+  await ledger.click();
+  await expect(page).toHaveURL(/\/g\/ledger\/$/);
+  await expect(page.locator("main [data-empty-state]")).toBeVisible();
 });
 
 /**
@@ -268,7 +348,8 @@ test("\"It's almost magic\" shows where a whole view has nothing yet, and nowher
   await expect(page.locator("#closed")).toContainText("Brewed and done");
   await expect(jingle).toHaveCount(1);
   // A grimoire with things in it shows the jingle nowhere: not its views, its node pages, nor a search that finds nothing.
-  for (const { path, content } of ROUTES.filter((r) => !r.path.startsWith("/g/ledger/"))) {
+  // The Library is Grimoire's own page, and carries the jingle by design.
+  for (const { path, content } of ROUTES.filter((r) => !r.path.startsWith("/g/ledger/") && r.path !== "/library")) {
     await page.goto(path);
     await page.locator(content).first().waitFor();
     await expect(page.locator("[data-empty-state]"), path).toHaveCount(0);
@@ -1782,6 +1863,7 @@ test("the tab names what is open, then Grimoire, and carries the book", async ({
     ["/", "Grimoire"],
     ["/cauldron", "Cauldron · Grimoire"],
     ["/unplaced", "Unplaced · Grimoire"],
+    ["/library", "Library · Grimoire"],
     ["/n/page%3Areadiness", "Readiness · Grimoire"],
     ["/n/ticket%3A0006", "Report readiness per workspace · Grimoire"],
     // A module has no title: its id.

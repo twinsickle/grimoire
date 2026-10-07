@@ -70,6 +70,49 @@ function checkouts(library: G.LibraryEntry[], repository: string): Checkout[] {
   return library.map((g) => ({ key: g.repository, folder: folderOf(g.repository), href: `/g/${g.name}/?checkout=${encodeURIComponent(g.repository)}`, here: g.repository === repository, current: g.current }));
 }
 
+/** A grimoire on the Library's shelf: its name, where it opens, and how many checkouts serve it. */
+export type Book = { name: string; href: string; checkouts: number };
+
+/** A stack of books on the Library's shelf: the grimoires of one place, this machine's stores or one team's server. */
+export type Stack = { key: string; server: string | null; label: string; books: Book[] };
+
+/**
+ * The Library's stacks: the grimoires status lists, one book per grimoire however many
+ * checkouts serve it, in name order, stacked by where each comes from, this machine first,
+ * then each server in address order, labelled by its address without the scheme unless
+ * another differs from it only by that. A daemon serving no library shows its one grimoire,
+ * opening at the bare routes.
+ */
+export function libraryStacks(status: Pick<G.StatusAnswer, "grimoire" | "repository" | "server" | "library">): Stack[] {
+  if (status.library.length === 0) {
+    const server = status.server ? serverOf(status.server.address) : null;
+    return [{ key: server ?? "", server, label: server ? bareAddress(server) : "this machine", books: [{ name: status.grimoire ?? folderOf(status.repository), href: "/", checkouts: 1 }] }];
+  }
+  const places = [...new Set(status.library.map((g) => g.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
+  // Two servers that differ only by scheme keep it, so no two labels read alike.
+  const label = (place: string) => (places.some((p) => p !== null && p !== place && bareAddress(p) === bareAddress(place)) ? place : bareAddress(place));
+  return places.map((place) => {
+    const here = status.library.filter((g) => g.server === place);
+    const names = [...new Set(here.map((g) => g.name))].sort((a, b) => a.localeCompare(b));
+    return {
+      key: place ?? "",
+      server: place,
+      label: place === null ? "this machine" : label(place),
+      books: names.map((name) => ({ name, href: `/g/${name}/`, checkouts: here.filter((g) => g.name === name).length })),
+    };
+  });
+}
+
+/** A server's address without its scheme, as a stack's label shows it. */
+function bareAddress(address: string): string {
+  return address.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+}
+
+/** The server an address of one of its grimoires names: the address without a trailing slash and /g/<name>, as status's library gives it. */
+function serverOf(address: string): string {
+  return address.replace(/\/+$/, "").replace(/\/g\/[^/]+$/, "");
+}
+
 /**
  * Where the grimoire on screen is kept, in words, and whether that is trouble: the
  * server's warning when it did not answer, that it answers when it did, its

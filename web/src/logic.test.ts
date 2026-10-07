@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed, saidId } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { checkoutsOf, folderOf, goneOf, idOf, kindOf, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
+import { checkoutsOf, folderOf, goneOf, idOf, kindOf, libraryStacks, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -522,10 +522,49 @@ test("a ticket's next step is a line for the agent, and an answer waiting or a c
  * {"test": "the-jingle-is-written-once", "checks": ["web/src/components#empty-state"]}
  * ```
  */
-test("the jingle is written once, in the empty state, and only the empty grimoire and cauldron use it", () => {
+test("the jingle is written once, drawn by Jingle, and only the empty states and the Library draw it", () => {
   // Every occurrence counted, not only the files holding one.
   const count = (re: RegExp) => Object.entries(sources).flatMap(([path, text]) => (text.match(re) ?? []).map(() => path));
   // Written as a string or as JSX text once; the contract names it in prose.
   expect(count(/["'`>]\s*It's almost magic/g)).toEqual(["./components.tsx"]);
   expect(count(/<EmptyState\b/g).sort()).toEqual(["./views/Board.tsx", "./views/Home.tsx"]);
+  expect(count(/<Jingle\b/g).sort()).toEqual(["./components.tsx", "./views/Library.tsx"]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-library-stacks-by-where-each-comes-from", "checks": ["web/src/views/Library#stacks"]}
+ * ```
+ */
+test("the Library stacks one book per grimoire by where each comes from, this machine first, then each server by its address", () => {
+  const entry = (name: string, repository: string, server: string | null) => ({ name, repository, server, current: null });
+  const library = [
+    entry("billing", "C:/code/billing", "https://teams.example/b"),
+    entry("notes", "C:/code/notes", null),
+    entry("shop", "C:/code/shop", "http://127.0.0.1:4243"),
+    entry("shop", "C:/code/shop/.claude/worktrees/wt", "http://127.0.0.1:4243"),
+    entry("abacus", "C:/code/abacus", "https://teams.example/b"),
+  ];
+  const stacks = libraryStacks({ grimoire: "shop", repository: "C:/code/shop", server: null, library });
+  expect(stacks.map((s) => [s.label, s.books.map((b) => [b.name, b.href, b.checkouts])])).toEqual([
+    ["this machine", [["notes", "/g/notes/", 1]]],
+    ["127.0.0.1:4243", [["shop", "/g/shop/", 2]]],
+    [
+      "teams.example/b",
+      [
+        ["abacus", "/g/abacus/", 1],
+        ["billing", "/g/billing/", 1],
+      ],
+    ],
+  ]);
+  expect(stacks.map((s) => s.server)).toEqual([null, "http://127.0.0.1:4243", "https://teams.example/b"]);
+  // Two servers that differ only by scheme keep it, each its own stack.
+  const twins = libraryStacks({ grimoire: "a", repository: "C:/a", server: null, library: [entry("a", "C:/a", "http://team.example"), entry("b", "C:/b", "https://team.example")] });
+  expect(twins.map((s) => s.label)).toEqual(["http://team.example", "https://team.example"]);
+  // No library: the one grimoire served, opening at the bare routes, from its server when it is a copy of one.
+  expect(libraryStacks({ grimoire: null, repository: "C:\\code\\notes", server: null, library: [] })).toEqual([{ key: "", server: null, label: "this machine", books: [{ name: "notes", href: "/", checkouts: 1 }] }]);
+  const copy = libraryStacks({ grimoire: null, repository: "C:/code/shop", server: { address: "http://127.0.0.1:4243/g/shop/", fetched: null, reachable: true, refused: false }, library: [] });
+  expect(copy.map((s) => [s.server, s.label])).toEqual([["http://127.0.0.1:4243", "127.0.0.1:4243"]]);
 });

@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: the section icons and the empty state that carries Grimoire's jingle, a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"empty-state","statement":"EmptyState draws a whole view that has nothing yet to show: its section's icon drawn large with a glint beside it in the accent colour that twinkles only where motion is allowed, the direction it is given, a span between backticks set as code, and beneath them Grimoire's jingle, It's almost magic.; it is the one place in the UI the jingle is written."},{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body, and a recipe's text, is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and a recipe's prose is Markdown, and in nothing else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
+ * {"purpose":"The small shared pieces: the section icons, Grimoire's jingle and the empty state that carries it, a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"empty-state","statement":"EmptyState draws a whole view that has nothing yet to show: its section's icon drawn large with a glint beside it in the accent colour that twinkles only where motion is allowed, the direction it is given, a span between backticks set as code, and beneath them Grimoire's jingle, drawn by Jingle. Jingle draws Grimoire's jingle, It's almost magic., in the accent colour; it is the one place in the UI the jingle is written, and EmptyState and the Library are the only views that draw it."},{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body, and a recipe's text, is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and a recipe's prose is Markdown, and in nothing else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
  * ```
  */
 
@@ -282,7 +282,7 @@ export function CauldronIcon({ size = 18, stroke = 1.8 }: { size?: number; strok
 }
 
 /** A four-pointed glint, filled with the current colour. */
-function Sparkle({ size, className }: { size: number; className: string }) {
+export function Sparkle({ size, className }: { size: number; className: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
       <path d="M8 0c.5 4.4 3.6 7.5 8 8-4.4.5-7.5 3.6-8 8-.5-4.4-3.6-7.5-8-8 4.4-.5 7.5-3.6 8-8z" />
@@ -291,7 +291,12 @@ function Sparkle({ size, className }: { size: number; className: string }) {
 }
 
 /** Grimoire's jingle. It belongs to Grimoire's own UI, never to a project's grimoire, and is written here only (req:web-empty-states). */
-export const JINGLE = "It's almost magic.";
+const JINGLE = "It's almost magic.";
+
+/** Grimoire's jingle as a line: beneath an empty view's direction, and beneath the Library's stacks. */
+export function Jingle({ className = "" }: { className?: string }) {
+  return <p className={`mb-0 text-accent italic text-[16px] tracking-[0.015em] ${className}`}>{JINGLE}</p>;
+}
 
 /** Text with its backticked spans set as code, since the directions name slugs and tools that way. */
 function Ticked({ text }: { text: string }) {
@@ -327,7 +332,7 @@ export function EmptyState({ icon, text }: { icon: "book" | "cauldron"; text: st
       <p className="m-0 text-fg-dim leading-relaxed">
         <Ticked text={text} />
       </p>
-      <p className="mt-4 mb-0 text-accent italic text-[16px] tracking-[0.015em]">{JINGLE}</p>
+      <Jingle className="mt-4" />
     </section>
   );
 }

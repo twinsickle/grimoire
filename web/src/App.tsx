@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, and the header: where the page is in its project, the section tabs, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box, at the header's right, calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped; / puts the cursor in it unless the cursor is in a field already, where / is typed."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"While useAway is true the header's pill says the daemon is not answering and that the page retries, its dot in the bad colour, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header's pill shows the lint answer's new findings as N new in the bad colour, only when there are any; its panel shows N new, in the bad colour when there are any, and the rest as N inherited, dimmed; inherited findings are never shown as a warning."},{"id":"header-advisories","statement":"The header's panel shows the count of the lint answer's advisories as N may conflict, beside the finding counts and never as a warning, its title saying they are other work's and do not fail the check."},{"id":"where-you-are","statement":"The header is three parts, the pill on the left, the tabs in the centre and the search on the right, and shows no node counts. The pill holds a dot, in the bad colour while serverAway gives a warning, status fails or useAway is true and else the ok colour; the grimoire status names, else the checkout's folder, and after it / and the checkout's folder when checkoutsOf gives more than one; the id of status's current ticket when it has one; and a chevron. Pressed, it opens a panel beneath it, lifted off the page by a shadow in the shade colour, closed by pressing it again, a click outside or Escape: the server's state in words, this machine for a store of its own; under Checkouts of this project, the checkouts checkoutsOf gives, those status lists of this grimoire alone, each its folder and its current ticket's id and title or no ticket, the one on screen marked and each other a link opening /g/<name>/?checkout=<checkout> as a new page; the finding counts; and a link to all projects."}]}
+ * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, and the header: where the page is in its project, the section tabs, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; the Library at /library, drawn without the project's header since it belongs to no one project; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box, at the header's right, calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped; / puts the cursor in it unless the cursor is in a field already, where / is typed."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"While useAway is true the header's pill says the daemon is not answering and that the page retries, its dot in the bad colour, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header's pill shows the lint answer's new findings as N new in the bad colour, only when there are any; its panel shows N new, in the bad colour when there are any, and the rest as N inherited, dimmed; inherited findings are never shown as a warning."},{"id":"header-advisories","statement":"The header's panel shows the count of the lint answer's advisories as N may conflict, beside the finding counts and never as a warning, its title saying they are other work's and do not fail the check."},{"id":"where-you-are","statement":"The header is three parts, the pill on the left, the tabs in the centre and the search on the right, and shows no node counts. The pill holds a dot, in the bad colour while serverAway gives a warning, status fails or useAway is true and else the ok colour; the grimoire status names, else the checkout's folder, and after it / and the checkout's folder when checkoutsOf gives more than one; the id of status's current ticket when it has one; and a chevron. Pressed, it opens a panel beneath it, lifted off the page by a shadow in the shade colour, closed by pressing it again, a click outside or Escape: the server's state in words, this machine for a store of its own; under Checkouts of this project, the checkouts checkoutsOf gives, those status lists of this grimoire alone, each its folder and its current ticket's id and title or no ticket, the one on screen marked and each other a link opening /g/<name>/?checkout=<checkout> as a new page; the finding counts; and a link to all projects, opening the Library at /library."}]}
  * ```
  */
 
@@ -13,26 +13,38 @@ import { BookIcon, CauldronIcon, KindTag, mono } from "./components";
 import { checkoutsOf, folderOf, idOf, kindOf, nodePath, serverState, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
+import { LibraryView } from "./views/Library";
 import { NodeView } from "./views/Node";
 
 export function App() {
   return (
     // Under /g/<name>/ every route is that grimoire's, so every link stays there.
     <BrowserRouter basename={base || undefined}>
-      <div className="grid grid-rows-[auto_1fr] h-full">
-        <Top />
-        <main className="overflow-auto px-5 pt-4 pb-10">
-          <Routes>
-            <Route path="/" element={<HomeView at={{ root: true }} />} />
-            <Route path="/unplaced" element={<HomeView at={{ unplaced: true }} />} />
-            <Route path="/map" element={<Navigate to="/" replace />} />
-            <Route path="/cauldron" element={<BoardView />} />
-            <Route path="/board" element={<Navigate to="/cauldron" replace />} />
-            <Route path="/n/:ref" element={<NodeRoute />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        {/* The machine's grimoires, where projects are switched: no one project's, so not under its header. */}
+        <Route path="/library" element={<LibraryView />} />
+        <Route path="*" element={<Project />} />
+      </Routes>
     </BrowserRouter>
+  );
+}
+
+/** One project's views, under its header. */
+function Project() {
+  return (
+    <div className="grid grid-rows-[auto_1fr] h-full">
+      <Top />
+      <main className="overflow-auto px-5 pt-4 pb-10">
+        <Routes>
+          <Route path="/" element={<HomeView at={{ root: true }} />} />
+          <Route path="/unplaced" element={<HomeView at={{ unplaced: true }} />} />
+          <Route path="/map" element={<Navigate to="/" replace />} />
+          <Route path="/cauldron" element={<BoardView />} />
+          <Route path="/board" element={<Navigate to="/cauldron" replace />} />
+          <Route path="/n/:ref" element={<NodeRoute />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 
@@ -233,7 +245,8 @@ function Where() {
             {" · "}
             <span title="Other work, landed since this branch's base or being worked elsewhere, that may conflict with this checkout. It does not fail the check.">{conflicts} may conflict</span>
           </div>
-          <a href="/" className="inline-block mt-2.5">
+          {/* The Library is the machine's, at the daemon's own address whichever grimoire is on screen. */}
+          <a href="/library" className="inline-block mt-2.5">
             All projects
           </a>
         </div>

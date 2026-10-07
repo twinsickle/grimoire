@@ -1,15 +1,17 @@
 // Every route the UI serves, on the behaviour fixture: the grimoire at the
 // root and at a page, the unplaced modules, the cauldron, one node page of
-// each other kind, and the grimoire and cauldron of `ledger`, the empty
-// grimoire beside it in the fixture's library, for the empty states. The behaviour specs visit them, the visual test
+// each other kind, the grimoire and cauldron of `ledger`, the empty
+// grimoire beside it in the fixture's library, for the empty states, and the
+// Library, the machine's grimoires. The behaviour specs visit them, the visual test
 // screenshots them and the shots capture them, so a route added here
 // is covered by all three.
 
 /**
  * A route: a name for its screenshot, its path, a selector for the view's own content, which a screenshot waits for
- * before the tool calls settle, and, for a part of the page drawn only when asked, what to press to open it.
+ * before the tool calls settle, for a part of the page drawn only when asked, what to press to open it, and what the
+ * visual test masks because it changes with the port the fixture is served on.
  */
-export type Route = { name: string; path: string; content: string; press?: string };
+export type Route = { name: string; path: string; content: string; press?: string; mask?: string[] };
 
 const node = (ref: string) => `/n/${encodeURIComponent(ref)}`;
 
@@ -39,4 +41,6 @@ export const ROUTES: Route[] = [
   // The fixture library's empty grimoire: nothing yet to show, so its views are the empty states.
   { name: "empty-grimoire", path: "/g/ledger/", content: "[data-empty-state]" },
   { name: "empty-cauldron", path: "/g/ledger/cauldron", content: "[data-empty-state]" },
+  // The Library: `repo`, a copy of the fixture's server, in one stack, and `almanac`, `bestiary` and `ledger`, stores on this machine, in another.
+  { name: "library", path: "/library", content: "[data-stack] [data-spine]", mask: ["[data-port]"] },
 ];

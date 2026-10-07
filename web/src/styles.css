@@ -37,7 +37,7 @@
   --color-syn-function: #7aa2f7;
   --color-syn-meta: #e0af68;
   --radius-md: 6px;
-  /* The empty state's sparkle glints now and then; nothing else in the UI moves on its own. */
+  /* The sparkle beside the jingle, in an empty state and on the Library, glints now and then; nothing else in the UI moves on its own. */
   --animate-twinkle: twinkle 3.2s ease-in-out infinite;
   @keyframes twinkle {
     0%, 70%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
@@ -45,6 +45,8 @@
   }
   --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* A book's face: the names on the Library's spines. */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 }
 
 /* Element defaults that preflight removes and every view relies on. */

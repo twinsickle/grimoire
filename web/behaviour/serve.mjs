@@ -140,11 +140,17 @@ tool("put_requirement", { slug: req.slug, title: `${req.title}, detached too`, s
 tool("put_page", { slug: "detached", title: "Detached heads", body: "Proposed by the first ticket: a page the truth does not have yet.", links: [], ticket: draft });
 
 // A second grimoire on the run's machine, a store of its own named `ledger`, so
-// the daemon serves a library of two and the views show its switcher.
+// the daemon serves a library and the views show it.
 const ledger = join(dir, "ledger");
 mkdirSync(join(ledger, "src"), { recursive: true });
 writeFileSync(join(ledger, "README.md"), "The ledger: a second grimoire in the fixture's library.\n");
 run(["init", "--store", "ledger", "--name", "ledger", "--empty"], undefined, ledger);
+// Two more on this machine, so the Library has a stack of books to show and not one book a place.
+for (const name of ["almanac", "bestiary"]) {
+  const other = join(dir, name);
+  mkdirSync(other, { recursive: true });
+  run(["init", "--store", name, "--name", name, "--empty"], undefined, other);
+}
 
 // A team's: the seeded store is served shared, and the fixture's checkout
 // becomes one that names that server, signed in, as a teammate's is.

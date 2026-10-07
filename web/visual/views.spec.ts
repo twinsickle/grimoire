@@ -17,6 +17,9 @@ import { open } from "./settle";
 for (const route of ROUTES) {
   test(route.name, async ({ page }) => {
     await open(page, route);
-    await expect(page).toHaveScreenshot(`${route.name}.png`, { fullPage: true });
+    // What changes with the port the fixture is served on is masked in the page's own background colour, read from the page so it follows the token.
+    const mask = (route.mask ?? []).map((m) => page.locator(m));
+    const maskColor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await expect(page).toHaveScreenshot(`${route.name}.png`, { fullPage: true, mask, maskColor });
   });
 }
