@@ -387,7 +387,7 @@ fn the_current_ticket_is_each_checkouts_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-checkout-is-told-of-a-ticket-it-still-carries", "checks": ["crates/core/src/tools/write#start-warns", "crates/core/src/ops/tickets#waits-here"]}
+/// {"test": "a-checkout-is-told-of-a-ticket-it-still-carries", "checks": ["crates/core/src/tools/write/tickets#start-warns", "crates/core/src/ops/tickets#waits-here"]}
 /// ```
 #[test]
 fn a_checkout_is_told_of_a_ticket_it_still_carries() {
