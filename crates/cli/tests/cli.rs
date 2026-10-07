@@ -94,7 +94,7 @@ fn files(dir: &Path) -> Vec<String> {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-adopts-what-it-finds", "checks": ["crates/cli/src#init-adopts"]}
+/// {"test": "init-adopts-what-it-finds", "checks": ["crates/cli/src/init/command#init-adopts"]}
 /// ```
 #[test]
 fn init_adopts_what_it_finds() {
@@ -520,7 +520,7 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-sets-a-project-up-in-one-command", "checks": ["crates/cli/src#init-scaffolds", "req:init-scaffolds"]}
+/// {"test": "init-sets-a-project-up-in-one-command", "checks": ["crates/cli/src/init/command#init-scaffolds", "req:init-scaffolds"]}
 /// ```
 #[test]
 fn init_sets_a_project_up_in_one_command() {
@@ -563,7 +563,7 @@ fn init_sets_a_project_up_in_one_command() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
+/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src/init/command#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
 /// ```
 #[test]
 fn a_teams_server_serves_its_library() {
@@ -889,7 +889,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src/init/command#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
@@ -1579,7 +1579,7 @@ fn the_daemon_runs_the_local_policy() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-re-points-a-moved-checkout-and-refuses-a-copy", "checks": ["crates/cli/src#init-repoints", "req:store-config-record"]}
+/// {"test": "init-re-points-a-moved-checkout-and-refuses-a-copy", "checks": ["crates/cli/src/init/command#init-repoints", "req:store-config-record"]}
 /// ```
 #[test]
 fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
@@ -1629,7 +1629,7 @@ fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-adopts-only-a-store-it-made", "checks": ["crates/cli/src#init-adopts"]}
+/// {"test": "init-adopts-only-a-store-it-made", "checks": ["crates/cli/src/init/command#init-adopts"]}
 /// ```
 #[test]
 fn init_adopts_only_a_store_it_made() {
@@ -1664,7 +1664,7 @@ fn init_trims_what_it_is_given() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-adopts-a-scaffolded-store", "checks": ["crates/cli/src#init-adopts"]}
+/// {"test": "init-adopts-a-scaffolded-store", "checks": ["crates/cli/src/init/command#init-adopts"]}
 /// ```
 #[test]
 fn init_adopts_a_scaffolded_store() {
@@ -1890,7 +1890,7 @@ fn marked_port(store: &Path) -> u16 {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src#init-server", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#opens-the-copy", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
+/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src/init/command#init-server", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#opens-the-copy", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
 /// ```
 #[test]
 fn a_checkout_works_against_a_teams_server() {
