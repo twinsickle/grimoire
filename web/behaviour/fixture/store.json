@@ -42,7 +42,7 @@
     {
       "slug": "constraints",
       "title": "Constraints",
-      "body": "What must always hold.",
+      "body": "**What must always hold.**\n\n- The `ready` module writes nothing, whichever [part](https://example.com) of the project is changed.",
       "links": [
         "req:ready-writes-nothing"
       ]

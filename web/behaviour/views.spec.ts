@@ -735,6 +735,11 @@ test("the root shows the grimoire's own level: its body, its bars and its pages 
   const card = page.locator("#pages a[href='/n/page%3Aarchitecture']");
   await expect(card).toContainText(`${architecture.contracted} of ${architecture.modules}`);
   await expect(card).toContainText(`${architecture.tested} of ${architecture.criteria}`);
+  // A card shows one paragraph of its page: the first longer than forty characters, past a short bold opening line,
+  // or the first when none is, its bold, code, list and link marks taken out.
+  const opening = (slug: string) => page.locator(`#pages a[href='/n/page%3A${slug}'] p`);
+  await expect(opening("constraints")).toHaveText("The ready module writes nothing, whichever part of the project is changed.");
+  await expect(opening("goal")).toHaveText("What it is.");
   const whole = outline.roots[0].rollup;
   await expect(page.getByRole("meter", { name: "Requirements held" }).first()).toHaveAttribute("aria-valuemax", String(whole.requirements));
   // With a second root, the root is still the first root's level: the second is no card and none of its pages shows.
