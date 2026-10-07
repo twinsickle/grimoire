@@ -137,7 +137,7 @@ fn eventually(what: &str, mut done: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-machine-joins-the-servers-intent-with-its-own-code", "checks": ["crates/server/src/remote#sync", "crates/server/src/http#export", "crates/server/src/daemon#shared"]}
+/// {"test": "a-machine-joins-the-servers-intent-with-its-own-code", "checks": ["crates/server/src/remote/sync#sync", "crates/server/src/http#export", "crates/server/src/daemon#shared"]}
 /// ```
 #[test]
 fn a_machine_joins_the_servers_intent_with_its_own_code() {
@@ -348,7 +348,7 @@ fn the_current_ticket_is_each_checkouts_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teammates-write-arrives-without-a-reload", "checks": ["crates/server/src/remote#follows-the-server"]}
+/// {"test": "a-teammates-write-arrives-without-a-reload", "checks": ["crates/server/src/remote/follow#follows-the-server"]}
 /// ```
 #[test]
 fn a_teammates_write_arrives_without_a_reload() {
@@ -380,7 +380,7 @@ fn a_teammates_write_arrives_without_a_reload() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "offline-a-machine-reads-its-copy-and-writes-nothing", "checks": ["crates/server/src/remote#offline"]}
+/// {"test": "offline-a-machine-reads-its-copy-and-writes-nothing", "checks": ["crates/server/src/remote/sync#offline"]}
 /// ```
 #[test]
 fn offline_a_machine_reads_its_copy_and_writes_nothing() {
@@ -486,7 +486,7 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote#offline", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#token-for-the-server", "crates/server/src/daemon#as-the-caller"]}
+/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote/sync#offline", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#token-for-the-server", "crates/server/src/daemon#as-the-caller"]}
 /// ```
 #[test]
 fn a_refused_token_is_not_a_server_that_is_away() {

@@ -27,7 +27,7 @@ fn only_the_daemon_and_the_cli_write_the_store() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     // The daemon owns the store while it serves; the CLI owns it when none does; and on a
     // project that names a server, the sync is what writes a machine's copy of its intent.
-    let owners = ["server/src/daemon.rs", "cli/src/main.rs", "server/src/store_io.rs", "server/src/remote.rs"];
+    let owners = ["server/src/daemon.rs", "cli/src/main.rs", "server/src/store_io.rs", "server/src/remote.rs", "server/src/remote/sync.rs"];
     let writes = ["store_io::persist", "store_io::write_all", "store_io::write_project_file", "store_io::write_serving", "store_io::remove_serving"];
     let mut callers = Vec::new();
     for krate in ["core", "extract", "server", "cli"] {

@@ -1,38 +1,37 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join a machine with a team's server: call the server with the person's token, keep the machine's copy of the server's intent, send a write there and answer it from the machine's own graph, and follow the server so a teammate's write arrives.","criteria":[{"id":"checkout-stays","statement":"A call sent to the server never carries `checkout`: the caller's checkout chose a checkout on this machine and names nothing on the server, so a server older than the field is not refused it."},{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"sync","statement":"sync fetches the server's intent in one read, joins it with what is the machine's own, creates the copy when there is none and otherwise writes only what differs, and rewrites from the server's intent, or removes, any file of the copy that did not load, and notes in the copy which server it is of and when it was fetched; it answers the store the copy now holds and what changed."},{"id":"offline","statement":"When the server does not answer, a machine that holds a copy opens on it and goes on reading it, status naming the server as unreachable and when the copy was fetched, and every write is refused as store_unavailable naming the server, with nothing changed; a machine that holds no copy does not open, and one whose token the server refuses does not open either; a server that refuses the token a call carries is told apart from one that refuses the call, by asking it with the same token for its status, whichever call finds it out, a write among them; a daemon already serving then says so in status, as refused and not as unreachable, stays refused while the server cannot be reached to be asked again, and takes up again by itself once the server takes its token."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, a close or a landing naming its ticket being sent only once the daemon has synced the copy and extracted any languages that brings, so it is judged as the server's intent now reads the code, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start the server took is kept in the copy as the machine ran it, its current ticket and its start being nowhere else; adopt is sent with the findings the machine sees."},{"id":"current-is-the-checkouts","statement":"A write that changes intent, or an update_ticket giving touches or relies_on of a ticket other than the current one, that names no ticket is sent naming the checkout's current ticket, so such an edit waits in that change's proposal on the server, and an update_ticket of anything else is sent as it was given; start_ticket on a ticket the server already has active or landing, and land_ticket naming none, are answered on the machine and never sent, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket active or landing, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes."},{"id":"follows-the-server","statement":"A daemon on a project that names a server follows the server's event stream: it syncs when the stream opens and on every event, announces on its own stream what a sync changed, and when the stream cannot be opened marks the server unreachable and tries again; whenever the server stops or starts answering, the daemon announces that too, as a change to `server`."}]}
+//! {"purpose":"Join a machine with a team's server: call the server with the person's token, and send a write there and answer it from the machine's own graph; keeping the machine's copy of the server's intent and following the server each have a module beneath.","criteria":[{"id":"checkout-stays","statement":"A call sent to the server never carries `checkout`: the caller's checkout chose a checkout on this machine and names nothing on the server, so a server older than the field is not refused it."},{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, a close or a landing naming its ticket being sent only once the daemon has synced the copy and extracted any languages that brings, so it is judged as the server's intent now reads the code, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start the server took is kept in the copy as the machine ran it, its current ticket and its start being nowhere else; adopt is sent with the findings the machine sees."},{"id":"current-is-the-checkouts","statement":"A write that changes intent, or an update_ticket giving touches or relies_on of a ticket other than the current one, that names no ticket is sent naming the checkout's current ticket, so such an edit waits in that change's proposal on the server, and an update_ticket of anything else is sent as it was given; start_ticket on a ticket the server already has active or landing, and land_ticket naming none, are answered on the machine and never sent, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket active or landing, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes."}]}
 //! ```
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use grimoire_core::answer::ServerCopy;
-use grimoire_core::export::{self, Exported};
+use grimoire_core::export::Exported;
 use grimoire_core::ops::Changed;
 use grimoire_core::store::FieldError;
-use grimoire_core::{lint, tools, State, Store, ToolError};
-use serde::{Deserialize, Serialize};
+use grimoire_core::{lint, tools, State, ToolError};
 use serde_json::Value;
-use tokio::sync::broadcast;
 
 use crate::client::TOKEN_ENV;
-use crate::daemon::{self, Daemon, Event, OpenError};
-use crate::store_io::{self, StoreIoError, StoreLock};
+use crate::daemon::Daemon;
+use crate::store_io::{self, StoreIoError};
 
-/// The note in a machine's copy of which server it is a copy of and when it was fetched.
-pub const COPY_FILE: &str = "copy.json";
+mod follow;
+mod sync;
+
+use follow::answering;
+pub use follow::follow;
+pub use sync::{copy_note, lock_copy, sync, sync_state, CopyNote, Followed, Synced, COPY_FILE};
+use sync::{mark, reread, Answered};
 
 /// The largest answer read from a server: a whole store's intent fits well inside it.
 const ANSWER_LIMIT: u64 = 512 * 1024 * 1024;
 /// How long one event stream is followed before it is opened again, so a
 /// connection that died without saying so is not followed for ever.
 const STREAM: Duration = Duration::from_secs(300);
-/// How long to wait before asking a server that did not answer again.
-const RETRY: Duration = Duration::from_secs(2);
 
 #[derive(Debug, thiserror::Error)]
 pub enum RemoteError {
@@ -249,176 +248,6 @@ pub fn intent_digest(intent: &Exported) -> String {
     Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Which server a copy is of, and when its intent was last fetched (UTC, RFC 3339).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CopyNote {
-    pub server: String,
-    pub fetched: String,
-}
-
-/// The note a sync left in a copy, when there is one.
-pub fn copy_note(copy_dir: &Path) -> Option<CopyNote> {
-    serde_json::from_str(&std::fs::read_to_string(copy_dir.join(COPY_FILE)).ok()?).ok()
-}
-
-fn now() -> String {
-    let now = time::OffsetDateTime::now_utc().replace_nanosecond(0).unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
-    now.format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
-}
-
-/// Take the write lock of a machine's copy, making its folder when this is the first sync.
-pub fn lock_copy(copy_dir: &Path) -> Result<StoreLock, StoreIoError> {
-    if copy_dir.join(store_io::CONFIG_FILE).is_file() {
-        return store_io::lock(copy_dir);
-    }
-    std::fs::create_dir_all(copy_dir).map_err(|e| StoreIoError::Io(copy_dir.to_path_buf(), e))?;
-    store_io::lock_new(copy_dir)
-}
-
-/// What a sync left: the store the copy now holds, what changed in it, and when it was fetched.
-#[derive(Debug)]
-pub struct Synced {
-    pub store: Store,
-    pub changed: Vec<Changed>,
-    pub fetched: String,
-}
-
-/// Fetch the server's intent and make the copy at `copy_dir` hold it, joined
-/// with what is the machine's own: `own`'s current ticket and starts, or the
-/// copy's when `own` is none. The caller holds the copy's lock.
-pub fn sync(server: &Server, copy_dir: &Path, repository: &str, own: Option<&Store>) -> Result<Synced, RemoteError> {
-    let exported = server.export()?;
-    let held = match copy_dir.join(store_io::CONFIG_FILE).is_file() {
-        true => Some(store_io::load(copy_dir)?),
-        false => None,
-    };
-    let none = Store::default();
-    let new = exported.joined(own.or(held.as_ref().map(|(store, _)| store)).unwrap_or(&none), repository).map_err(|why| server.bad(why))?;
-    let changed = match &held {
-        None => {
-            store_io::write_all(copy_dir, &new, false)?;
-            vec![Changed::Config]
-        }
-        Some((old, malformed)) => {
-            let mut changed = export::difference(old, &new);
-            // A file that did not load is in neither store, so no difference names it: a write stopped
-            // part way, or a hand's edit. The copy is the server's intent, so it is made that again.
-            changed.extend(mend(malformed, &new));
-            if !changed.is_empty() {
-                store_io::persist(copy_dir, &new, &Changed::Many(changed.clone()))?;
-            }
-            changed
-        }
-    };
-    let fetched = now();
-    let note = CopyNote { server: server.address.clone(), fetched: fetched.clone() };
-    let path = copy_dir.join(COPY_FILE);
-    std::fs::write(&path, serde_json::to_string_pretty(&note).unwrap_or_default()).map_err(|e| StoreIoError::Io(path, e))?;
-    Ok(Synced { store: new, changed, fetched })
-}
-
-/// How a server answered the last time it was asked.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Answered {
-    Yes,
-    /// It did not: the machine is offline, or the server is down.
-    No,
-    /// It did, and refused this machine's token.
-    Refused,
-}
-
-impl Answered {
-    /// What an error says of the server; none when it says nothing of it.
-    fn of(e: &RemoteError) -> Option<Answered> {
-        match e {
-            RemoteError::Unreachable(..) => Some(Answered::No),
-            RemoteError::Refused(..) => Some(Answered::Refused),
-            _ => None,
-        }
-    }
-}
-
-/// What makes each file of a copy that did not load what the server has: the
-/// record written again from `new`, or the file removed when `new` has none.
-fn mend(malformed: &[grimoire_core::Malformed], new: &Store) -> Vec<Changed> {
-    use grimoire_core::model::Reference;
-    let mut out = Vec::new();
-    for m in malformed {
-        let (dir, slug) = match m.path.rsplit_once('/') {
-            Some((dir, file)) => (dir, file.strip_suffix(".json").unwrap_or(file)),
-            None => ("", m.path.as_str()),
-        };
-        out.push(match (dir, slug) {
-            ("", file) if file == store_io::CURRENT_FILE => Changed::Current,
-            ("", file) if file == store_io::BASELINE_FILE => Changed::Baseline,
-            ("pages", s) if new.pages.contains_key(s) => Changed::Page(s.to_string()),
-            ("pages", s) => Changed::Deleted(Reference::page(s)),
-            ("requirements", s) if new.requirements.contains_key(s) => Changed::Requirement(s.to_string()),
-            ("requirements", s) => Changed::Deleted(Reference::req(s)),
-            ("tickets", s) if new.tickets.contains_key(s) => Changed::Ticket(s.to_string()),
-            ("tickets", s) => Changed::Deleted(Reference::ticket(s)),
-            (dir, s) if dir == store_io::PROPOSALS_DIR => Changed::Proposed(s.to_string()),
-            (dir, s) if dir == store_io::STARTS_DIR && new.starts.contains_key(s) && new.tickets.contains_key(s) => Changed::Started(s.to_string()),
-            (dir, s) if dir == store_io::STARTS_DIR && new.tickets.contains_key(s) => Changed::Closed(s.to_string()),
-            // A start with no ticket: its file goes as a deleted ticket's does.
-            (dir, s) if dir == store_io::STARTS_DIR => Changed::Deleted(Reference::ticket(s)),
-            _ => continue,
-        });
-    }
-    out
-}
-
-/// Say on `state` which server it is a copy of and how that server answered just now.
-fn mark(state: &mut State, server: &Server, fetched: Option<String>, answered: Answered) {
-    // What a lent token is answered says nothing of the machine's own.
-    if server.lent {
-        return;
-    }
-    let fetched = fetched.or_else(|| state.server().and_then(|s| s.fetched.clone()));
-    // Refused stays refused until the server takes a token: one that then cannot be reached has not taken it.
-    let refused = answered == Answered::Refused || (answered == Answered::No && state.server().is_some_and(|s| s.refused));
-    state.set_server(Some(ServerCopy { address: server.address.clone(), fetched, reachable: answered == Answered::Yes, refused }));
-}
-
-/// What syncing a state did: what changed in the copy, and whether the
-/// state held something other than what the server does, so that anything
-/// worked out from it beforehand was worked out from a copy that was behind.
-#[derive(Debug)]
-pub struct Followed {
-    pub changed: Vec<Changed>,
-    pub behind: bool,
-}
-
-/// Sync the copy and the state that reads it. What is the machine's own is
-/// taken from the state, so a start or a close just made here is kept.
-pub fn sync_state(server: &Server, copy_dir: &Path, state: &mut State) -> Result<Followed, RemoteError> {
-    let repository = state.store().config.repository.clone();
-    match sync(server, copy_dir, &repository, Some(state.store())) {
-        Ok(synced) => {
-            let behind = synced.store != *state.store();
-            if behind {
-                state.set_store(synced.store, Vec::new());
-            }
-            mark(state, server, Some(synced.fetched), Answered::Yes);
-            Ok(Followed { changed: synced.changed, behind })
-        }
-        Err(e) => {
-            if let Some(answered) = Answered::of(&e) {
-                mark(state, server, None, answered);
-            }
-            Err(e)
-        }
-    }
-}
-
-/// Read the state again from the copy on disk, after something left the two apart.
-fn reread(copy_dir: &Path, state: &mut State) {
-    match store_io::load(copy_dir) {
-        Ok((store, malformed)) => state.set_store(store, malformed),
-        Err(e) => tracing::error!("this checkout's copy could not be read again: {e}"),
-    }
-}
-
 /// A tool's error object, as a server sent it, as the error it is.
 fn tool_error(v: &Value) -> ToolError {
     let message = v["message"].as_str().unwrap_or("the server gave no reason").to_string();
@@ -577,41 +406,6 @@ pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut
 }
 
 impl Daemon {
-    /// Open a checkout whose project names a server: sync its copy of the
-    /// server's intent, or read the copy it holds when the server does not
-    /// answer, and join it with the checkout's code as any store is joined.
-    /// The caller holds the copy's lock.
-    pub fn open_remote(copy_dir: &Path, repo: &Path, server: Server) -> Result<(Daemon, Vec<grimoire_extract::ExtractError>), OpenError> {
-        let repository = store_io::repository_string(repo)?;
-        store_io::refuse_inside(copy_dir, repo)?;
-        let reachable = match sync(&server, copy_dir, &repository, None) {
-            Ok(_) => true,
-            // Offline with a copy: it is read as it is. With none there is nothing to read.
-            Err(e @ RemoteError::Unreachable(..)) if copy_dir.join(store_io::CONFIG_FILE).is_file() => {
-                tracing::warn!("{e}; reading the copy this machine holds, and writing nothing until the server answers");
-                false
-            }
-            Err(e) => return Err(e.into()),
-        };
-        let mut loaded = daemon::load(copy_dir)?;
-        mark(&mut loaded.state, &server, copy_note(copy_dir).map(|n| n.fetched), if reachable { Answered::Yes } else { Answered::No });
-        let (events, _) = broadcast::channel(256);
-        let daemon = Daemon {
-            store_dir: copy_dir.to_path_buf(),
-            repo: loaded.repo,
-            shared: false,
-            server: Some(Arc::new(server)),
-            extractor: std::sync::RwLock::new(loaded.extractor),
-            files: Mutex::new(loaded.files),
-            state: Mutex::new(loaded.state),
-            events,
-            kin: Arc::default(),
-            main: true,
-            base: Mutex::new((None, None)),
-        };
-        Ok((daemon, loaded.extract_errors))
-    }
-
     /// A write on a daemon whose intent is a server's.
     pub(crate) fn call_through(&self, server: &Server, name: &str, input: Value) -> Result<Value, ToolError> {
         let today = store_io::today();
@@ -667,117 +461,6 @@ impl Daemon {
     fn extracted_for(&self, languages: &[String]) -> bool {
         let built = grimoire_extract::Extractor::for_languages(&self.repo, languages);
         self.extractor.read().expect("extractor lock").languages() == built.languages()
-    }
-
-    /// Fetch the server's intent now. True when the copy changed.
-    pub fn sync_now(&self) -> Result<bool, RemoteError> {
-        let Some(server) = self.server.clone() else { return Ok(false) };
-        self.sync_with(&server)
-    }
-
-    /// Fetch the intent from `server`, the daemon's own or one called with a caller's token, and extract any
-    /// languages it brings. True when the copy changed.
-    fn sync_with(&self, server: &Server) -> Result<bool, RemoteError> {
-        let mut state = self.state.lock().expect("state lock");
-        let languages = state.store().config.languages.clone();
-        let was = answering(&state);
-        let result = sync_state(server, &self.store_dir, &mut state);
-        let is = answering(&state);
-        let now = state.store().config.languages.clone();
-        drop(state);
-        self.announce_server(was, is);
-        let changed = result?.changed;
-        self.announce("sync", &changed);
-        if now != languages {
-            let _ = self.reextract_all(&now);
-        }
-        Ok(!changed.is_empty())
-    }
-
-    fn announce(&self, tool: &str, changed: &[Changed]) {
-        if !changed.is_empty() {
-            let _ = self.events.send(Event::Store { tool: tool.to_string(), changed: changed.iter().flat_map(daemon::describe).collect() });
-        }
-    }
-
-    /// Tell listeners the server stopped or started answering, or refused or took this machine's token, so an interface asks status again.
-    fn announce_server(&self, was: (bool, bool), is: (bool, bool)) {
-        if was != is {
-            let _ = self.events.send(Event::Store { tool: "sync".to_string(), changed: vec!["server".to_string()] });
-        }
-    }
-
-    /// Say how the server failed to answer, so status shows it.
-    fn mark_away(&self, answered: Answered) {
-        if let Some(server) = &self.server {
-            let mut state = self.state.lock().expect("state lock");
-            let was = answering(&state);
-            mark(&mut state, server, None, answered);
-            let is = answering(&state);
-            drop(state);
-            self.announce_server(was, is);
-        }
-    }
-}
-
-/// Whether the server a state is a copy of answered the last time it was asked, and whether it refused this machine.
-fn answering(state: &State) -> (bool, bool) {
-    state.server().map_or((false, false), |s| (s.reachable, s.refused))
-}
-
-/// Follow the server a daemon's intent is a copy of, for as long as the
-/// daemon lives: sync when its event stream opens and on every event, and
-/// when the stream cannot be opened, say so in status and try again.
-pub fn follow(daemon: &Arc<Daemon>) {
-    let Some(server) = daemon.server.clone() else { return };
-    let daemon = Arc::downgrade(daemon);
-    let spawned = std::thread::Builder::new().name("grimoire-follow".to_string()).spawn(move || loop {
-        let opened = Instant::now();
-        match server.events() {
-            Ok(stream) => {
-                // Whatever was written while nothing was followed is fetched now.
-                let Some(d) = daemon.upgrade() else { return };
-                if let Err(e) = d.sync_now() {
-                    tracing::warn!("{e}");
-                }
-                drop(d);
-                for line in BufReader::new(stream).lines() {
-                    let Ok(line) = line else { break };
-                    // Asked on every line, a keep-alive too, so a daemon let go of is followed no longer.
-                    let Some(d) = daemon.upgrade() else { return };
-                    if !line.starts_with("data:") {
-                        continue;
-                    }
-                    if let Err(e) = d.sync_now() {
-                        tracing::warn!("{e}");
-                    }
-                }
-                // A stream that ends at once is not opened again in a tight loop.
-                if opened.elapsed() < RETRY {
-                    std::thread::sleep(RETRY);
-                }
-            }
-            Err(e) => {
-                let Some(d) = daemon.upgrade() else { return };
-                // A refused token is said as that, and not read on as if the server were only away.
-                let answered = Answered::of(&e).unwrap_or(Answered::No);
-                if answering(&d.state.lock().expect("state lock")).0 {
-                    match answered {
-                        Answered::Refused => tracing::warn!("{e}"),
-                        _ => tracing::warn!("{e}; reading the copy this machine holds until the server answers"),
-                    }
-                }
-                d.mark_away(answered);
-                drop(d);
-                std::thread::sleep(RETRY);
-            }
-        }
-        if daemon.strong_count() == 0 {
-            return;
-        }
-    });
-    if let Err(e) = spawned {
-        tracing::error!("the server will not be followed, so a teammate's write shows only after a write here: {e}");
     }
 }
 
