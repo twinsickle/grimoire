@@ -124,6 +124,10 @@ impl Adapter for TypeScriptAdapter {
         "typescript"
     }
 
+    fn tier(&self) -> u8 {
+        2
+    }
+
     fn handles(&self, rel_path: &str) -> bool {
         (rel_path.ends_with(".ts") || rel_path.ends_with(".tsx") || rel_path.ends_with(".mts") || rel_path.ends_with(".cts")) && !rel_path.ends_with(".d.ts")
     }

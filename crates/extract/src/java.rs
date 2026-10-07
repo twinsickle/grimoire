@@ -184,6 +184,10 @@ impl Adapter for JavaAdapter {
         "java"
     }
 
+    fn tier(&self) -> u8 {
+        2
+    }
+
     fn handles(&self, rel_path: &str) -> bool {
         rel_path.ends_with(".java")
     }

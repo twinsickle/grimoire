@@ -121,6 +121,8 @@ pub struct StatusAnswer {
     pub languages: Vec<String>,
     pub version: String,
     pub supported_languages: Vec<String>,
+    // Each configured language, in the config's order, with the tier this build reads it at.
+    pub tiers: Vec<LanguageTier>,
     // How many nodes of each kind.
     pub nodes: BTreeMap<String, usize>,
     pub edges: usize,
@@ -136,6 +138,16 @@ pub struct StatusAnswer {
     pub grimoire: Option<String>,
     // Every grimoire that daemon serves, in name order; empty on a daemon serving one store alone.
     pub library: Vec<LibraryEntry>,
+}
+
+/// A configured language and the tier the running build reads it at:
+/// 2 declarations and imports, 1 declarations alone, 0 comments alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct LanguageTier {
+    pub language: String,
+    // None when the build cannot read the language at any tier.
+    pub tier: Option<u8>,
 }
 
 /// One grimoire of a daemon's library, as `status` lists it.

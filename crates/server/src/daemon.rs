@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use grimoire_core::{lint, tools};
 use grimoire_core::{Build, Extraction, FileExtraction, State, ToolError};
-use grimoire_extract::{Extractor, SUPPORTED_LANGUAGES};
+use grimoire_extract::{supported_languages, Extractor};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -158,10 +158,15 @@ impl tools::SourceReader for RepoSource {
 }
 
 /// What this binary is, for `status`: the workspace version and the
-/// languages the extractor has adapters for. Told to core here because the
+/// languages the extractor reads, with the tier it reads each at. Told to core here because the
 /// core crate does no I/O and this is the one path every command loads through.
 pub fn build() -> Build {
-    Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: SUPPORTED_LANGUAGES.iter().map(|l| l.to_string()).collect() }
+    let supported = supported_languages();
+    Build {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        supported_languages: supported.iter().map(|(l, _)| l.to_string()).collect(),
+        tiers: supported.iter().map(|(l, t)| (l.to_string(), *t)).collect(),
+    }
 }
 
 /// What a write changed, as references, for the event it announces.

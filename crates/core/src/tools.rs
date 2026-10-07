@@ -259,7 +259,7 @@ pub(crate) mod fixtures {
     }
 
     pub fn built(mut s: State, languages: &[&str]) -> State {
-        s.set_build(Build { version: "0.0.0".into(), supported_languages: languages.iter().map(|l| l.to_string()).collect() });
+        s.set_build(Build { version: "0.0.0".into(), supported_languages: languages.iter().map(|l| l.to_string()).collect(), tiers: languages.iter().map(|l| (l.to_string(), 2)).collect() });
         s
     }
 }

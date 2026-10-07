@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -199,6 +199,7 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
             let status = StatusAnswer {
                 repository: config.repository,
                 roots: config.roots,
+                tiers: config.languages.iter().map(|l| crate::answer::LanguageTier { language: l.clone(), tier: build.tiers.get(l).copied() }).collect(),
                 languages: config.languages,
                 version: build.version,
                 supported_languages: build.supported_languages,
@@ -335,10 +336,14 @@ mod tests {
         assert_eq!(out.output["supported_languages"], json!([]));
         assert!(out.output["languages"].is_array());
 
-        s.set_build(Build { version: "9.9.9".into(), supported_languages: vec!["rust".into()] });
+        s.set_build(Build { version: "9.9.9".into(), supported_languages: vec!["rust".into(), "css".into()], tiers: [("rust".to_string(), 2), ("css".to_string(), 0)].into() });
         let out = call(&mut s, "status", json!({}), "2026-09-27").unwrap();
         assert_eq!(out.output["version"], "9.9.9");
-        assert_eq!(out.output["supported_languages"], json!(["rust"]));
+        assert_eq!(out.output["supported_languages"], json!(["rust", "css"]));
+        // Each configured language with its tier, in the config's order; one the build cannot read has none.
+        let languages: Vec<String> = serde_json::from_value(out.output["languages"].clone()).unwrap();
+        let tiers: Vec<serde_json::Value> = languages.iter().map(|l| json!({"language": l, "tier": match l.as_str() { "rust" => json!(2), "css" => json!(0), _ => json!(null) }})).collect();
+        assert_eq!(out.output["tiers"], json!(tiers));
         // The rest of the answer is untouched by the build.
         assert!(out.output["nodes"].is_object());
         assert!(out.output["edges"].is_number());

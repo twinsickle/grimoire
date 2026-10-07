@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!--
+  # Module contract
+
+  ```json
+  {"purpose":"Render a button.","criteria":[{"id":"labelled","statement":"A button always carries a label."}]}
+  ```
+-->
+<button class="button">${label}</button>
+
+<!--
+  # Test contract
+
+  ```json
+  {"test": "button-has-a-label", "checks": ["components/button/button.html#labelled", "components/button/button.css#round"]}
+  ```
+-->

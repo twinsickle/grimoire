@@ -110,6 +110,34 @@ through the packages the repository's own files declare; an on-demand
 import stands for every type file of its package and its
 `package-info.java`.
 
+## Languages read by their comments alone
+
+A language with no adapter of its own but a known comment syntax is read
+by its comments alone (tier 0): HTML, HTL, XML, CSS and SCSS so far. Name it
+in the config's languages as any other; `status` shows the tier each runs
+at. The contract goes in the file's first comment, which may follow only
+whitespace and, in markup, the prolog (XML declaration, processing
+instructions, doctype); test blocks go in any comment. Such a file gives
+no declarations and no imports.
+
+````html
+<!--
+  # Module contract
+
+  ```json
+  {"purpose":"Render a teaser card.","criteria":[{"id":"links-to-target","statement":"A teaser links to the page it names."}]}
+  ```
+-->
+<div class="teaser">...</div>
+````
+
+In HTL, `<!--/* */-->` works as well, and is never sent to the page.
+HTML and HTL both read `.html`; a project naming both reads it by the
+one it names first.
+Expected to carry a contract: every file of the language; narrow it with
+the contract scope through `configure`. Module identity is the path with
+its extension, so a component's markup and its styles are two modules.
+
 ## Test contracts
 
 A test says which criteria it checks in a `# Test contract` block, in any

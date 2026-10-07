@@ -89,6 +89,8 @@ export type Ingredient = { recipe: string, id: string, says: string, };
 
 export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
+export type LanguageTier = { language: string, tier: number | null, };
+
 export type LibraryEntry = { name: string, repository: string, server: string | null, };
 
 export type Linked = { ref: Ref, title: string | null, };
@@ -177,7 +179,7 @@ export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array
 
 export type Status = "open" | "active" | "landing" | "closed";
 
-export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, grimoire: string | null, library: Array<LibraryEntry>, };
+export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, tiers: Array<LanguageTier>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, grimoire: string | null, library: Array<LibraryEntry>, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 

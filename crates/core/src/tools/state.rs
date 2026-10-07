@@ -17,13 +17,15 @@ use crate::store::{Malformed, Store};
 pub struct Build {
     /// The crate version; every crate in the workspace shares one.
     pub version: String,
-    /// The languages this build has an extraction adapter for.
+    /// The languages this build reads, by an adapter or by their comments.
     pub supported_languages: Vec<String>,
+    /// The tier this build reads each supported language at (req:extract-tiers).
+    pub tiers: std::collections::BTreeMap<String, u8>,
 }
 
 impl Default for Build {
     fn default() -> Self {
-        Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: vec![] }
+        Build { version: env!("CARGO_PKG_VERSION").to_string(), supported_languages: vec![], tiers: Default::default() }
     }
 }
 

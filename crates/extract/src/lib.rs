@@ -1,9 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"recipes-read","statement":"Every file whose name ends .recipe.md is read as a recipe whatever languages the extractor is built for, by the same walk and under the same ignore, hidden and nested-checkout rules as source, handles and reads answering for it as for source; extract_text gives any handled file's record from text already read."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"recipes-read","statement":"Every file whose name ends .recipe.md is read as a recipe whatever languages the extractor is built for, by the same walk and under the same ignore, hidden and nested-checkout rules as source, handles and reads answering for it as for source; extract_text gives any handled file's record from text already read."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."},{"id":"tiers","statement":"Every supported language is read at one tier, the highest the build has: an adapter's own, 2 for one that resolves imports and 1 for one that reads declarations alone, else 0 for a language in the comment-syntax table; a language with an adapter is never read by the table, and the supported languages are exactly those with a tier."}]}
 //! ```
 
+pub mod comments;
 pub mod contract;
 pub mod java;
 pub mod recipe;
@@ -92,6 +93,10 @@ pub(crate) fn strip_slash_comment(raw: &str) -> String {
 /// The four things a language supplies, plus how to find its leading comment.
 pub trait Adapter: Send + Sync {
     fn language(&self) -> &'static str;
+    /// The tier this adapter reads its language at (req:extract-tiers): 2 when
+    /// it resolves imports to modules, 1 when it reads declarations alone, 0
+    /// when it reads comments alone.
+    fn tier(&self) -> u8;
     /// Whether this adapter handles a repository-relative path.
     fn handles(&self, rel_path: &str) -> bool;
     /// The canonical module id for a path.
@@ -155,10 +160,23 @@ pub enum ExtractError {
     Walk(PathBuf, ignore::Error),
 }
 
-/// The languages this build has an adapter for, in the order
-/// [`Extractor::for_languages`] recognises them. What `status` reports as
-/// `supported_languages`.
-pub const SUPPORTED_LANGUAGES: &[&str] = &["rust", "typescript", "java"];
+/// The languages this build has an adapter of their own for, each with its
+/// tier. A language here is never read by the comment-syntax table.
+const ADAPTERS: &[(&str, u8)] = &[("rust", 2), ("typescript", 2), ("java", 2)];
+
+/// The languages this build reads, each with the tier it reads it at
+/// (req:extract-tiers): those with an adapter of their own, then those read by
+/// their comments alone, in the order [`Extractor::for_languages`] recognises
+/// them. What `status` reports as `supported_languages` and `tiers`.
+pub fn supported_languages() -> Vec<(&'static str, u8)> {
+    let mut out: Vec<(&'static str, u8)> = ADAPTERS.to_vec();
+    for s in comments::TABLE {
+        if !out.iter().any(|(l, _)| *l == s.language) {
+            out.push((s.language, 0));
+        }
+    }
+    out
+}
 
 /// A repository root with its adapters.
 pub struct Extractor {
@@ -166,14 +184,15 @@ pub struct Extractor {
     adapters: Vec<Box<dyn Adapter>>,
 }
 
-/// The adapter for one language name, or `None` when this build has none.
-/// The names here and [`SUPPORTED_LANGUAGES`] are the same list.
+/// The adapter for one language name, or `None` when this build reads it at
+/// no tier. An adapter of the language's own comes first; the comment-syntax
+/// table is the fallback.
 fn adapter_named(language: &str, root: &Path) -> Option<Box<dyn Adapter>> {
     match language {
         "rust" => Some(Box::new(rust::RustAdapter::new(root))),
         "typescript" => Some(Box::new(typescript::TypeScriptAdapter::new(root))),
         "java" => Some(Box::new(java::JavaAdapter::new(root))),
-        _ => None,
+        _ => comments::syntax_of(language).map(|s| Box::new(comments::CommentAdapter::new(s)) as Box<dyn Adapter>),
     }
 }
 
@@ -197,7 +216,7 @@ impl Extractor {
 
     /// Adapters for the named languages. Unknown names are ignored so a store
     /// naming a language this build lacks still opens; `status` shows the
-    /// mismatch through [`SUPPORTED_LANGUAGES`].
+    /// mismatch through [`supported_languages`].
     pub fn for_languages(root: impl Into<PathBuf>, languages: &[String]) -> Self {
         let root: PathBuf = root.into();
         let adapters: Vec<Box<dyn Adapter>> = languages.iter().filter_map(|l| adapter_named(l, &root)).collect();
@@ -395,16 +414,31 @@ export class Box {
         assert!(g.contains(&Reference::criterion(&x.module, "kept")), "the module {} keeps its criterion", x.module);
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "each-language-is-read-at-its-tier", "checks": ["crates/extract/src#tiers", "req:extract-tiers"]}
+    /// ```
     #[test]
-    fn supported_languages_is_exactly_what_for_languages_accepts() {
+    fn each_language_is_read_at_its_tier() {
         let root = Path::new(".");
-        for l in SUPPORTED_LANGUAGES {
-            let a = adapter_named(l, root).unwrap_or_else(|| panic!("{l} is listed as supported but has no adapter"));
-            assert_eq!(a.language(), *l);
+        let supported = supported_languages();
+        for (l, tier) in &supported {
+            let a = adapter_named(l, root).unwrap_or_else(|| panic!("{l} is listed as supported but nothing reads it"));
+            assert_eq!((a.language(), a.tier()), (*l, *tier));
         }
+        let tier_of = |l: &str| supported.iter().find(|(s, _)| *s == l).map(|(_, t)| *t);
+        assert_eq!((tier_of("rust"), tier_of("typescript"), tier_of("java")), (Some(2), Some(2), Some(2)), "the adapters read declarations and imports");
+        for l in ["html", "htl", "xml", "css", "scss"] {
+            assert_eq!(tier_of(l), Some(0), "{l} is read by its comments");
+        }
+        assert_eq!(tier_of("cobol"), None);
         assert!(adapter_named("cobol", root).is_none());
-        let x = Extractor::for_languages(root, &["rust".to_string(), "cobol".to_string(), "typescript".to_string()]);
-        assert_eq!(x.languages(), vec!["rust", "typescript"]);
+        // Every language the table knows is supported, and none with an adapter of its own is read by the table.
+        assert_eq!(supported.len(), ADAPTERS.len() + comments::TABLE.iter().filter(|s| !ADAPTERS.iter().any(|(l, _)| *l == s.language)).count());
+        assert!(ADAPTERS.iter().all(|(l, t)| *t > 0 && adapter_named(l, root).is_some_and(|a| a.tier() == *t)));
+        let x = Extractor::for_languages(root, &["rust".to_string(), "cobol".to_string(), "css".to_string(), "typescript".to_string()]);
+        assert_eq!(x.languages(), vec!["rust", "css", "typescript"]);
     }
 
     /// A repository of the given files in a fresh folder, removed when dropped.

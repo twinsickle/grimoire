@@ -1,0 +1,12 @@
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"Style a button.","criteria":[{"id":"round","statement":"A button is round."}]}
+ * ```
+ */
+@import url(http://example.com/base.css);
+
+.button {
+  border-radius: 50%;
+}
