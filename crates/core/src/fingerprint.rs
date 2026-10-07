@@ -64,7 +64,8 @@ pub fn all(g: &Graph) -> BTreeMap<Reference, String> {
             }
             Node::Recipe(x) => of_json(x),
             Node::Ingredient(i) => of_text(&i.says),
-            Node::Decl(_) => continue,
+            // A decision changes only with its requirement; a decl only with its file.
+            Node::Decl(_) | Node::Decision(_) => continue,
         };
         out.insert(r.clone(), fp);
     }

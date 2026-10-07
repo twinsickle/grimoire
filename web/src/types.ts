@@ -29,6 +29,7 @@ export type DeclNode = NodeBase & G.Decl;
 export type TestNode = NodeBase & G.Test;
 export type RecipeNode = NodeBase & G.Recipe;
 export type IngredientNode = NodeBase & G.Ingredient;
+export type DecisionNode = NodeBase & G.DecisionNode;
 
 export function kindOf(ref: G.Ref): Kind {
   return ref.slice(0, ref.indexOf(":")) as Kind;

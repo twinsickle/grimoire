@@ -75,9 +75,11 @@ it created in `warnings`. Every warning is work to do now.
   scenario (given, when, then; without one it is `unspecified`),
   `covered_by` criteria, dated append-only **decisions** of one paragraph
   each: what was chosen and why. A decision that overturns earlier ones
-  names them in `record_decision`'s `supersedes`, by position (1 for the
-  oldest); they stay, no longer in force, and `rests_on` shows only what
-  is. A requirement that no longer holds is retired with `retire_node`,
+  names them in `record_decision`'s `supersedes`, by id: `d1`, `d2` and
+  so on, each given as the decision lands and never given twice, and
+  referenced as `req:<slug>#d<n>`; they stay, no longer in force, and
+  `rests_on` shows only what is. A decision recorded under a ticket has
+  no id until the ticket lands, so the ticket cannot supersede it. A requirement that no longer holds is retired with `retire_node`,
   never deleted: `delete_node` refuses one with decisions, and a closed
   ticket.
 - **A write that changes intent lands in a ticket's proposal**, not in the
@@ -86,10 +88,13 @@ it created in `warnings`. Every warning is work to do now.
   `ticket` (a slug or `ticket:` reference); absent, they land in the store's
   current ticket, the one last started (on a team, last started in this
   checkout); with neither they are refused.
-  The truth changes when the ticket closes. A patch, decision,
-  supersession, retirement or deletion builds on the proposal's copy of the
-  record; when the truth moved under it, the write is refused as a
-  `conflict`: `get` the record and put it whole again under the ticket.
+  The truth changes when the ticket closes. A patch, retirement or
+  deletion builds on the proposal's copy of the record; when the truth
+  moved under it, the write is refused as a `conflict`: `get` the record
+  and put it whole again under the ticket. A decision or supersession
+  builds on no copy: it waits in the proposal and lands after whatever
+  decisions the truth holds then, so putting a requirement again never
+  loses one.
   When the truth moves under a record your ticket already proposes, your
   checkout's check says so at once, as `proposal-moved` on the ticket
   naming each record: `get` it and propose it again, or ask the person

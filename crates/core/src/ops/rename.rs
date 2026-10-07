@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it (page links, tickets that are not closed, roots, the pages the site shows, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
+//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it, and to a requirement's decisions (page links, tickets that are not closed, roots, the pages the site shows, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
 //! ```
 
 use super::*;
@@ -30,10 +30,20 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     // The comparison is with the record as the rename would write it, so a page
     // that links itself, whose link the rename moved too, still compares equal.
     // A list is rewritten the one way everywhere: the old reference becomes the new, kept once, so a rerun compares with what the first run wrote.
+    // What a reference becomes: the record's own, or one of a requirement's decisions, req:<slug>#d<n>.
+    let renamed = |l: &Reference| -> Option<Reference> {
+        if l == r {
+            return Some(Reference::new(r.kind, to));
+        }
+        match l.as_decision() {
+            Some((slug, id)) if r.kind == Kind::Req && slug == r.id => Some(Reference::decision(to, id)),
+            _ => None,
+        }
+    };
     let rewrite = |refs: &[Reference]| {
         let mut kept: Vec<Reference> = Vec::with_capacity(refs.len());
         for l in refs {
-            let l = if l == r { Reference::new(r.kind, to) } else { l.clone() };
+            let l = renamed(l).unwrap_or_else(|| l.clone());
             if !kept.contains(&l) {
                 kept.push(l);
             }
@@ -59,11 +69,16 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     }
     let new = Reference::new(r.kind, to);
     // The truth's fingerprint before and after, so a proposal that rested on the old record rests on the renamed one.
+    // A requirement's base leaves its decisions out, or, written before they left the record, holds them: both follow.
     let fingerprint = |s: &Store, slug: &str| match r.kind {
         Kind::Page => s.pages.get(slug).map(crate::fingerprint::of_record),
         _ => s.requirements.get(slug).map(crate::fingerprint::of_record),
     };
-    let old_fp = fingerprint(store, &r.id);
+    let base_of = |s: &Store, slug: &str| match r.kind {
+        Kind::Page => s.pages.get(slug).map(crate::fingerprint::of_record),
+        _ => s.requirements.get(slug).map(super::requirement_base),
+    };
+    let (old_fp, old_base) = (fingerprint(store, &r.id), base_of(store, &r.id));
     let mut changes = Vec::new();
     // The record itself, under its new slug.
     match r.kind {
@@ -81,7 +96,7 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
         }
     }
     let swap = |refs: &mut Vec<Reference>| {
-        let hit = refs.contains(r);
+        let hit = refs.iter().any(|l| renamed(l).is_some());
         if hit {
             *refs = rewrite(refs);
         }
@@ -118,14 +133,14 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     if let Some(b) = store.baseline.as_mut() {
         let mut hit = false;
         for k in b.findings.iter_mut() {
-            if &k.r#ref == r {
-                k.r#ref = new.clone();
+            if let Some(n) = renamed(&k.r#ref) {
+                k.r#ref = n;
                 hit = true;
             }
             if let Some(e) = k.edge.as_mut() {
                 for end in [&mut e.from, &mut e.to] {
-                    if *end == *r {
-                        *end = new.clone();
+                    if let Some(n) = renamed(end) {
+                        *end = n;
                         hit = true;
                     }
                 }
@@ -144,8 +159,16 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     }
     // Every proposal: its copy of the record moves with it, its base following
     // when it rested on the truth's old record; its links and marks are rewritten.
-    let new_fp = fingerprint(store, to);
-    let rebase = |base: Option<String>| if base.is_some() && base == old_fp { new_fp.clone() } else { base };
+    let (new_fp, new_base) = (fingerprint(store, to), base_of(store, to));
+    let rebase = |base: Option<String>| {
+        if base.is_some() && base == old_fp {
+            new_fp.clone()
+        } else if base.is_some() && base == old_base {
+            new_base.clone()
+        } else {
+            base
+        }
+    };
     for p in store.proposals.values_mut() {
         let mut hit = false;
         match r.kind {
@@ -163,6 +186,11 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
                     q.record.slug = to.to_string();
                     q.base = rebase(q.base);
                     p.requirements.insert(to.to_string(), q);
+                    hit = true;
+                }
+                // The decisions it adds go with it.
+                if let Some(adds) = p.decisions.remove(&r.id) {
+                    p.decisions.insert(to.to_string(), adds);
                     hit = true;
                 }
             }
@@ -297,5 +325,26 @@ mod tests {
         // And it is not history yet: it can be deleted, its decision with it.
         delete_node(&mut s, &Reference::ticket("later-1")).unwrap();
         assert!(!s.tickets.contains_key("later-1"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-rename-takes-a-requirements-decisions-with-it", "checks": ["crates/core/src/ops/rename#rename"]}
+    /// ```
+    #[test]
+    fn a_rename_takes_a_requirements_decisions_with_it() {
+        let mut s = store();
+        let x = Reference::req("ready-only-with-commit");
+        let restated = Requirement { statement: "Restated.".into(), ..s.requirements["ready-only-with-commit"].clone() };
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_requirement(w, restated)).unwrap();
+        propose(&mut s, "later-1", Proposing::Partial, |w| record_decision(w, &x, "Ours.".into(), "2026-10-05".into(), vec![1], false)).unwrap();
+        s.tickets.get_mut("phase-62").unwrap().relies_on.push("req:ready-only-with-commit#d1".parse().unwrap());
+        rename_node(&mut s, &x, "ready").unwrap();
+        assert!(s.tickets["phase-62"].relies_on.contains(&Reference::decision("ready", 1)), "a reference to one of its decisions follows it");
+        let p = &s.proposals["later-1"];
+        assert!(p.decisions.contains_key("ready") && !p.decisions.contains_key("ready-only-with-commit"), "the decisions it adds go with it");
+        assert_eq!(p.requirements["ready"].base, Some(requirement_base(&s.requirements["ready"])), "its base follows, its decisions left out");
+        assert!(moved(&s, "later-1").is_empty());
     }
 }

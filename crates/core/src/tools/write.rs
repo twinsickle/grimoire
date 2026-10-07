@@ -74,14 +74,14 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 text: String,
                 date: Option<String>,
                 #[serde(default)]
-                supersedes: Vec<u32>,
+                supersedes: Vec<DecisionId>,
                 #[serde(default)]
                 adopted: bool,
             }
             let i: In = parse(input)?;
             let t = ops::target_ticket(state.store(), ticket.as_deref())?;
             let date = i.date.unwrap_or_else(|| today.to_string());
-            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::record_decision(s, &i.r#ref, i.text, date, i.supersedes, i.adopted))?;
+            let (node, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::record_decision(s, &i.r#ref, i.text, date, DecisionId::all(&i.supersedes), i.adopted))?;
             let r = Reference::req(&node.slug);
             let node = query::view(state.graph_for(Some(&t))?, &r).expect("just written");
             answer(name, NodeAnswer { node, proposal: None, drafts: None }, Some(changed))
@@ -91,12 +91,12 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
             #[serde(deny_unknown_fields)]
             struct In {
                 r#ref: Reference,
-                decision: u32,
-                supersedes: Vec<u32>,
+                decision: DecisionId,
+                supersedes: Vec<DecisionId>,
             }
             let i: In = parse(input)?;
             let t = ops::target_ticket(state.store(), ticket.as_deref())?;
-            let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::supersede(s, &i.r#ref, i.decision, &i.supersedes))?;
+            let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::supersede(s, &i.r#ref, i.decision.0, &DecisionId::all(&i.supersedes)))?;
             let node = query::view(state.graph_for(Some(&t))?, &i.r#ref).expect("just written");
             answer(name, NodeAnswer { node, proposal: None, drafts: None }, Some(changed))
         }
@@ -1018,12 +1018,26 @@ mod tests {
         let mut s = state();
         let out = call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "Why.", "ticket": "later-1" }), "2026-09-28").unwrap().output;
         let last = out["node"]["decisions"].as_array().unwrap().last().unwrap().clone();
-        assert_eq!(last, json!({ "date": "2026-09-28", "text": "Why." }));
-        // Proposed with its requirement: the truth has no new decision until the ticket closes.
+        assert_eq!(last, json!({ "id": null, "date": "2026-09-28", "text": "Why." }), "waiting in the ticket, with no id yet");
+        // Kept apart in the proposal: the truth has no new decision until the ticket closes, and no copy of the record is proposed.
         assert_eq!(s.store().requirements["ready-only-with-commit"].decisions.len(), 1);
+        assert!(!s.store().proposals["later-1"].requirements.contains_key("ready-only-with-commit"));
+        // Superseding names ids, as numbers or as they are said; one the requirement does not hold is refused.
+        let out = call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "Instead.", "supersedes": ["d1"], "ticket": "later-1" }), "2026-09-28").unwrap().output;
+        assert_eq!(out["node"]["decisions"][2]["supersedes"], json!([1]));
+        assert_eq!(
+            call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "x", "supersedes": ["d2"], "ticket": "later-1" }), "2026-09-28").unwrap_err().code(),
+            "invalid",
+            "d2 has not landed"
+        );
+        assert_eq!(
+            call(&mut s, "record_decision", json!({ "ref": "req:ready-only-with-commit", "text": "x", "supersedes": ["two"], "ticket": "later-1" }), "2026-09-28").unwrap_err().code(),
+            "invalid"
+        );
         call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-09-29").unwrap();
-        let landed = s.store().requirements["ready-only-with-commit"].decisions.last().unwrap();
-        assert_eq!((landed.date.as_str(), landed.text.as_str()), ("2026-09-28", "Why."), "it keeps the date it was recorded");
+        let landed = &s.store().requirements["ready-only-with-commit"].decisions;
+        assert_eq!((landed[1].id, landed[1].date.as_str(), landed[1].text.as_str()), (Some(2), "2026-09-28", "Why."), "it keeps the date it was recorded and takes the next id");
+        assert_eq!((landed[2].id, landed[2].supersedes.clone()), (Some(3), vec![1]));
     }
 
     /// # Test contract

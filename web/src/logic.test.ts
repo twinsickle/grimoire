@@ -3,7 +3,7 @@
 
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, call, grimoireBase, Unreachable } from "./api";
-import { decisionsInForce, isDescribed } from "./decisions";
+import { decisionsInForce, isDescribed, saidId } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
@@ -483,14 +483,23 @@ test("colours are named by token, never written as literals", () => {
 test("decisions sort into those in force, newest first, and those superseded, with what superseded them", () => {
   const d = (text: string, supersedes?: number[]) => ({ date: "2026-09-29", text, supersedes });
   const { inForce, superseded } = decisionsInForce([d("one"), d("two"), d("three", [1]), d("four", [1, 3])]);
-  expect(inForce.map((x) => [x.n, x.d.text])).toEqual([
+  expect(inForce.map((x) => [x.id, x.d.text])).toEqual([
     [4, "four"],
     [2, "two"],
   ]);
-  expect(superseded.map((x) => [x.n, x.by])).toEqual([
+  expect(superseded.map((x) => [x.id, x.by])).toEqual([
     [3, 4],
     [1, 4],
   ]);
+  // Ids are carried, not positions: with d2 gone, d3 is still d3 and supersedes d1.
+  const gap = decisionsInForce([d("one"), { ...d("three", [1]), id: 3 }]);
+  expect(gap.inForce.map((x) => x.id)).toEqual([3]);
+  expect(gap.superseded.map((x) => [x.id, x.by])).toEqual([[1, 3]]);
+  // One waiting in a ticket has no id, is in force, and says so; what it supersedes is superseded by a waiting decision.
+  const waiting = decisionsInForce([d("one"), { ...d("ours", [1]), id: null }]);
+  expect(waiting.inForce.map((x) => [x.id, x.d.text])).toEqual([[null, "ours"]]);
+  expect(waiting.superseded.map((x) => [x.id, x.by])).toEqual([[1, null]]);
+  expect([saidId(3), saidId(null)]).toEqual(["d3", "waiting for its ticket to land"]);
   expect(decisionsInForce([]).inForce).toEqual([]);
 });
 

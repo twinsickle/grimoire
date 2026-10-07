@@ -279,6 +279,8 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             Err(reason) => malformed.push(Malformed { path: BASELINE_FILE.to_string(), reason }),
         }
     }
+    // A proposal written before decisions left the record is read as this build keeps it (req:ticket-proposal).
+    store.settle_proposals();
     Ok((store, malformed))
 }
 
@@ -682,6 +684,7 @@ mod tests {
             requirements: Default::default(),
             deleted: Default::default(),
             tickets: Default::default(),
+            decisions: Default::default(),
         };
         let mut with_ticket = good.clone();
         with_ticket.tickets.insert("0001".into(), active.clone());
@@ -777,6 +780,7 @@ mod tests {
                 requirements: Default::default(),
                 deleted: Default::default(),
                 tickets: Default::default(),
+                decisions: Default::default(),
             },
         );
         let vision: Reference = "page:vision".parse().unwrap();
@@ -916,6 +920,7 @@ mod tests {
                 requirements: Default::default(),
                 deleted: [("page:overview".to_string(), "f".to_string())].into(),
                 tickets: Default::default(),
+                decisions: Default::default(),
             },
         );
         store.current = Some("0001".into());

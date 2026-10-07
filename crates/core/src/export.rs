@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,11 @@ pub struct Exported {
     pub pages: Vec<Page>,
     pub requirements: Vec<Requirement>,
     pub tickets: Vec<Ticket>,
+    // The proposals as an older build keeps them, decisions inside each record, so a machine on one still reads them.
     pub proposals: Vec<Proposal>,
+    // The proposals as this build keeps them, decisions apart: ignored by an older machine, read by this one in place of the above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept_proposals: Option<Vec<Proposal>>,
     pub baseline: Option<Baseline>,
     // Each judged recipe's judgements; absent from an older server's export, and ignored by an older machine.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -56,10 +60,31 @@ pub fn exported(store: &Store) -> Exported {
         pages: store.pages.values().cloned().collect(),
         requirements: store.requirements.values().cloned().collect(),
         tickets: store.tickets.values().cloned().collect(),
-        proposals: store.proposals.values().cloned().collect(),
+        proposals: store.proposals.values().map(|p| for_older_builds(store, p)).collect(),
+        kept_proposals: Some(store.proposals.values().cloned().collect()),
         baseline: store.baseline.clone(),
         judgements: store.judgements.clone(),
     }
+}
+
+/// `p` as a build older than decision ids keeps a proposal (req:remote-export-for-older-builds):
+/// each requirement it holds or adds decisions to, whole, with the truth's decisions, its links
+/// and then its own, at their positions, resting on the truth's whole record when it rests on the
+/// truth as it is, which is what an older build compares.
+fn for_older_builds(store: &Store, p: &Proposal) -> Proposal {
+    let mut older = Proposal { decisions: Default::default(), ..p.clone() };
+    let slugs: std::collections::BTreeSet<&String> = p.requirements.keys().chain(p.decisions.keys()).collect();
+    for slug in slugs {
+        let truth = store.requirements.get(slug);
+        let Some(record) = crate::store::with_decisions(truth, p, slug, crate::store::Landing::Landed) else { continue };
+        let base = match (p.requirements.get(slug).map(|q| q.base.clone()), truth) {
+            (Some(Some(b)), Some(t)) if b == crate::ops::requirement_base(t) => Some(crate::fingerprint::of_record(t)),
+            (Some(base), _) => base,
+            (None, t) => t.map(crate::fingerprint::of_record),
+        };
+        older.requirements.insert(slug.clone(), Proposed { record, base });
+    }
+    older
 }
 
 impl Exported {
@@ -88,11 +113,14 @@ impl Exported {
         store.requirements = self.requirements.into_iter().map(|r| (r.slug.clone(), r)).collect();
         store.tickets = self.tickets.into_iter().map(|t| (t.slug.clone(), t)).collect();
         let live = |slug: &str| store.tickets.get(slug).is_some_and(Ticket::is_worked);
-        store.proposals = self.proposals.into_iter().filter(|p| live(&p.ticket)).map(|p| (p.ticket.clone(), p)).collect();
+        // As this build keeps them; from an older server, as written before decisions left the record, and settled.
+        let proposals = self.kept_proposals.unwrap_or(self.proposals);
+        store.proposals = proposals.into_iter().filter(|p| live(&p.ticket)).map(|p| (p.ticket.clone(), p)).collect();
         store.baseline = self.baseline;
         store.judgements = self.judgements;
         store.current = own.current.clone().filter(|c| live(c));
         store.starts = own.starts.iter().filter(|(slug, _)| live(slug)).map(|(slug, s)| (slug.clone(), s.clone())).collect();
+        store.settle_proposals();
         Ok(store)
     }
 }
@@ -197,6 +225,38 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
+    /// {"test": "an-older-build-reads-what-a-server-hands-it", "checks": ["crates/core/src/export#older-builds"]}
+    /// ```
+    #[test]
+    fn an_older_build_reads_what_a_server_hands_it() {
+        let mut server = store();
+        let x = Reference::req("ready-only-with-commit");
+        let truth = server.requirements["ready-only-with-commit"].clone();
+        crate::ops::propose(&mut server, "later-1", crate::ops::Proposing::Partial, |w| crate::ops::record_decision(w, &x, "Ours.".into(), "2026-10-05".into(), vec![], false)).unwrap();
+        let e = exported(&server);
+        // As an older build keeps it: no field it does not know, the record whole with the truth's decision and then the ticket's, resting on the truth's whole record.
+        let older = serde_json::to_value(&e.proposals).unwrap();
+        assert!(older[0].get("decisions").is_none(), "{older}");
+        let held = &e.proposals[0].requirements["ready-only-with-commit"];
+        assert_eq!(held.record.decisions.iter().map(|d| (d.id, d.text.as_str())).collect::<Vec<_>>(), vec![(Some(1), "Identity is required rather than invented."), (Some(2), "Ours.")]);
+        assert!(!serde_json::to_string(&held.record).unwrap().contains("\"id\""), "each at its position, so no id is written");
+        assert_eq!(held.base, Some(crate::fingerprint::of_record(&truth)));
+        // This build reads them as the server keeps them, beside.
+        let text = serde_json::to_string(&e).unwrap();
+        let joined = serde_json::from_str::<Exported>(&text).unwrap().joined(&Store::default(), "C:/checkout").unwrap();
+        assert_eq!(joined.proposals, server.proposals);
+        // From an older server, which hands only the first: read as written before decisions left the record.
+        let from_older = Exported { kept_proposals: None, ..e.clone() };
+        let joined = from_older.joined(&Store::default(), "C:/checkout").unwrap();
+        let p = &joined.proposals["later-1"];
+        assert_eq!(p.decisions["ready-only-with-commit"].added.iter().map(|d| (d.id, d.text.as_str())).collect::<Vec<_>>(), vec![(None, "Ours.")]);
+        assert!(p.requirements["ready-only-with-commit"].record.decisions.is_empty());
+        assert!(crate::ops::moved(&joined, "later-1").is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
     /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/export#joined"]}
     /// ```
     #[test]
@@ -279,7 +339,7 @@ mod tests {
         // A ticket closed elsewhere: it stops being current and loses its proposal before its record says closed,
         // so a writer stopped anywhere between leaves a store that loads.
         let mut worked = new.clone();
-        worked.proposals.insert(live.clone(), Proposal { ticket: live.clone(), pages: Default::default(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default() });
+        worked.proposals.insert(live.clone(), Proposal::new(&live));
         let mut closed = worked.clone();
         closed.tickets.get_mut(&live).unwrap().status = Status::Closed;
         closed.proposals.remove(&live);

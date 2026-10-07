@@ -861,7 +861,14 @@ mod tests {
         let proposed = Proposed { record: Page { body: "proposed".into(), ..page.clone() }, base: Some(crate::fingerprint::of_record(&page)) };
         s.proposals.insert(
             "later-1".into(),
-            Proposal { ticket: "later-1".into(), pages: [("orphan".to_string(), proposed)].into(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default() },
+            Proposal {
+                ticket: "later-1".into(),
+                pages: [("orphan".to_string(), proposed)].into(),
+                requirements: Default::default(),
+                deleted: Default::default(),
+                tickets: Default::default(),
+                decisions: Default::default(),
+            },
         );
         // Read with the ticket, as its own checkout and `check --ticket` read it.
         let found =

@@ -793,7 +793,7 @@ test("an adopted requirement reads as described, on its page and where a page li
   });
   await page.goto("/n/req%3Aready-needs-commit");
   await expect(page.locator("[data-described]")).toContainText("described");
-  await expect(page.locator("main")).toContainText("#1 · adoption");
+  await expect(page.locator("main")).toContainText("d1 · adoption");
   await page.goto("/n/page%3Areadiness");
   const req = (slug: string) => page.locator("main li", { has: page.locator(`a[href='/n/req%3A${slug}']`) });
   await expect(req("ready-needs-commit")).toContainText("described");
@@ -1548,7 +1548,7 @@ test("a declaration's page links to its own file, though the file's name and the
  * # Test contract
  *
  * ```json
- * {"test": "a-requirement-shows-decisions-in-force", "checks": ["web/src/views/Node#decisions-in-force"]}
+ * {"test": "a-requirement-shows-decisions-in-force", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Node#content-then-graph"]}
  * ```
  */
 test("a requirement's page shows its decisions in force and folds the superseded ones; a retired one says so", async ({ page }) => {
@@ -1573,6 +1573,14 @@ test("a requirement's page shows its decisions in force and folds the superseded
     const ref = route.request().postDataJSON().ref;
     if (ref === "req:revised") return route.fulfill({ json: { node: req("revised", false) } });
     if (ref === "req:gone") return route.fulfill({ json: { node: req("gone", true) } });
+    // Read through a ticket: the truth's d1, with d2 gone, and the ticket's own, waiting with no id.
+    if (ref === "req:waiting") {
+      const decisions = [{ date: "2026-01-01", text: "The truth's first." }, { id: 3, date: "2026-01-03", text: "The truth's third." }, { id: null, date: "2026-01-04", text: "Ours, waiting.", supersedes: [1] }];
+      return route.fulfill({ json: { node: { ...req("waiting", false), decisions } } });
+    }
+    if (ref === "req:revised#d3") {
+      return route.fulfill({ json: { node: { ref, requirement: "revised", id: 3, date: "2026-01-03", text: "Third, instead of the first.", supersedes: [1], in: [], out: [] } } });
+    }
     return route.continue();
   });
   await page.goto("/n/req%3Arevised");
@@ -1583,8 +1591,21 @@ test("a requirement's page shows its decisions in force and folds the superseded
   await expect(main.getByText("First, overturned.")).toBeHidden();
   await main.getByText("1 superseded").click();
   await expect(main.getByText("First, overturned.")).toBeVisible();
-  await expect(main.getByText("#1 · superseded by #3")).toBeVisible();
+  await expect(main.getByText("d1 · superseded by d3")).toBeVisible();
+  await expect(main.getByText("d3", { exact: true })).toBeVisible();
   await expect(main.getByText("retired", { exact: true })).toHaveCount(0);
+  // Ids are carried, not positions, and a decision waiting in a ticket has none yet.
+  await page.goto("/n/req%3Awaiting");
+  await expect(main.getByText("Ours, waiting.")).toBeVisible();
+  await expect(main.getByText("waiting for its ticket to land", { exact: true })).toBeVisible();
+  await expect(main.getByText("d3", { exact: true })).toBeVisible();
+  await main.getByText("1 superseded").click();
+  await expect(main.getByText("d1 · superseded by a decision waiting for its ticket to land")).toBeVisible();
+  // A decision's own page: whose it is, what it says and what it supersedes.
+  await page.goto("/n/req%3Arevised%23d3");
+  await expect(main.getByRole("heading", { name: "Decision d3 of revised" })).toBeVisible();
+  await expect(main.getByText("Third, instead of the first.")).toBeVisible();
+  await expect(main.getByText("Supersedes")).toBeVisible();
   await page.goto("/n/req%3Agone");
   await expect(page.locator("main").getByText("retired", { exact: true })).toBeVisible();
 });

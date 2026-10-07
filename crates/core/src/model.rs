@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's at the first, since a recipe id never holds one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket was closed when: landed, the checkout it was closed in, by repository path, absent otherwise."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of id, date, text, the ids of earlier decisions each supersedes and whether it was recorded as an adoption, in the order they landed, and whether it is retired; a decision's id is written only where it differs from its position, 1 for the oldest, read as that position where absent, and null for one not yet landed; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket was closed when: landed, the checkout it was closed in, by repository path, absent otherwise."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists, and for each requirement the decisions it adds, with no id, and the supersessions it links, by id, apart from any record it holds; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -118,20 +118,66 @@ impl Reference {
     pub fn ingredient(recipe: &str, id: &str) -> Self {
         Self::new(Kind::Recipe, format!("{recipe}#{id}"))
     }
+    /// A requirement's decision, `req:<slug>#d<id>`: said as decision 3 of the requirement.
+    pub fn decision(slug: &str, id: u32) -> Self {
+        Self::new(Kind::Req, format!("{slug}#d{id}"))
+    }
+
+    /// For a decision's reference, the requirement's slug and the decision's id.
+    pub fn as_decision(&self) -> Option<(&str, u32)> {
+        let (slug, id) = self.id.split_once('#').filter(|_| self.kind == Kind::Req)?;
+        Some((slug, decision_id(id.strip_prefix('d')?)?))
+    }
 
     /// For `criterion` and `test` references, the module or file before the
     /// last `#` and the criterion id or test name after it, which never hold
     /// one; for an ingredient, the recipe before the first `#`, since a recipe
-    /// id never holds one, and the ingredient after it. `None` for a recipe
+    /// id never holds one, and the ingredient after it; for a decision, the
+    /// requirement before the first `#`, since a slug never holds one, and the
+    /// decision after it. `None` for a recipe
     /// itself and for other kinds, a `decl` among them: a file and a
     /// declaration path may both hold `#`, so a declaration's file is read
     /// from its node, never from its reference.
     pub fn split_hash(&self) -> Option<(&str, &str)> {
         match self.kind {
             Kind::Criterion | Kind::Test => self.id.rsplit_once('#'),
-            Kind::Recipe => self.id.split_once('#'),
+            Kind::Recipe | Kind::Req => self.id.split_once('#'),
             _ => None,
         }
+    }
+}
+
+/// A decision's id from its digits, `3`; `None` for anything else, 0 and a leading 0 among them.
+pub fn decision_id(digits: &str) -> Option<u32> {
+    if digits.is_empty() || digits.starts_with('0') || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// A decision's id as a tool takes it: a number, `3`, or as it is said, `"d3"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecisionId(pub u32);
+
+impl DecisionId {
+    pub fn all(ids: &[DecisionId]) -> Vec<u32> {
+        ids.iter().map(|d| d.0).collect()
+    }
+}
+
+impl<'de> Deserialize<'de> for DecisionId {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Either {
+            Number(u32),
+            Said(String),
+        }
+        let id = match Either::deserialize(d).map_err(|_| serde::de::Error::custom("a decision's id is a number from 1 or d<n>"))? {
+            Either::Number(n) => (n > 0).then_some(n),
+            Either::Said(s) => s.strip_prefix('d').and_then(decision_id),
+        };
+        id.map(DecisionId).ok_or_else(|| serde::de::Error::custom("a decision's id is a number from 1 or d<n>"))
     }
 }
 
@@ -191,6 +237,8 @@ pub enum Relation {
     /// A recipe to a path its `files` names: the implementation it represents. Only a finding's
     /// edge names it, for a path not found; the graph draws no such edge.
     Represents,
+    /// A decision to an earlier decision of its requirement it replaces. Written in its `supersedes`.
+    Supersedes,
 }
 
 impl Relation {
@@ -206,6 +254,7 @@ impl Relation {
             Relation::Checks => "checks",
             Relation::Uses => "uses",
             Relation::Represents => "represents",
+            Relation::Supersedes => "supersedes",
         }
     }
 }
@@ -241,6 +290,10 @@ pub struct Requirement {
     pub statement: String,
     pub scenarios: Vec<Scenario>,
     pub covered_by: Vec<Reference>,
+    // In the order they reached the truth. Each carries its id, written only where it differs
+    // from its position, so a store written before ids reads the same, and an older build reads
+    // what this one writes while no decision has gone missing (req:store-requirement-record).
+    #[serde(serialize_with = "write_decisions", deserialize_with = "read_decisions")]
     pub decisions: Vec<Decision>,
     /// Retired: it no longer holds. It stays readable with its decisions, the
     /// last saying why, but no page links it and it covers no criterion.
@@ -250,15 +303,30 @@ pub struct Requirement {
 }
 
 impl Requirement {
-    /// The positions, 1 for the oldest, of the decisions a later one supersedes.
+    /// The ids of the decisions a later one supersedes.
     pub fn superseded(&self) -> std::collections::BTreeSet<u32> {
         self.decisions.iter().flat_map(|d| d.supersedes.iter().copied()).collect()
     }
 
-    /// The decisions in force, with their positions, oldest first.
-    pub fn in_force(&self) -> Vec<(u32, &Decision)> {
+    /// The decisions in force, oldest first: those no decision supersedes, one not yet landed among them.
+    pub fn in_force(&self) -> Vec<&Decision> {
         let superseded = self.superseded();
-        (1u32..).zip(&self.decisions).filter(|(n, _)| !superseded.contains(n)).collect()
+        self.decisions.iter().filter(|d| !d.id.is_some_and(|id| superseded.contains(&id))).collect()
+    }
+
+    /// The landed decision whose id is `id`.
+    pub fn decision(&self, id: u32) -> Option<&Decision> {
+        self.decisions.iter().find(|d| d.id == Some(id))
+    }
+
+    /// The id the next decision to land takes: above every id it holds, so none is given twice.
+    pub fn next_id(&self) -> u32 {
+        self.decisions.iter().filter_map(|d| d.id).max().unwrap_or(0) + 1
+    }
+
+    /// The record as a proposal holds it: every field but its decisions, which wait apart.
+    pub fn without_decisions(&self) -> Requirement {
+        Requirement { decisions: Vec::new(), ..self.clone() }
     }
 
     /// Described, not decided: it has decisions in force and every one is an
@@ -266,8 +334,69 @@ impl Requirement {
     /// has chosen it since.
     pub fn described(&self) -> bool {
         let in_force = self.in_force();
-        !in_force.is_empty() && in_force.iter().all(|(_, d)| d.adopted)
+        !in_force.is_empty() && in_force.iter().all(|d| d.adopted)
     }
+}
+
+/// A requirement's decisions as they are written: each one's `id` only where it differs from its
+/// position, 1 for the oldest, and null for one not yet landed, as a read through a proposal shows it.
+fn write_decisions<S: Serializer>(decisions: &[Decision], s: S) -> Result<S::Ok, S::Error> {
+    use serde::ser::{SerializeMap, SerializeSeq};
+    struct Written<'a>(usize, &'a Decision);
+    impl Serialize for Written<'_> {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            let Written(position, d) = *self;
+            let mut m = s.serialize_map(None)?;
+            match d.id {
+                Some(id) if id as usize == position => {}
+                id => m.serialize_entry("id", &id)?,
+            }
+            m.serialize_entry("date", &d.date)?;
+            m.serialize_entry("text", &d.text)?;
+            if !d.supersedes.is_empty() {
+                m.serialize_entry("supersedes", &d.supersedes)?;
+            }
+            if d.adopted {
+                m.serialize_entry("adopted", &true)?;
+            }
+            if d.withdrawn {
+                m.serialize_entry("withdrawn", &true)?;
+            }
+            m.end()
+        }
+    }
+    let mut seq = s.serialize_seq(Some(decisions.len()))?;
+    for (i, d) in decisions.iter().enumerate() {
+        seq.serialize_element(&Written(i + 1, d))?;
+    }
+    seq.end()
+}
+
+/// A requirement's decisions as they are read: one with no `id` takes its position, as every
+/// decision written before ids, and one whose `id` is null has not landed.
+fn read_decisions<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Decision>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Read {
+        #[serde(default, deserialize_with = "present")]
+        id: Option<Option<u32>>,
+        date: String,
+        text: String,
+        #[serde(default)]
+        supersedes: Vec<u32>,
+        #[serde(default)]
+        adopted: bool,
+        #[serde(default)]
+        withdrawn: bool,
+    }
+    fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<u32>>, D::Error> {
+        Option::<u32>::deserialize(d).map(Some)
+    }
+    let read = Vec::<Read>::deserialize(d)?;
+    Ok((1u32..)
+        .zip(read)
+        .map(|(position, r)| Decision { id: r.id.unwrap_or(Some(position)), date: r.date, text: r.text, supersedes: r.supersedes, adopted: r.adopted, withdrawn: r.withdrawn })
+        .collect())
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -285,11 +414,15 @@ pub struct Scenario {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Decision {
+    // A requirement's decision's id, said `d<n>`, given when it lands and never given twice; none on
+    // a ticket's decision and on one waiting in a proposal. Among a requirement's decisions, absent
+    // means the decision's position, 1 for the oldest, and null one not yet landed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Option<u32>>", optional))]
+    pub id: Option<u32>,
     pub date: String,
     pub text: String,
-    /// The positions, 1 for the oldest, of earlier decisions of the same
-    /// record this one replaces. A position never changes, since decisions
-    /// are only appended, so it is the decision's id.
+    // The ids of earlier decisions of the same requirement this one replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Vec<u32>>", optional))]
     pub supersedes: Vec<u32>,
@@ -304,6 +437,23 @@ pub struct Decision {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub withdrawn: bool,
+}
+
+/// A requirement's landed decision as a node of the graph, `req:<slug>#d<id>`: derived from its
+/// requirement on every read, never stored apart from it (req:decision-references).
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DecisionNode {
+    pub requirement: String,
+    pub id: u32,
+    pub date: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<u32>>", optional))]
+    pub supersedes: Vec<u32>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub adopted: bool,
 }
 
 /// What judging a recipe found: it still says truly how to use what it
@@ -340,7 +490,7 @@ pub struct Judgements {
 
 impl Decision {
     pub fn new(date: impl Into<String>, text: impl Into<String>) -> Self {
-        Decision { date: date.into(), text: text.into(), supersedes: Vec::new(), adopted: false, withdrawn: false }
+        Decision { id: None, date: date.into(), text: text.into(), supersedes: Vec::new(), adopted: false, withdrawn: false }
     }
 }
 
@@ -514,14 +664,36 @@ pub struct Proposal {
     /// against: they reach the ticket when this one lands.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub tickets: std::collections::BTreeMap<String, Proposed<TicketReferences>>,
+    /// The decisions this ticket adds to requirements, by slug, kept apart from any record it
+    /// holds: appended after the truth's when it lands, each taking its id then.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub decisions: std::collections::BTreeMap<String, ProposedDecisions>,
 }
 
 impl Proposal {
     pub fn new(ticket: &str) -> Self {
-        Proposal { ticket: ticket.to_string(), pages: Default::default(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default() }
+        Proposal { ticket: ticket.to_string(), pages: Default::default(), requirements: Default::default(), deleted: Default::default(), tickets: Default::default(), decisions: Default::default() }
     }
     pub fn is_empty(&self) -> bool {
-        self.pages.is_empty() && self.requirements.is_empty() && self.deleted.is_empty() && self.tickets.is_empty()
+        self.pages.is_empty() && self.requirements.is_empty() && self.deleted.is_empty() && self.tickets.is_empty() && self.decisions.is_empty()
+    }
+}
+
+/// What a proposal adds to one requirement's decisions: the decisions recorded under the ticket,
+/// in the order they were recorded and with no id, and the supersessions linked under it, by
+/// the id of the decision that supersedes to the ids it supersedes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProposedDecisions {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added: Vec<Decision>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub linked: std::collections::BTreeMap<u32, Vec<u32>>,
+}
+
+impl ProposedDecisions {
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.linked.is_empty()
     }
 }
 
@@ -956,6 +1128,12 @@ mod tests {
     /// ```
     #[test]
     fn kinds_and_their_ids() {
+        // A decision is of the kind req, its id the requirement's slug, #, d and its id, split at the first #.
+        let d = Reference::decision("store-config-record", 3);
+        assert_eq!(d.to_string(), "req:store-config-record#d3");
+        assert_eq!(("req:store-config-record#d3".parse::<Reference>().unwrap().as_decision(), d.split_hash()), (Some(("store-config-record", 3)), Some(("store-config-record", "d3"))));
+        assert_eq!((Reference::req("x").as_decision(), "req:x#3".parse::<Reference>().unwrap().as_decision(), "req:x#d0".parse::<Reference>().unwrap().as_decision()), (None, None, None));
+        assert_eq!("req:x#dd3".parse::<Reference>().unwrap().as_decision(), None);
         for k in Kind::ALL {
             assert_eq!(Kind::parse(k.as_str()), Some(k));
             assert_eq!(k.is_stored(), matches!(k, Kind::Page | Kind::Req | Kind::Ticket));
@@ -1079,6 +1257,12 @@ mod tests {
         assert_eq!(new.base, None);
         assert!(serde_json::from_str::<Proposal>(r#"{"ticket":"t","extra":1}"#).is_err());
         assert!(Proposal::new("t").is_empty());
+        // The decisions it adds, apart from any record: with no id, and links by id; read back the same.
+        let json = r#"{"ticket":"t","decisions":{"x":{"added":[{"date":"2026-10-07","text":"Why."}],"linked":{"3":[1,2]}}}}"#;
+        let p: Proposal = serde_json::from_str(json).unwrap();
+        assert!(!p.is_empty());
+        assert_eq!((p.decisions["x"].added[0].id, p.decisions["x"].linked[&3].clone()), (None, vec![1, 2]));
+        assert_eq!(serde_json::to_string(&p).unwrap(), json);
         // Another ticket's references, as the edit leaves them, with the truth's lists' fingerprint.
         let edit = r#"{"ticket":"t","tickets":{"0200":{"record":{"touches":["req:x"],"relies_on":[]},"base":"fp3"}}}"#;
         let p: Proposal = serde_json::from_str(edit).unwrap();
@@ -1088,5 +1272,39 @@ mod tests {
         assert!(serde_json::from_str::<Proposal>(r#"{"ticket":"t","tickets":{"0200":{"record":{"touches":[],"relies_on":[],"body":""}}}}"#).is_err());
         let c: Current = serde_json::from_str(r#"{"ticket":"t"}"#).unwrap();
         assert_eq!(c.ticket, "t");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-decisions-id-is-written-only-where-it-is-not-its-position", "checks": ["crates/core/src/model#requirement-record"]}
+    /// ```
+    #[test]
+    fn a_decisions_id_is_written_only_where_it_is_not_its_position() {
+        let record = |decisions: &str| format!(r#"{{"slug":"x","title":"X","statement":"It SHALL.","scenarios":[],"covered_by":[],"decisions":{decisions}}}"#);
+        // Written before ids: each takes its position, and is written back as it was, so its fingerprint is unchanged.
+        let before = record(r#"[{"date":"2026-01-01","text":"a"},{"date":"2026-01-02","text":"b","supersedes":[1]}]"#);
+        let q: Requirement = serde_json::from_str(&before).unwrap();
+        assert_eq!(q.decisions.iter().map(|d| d.id).collect::<Vec<_>>(), vec![Some(1), Some(2)]);
+        assert_eq!(serde_json::to_string(&q).unwrap(), before);
+        // An id that is not its position is written, and kept: a decision gone from before it moves nothing.
+        let gap = record(r#"[{"date":"2026-01-01","text":"a"},{"id":3,"date":"2026-01-03","text":"c"}]"#);
+        let q: Requirement = serde_json::from_str(&gap).unwrap();
+        assert_eq!((q.decisions[1].id, q.next_id(), q.decision(2).is_none()), (Some(3), 4, true));
+        assert_eq!(serde_json::to_string(&q).unwrap(), gap);
+        // One not yet landed, as a read through a proposal shows it: null, read back as none.
+        let waiting = record(r#"[{"date":"2026-01-01","text":"a"},{"id":null,"date":"2026-01-04","text":"w","adopted":true}]"#);
+        let q: Requirement = serde_json::from_str(&waiting).unwrap();
+        assert_eq!((q.decisions[1].id, q.in_force().len(), q.next_id()), (None, 2, 2));
+        assert_eq!(serde_json::to_string(&q).unwrap(), waiting);
+        // A ticket's decision carries none and writes none; a field the record lacks is still refused.
+        assert_eq!(serde_json::to_string(&Decision::new("2026-01-01", "Done.")).unwrap(), r#"{"date":"2026-01-01","text":"Done."}"#);
+        assert!(serde_json::from_str::<Requirement>(&record(r#"[{"date":"2026-01-01","text":"a","why":1}]"#)).is_err());
+        // A tool takes an id as a number or as it is said.
+        let ids: Vec<DecisionId> = serde_json::from_str(r#"[3, "d4"]"#).unwrap();
+        assert_eq!(DecisionId::all(&ids), vec![3, 4]);
+        for bad in [r#"0"#, r#""d0""#, r#""4""#, r#""dx""#, r#""d""#, r#""dd3""#, r#""d03""#] {
+            assert!(serde_json::from_str::<DecisionId>(bad).is_err(), "{bad}");
+        }
     }
 }

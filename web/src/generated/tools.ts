@@ -38,13 +38,9 @@ export type Criterion = { module: string, id: string, statement: string, };
 
 export type CriterionCoverage = { ref: Ref, statement: string, requirements: Array<Summary>, tests: Array<Summary>, };
 
-export type Decision = { date: string, text: string, 
-/**
- * The positions, 1 for the oldest, of earlier decisions of the same
- * record this one replaces. A position never changes, since decisions
- * are only appended, so it is the decision's id.
- */
-supersedes?: Array<number>, adopted?: boolean, withdrawn?: boolean, };
+export type Decision = { id?: number | null, date: string, text: string, supersedes?: Array<number>, adopted?: boolean, withdrawn?: boolean, };
+
+export type DecisionNode = { requirement: string, id: number, date: string, text: string, supersedes?: Array<number>, adopted?: boolean, };
 
 export type Decl = { path: string, kind: string, line: number, 
 /**
@@ -126,7 +122,7 @@ export type ModuleSummary = { ref: Ref, purpose: string | null, };
 
 export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, };
 
-export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient);
+export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient | DecisionNode);
 
 export type NodesAnswer = { nodes: Array<Summary>, };
 
@@ -152,7 +148,7 @@ export type RecipeState = { ref: Ref, title: string, due: boolean, via: Ref, };
 
 export type Ref = string;
 
-export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks" | "uses" | "represents";
+export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks" | "uses" | "represents" | "supersedes";
 
 export type Renamed = { node: NodeView, still_named_in: Array<StillNamed>, };
 

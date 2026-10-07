@@ -195,7 +195,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
             let config = state.store.config.clone();
             let build = state.build.clone();
             let g = state.graph_for(view)?;
-            let nodes = Kind::ALL.iter().map(|k| (k.to_string(), g.nodes.keys().filter(|r| r.kind == *k).count())).collect();
+            // A decision is of the kind req but is no requirement: counted with none.
+            let nodes = Kind::ALL.iter().map(|k| (k.to_string(), g.nodes.keys().filter(|r| r.kind == *k && r.as_decision().is_none()).count())).collect();
             let status = StatusAnswer {
                 repository: config.repository,
                 roots: config.roots,
@@ -243,7 +244,11 @@ fn drafts_of(store: &crate::store::Store, r: &Reference) -> (Option<ProposalView
 fn changes(store: &crate::store::Store, p: &Proposal, r: &Reference) -> bool {
     match r.kind {
         Kind::Page => p.pages.get(&r.id).is_some_and(|q| store.pages.get(&r.id) != Some(&q.record)) || (p.deleted.contains_key(&r.to_string()) && store.pages.contains_key(&r.id)),
-        Kind::Req => p.requirements.get(&r.id).is_some_and(|q| store.requirements.get(&r.id) != Some(&q.record)) || (p.deleted.contains_key(&r.to_string()) && store.requirements.contains_key(&r.id)),
+        Kind::Req => {
+            p.requirements.get(&r.id).is_some_and(|q| store.requirements.get(&r.id).map(Requirement::without_decisions).as_ref() != Some(&q.record.without_decisions()))
+                || p.decisions.get(&r.id).is_some_and(|d| !d.is_empty())
+                || (p.deleted.contains_key(&r.to_string()) && store.requirements.contains_key(&r.id))
+        }
         _ => false,
     }
 }
@@ -267,21 +272,23 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
             Draft { r#ref: Reference::page(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
         })
         .collect();
-    let requirements = p
-        .requirements
-        .values()
-        .filter(|q| changes(store, p, &Reference::req(&q.record.slug)))
+    // A requirement it holds a record of, or adds decisions to, read as it would land.
+    let slugs: std::collections::BTreeSet<&String> = p.requirements.keys().chain(p.decisions.keys()).collect();
+    let requirements = slugs
+        .into_iter()
+        .filter(|slug| changes(store, p, &Reference::req(slug)))
+        .filter_map(|slug| crate::store::with_decisions(store.requirements.get(slug), p, slug, crate::store::Landing::Waiting))
         .map(|q| {
-            let truth = store.requirements.get(&q.record.slug);
+            let truth = store.requirements.get(&q.slug);
             let differs = truth
                 .map(|t| {
                     [
-                        ("title", t.title != q.record.title),
-                        ("statement", t.statement != q.record.statement),
-                        ("scenarios", t.scenarios != q.record.scenarios),
-                        ("covered_by", t.covered_by != q.record.covered_by),
-                        ("decisions", t.decisions != q.record.decisions),
-                        ("retired", t.retired != q.record.retired),
+                        ("title", t.title != q.title),
+                        ("statement", t.statement != q.statement),
+                        ("scenarios", t.scenarios != q.scenarios),
+                        ("covered_by", t.covered_by != q.covered_by),
+                        ("decisions", t.decisions != q.decisions),
+                        ("retired", t.retired != q.retired),
                     ]
                     .into_iter()
                     .filter(|(_, d)| *d)
@@ -289,7 +296,7 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
                     .collect()
                 })
                 .unwrap_or_default();
-            Draft { r#ref: Reference::req(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
+            Draft { r#ref: Reference::req(&q.slug), title: q.title.clone(), new: truth.is_none(), differs }
         })
         .collect();
     let deleted = p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok()).filter(|r| changes(store, p, r)).collect();

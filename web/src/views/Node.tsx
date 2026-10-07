@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. The pages of a module, criterion, declaration and test link to their line in the file's annotated source. A file's page is its annotated source from web/src/views/Source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
+ * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, decision, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe, a decision's requirement, id, date, text and the decisions it supersedes; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. The pages of a module, criterion, declaration and test link to their line in the file's annotated source. A file's page is its annotated source from web/src/views/Source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its id, d<n>, or, read through a ticket, as waiting for its ticket to land, and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming by id the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
  * ```
  */
 
@@ -12,7 +12,7 @@ import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
 import { NodeGraph } from "./NodeGraph";
 import { FileSource } from "./Source";
-import { decisionsInForce, isDescribed } from "../decisions";
+import { decisionsInForce, isDescribed, saidId } from "../decisions";
 import {
   Badge,
   ErrorBox,
@@ -44,6 +44,7 @@ import {
   type TestNode,
   type FileNode,
   type IngredientNode,
+  type DecisionNode,
   type ModuleNode,
   type RecipeNode,
   type Ref,
@@ -67,6 +68,8 @@ export function NodeView() {
   const kind = kindOf(ref);
   // An ingredient is of the kind recipe, its id the recipe's, #, its own.
   const ingredient = kind === "recipe" && "says" in node;
+  // A decision is of the kind req, its id the requirement's slug, #, d and its own.
+  const decision = kind === "req" && "requirement" in node;
   const gone = goneOf(node);
   return (
     <div className="max-w-[150ch] mx-auto">
@@ -80,14 +83,15 @@ export function NodeView() {
           <DraftNotice ref={ref} ticket={ticket} drafts={data.drafts} />
         </div>
         {/* What the node is comes first, then its graph, then the rest of what it holds. */}
-        {kind === "req" && <Req n={node as ReqNode} part="lead" />}
+        {kind === "req" && !decision && <Req n={node as ReqNode} part="lead" />}
+        {decision && <DecisionView n={node as DecisionNode} />}
         {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} part="lead" />}
         {kind === "module" && <Module n={node as ModuleNode} part="lead" />}
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
         {kind === "recipe" && !ingredient && <Recipe n={node as RecipeNode} part="lead" />}
         {ingredient && <Ingredient n={node as IngredientNode} />}
         {kind !== "file" && <NodeGraph key={`${ref}|${ticket ?? ""}`} node={ref} title={titleOf(node)} incoming={node.in} gone={gone} ticket={ticket} />}
-        {kind === "req" && <Req n={node as ReqNode} part="rest" />}
+        {kind === "req" && !decision && <Req n={node as ReqNode} part="rest" />}
         {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} part="rest" />}
         {kind === "module" && <Module n={node as ModuleNode} part="rest" />}
         {kind === "recipe" && !ingredient && <Recipe n={node as RecipeNode} part="rest" />}
@@ -128,6 +132,7 @@ function asProposed(ref: Ref, ticket: Ref): string {
 
 function titleOf(n: AnyNode): string {
   if ("title" in n) return n.title;
+  if ("requirement" in n) return `Decision d${n.id} of ${n.requirement}`;
   if ("purpose" in n) return n.purpose ?? n.id;
   if ("statement" in n) return n.statement;
   if ("says" in n) return n.says;
@@ -151,16 +156,16 @@ function Decisions({ n }: { n: ReqNode }) {
     <>
       <h2>Decisions</h2>
       {n.decisions.length === 0 && <p className={empty}>None recorded. `record_decision` adds one.</p>}
-      {inForce.map(({ n: at, d }) => (
-        <Decision key={at} label={`#${at}${d.adopted ? " · adoption" : ""}`} date={d.date} text={d.text} />
+      {inForce.map(({ id, d }, i) => (
+        <Decision key={id ?? `waiting-${i}`} label={`${saidId(id)}${d.adopted ? " · adoption" : ""}`} date={d.date} text={d.text} />
       ))}
       {superseded.length > 0 && (
         <details className="mt-2">
           <summary className="text-fg-dim text-[13px] cursor-pointer">
             {superseded.length} superseded
           </summary>
-          {superseded.map(({ n: at, d, by }) => (
-            <Decision key={at} label={`#${at}${d.adopted ? " · adoption" : ""} · superseded by #${by}`} date={d.date} text={d.text} />
+          {superseded.map(({ id, d, by }) => (
+            <Decision key={id} label={`${saidId(id)}${d.adopted ? " · adoption" : ""} · superseded by ${by === null ? "a decision waiting for its ticket to land" : saidId(by)}`} date={d.date} text={d.text} />
           ))}
         </details>
       )}
@@ -366,6 +371,31 @@ function Recipe({ n, part }: { n: RecipeNode; part: Part }) {
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+/** A decision on its own page: whose it is, what it says, and what it supersedes; the graph shows the rest. */
+function DecisionView({ n }: { n: DecisionNode }) {
+  return (
+    <>
+      <p className="text-fg-dim">
+        {/* The title names it, decision d3 of its requirement; here, the requirement to follow. */}
+        Of <RefLink ref={`req:${n.requirement}`} />
+        {n.adopted ? ", recorded as an adoption" : ""}
+      </p>
+      <Decision date={n.date} text={n.text} />
+      {(n.supersedes ?? []).length > 0 && (
+        <p className="text-fg-dim">
+          Supersedes{" "}
+          {(n.supersedes ?? []).map((s, i) => (
+            <span key={s}>
+              {i > 0 && ", "}
+              <RefLink ref={`req:${n.requirement}#d${s}`} />
+            </span>
+          ))}
+        </p>
+      )}
     </>
   );
 }

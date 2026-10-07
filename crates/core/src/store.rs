@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"settles-proposals","statement":"settle_proposals reads a proposal written before decisions left the record as this build keeps it: each proposed requirement keeps no decisions, and those of its decisions the truth does not hold, by date and text, become decisions the proposal adds, with no id and ahead of any it already adds, each superseding only what it named among the decisions the truth holds; settling a settled store changes nothing."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -39,8 +39,10 @@ impl Store {
             for (slug, q) in &p.pages {
                 s.pages.insert(slug.clone(), q.record.clone());
             }
-            for (slug, q) in &p.requirements {
-                s.requirements.insert(slug.clone(), q.record.clone());
+            for slug in p.requirements.keys().chain(p.decisions.keys()) {
+                if let Some(q) = with_decisions(self.requirements.get(slug), p, slug, Landing::Waiting) {
+                    s.requirements.insert(slug.clone(), q);
+                }
             }
             for key in p.deleted.keys() {
                 if let Ok(r) = key.parse::<Reference>() {
@@ -264,26 +266,75 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
         check_required(&mut e, &format!("scenarios[{i}].then"), &s.then);
     }
     check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion, Kind::Recipe]));
+    // Ids rise in the order the decisions landed; one not yet landed, read through a proposal, comes after them all.
+    let mut last = 0u32;
+    let mut waiting = false;
     for (i, d) in r.decisions.iter().enumerate() {
         if d.withdrawn {
             e.push(FieldError::new(&format!("decisions[{i}].withdrawn"), "only a closed change's decision is withdrawn"));
         }
         check_decision(&mut e, &format!("decisions[{i}]"), d);
-        // A decision supersedes only earlier ones, by position from 1.
-        if d.supersedes.iter().any(|&p| p == 0 || p as usize > i) {
-            e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "may name only earlier decisions, by position from 1"));
+        match d.id {
+            Some(id) if id <= last || waiting => e.push(FieldError::new(&format!("decisions[{i}].id"), "ids rise in the order decisions landed, from 1, each given once")),
+            Some(id) => last = id,
+            None => waiting = true,
+        }
+        // A decision supersedes only earlier ones, by id: below its own, or, not yet landed, below the next to be given.
+        let own = d.id.unwrap_or(last + 1);
+        if d.supersedes.iter().any(|&p| p == 0 || p >= own) {
+            e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "may name only earlier decisions, by id"));
         }
         if d.supersedes.iter().enumerate().any(|(j, p)| d.supersedes[..j].contains(p)) {
             e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "names each earlier decision once"));
         }
     }
-    for w in r.decisions.windows(2) {
-        if w[0].date > w[1].date {
-            e.push(FieldError::new("decisions", "must be ordered oldest first"));
-            break;
+    e
+}
+
+/// Whether a requirement read with its decisions is taken as it waits in a proposal, the
+/// decisions it adds with no id, or as it lands, each taking the next id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Landing {
+    Waiting,
+    Landed,
+}
+
+/// Requirement `slug` as proposal `p` leaves it over `truth`, the truth's record now: the
+/// record it proposes, or the truth's, with the truth's decisions, the supersessions it links
+/// added to them, and after them the decisions it adds (req:close-applies-proposal). Landed, each
+/// added decision takes the next id, and a retirement's, the last, supersedes every decision
+/// before it. `None` when there is no record to hold them.
+pub fn with_decisions(truth: Option<&Requirement>, p: &Proposal, slug: &str, landing: Landing) -> Option<Requirement> {
+    let mut q = match (p.requirements.get(slug), truth) {
+        (Some(proposed), _) => proposed.record.clone(),
+        (None, Some(t)) => t.clone(),
+        (None, None) => return None,
+    };
+    q.decisions = truth.map(|t| t.decisions.clone()).unwrap_or_default();
+    let Some(adds) = p.decisions.get(slug) else { return Some(q) };
+    for (id, ids) in &adds.linked {
+        if let Some(d) = q.decisions.iter_mut().find(|d| d.id == Some(*id)) {
+            for x in ids {
+                if !d.supersedes.contains(x) {
+                    d.supersedes.push(*x);
+                }
+            }
+            d.supersedes.sort_unstable();
         }
     }
-    e
+    for d in &adds.added {
+        let id = (landing == Landing::Landed).then(|| q.next_id());
+        q.decisions.push(Decision { id, ..d.clone() });
+    }
+    // A retirement supersedes every decision before it: as it lands, and read through the ticket, every one landed by then.
+    let retiring = q.retired && !truth.is_some_and(|t| t.retired);
+    if retiring && !adds.added.is_empty() {
+        let earlier: Vec<u32> = q.decisions[..q.decisions.len() - 1].iter().filter_map(|d| d.id).collect();
+        if let Some(last) = q.decisions.last_mut() {
+            last.supersedes = earlier;
+        }
+    }
+    Some(q)
 }
 
 pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
@@ -304,6 +355,10 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
                 check_required(&mut e, "body", &t.body);
             } else if !t.body.is_empty() {
                 e.push(FieldError::new("body", "must be empty once the ticket is closed, since closing discards it"));
+            }
+            // A ticket's decision is not a requirement's: it takes no id.
+            if d.id.is_some() {
+                e.push(FieldError::new("decision.id", "a ticket's decision has no id"));
             }
             // A ticket has one decision, so there is nothing earlier for it to supersede.
             if !d.supersedes.is_empty() {
@@ -378,6 +433,32 @@ pub fn validate_start(s: &Start) -> Vec<FieldError> {
 /// held under its own slug, each base a non-empty fingerprint, and each
 /// deletion a page or requirement reference.
 pub fn validate_proposal(p: &Proposal) -> Vec<FieldError> {
+    let mut e = validate_proposal_records(p);
+    for (key, adds) in &p.decisions {
+        check_slug(&mut e, &format!("decisions[{key}]"), key);
+        for (i, d) in adds.added.iter().enumerate() {
+            let field = format!("decisions[{key}].added[{i}]");
+            check_decision(&mut e, &field, d);
+            if d.id.is_some() {
+                e.push(FieldError::new(&format!("{field}.id"), "a decision not yet landed has no id"));
+            }
+            if d.withdrawn {
+                e.push(FieldError::new(&format!("{field}.withdrawn"), "only a closed change's decision is withdrawn"));
+            }
+            if d.supersedes.contains(&0) {
+                e.push(FieldError::new(&format!("{field}.supersedes"), "names decisions by id, from 1"));
+            }
+        }
+        for (id, ids) in &adds.linked {
+            if *id == 0 || ids.iter().any(|x| x == id || *x == 0 || x > id) {
+                e.push(FieldError::new(&format!("decisions[{key}].linked"), "links a decision only to earlier ones, by id from 1"));
+            }
+        }
+    }
+    e
+}
+
+fn validate_proposal_records(p: &Proposal) -> Vec<FieldError> {
     let mut e = Vec::new();
     check_slug(&mut e, "ticket", &p.ticket);
     for (key, q) in &p.pages {
@@ -491,6 +572,28 @@ impl Store {
         Store { config, ..Default::default() }
     }
 
+    /// Read every proposal written before decisions left the record (req:ticket-proposal): a
+    /// proposed requirement holding decisions keeps none, and those the truth does not hold, by
+    /// date and text, become decisions the proposal adds, ahead of any it already adds. Whatever
+    /// the truth holds the proposal never had to carry, so nothing of it is lost.
+    pub fn settle_proposals(&mut self) {
+        for p in self.proposals.values_mut() {
+            for (slug, q) in p.requirements.iter_mut().filter(|(_, q)| !q.record.decisions.is_empty()) {
+                let truth = self.requirements.get(slug);
+                let held = |d: &Decision| truth.is_some_and(|t| t.decisions.iter().any(|x| x.date == d.date && x.text == d.text));
+                let record = std::mem::take(&mut q.record.decisions);
+                // The positions of its own decisions: one superseding another of its own named a decision with no id yet, so names nothing.
+                let own_positions: Vec<u32> = (1u32..).zip(&record).filter(|(_, d)| !held(d)).map(|(p, _)| p).collect();
+                let own: Vec<Decision> =
+                    record.into_iter().filter(|d| !held(d)).map(|d| Decision { id: None, supersedes: d.supersedes.iter().copied().filter(|p| !own_positions.contains(p)).collect(), ..d }).collect();
+                if !own.is_empty() {
+                    let adds = p.decisions.entry(slug.clone()).or_default();
+                    adds.added.splice(0..0, own);
+                }
+            }
+        }
+    }
+
     /// Whether a stored node exists. Derived kinds always return `false`.
     pub fn contains(&self, r: &Reference) -> bool {
         match r.kind {
@@ -554,16 +657,26 @@ mod tests {
             statement: "It SHALL hold.".into(),
             scenarios: vec![],
             covered_by,
-            decisions: dates.iter().map(|d| Decision::new(d.to_string(), "why")).collect(),
+            decisions: (1u32..).zip(dates).map(|(id, d)| Decision { id: Some(id), ..Decision::new(d.to_string(), "why") }).collect(),
             retired: false,
         };
         assert!(validate_requirement(&req(vec![Reference::criterion("m", "c")], &["2026-01-01", "2026-02-01"])).is_empty());
         let e = validate_requirement(&req(vec![Reference::module("m")], &[]));
         assert_eq!(e[0].field, "covered_by", "covered_by names only criteria, recipes and ingredients");
         assert!(validate_requirement(&req(vec![Reference::recipe("button"), Reference::ingredient("button", "label")], &[])).is_empty(), "a recipe or an ingredient may carry it");
-        let e = validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"]));
-        assert_eq!(e[0].field, "decisions", "decisions are oldest first");
-        // A decision supersedes only earlier ones, by position from 1.
+        // The order is the order they landed, whatever their dates; ids rise with it, each given once.
+        assert!(validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"])).is_empty(), "a decision dated earlier may land later");
+        let mut r = req(vec![], &["2026-01-01", "2026-02-01", "2026-03-01"]);
+        r.decisions[2].id = Some(2);
+        assert_eq!(validate_requirement(&r)[0].field, "decisions[2].id");
+        r.decisions[2].id = Some(9);
+        assert!(validate_requirement(&r).is_empty(), "an id need not be its position");
+        // One not yet landed, read through a proposal, comes after every landed one.
+        r.decisions[1].id = None;
+        assert_eq!(validate_requirement(&r)[0].field, "decisions[2].id");
+        r.decisions.swap(1, 2);
+        assert!(validate_requirement(&r).is_empty());
+        // A decision supersedes only earlier ones, by id: below its own, or below the next to be given while it waits.
         let mut r = req(vec![], &["2026-01-01", "2026-02-01"]);
         r.decisions[1].supersedes = vec![1];
         assert!(validate_requirement(&r).is_empty());
@@ -571,6 +684,10 @@ mod tests {
             r.decisions[1].supersedes = bad.clone();
             assert_eq!(validate_requirement(&r).first().map(|e| e.field.as_str()), Some("decisions[1].supersedes"), "{bad:?}");
         }
+        r.decisions[1] = Decision { supersedes: vec![1], ..Decision::new("2026-02-01", "waiting") };
+        assert!(validate_requirement(&r).is_empty());
+        r.decisions[1].supersedes = vec![2];
+        assert_eq!(validate_requirement(&r)[0].field, "decisions[1].supersedes", "one waiting supersedes only landed decisions");
         // Empty and false are left out of the record.
         let json = serde_json::to_value(req(vec![], &["2026-01-01"])).expect("serialisable");
         assert!(json.get("retired").is_none() && json["decisions"][0].get("supersedes").is_none(), "{json}");
@@ -773,6 +890,8 @@ mod tests {
         // A ticket's one decision has nothing earlier to supersede.
         t.decision = Some(Decision { supersedes: vec![1], ..Decision::new("2026-01-01", "done") });
         assert_eq!(validate_ticket(&t)[0].field, "decision.supersedes");
+        t.decision = Some(Decision { id: Some(1), ..Decision::new("2026-01-01", "done") });
+        assert_eq!(validate_ticket(&t)[0].field, "decision.id", "a ticket's decision has no id");
         t.decision = Some(Decision::new("2026-01-01", "done"));
         // Closing discards the body, so a closed ticket holding one was not closed by the tools.
         t.body = " ".into();
@@ -833,7 +952,11 @@ mod tests {
             statement: "S".into(),
             scenarios: vec![],
             covered_by: vec![],
-            decisions: vec![Decision::new("2026-09-01", "a"), Decision::new("2026-09-02", "b"), Decision { supersedes: vec![1, 2], ..Decision::new("2026-09-03", "c") }],
+            decisions: vec![
+                Decision { id: Some(1), ..Decision::new("2026-09-01", "a") },
+                Decision { id: Some(2), ..Decision::new("2026-09-02", "b") },
+                Decision { id: Some(3), supersedes: vec![1, 2], ..Decision::new("2026-09-03", "c") },
+            ],
             retired: false,
         };
         assert!(validate_requirement(&req).is_empty());
