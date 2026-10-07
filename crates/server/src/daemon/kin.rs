@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve one store of its own for its several checkouts side by side, each daemon a view of it with that checkout's code and current ticket, their writes taken one at a time and each handed to the others.","criteria":[{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."}]}
+//! {"purpose":"Serve one store of its own for its several checkouts side by side, each daemon a view of it with that checkout's code and current ticket, their writes taken one at a time and each handed to the others.","criteria":[{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"checkout-tickets","statement":"Before answering status, a daemon tells its state the current ticket of every other checkout of its grimoire, those sharing its store and those its library told it of with set_fellows, a team's checkouts each holding a copy of their own, as that checkout's daemon holds it then, never waiting on a daemon busy with a write or a sync, whose ticket stays as last read, so status names each checkout's as it is and answers at once."}]}
 //! ```
 
 use std::path::Path;
@@ -68,6 +68,33 @@ impl Daemon {
         self.kin.members.lock().expect("kin members lock").iter().filter_map(Weak::upgrade).filter(|m| !std::ptr::eq(Arc::as_ptr(m), self)).collect()
     }
 
+    /// Tell this daemon's state the current ticket of every other checkout of its grimoire, its kin and
+    /// the fellows its library told it of, as each holds it now, for `status`. Each state is tried alone
+    /// and never waited for: a fellow mid-sync holds its state across a fetch, and status answers always,
+    /// so one that is busy keeps the ticket it was last read with.
+    pub(super) fn tell_checkout_tickets(&self) {
+        let mut others = self.kin_but_me();
+        let fellows: Vec<Arc<Daemon>> = self.fellows.lock().expect("fellows lock").iter().filter_map(Weak::upgrade).collect();
+        for f in fellows {
+            if !std::ptr::eq(Arc::as_ptr(&f), self) && !others.iter().any(|o| Arc::ptr_eq(o, &f)) {
+                others.push(f);
+            }
+        }
+        let read = others
+            .iter()
+            .filter_map(|m| {
+                let ticket = m.state.try_lock().ok()?.current_ticket();
+                Some((store_io::repository_string(&m.repo).unwrap_or_else(|_| m.repo.display().to_string()), ticket))
+            })
+            .collect();
+        self.state.lock().expect("state lock").tell_checkout_tickets(read);
+    }
+
+    /// Tell this daemon of the daemons its library serves for the other checkouts of its grimoire.
+    pub fn set_fellows(&self, fellows: Vec<Weak<Daemon>>) {
+        *self.fellows.lock().expect("fellows lock") = fellows;
+    }
+
     /// Hand the store as it now is to every other checkout's daemon of this store: each keeps
     /// its own repository and current ticket, clearing the latter when its ticket is no longer
     /// worked. Called with the kin's write lock held, and this daemon's state not.
@@ -124,7 +151,7 @@ impl Daemon {
 mod tests {
     use super::super::tests::{Harness, CONTRACTED};
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     /// # Test contract
     ///
@@ -182,5 +209,56 @@ mod tests {
         main.call("close_ticket", json!({ "ref": ticket, "decision": { "text": "Done." } })).unwrap();
         assert_eq!(other.state.lock().unwrap().store().current, None);
         assert_eq!(store_io::load_for(&h.store, &wt_at).unwrap().0.current, None);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "status-names-each-checkouts-ticket", "checks": ["crates/server/src/daemon/kin#checkout-tickets"]}
+    /// ```
+    #[test]
+    fn status_names_each_checkouts_ticket() {
+        let h = Harness::new();
+        let wt = h.repo.parent().unwrap().join("wt");
+        std::fs::create_dir_all(wt.join("src")).unwrap();
+        for f in ["Cargo.toml", "src/lib.rs", "src/a.rs", "src/b.rs"] {
+            std::fs::copy(h.repo.join(f), wt.join(f)).unwrap();
+        }
+        std::fs::write(
+            wt.join(store_io::PROJECT_FILE),
+            format!(
+                "store = {}
+",
+                toml::Value::String(h.store.to_string_lossy().to_string())
+            ),
+        )
+        .unwrap();
+        let main = Arc::new(h.open());
+        assert!(main.register_checkout(&wt).unwrap());
+        let (main_at, wt_at) = (store_io::repository_string(&h.repo).unwrap(), store_io::repository_string(&wt).unwrap());
+        let (other, _) = main.sibling(&wt_at).unwrap();
+        let entry = |repository: &str| grimoire_core::answer::LibraryEntry { name: "shop".into(), repository: repository.into(), server: None, current: None };
+        main.set_library("shop", vec![entry(&main_at), entry(&wt_at)]);
+        let tickets = |d: &Daemon| d.call("status", json!({})).unwrap()["library"].as_array().unwrap().iter().map(|e| e["current"]["id"].clone()).collect::<Vec<_>>();
+        // The main checkout's `work` is current, the worktree's none yet.
+        assert_eq!(tickets(&main), vec![json!("work"), Value::Null]);
+        // The worktree starts one: the main checkout's status names it at once, with no listing of the library since.
+        let filed = other.call("file_ticket", json!({ "title": "In the worktree", "kind": "change", "priority": "later", "body": "b" })).unwrap();
+        let ticket = filed["node"]["ref"].as_str().unwrap().to_string();
+        other.call("start_ticket", json!({ "ref": ticket })).unwrap();
+        let listed = main.call("status", json!({})).unwrap()["library"][1]["current"].clone();
+        assert_eq!(listed, json!({ "id": ticket.trim_start_matches("ticket:"), "title": "In the worktree" }));
+        // A checkout that is no kin, as a team's each keep a copy of their own: named once the library tells of it.
+        let apart = Harness::new();
+        let fellow = Arc::new(apart.open());
+        let fellow_at = store_io::repository_string(&apart.repo).unwrap();
+        main.set_library("shop", vec![entry(&main_at), entry(&wt_at), entry(&fellow_at)]);
+        assert_eq!(main.call("status", json!({})).unwrap()["library"][2]["current"], Value::Null, "not told of it, nothing is known");
+        main.set_fellows(vec![Arc::downgrade(&fellow)]);
+        assert_eq!(main.call("status", json!({})).unwrap()["library"][2]["current"]["id"], "work");
+        // A fellow busy with its state, as one mid-sync is, is not waited for: its ticket stays as last read.
+        let busy = fellow.state.lock().unwrap();
+        assert_eq!(main.call("status", json!({})).unwrap()["library"][2]["current"]["id"], "work");
+        drop(busy);
     }
 }

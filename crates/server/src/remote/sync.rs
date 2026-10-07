@@ -222,6 +222,7 @@ impl Daemon {
             state: Mutex::new(loaded.state),
             events,
             kin: Arc::default(),
+            fellows: Mutex::default(),
             main: true,
             base: Mutex::new((None, None)),
         };

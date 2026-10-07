@@ -38,6 +38,8 @@ export type Criterion = { module: string, id: string, statement: string, };
 
 export type CriterionCoverage = { ref: Ref, statement: string, requirements: Array<Summary>, tests: Array<Summary>, };
 
+export type CurrentTicket = { id: string, title: string, };
+
 export type Decision = { id?: number | null, date: string, text: string, supersedes?: Array<number>, adopted?: boolean, withdrawn?: boolean, };
 
 export type DecisionNode = { requirement: string, id: number, date: string, text: string, supersedes?: Array<number>, adopted?: boolean, };
@@ -95,7 +97,7 @@ export type Landed = { landed: boolean, node: NodeView | null, findings: Array<F
 
 export type LanguageTier = { language: string, tier: number | null, };
 
-export type LibraryEntry = { name: string, repository: string, server: string | null, };
+export type LibraryEntry = { name: string, repository: string, server: string | null, current: CurrentTicket | null, };
 
 export type Linked = { ref: Ref, title: string | null, };
 
@@ -187,7 +189,7 @@ export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array
 
 export type Status = "open" | "active" | "landing" | "closed";
 
-export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, tiers: Array<LanguageTier>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, grimoire: string | null, library: Array<LibraryEntry>, };
+export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, tiers: Array<LanguageTier>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, current: CurrentTicket | null, grimoire: string | null, library: Array<LibraryEntry>, };
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 

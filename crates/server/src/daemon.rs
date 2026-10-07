@@ -9,7 +9,7 @@ mod loading;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use grimoire_core::{lint, tools};
 use grimoire_core::{Extraction, FileExtraction, State, ToolError};
@@ -49,6 +49,9 @@ pub struct Daemon {
     pub(crate) events: broadcast::Sender<Event>,
     /// The daemons serving the same store for its other checkouts, and the one lock their writes take.
     pub(crate) kin: Arc<Kin>,
+    /// The daemons a library serves for the other checkouts of the same grimoire, kin or not:
+    /// a team's checkouts each keep a copy of their own, so only the library knows them all.
+    pub(crate) fellows: Mutex<Vec<Weak<Daemon>>>,
     /// Serving the store's main checkout, the only one that prunes its baseline.
     pub main: bool,
     /// The commit and languages whose code the state holds as this checkout's base, and when that was last
@@ -110,6 +113,7 @@ impl Daemon {
             state: Mutex::new(state),
             events,
             kin,
+            fellows: Mutex::default(),
             main,
             base: Mutex::new((None, None)),
         }
@@ -146,6 +150,7 @@ impl Daemon {
             state: Mutex::new(state),
             events,
             kin: Arc::default(),
+            fellows: Mutex::default(),
             main: true,
             base: Mutex::new((None, None)),
         })
@@ -304,6 +309,10 @@ impl Daemon {
                 Some(token) => self.call_through(&server.as_token(token), name, input),
                 None => self.call_through(server, name, input),
             };
+        }
+        // status names each checkout's current ticket as it is now, not as the library last listed them.
+        if name == "status" {
+            self.tell_checkout_tickets();
         }
         // A lint tells this checkout's own work from what landed since its base: the base read first,
         // outside the state's lock, and again only when it moved (req:check-own-work).

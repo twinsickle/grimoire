@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, this checkout's current ticket's id and title, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -212,13 +212,33 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 baseline: state.store.baseline.as_ref().map(baseline_summary),
                 shared: state.without_code(),
                 server: state.server().cloned(),
+                current: state.current_ticket(),
                 grimoire: state.library.as_ref().map(|(name, _)| name.clone()),
-                library: state.library.as_ref().map(|(_, all)| all.clone()).unwrap_or_default(),
+                library: library_with_tickets(state),
             };
             answer(name, status, None)
         }
         other => Err(ToolError::invalid(format!("unknown tool `{other}`"), vec![])),
     }
+}
+
+/// The library as `status` lists it: each checkout of this grimoire with its current ticket,
+/// this checkout's as it is now and another's as the state was last told; another grimoire's with none.
+fn library_with_tickets(state: &State) -> Vec<crate::answer::LibraryEntry> {
+    let Some((name, all)) = state.library.as_ref() else { return Vec::new() };
+    let here = &state.store.config.repository;
+    all.iter()
+        .map(|e| {
+            let current = if &e.name != name {
+                None
+            } else if &e.repository == here {
+                state.current_ticket()
+            } else {
+                state.checkout_tickets.get(&e.repository).cloned()
+            };
+            crate::answer::LibraryEntry { current, ..e.clone() }
+        })
+        .collect()
 }
 
 /// What `get` adds about drafts: a ticket's own proposal, or for a page or
@@ -364,15 +384,39 @@ mod tests {
     #[test]
     fn status_names_the_grimoire_and_its_library() {
         let mut s = state();
-        // Served alone: no name, no library.
+        // Served alone: no name, no library, and no ticket current.
         let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
-        assert_eq!((out.output["grimoire"].clone(), out.output["library"].clone()), (json!(null), json!([])));
-        // Served in a library, which is listed in name order.
-        let entry = |name: &str| crate::answer::LibraryEntry { name: name.into(), repository: format!("C:/{name}"), server: None };
-        s.set_library("shop".into(), vec![entry("shop"), crate::answer::LibraryEntry { server: Some("https://team.example".into()), ..entry("ledger") }]);
+        assert_eq!((out.output["grimoire"].clone(), out.output["library"].clone(), out.output["current"].clone()), (json!(null), json!([]), json!(null)));
+        // Served in a library, which is listed in name order, once for each checkout.
+        let entry = |name: &str, repository: &str| crate::answer::LibraryEntry { name: name.into(), repository: repository.into(), server: None, current: None };
+        s.set_library(
+            "shop".into(),
+            vec![entry("shop", "C:/repo"), entry("shop", "C:/wt"), crate::answer::LibraryEntry { server: Some("https://team.example".into()), ..entry("ledger", "C:/ledger") }],
+        );
         let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
         assert_eq!(out.output["grimoire"], "shop");
-        assert_eq!(out.output["library"], json!([{ "name": "ledger", "repository": "C:/ledger", "server": "https://team.example" }, { "name": "shop", "repository": "C:/shop", "server": null }]));
+        assert_eq!(
+            out.output["library"],
+            json!([
+                { "name": "ledger", "repository": "C:/ledger", "server": "https://team.example", "current": null },
+                { "name": "shop", "repository": "C:/repo", "server": null, "current": null },
+                { "name": "shop", "repository": "C:/wt", "server": null, "current": null }
+            ])
+        );
+        // Each checkout of this grimoire with its current ticket: this one's as it is now, another's as last told; another grimoire's none.
+        s.store.current = Some("later-1".into());
+        let told = crate::answer::CurrentTicket { id: "0007".into(), title: "Seven".into() };
+        s.tell_checkout_tickets(vec![("C:/wt".to_string(), Some(told.clone())), ("C:/ledger".to_string(), Some(told))]);
+        let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
+        assert_eq!(out.output["current"], json!({ "id": "later-1", "title": "LATER-1" }));
+        let currents: Vec<serde_json::Value> = out.output["library"].as_array().unwrap().iter().map(|e| e["current"].clone()).collect();
+        assert_eq!(currents, vec![json!(null), json!({ "id": "later-1", "title": "LATER-1" }), json!({ "id": "0007", "title": "Seven" })]);
+        // Told again of one checkout with none, and of nothing for the other, which keeps what was last told.
+        s.tell_checkout_tickets(vec![("C:/wt".to_string(), None)]);
+        assert_eq!(call(&mut s, "status", json!({}), "2026-10-05").unwrap().output["library"][2]["current"], json!(null));
+        s.tell_checkout_tickets(vec![("C:/wt".to_string(), Some(crate::answer::CurrentTicket { id: "0008".into(), title: "Eight".into() }))]);
+        s.tell_checkout_tickets(vec![]);
+        assert_eq!(call(&mut s, "status", json!({}), "2026-10-05").unwrap().output["library"][2]["current"]["id"], "0008");
     }
 
     /// # Test contract

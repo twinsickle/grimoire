@@ -3,8 +3,8 @@ import type { Page } from "@playwright/test";
 import type { Route } from "../behaviour/routes";
 
 /**
- * Open `route` and wait until it is drawn: the header's status line, which
- * proves the daemon answered, the route's content, and then no tool call in
+ * Open `route` and wait until it is drawn: the header's pill naming the
+ * grimoire, which proves the daemon answered, the route's content, and then no tool call in
  * flight for 300 ms, since a view's sections query separately and a heading
  * arrives before them. The event stream holds a connection open forever, so
  * the network never goes idle; tool calls are what the view waits on.
@@ -26,8 +26,12 @@ export async function open(page: Page, route: Route): Promise<void> {
   page.on("requestfinished", done);
   page.on("requestfailed", done);
   await page.goto(route.path);
-  await page.locator("header").getByText(/\d+ pages ·/).waitFor();
+  await page.locator("header [aria-label^='Where you are'] .font-bold").waitFor();
   await page.locator(route.content).first().waitFor();
+  if (route.press) {
+    await page.locator(route.press).click();
+    await page.getByRole("dialog").waitFor();
+  }
   await expectQuiet(() => inFlight === 0 && Date.now() - last >= 300);
   // Fonts and layout settle.
   await page.waitForTimeout(100);

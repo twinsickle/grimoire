@@ -5,8 +5,11 @@
 // screenshots them and the shots capture them, so a route added here
 // is covered by all three.
 
-/** A route: a name for its screenshot, its path, and a selector for the view's own content, which a screenshot waits for before the tool calls settle. */
-export type Route = { name: string; path: string; content: string };
+/**
+ * A route: a name for its screenshot, its path, a selector for the view's own content, which a screenshot waits for
+ * before the tool calls settle, and, for a part of the page drawn only when asked, what to press to open it.
+ */
+export type Route = { name: string; path: string; content: string; press?: string };
 
 const node = (ref: string) => `/n/${encodeURIComponent(ref)}`;
 
@@ -15,6 +18,8 @@ export const ROUTES: Route[] = [
   { name: "grimoire-page", path: node("page:readiness"), content: "#modules" },
   { name: "unplaced", path: "/unplaced", content: "main h1" },
   { name: "cauldron", path: "/cauldron", content: "section[id^='band-']" },
+  // The header's pill opened: the project's checkouts, the finding counts and the way to every project.
+  { name: "header-open", path: "/cauldron", content: "section[id^='band-']", press: "header button[aria-label^='Where you are']" },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
   // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
   { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "main h2:has-text('Other work may conflict')" },

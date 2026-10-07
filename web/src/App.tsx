@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, the header with the section tabs, status and the new and inherited finding counts, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"The header says the daemon is not answering and that the page retries while useAway is true, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header shows the lint answer's new findings as a warning and the rest as inherited, dimmed, and never shows inherited findings as a warning."},{"id":"header-advisories","statement":"The header shows the count of the lint answer's advisories as may conflict, apart from the finding counts and never as a warning, its title saying they are other work's and do not fail the check, and nothing of them when there are none."},{"id":"library-switcher","statement":"The header names the grimoire status says is on screen; when status lists more than one grimoire or checkout in its library it offers each, a grimoire served for several checkouts once for each, labelled with its checkout's folder, the one on screen chosen, grouped by where each comes from, this machine and then each team's server by its address, when they come from more than one place, and choosing another opens /g/<name>/?checkout=<checkout> as a new page; with none named it shows nothing."}]}
+ * {"purpose":"The shell: routes to the grimoire, the cauldron and node pages, and the header: where the page is in its project, the section tabs, and search over find.","criteria":[{"id":"three-views","statement":"The routes are the grimoire at /, at /n/page:<slug> for a page and at /unplaced; the cauldron at /cauldron; a node page at /n/<ref> for every other kind; /map redirects to / and /board to /cauldron; nothing else; under /g/<name>/ the same routes are that grimoire's, every link staying there."},{"id":"lit-tab","statement":"The header's first tab is Grimoire with a book and is the brand, the second Cauldron with a cauldron; exactly one tab is lit at all times: Grimoire on the grimoire view, Cauldron on /cauldron, and on a node page the section the node was reached from, falling back to Cauldron for a ticket and Grimoire for anything else when the page was opened cold."},{"id":"search-is-find","statement":"The search box, at the header's right, calls the find tool and offers its results as links; Enter opens the first; only the answer to the latest text is offered, an earlier one arriving after it dropped; / puts the cursor in it unless the cursor is in a field already, where / is typed."},{"id":"visual-baselines","statement":"Every route this shell serves, from one list shared with the behaviour specs, is screenshotted by the visual test in web/visual against the behaviour fixture store and compared with a baseline committed in web/visual/baseline; a view that renders differently fails the test until the new screenshot is looked at and the baseline updated on purpose, and a change to the grimoire's own content never does."},{"id":"header-away","statement":"While useAway is true the header's pill says the daemon is not answering and that the page retries, its dot in the bad colour, and says nothing of it once the daemon answers."},{"id":"header-findings","statement":"The header's pill shows the lint answer's new findings as N new in the bad colour, only when there are any; its panel shows N new, in the bad colour when there are any, and the rest as N inherited, dimmed; inherited findings are never shown as a warning."},{"id":"header-advisories","statement":"The header's panel shows the count of the lint answer's advisories as N may conflict, beside the finding counts and never as a warning, its title saying they are other work's and do not fail the check."},{"id":"where-you-are","statement":"The header is three parts, the pill on the left, the tabs in the centre and the search on the right, and shows no node counts. The pill holds a dot, in the bad colour while serverAway gives a warning, status fails or useAway is true and else the ok colour; the grimoire status names, else the checkout's folder, and after it / and the checkout's folder when checkoutsOf gives more than one; the id of status's current ticket when it has one; and a chevron. Pressed, it opens a panel beneath it, lifted off the page by a shadow in the shade colour, closed by pressing it again, a click outside or Escape: the server's state in words, this machine for a store of its own; under Checkouts of this project, the checkouts checkoutsOf gives, those status lists of this grimoire alone, each its folder and its current ticket's id and title or no ticket, the one on screen marked and each other a link opening /g/<name>/?checkout=<checkout> as a new page; the finding counts; and a link to all projects."}]}
  * ```
  */
 
@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, base, useAway, useQuery } from "./api";
 import { BookIcon, CauldronIcon, KindTag, mono } from "./components";
-import { idOf, kindOf, libraryChoices, libraryGroups, libraryShown, nodePath, serverAway, type Summary } from "./types";
+import { checkoutsOf, folderOf, idOf, kindOf, nodePath, serverState, type Summary } from "./types";
 import { BoardView } from "./views/Board";
 import { HomeView } from "./views/Home";
 import { NodeView } from "./views/Node";
@@ -86,18 +86,13 @@ function Tab({ section, lit, children }: { section: Section; lit: Section; child
 }
 
 function Top() {
-  const status = useQuery(() => api.status(), []);
-  const lint = useQuery(() => api.lint(), []);
   const lit = useLitSection();
-  const fresh = lint.data?.new ?? 0;
-  const inherited = (lint.data?.findings.length ?? 0) - fresh;
-  // Other work's, never this checkout's to fix: shown apart, not as a warning (req:check-own-work).
-  const conflicts = lint.data?.advisories.length ?? 0;
-  const repo = status.data?.repository.split("/").pop();
-  const away = serverAway(status.data?.server);
-  const daemonAway = useAway();
   return (
-    <header className="flex items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
+    // Three parts: where the page is on the left, the two views in the centre, search on the right.
+    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-2 bg-bg-1 border-b border-line">
+      <div className="justify-self-start min-w-0">
+        <Where />
+      </div>
       <nav className="flex gap-1 items-center">
         <Tab section="grimoire" lit={lit}>
           <BookIcon />
@@ -108,73 +103,142 @@ function Top() {
           Cauldron
         </Tab>
       </nav>
-      <Search />
-      <span className="flex-1" />
-      <Library grimoire={status.data?.grimoire ?? null} checkout={status.data?.repository ?? null} library={status.data?.library ?? []} />
-      <span className="text-fg-faint text-xs">
-        {daemonAway ? <span className="text-bad">daemon not answering · retrying</span> : status.error && <span className="text-bad">{status.error.message}</span>}
-        {status.data && (
-          <>
-            {away && <span className="text-bad font-semibold">{away} · </span>}
-            {/* The switcher names the grimoire; the folder is said only when nothing else names it. */}
-            {!status.data.grimoire && `${repo} · `}
-            {status.data.nodes.page} pages · {status.data.nodes.req} reqs · {status.data.nodes.module} modules · {status.data.nodes.ticket} tickets ·{" "}
-            {fresh > 0 && <span className="text-bad font-semibold">{fresh} new</span>}
-            {fresh > 0 && inherited > 0 && " · "}
-            {inherited > 0 && <span>{inherited} inherited</span>}
-            {fresh === 0 && inherited === 0 && <span>no findings</span>}
-            {conflicts > 0 && (
-              <span title="Other work, landed since this branch's base or being worked elsewhere, that may conflict with this checkout. It does not fail the check.">
-                {" · "}
-                {conflicts} may conflict
-              </span>
-            )}
-          </>
-        )}
-      </span>
+      <div className="justify-self-end">
+        <Search />
+      </div>
     </header>
   );
 }
 
+function Dot({ bad }: { bad: boolean }) {
+  return <span aria-hidden className={`inline-block size-2 shrink-0 rounded-full ${bad ? "bg-bad" : "bg-ok"}`} />;
+}
+
 /**
- * The grimoire on screen and, when the daemon's library holds others, a list
- * of them. Choosing one opens it at its own address as a page of its own, so
- * every query and the event stream are that grimoire's from the start.
+ * Where the page is in its project, as one pill: the server's dot, the grimoire
+ * and the checkout, its current ticket and its new findings. Opened, the
+ * project's checkouts, the finding counts and the way to every project.
  */
-function Library({ grimoire, checkout, library }: { grimoire: string | null; checkout: string | null; library: { name: string; repository: string; server: string | null }[] }) {
-  const shown = libraryShown(grimoire, library);
-  const choices = libraryChoices(grimoire, checkout, library);
-  if (shown === "none") return null;
-  if (shown === "name") return <span className={`text-fg-dim text-xs ${mono}`} aria-label="Grimoire">{grimoire}</span>;
+function Where() {
+  const status = useQuery(() => api.status(), []);
+  const lint = useQuery(() => api.lint(), []);
+  const daemonAway = useAway();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    // Escape closes it, and so does "/", which takes the cursor to the search.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "/") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const fresh = lint.data?.new ?? 0;
+  const inherited = (lint.data?.findings.length ?? 0) - fresh;
+  // Other work's, never this checkout's to fix: shown apart, not as a warning (req:check-own-work).
+  const conflicts = lint.data?.advisories.length ?? 0;
+  const s = status.data;
+  const server = daemonAway ? { words: "daemon not answering · retrying", bad: true } : serverState(s?.server);
+  const folder = s ? folderOf(s.repository) : null;
+  const here = s ? checkoutsOf(s) : [];
   return (
-    <label className="text-xs text-fg-dim inline-flex items-center gap-1.5">
-      <span className="sr-only">Grimoire</span>
-      <select
-        aria-label="Grimoire"
-        className={`bg-bg-2 border border-line rounded px-1.5 py-0.5 text-fg ${mono}`}
-        value={choices.find((c) => c.chosen)?.key}
-        onChange={(e) => {
-          const to = choices.find((c) => c.key === e.target.value);
-          if (to) window.location.assign(to.href);
-        }}
+    <div className="relative" ref={box}>
+      <button
+        type="button"
+        // Its name says what it shows, so a screen reader hears where the page is, not only what the button is.
+        aria-label={`Where you are: ${[s?.grimoire ?? folder, here.length > 1 && s?.grimoire ? folder : null, s?.current?.id, fresh > 0 ? `${fresh} new` : null, daemonAway ? "daemon not answering" : server.bad ? server.words : null].filter(Boolean).join(", ")}`}
+        aria-expanded={open}
+        title={server.words}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-2 max-w-full rounded-full bg-bg-2 border border-accent-dim hover:border-accent px-3 py-1 text-xs text-fg"
       >
-        {libraryGroups(choices).map((group) => {
-          const options = group.choices.map((c) => (
-            <option key={c.key} value={c.key} title={c.key.split("\n")[1]}>
-              {c.label}
-            </option>
-          ));
-          // Grouped by where each comes from, each server and this machine, only when there is more than one.
-          return group.label === null ? (
-            options
-          ) : (
-            <optgroup key={group.key} label={group.label}>
-              {options}
-            </optgroup>
-          );
-        })}
-      </select>
-    </label>
+        <Dot bad={server.bad || !!status.error} />
+        {s && (
+          <span className="inline-flex items-baseline gap-1.5 min-w-0 truncate">
+            <span className={`${mono} font-bold`}>{s.grimoire ?? folder}</span>
+            {/* The checkout is named only when the project has more than one to tell apart. */}
+            {s.grimoire && here.length > 1 && (
+              <>
+                {" "}
+                <span className="text-fg-faint">/</span> <span className={mono}>{folder}</span>
+              </>
+            )}
+            {s.current && (
+              <>
+                {" "}
+                <span className={`${mono} text-ticket`}>{s.current.id}</span>
+              </>
+            )}
+          </span>
+        )}
+        {fresh > 0 && <span className="text-bad font-semibold whitespace-nowrap">{fresh} new</span>}
+        {daemonAway ? (
+          <span className="text-bad whitespace-nowrap">daemon not answering · retrying</span>
+        ) : (
+          status.error && <span className="text-bad truncate">{status.error.message}</span>
+        )}
+        <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" className={`shrink-0 text-fg-dim transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Checkouts" className="absolute left-0 top-full z-20 mt-2 w-[380px] max-w-[calc(100vw-2rem)] bg-bg-2 border border-line rounded-md shadow-[0_20px_50px_-4px_var(--color-shade),0_6px_16px_-2px_var(--color-shade)] p-3 text-xs">
+          <div title={s?.server?.address} className={`flex items-center gap-2 ${server.bad ? "text-bad" : "text-fg-dim"}`}>
+            <Dot bad={server.bad} />
+            {server.words}
+          </div>
+          <h2 className="mt-3 mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Checkouts of this project</h2>
+          <ul className="m-0 p-0 list-none">
+            {here.map((c) => {
+              const line = (
+                <>
+                  <span className={`${mono} ${c.here ? "text-accent font-semibold" : ""}`}>{c.folder}</span>{" "}
+                  {c.current ? (
+                    <span className="min-w-0 truncate">
+                      <span className={`${mono} text-ticket`}>{c.current.id}</span> <span className={c.here ? "text-fg" : "text-fg-dim"}>{c.current.title}</span>
+                    </span>
+                  ) : (
+                    <span className="text-fg-faint">no ticket</span>
+                  )}
+                </>
+              );
+              return (
+                <li key={c.key}>
+                  {c.here ? (
+                    <span aria-current="true" className="flex items-baseline gap-2 px-2 py-1 -mx-2 rounded bg-bg-3">
+                      {line}
+                    </span>
+                  ) : (
+                    <a href={c.href} title={c.key} className="flex items-baseline gap-2 px-2 py-1 -mx-2 rounded text-fg hover:bg-bg-3 hover:no-underline">
+                      {line}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <hr className="my-2.5 border-0 border-t border-line" />
+          <div className="text-fg-dim">
+            <span className={fresh > 0 ? "text-bad font-semibold" : ""}>{fresh} new</span>
+            {" · "}
+            <span>{inherited} inherited</span>
+            {" · "}
+            <span title="Other work, landed since this branch's base or being worked elsewhere, that may conflict with this checkout. It does not fail the check.">{conflicts} may conflict</span>
+          </div>
+          <a href="/" className="inline-block mt-2.5">
+            All projects
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -184,6 +248,7 @@ function Search() {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const box = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   // Each find is numbered; only the latest one's answer is kept, so a slower
   // answer to earlier text can neither replace the hits nor be opened by Enter.
   // The hits carry the text they answer and show only for that text, so none
@@ -204,13 +269,25 @@ function Search() {
     const onDoc = (e: MouseEvent) => {
       if (!box.current?.contains(e.target as Node)) setOpen(false);
     };
+    // "/" finds from anywhere but a field, where it is typed as usual.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || inField(e.target)) return;
+      e.preventDefault();
+      input.current?.focus();
+    };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
   return (
     <div className="relative" ref={box}>
       <input
-        className="w-80"
+        ref={input}
+        aria-label="Find"
+        className="w-[340px] max-w-full"
         placeholder="Find a page, requirement, module, ticket…"
         value={q}
         onChange={(e) => {
@@ -226,8 +303,13 @@ function Search() {
           if (e.key === "Escape") setOpen(false);
         }}
       />
+      {!q && (
+        <kbd aria-hidden className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 px-1.5 leading-4 rounded border border-line text-fg-faint text-[10.5px] font-mono">
+          /
+        </kbd>
+      )}
       {open && shown.length > 0 && (
-        <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-bg-2 border border-line rounded-md max-h-[60vh] overflow-auto shadow-xl shadow-bg">
+        <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-bg-2 border border-line rounded-md max-h-[60vh] overflow-auto shadow-[0_20px_50px_-4px_var(--color-shade),0_6px_16px_-2px_var(--color-shade)]">
           {shown.map((h) => (
             <Link key={h.ref} to={nodePath(h.ref)} onClick={() => setOpen(false)} className="block px-2.5 py-1.5 text-fg hover:bg-bg-3 hover:no-underline">
               <KindTag ref={h.ref} /> {h.title} <span className={`text-fg-faint ${mono}`}>{idOf(h.ref)}</span>
@@ -237,4 +319,10 @@ function Search() {
       )}
     </div>
   );
+}
+
+/** Whether a key pressed there is typed: an input, a text area, a select or editable content. */
+function inField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }

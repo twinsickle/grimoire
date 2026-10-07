@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed, saidId } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { goneOf, idOf, kindOf, libraryChoices, libraryGroups, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
+import { checkoutsOf, folderOf, goneOf, idOf, kindOf, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -34,20 +34,6 @@ test("a root named but not written is told apart from no root named", () => {
   expect(unwritten).toContain("put a page `overview`");
   expect(unwritten).not.toContain("configure");
   for (const none of [null, undefined, ""]) expect(missingRoot(none)).toContain("configure");
-});
-
-/**
- * # Test contract
- *
- * ```json
- * {"test": "the-header-names-a-lone-grimoire", "checks": ["web/src/App#library-switcher"]}
- * ```
- */
-test("the header names a lone grimoire and lists a library of more", () => {
-  expect(libraryShown(null, [])).toBe("none");
-  expect(libraryShown("shop", [])).toBe("name");
-  expect(libraryShown("shop", [{ name: "shop" }])).toBe("name");
-  expect(libraryShown("shop", [{ name: "ledger" }, { name: "shop" }])).toBe("list");
 });
 
 test("an address names its grimoire only by a leading /g/ and a slug", () => {
@@ -392,52 +378,42 @@ test("a call refused for the checkout it names forgets it, learns it again and i
  * # Test contract
  *
  * ```json
- * {"test": "the-switcher-offers-each-checkout", "checks": ["web/src/App#library-switcher"]}
+ * {"test": "the-header-lists-this-projects-checkouts", "checks": ["web/src/App#where-you-are"]}
  * ```
  */
-test("the switcher offers each checkout of a grimoire, named by its folder, the one on screen chosen", () => {
+test("the header lists the checkouts of the grimoire on screen alone, each with its ticket, the one on screen marked", () => {
+  const ticket = (id: string) => ({ id, title: `Ticket ${id}` });
   const library = [
-    { name: "ledger", repository: "C:/code/ledger" },
-    { name: "shop", repository: "C:/code/shop" },
-    { name: "shop", repository: "C:/code/shop/.claude/worktrees/wt" },
+    { name: "ledger", repository: "C:/code/ledger", server: null, current: null },
+    { name: "shop", repository: "C:/code/shop", server: null, current: ticket("0001") },
+    { name: "shop", repository: "C:/code/shop/.claude/worktrees/wt", server: null, current: ticket("0002") },
+    { name: "shop", repository: "C:/code/shop/.claude/worktrees/idle/", server: null, current: null },
   ];
-  const choices = libraryChoices("shop", "C:/code/shop/.claude/worktrees/wt", library);
-  expect(choices.map((c) => c.label)).toEqual(["ledger", "shop · shop", "shop · wt"]);
-  expect(choices.map((c) => c.chosen)).toEqual([false, false, true]);
-  expect(choices[2].href).toBe("/g/shop/?checkout=C%3A%2Fcode%2Fshop%2F.claude%2Fworktrees%2Fwt");
-  // Before the checkout is known, the grimoire on screen is chosen.
-  expect(libraryChoices("ledger", null, library).map((c) => c.chosen)).toEqual([true, false, false]);
-  // From one place, the choices are one group with no heading.
-  expect(libraryGroups(choices)).toEqual([{ key: "", label: null, choices }]);
+  // Status's own current ticket is the one on screen's, newer than the library's listing.
+  const status = { grimoire: "shop", repository: "C:/code/shop/.claude/worktrees/wt", current: ticket("0003"), library };
+  const listed = checkoutsOf(status);
+  expect(listed.map((c) => [c.folder, c.here, c.current?.id ?? null])).toEqual([
+    ["shop", false, "0001"],
+    ["wt", true, "0003"],
+    ["idle", false, null],
+  ]);
+  expect(listed[0].href).toBe("/g/shop/?checkout=C%3A%2Fcode%2Fshop");
+  // No library: the one checkout on screen, a store served alone.
+  expect(checkoutsOf({ grimoire: null, repository: "C:\\code\\notes", current: null, library: [] })).toEqual([{ key: "C:\\code\\notes", folder: "notes", href: "", here: true, current: null }]);
+  expect(folderOf("C:/code/shop/")).toBe("shop");
 });
 
 /**
  * # Test contract
  *
  * ```json
- * {"test": "the-switcher-groups-by-where-each-comes-from", "checks": ["web/src/App#library-switcher"]}
+ * {"test": "the-header-says-where-the-grimoire-is-kept", "checks": ["web/src/App#where-you-are"]}
  * ```
  */
-test("the switcher groups grimoires by where each comes from, this machine first, then each server by its address", () => {
-  const library = [
-    { name: "billing", repository: "C:/code/billing", server: "https://teams.example/b" },
-    { name: "notes", repository: "C:/code/notes", server: null },
-    { name: "shop", repository: "C:/code/shop", server: "http://127.0.0.1:4243" },
-    { name: "zeta", repository: "C:/code/zeta", server: "https://teams.example/b" },
-  ];
-  const groups = libraryGroups(libraryChoices("shop", null, library));
-  expect(groups.map((g) => [g.label, g.choices.map((c) => c.label)])).toEqual([
-    ["this machine", ["notes"]],
-    ["127.0.0.1:4243", ["shop"]],
-    ["teams.example/b", ["billing", "zeta"]],
-  ]);
-  expect(groups[1].choices[0].chosen).toBe(true);
-  // Two servers that differ only by scheme keep it, each its own group.
-  const twins = libraryGroups(libraryChoices("a", null, [{ name: "a", repository: "C:/a", server: "http://team.example" }, { name: "b", repository: "C:/b", server: "https://team.example" }]));
-  expect(twins.map((g) => [g.key, g.label])).toEqual([
-    ["http://team.example", "http://team.example"],
-    ["https://team.example", "https://team.example"],
-  ]);
+test("the header says where the grimoire is kept, and whether that is trouble", () => {
+  expect(serverState(null)).toEqual({ words: "this machine", bad: false });
+  expect(serverState({ address: "http://127.0.0.1:4243/g/shop", fetched: null, reachable: true, refused: false })).toEqual({ words: "team server answering", bad: false });
+  expect(serverState({ address: "http://127.0.0.1:4243", fetched: null, reachable: false, refused: false })).toEqual({ words: "server unreachable", bad: true });
 });
 
 /**

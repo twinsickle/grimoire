@@ -45,48 +45,41 @@ export function localId(ref: G.Ref): string {
   return id.slice(id.lastIndexOf("#") + 1);
 }
 
-/** The UI route for a node's page. */
+/** The last part of a checkout's path, which names it in the header. */
+export function folderOf(path: string): string {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+}
+
+/** A checkout of the grimoire on screen, as the header lists it. */
+export type Checkout = { key: string; folder: string; href: string; here: boolean; current: G.CurrentTicket | null };
+
 /**
- * What the header shows of the daemon's library: nothing when no grimoire is
- * named, the name alone when the library holds one, and a list of them when
- * it holds more.
+ * The checkouts the header lists: those status lists of the grimoire on screen and
+ * of no other, each named by its folder and opening at /g/<name>/?checkout=<checkout>,
+ * the one on screen marked and given its current ticket as status answers it; with
+ * no library, the one checkout on screen.
  */
-export function libraryShown(grimoire: string | null, library: { name: string }[]): "none" | "name" | "list" {
-  if (!grimoire) return "none";
-  return library.length < 2 ? "name" : "list";
+export function checkoutsOf(status: Pick<G.StatusAnswer, "grimoire" | "repository" | "current" | "library">): Checkout[] {
+  const { grimoire, repository, current } = status;
+  const mine = grimoire ? status.library.filter((g) => g.name === grimoire) : [];
+  if (!mine.some((g) => g.repository === repository)) return [{ key: repository, folder: folderOf(repository), href: "", here: true, current }, ...checkouts(mine, repository)];
+  return checkouts(mine, repository).map((c) => (c.here ? { ...c, current } : c));
+}
+
+function checkouts(library: G.LibraryEntry[], repository: string): Checkout[] {
+  return library.map((g) => ({ key: g.repository, folder: folderOf(g.repository), href: `/g/${g.name}/?checkout=${encodeURIComponent(g.repository)}`, here: g.repository === repository, current: g.current }));
 }
 
 /**
- * The grimoires a library's switcher offers, one for each checkout: the label names the
- * checkout's folder when the grimoire is served for several, the address opens it as
- * /g/<name>/?checkout=<checkout>, and the one on screen is chosen.
+ * Where the grimoire on screen is kept, in words, and whether that is trouble: the
+ * server's warning when it did not answer, that it answers when it did, its
+ * address left to the line's title, and this machine for a store of its own.
  */
-export function libraryChoices(grimoire: string | null, checkout: string | null, library: { name: string; repository: string; server?: string | null }[]): { key: string; label: string; href: string; chosen: boolean; server: string | null }[] {
-  const several = (name: string) => library.filter((g) => g.name === name).length > 1;
-  const folder = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
-  return library.map((g) => ({
-    key: `${g.name}\n${g.repository}`,
-    label: several(g.name) ? `${g.name} · ${folder(g.repository)}` : g.name,
-    href: `/g/${g.name}/?checkout=${encodeURIComponent(g.repository)}`,
-    chosen: g.name === grimoire && (checkout === null || g.repository === checkout),
-    server: g.server ?? null,
-  }));
-}
-
-/**
- * The switcher's choices grouped by where each grimoire comes from: this machine's
- * stores first, then each team's server in address order, keyed by its address and
- * labelled by it without the scheme, unless another differs from it only by that.
- * Choices that all come from one place make one group with no label, since a lone
- * heading says nothing.
- */
-export function libraryGroups<C extends { server: string | null }>(choices: C[]): { key: string; label: string | null; choices: C[] }[] {
-  const places = [...new Set(choices.map((c) => c.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
-  if (places.length < 2) return [{ key: "", label: null, choices }];
-  const bare = (place: string) => place.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
-  // Two servers that differ only by scheme keep it, so no two headings read alike.
-  const label = (place: string) => (places.some((p) => p !== null && p !== place && bare(p) === bare(place)) ? place : bare(place));
-  return places.map((place) => ({ key: place ?? "", label: place === null ? "this machine" : label(place), choices: choices.filter((c) => c.server === place) }));
+export function serverState(server: G.ServerCopy | null | undefined): { words: string; bad: boolean } {
+  const away = serverAway(server);
+  if (away) return { words: away, bad: true };
+  if (server) return { words: "team server answering", bad: false };
+  return { words: "this machine", bad: false };
 }
 
 /**
@@ -98,6 +91,7 @@ export function missingRoot(named: string | null | undefined): string {
   return "No grimoire root is named. The check says how to name one with configure.";
 }
 
+/** The UI route for a node's page. */
 export function nodePath(ref: G.Ref): string {
   return `/n/${encodeURIComponent(ref)}`;
 }

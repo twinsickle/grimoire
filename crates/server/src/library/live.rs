@@ -481,10 +481,15 @@ impl Live {
                 name: name.clone(),
                 repository: store_io::repository_string(&s.daemon.repo).unwrap_or_else(|_| s.daemon.repo.display().to_string()),
                 server: s.server.as_deref().map(super::server_of),
+                // Each checkout's current ticket is added by its daemon as status answers, as it is then.
+                current: None,
             })
             .collect();
         for ((name, _), s) in &held.served {
             s.daemon.set_library(name, all.clone());
+            // Its grimoire's other checkouts, whose current tickets status names as it answers.
+            let fellows = held.served.iter().filter(|((n, _), o)| n == name && !Arc::ptr_eq(&o.daemon, &s.daemon)).map(|(_, o)| Arc::downgrade(&o.daemon)).collect();
+            s.daemon.set_fellows(fellows);
         }
     }
 

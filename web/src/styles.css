@@ -4,6 +4,8 @@
 @theme {
   /* Drop Tailwind's default palette so a colour can only be named by one of these tokens. */
   --color-*: initial;
+  /* What a raised surface casts on the page beneath it; darker than any surface, so it reads over the page's own background. */
+  --color-shade: #000000;
   --color-bg: #0f1115;
   --color-bg-1: #161a21;
   --color-bg-2: #1e232c;

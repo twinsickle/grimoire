@@ -89,10 +89,10 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * # Test contract
  *
  * ```json
- * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#three-views", "web/src/App#library-switcher", "web/src/api#grimoire-base"]}
+ * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#three-views", "web/src/App#where-you-are", "web/src/api#grimoire-base"]}
  * ```
  */
-test("a grimoire of the library is read at its own address, and the header switches between them", async ({ page }, testInfo) => {
+test("a grimoire of the library is read at its own address, and the header lists its checkouts alone", async ({ page }) => {
   // The fixture's daemon serves a library of two: its own checkout, `repo`, and `ledger`.
   const calls: string[] = [];
   page.on("request", (r) => {
@@ -101,31 +101,38 @@ test("a grimoire of the library is read at its own address, and the header switc
   });
   await page.goto("/g/ledger/cauldron");
   await expect(page.locator("main h1")).toHaveText("Cauldron");
-  await expect(page.locator("header")).toContainText("0 pages · 0 reqs");
-  const switcher = page.locator("header select[aria-label='Grimoire']");
-  await expect(switcher.locator("option:checked")).toHaveText("ledger");
-  await expect(switcher.locator("option")).toHaveText(["ledger", "repo"]);
-  // As a team, `repo` is a copy of the team's server and `ledger` a store on this machine: grouped by where each comes from.
-  if (testInfo.project.name === "team") {
-    await expect(switcher.locator("optgroup")).toHaveCount(2);
-    expect(await switcher.locator("optgroup").evaluateAll((gs) => gs.map((g) => [g.getAttribute("label"), g.textContent]))).toEqual([
-      ["this machine", "ledger"],
-      [expect.stringMatching(/^127\.0\.0\.1:\d+$/), "repo"],
-    ]);
-  } else {
-    await expect(switcher.locator("optgroup")).toHaveCount(0);
-  }
+  const pill = page.locator("header button[aria-label^='Where you are']");
+  // One checkout: the project alone, its checkout not named again.
+  await expect(pill.locator(".font-bold")).toHaveText("ledger");
+  await expect(pill).not.toContainText("/");
+  // No node counts: nobody acts on them.
+  await expect(page.locator("header")).not.toContainText("pages ·");
+  await pill.click();
+  const panel = page.getByRole("dialog", { name: "Checkouts" });
+  await expect(panel).toHaveClass(/--color-shade/);
+  await expect(panel).toContainText("this machine");
+  await expect(panel.getByRole("listitem")).toHaveCount(1);
+  await expect(panel.getByRole("listitem")).toContainText("ledger no ticket");
+  // The header holds this project alone: `repo` is another project, not listed.
+  await expect(panel).not.toContainText("repo");
+  await expect(panel.getByRole("link", { name: "All projects" })).toBeVisible();
+  // Escape closes it.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
   // Every call and the event stream went to ledger's address, none to the bare routes.
   expect(calls.length).toBeGreaterThan(0);
   expect(calls.filter((c) => !c.startsWith("/g/ledger/api/")), "calls outside ledger's address").toEqual([]);
   // Its links stay under its address: the grimoire tab opens ledger's grimoire.
   await page.locator("header nav a").first().click();
   await expect(page).toHaveURL(/\/g\/ledger\/?$/);
-  // Choosing the other opens it at its own address, a page of its own.
-  await switcher.selectOption({ label: "repo" });
-  await expect(page).toHaveURL(/\/g\/repo\/(\?checkout=[^/]+)?$/);
+  // `repo` at its own address: its current ticket in the pill and in its one checkout's line.
+  const status = await tool<{ current: { id: string; title: string } }>(page, "status");
+  await page.goto("/g/repo/");
   await expect(page.locator(rail)).toBeVisible();
-  await expect(page.locator("header select[aria-label='Grimoire'] option:checked")).toHaveText("repo");
+  await expect(pill).toContainText(`repo ${status.current.id}`);
+  await expect(pill).not.toContainText("/");
+  await pill.click();
+  await expect(panel.locator("[aria-current]")).toHaveText(`repo ${status.current.id} ${status.current.title}`);
   const goal = await tool<{ node: { title: string } }>(page, "get", { ref: "page:goal" });
   await page.goto("/g/repo/n/page%3Agoal");
   await expect(page.locator("main h1").first()).toContainText(goal.node.title);
@@ -309,14 +316,18 @@ test("the header shows new findings as a warning and inherited ones dimmed", asy
   expect(lint.new, "the fixture adds new work after adopting").toBeGreaterThan(0);
   expect(inherited).toBeGreaterThan(0);
   await page.goto("/cauldron");
-  const fresh = page.locator("header").getByText(`${lint.new} new`, { exact: true });
-  await expect(fresh).toBeVisible();
+  const pill = page.locator("header button[aria-label^='Where you are']");
+  const glance = pill.getByText(`${lint.new} new`, { exact: true });
+  await expect(glance).toBeVisible();
+  await expect(glance).toHaveClass(/text-bad/);
+  await pill.click();
+  const panel = page.getByRole("dialog", { name: "Checkouts" });
+  const fresh = panel.getByText(`${lint.new} new`, { exact: true });
   await expect(fresh).toHaveClass(/text-bad/);
-  const old = page.locator("header").getByText(`${inherited} inherited`, { exact: true });
+  const old = panel.getByText(`${inherited} inherited`, { exact: true });
   await expect(old).toBeVisible();
   await expect(old).not.toHaveClass(/text-bad/);
 });
-
 /**
  * # Test contract
  *
@@ -328,12 +339,14 @@ test("the header shows what other work may conflict apart from the findings, not
   const lint = await tool<{ advisories: unknown[] }>(page, "lint");
   expect(lint.advisories.length, "the fixture's landing ticket proposes a criterion its code lacks").toBeGreaterThan(0);
   await page.goto("/cauldron");
-  const conflicts = page.locator("header").getByText(`${lint.advisories.length} may conflict`);
+  // At a glance only what is new; the rest in the pill's panel.
+  await expect(page.locator("header button[aria-label^='Where you are']")).not.toContainText("may conflict");
+  await page.locator("header button[aria-label^='Where you are']").click();
+  const conflicts = page.getByRole("dialog", { name: "Checkouts" }).getByText(`${lint.advisories.length} may conflict`);
   await expect(conflicts).toBeVisible();
   await expect(conflicts).not.toHaveClass(/text-bad/);
   await expect(conflicts).toHaveAttribute("title", /does not fail the check/);
 });
-
 /**
  * # Test contract
  *
@@ -369,6 +382,26 @@ test("search offers find's results as links, and Enter opens the first", async (
   await expect(page.locator(`header a[href="/n/${encodeURIComponent(first)}"]`)).toBeVisible();
   await page.getByPlaceholder("Find a page, requirement, module, ticket…").press("Enter");
   await expect(page).toHaveURL(`/n/${encodeURIComponent(first)}`);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "slash-puts-the-cursor-in-search", "checks": ["web/src/App#search-is-find"]}
+ * ```
+ */
+test("/ puts the cursor in the search from anywhere but a field", async ({ page }) => {
+  await page.goto("/cauldron");
+  await expect(page.locator("section[id^='band-']").first()).toBeVisible();
+  const search = page.getByPlaceholder("Find a page, requirement, module, ticket…");
+  await page.locator("main").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+  // In the field, / is typed.
+  await page.keyboard.type("a/b");
+  await expect(search).toHaveValue("a/b");
 });
 
 /**
@@ -1906,6 +1939,8 @@ test("while the daemon is away the page says so, keeps what it showed, and recov
   await daemonAway(page);
   const away = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Written while away", kind: "gap", priority: "later", touches: [], body: "Its event makes the board fetch." });
   await expect(header).toContainText("daemon not answering · retrying");
+  // Its dot turns to the bad colour while it is away, and back once it answers.
+  await expect(header.locator("button[aria-label^='Where you are'] .bg-bad")).toHaveCount(1);
   await expect(gap).toBeVisible();
   await expect(page.locator(`#unattached li[data-ticket='${away.node.ref}']`)).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("JSON");

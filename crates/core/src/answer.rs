@@ -136,9 +136,11 @@ pub struct StatusAnswer {
     pub shared: bool,
     // Set on a machine whose intent is a copy of a team's server's.
     pub server: Option<ServerCopy>,
+    // This checkout's current ticket, the one last started here; none when no ticket is.
+    pub current: Option<CurrentTicket>,
     // This grimoire's name in its daemon's library; none on a daemon serving one store alone.
     pub grimoire: Option<String>,
-    // Every grimoire that daemon serves, in name order; empty on a daemon serving one store alone.
+    // Every grimoire that daemon serves, once for each checkout, in name order; empty on a daemon serving one store alone.
     pub library: Vec<LibraryEntry>,
 }
 
@@ -160,6 +162,16 @@ pub struct LibraryEntry {
     pub repository: String,
     // Where it comes from: the team's server it is a copy of, that server's address without a grimoire's /g/<name>; none for a store on this machine.
     pub server: Option<String>,
+    // That checkout's current ticket, for the checkouts of the grimoire answering; none for another grimoire's.
+    pub current: Option<CurrentTicket>,
+}
+
+/// A checkout's current ticket, the one last started there, as `status` names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CurrentTicket {
+    pub id: String,
+    pub title: String,
 }
 
 /// What a machine's intent is a copy of: the server's address, when the copy
