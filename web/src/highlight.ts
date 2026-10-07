@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text, once Shiki and the grammar of the file's language are loaded (each imported only the first time it is needed, so the first page load holds none of them), as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a .tsx file is read with the TSX grammar, so code inside markup is toned as code; a language with no grammar comes back as plain lines; the highlighter's tokens are read and no HTML is ever made."},{"id":"plain","statement":"plain answers a file's text as one line per line of text with no tone and nothing laid out, its text being the line's, only a line feed ending a line, a final one starting none, and the CR before one dropped, without running the highlighter."}]}
+ * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text, once Shiki and the grammar of the file's language are loaded (each imported only the first time it is needed, so the first page load holds none of them), as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a .tsx file is read with the TSX grammar, so code inside markup is toned as code, and an HTL file with the HTML grammar; the languages with a grammar are rust, typescript, javascript, java, html, htl, xml, css and scss, a language with no grammar comes back as plain lines; the highlighter's tokens are read and no HTML is ever made."},{"id":"plain","statement":"plain answers a file's text as one line per line of text with no tone and nothing laid out, its text being the line's, only a line feed ending a line, a final one starting none, and the CR before one dropped, without running the highlighter."}]}
  * ```
  */
 
@@ -21,17 +21,29 @@ type Grammar = () => Promise<{ default: LanguageRegistration[] }>;
 // Each grammar is imported the first time a file in it is opened, so none of
 // them, nor Shiki itself, is part of the first page load. Named by the
 // language a file node carries; TypeScript's .tsx files take the TSX grammar.
+// JavaScript's grammar reads JSX as it is, so a .jsx file needs no other.
 const GRAMMARS: Record<string, Grammar> = {
   rust: () => import("@shikijs/langs/rust"),
   typescript: () => import("@shikijs/langs/typescript"),
   tsx: () => import("@shikijs/langs/tsx"),
+  javascript: () => import("@shikijs/langs/javascript"),
+  java: () => import("@shikijs/langs/java"),
+  // Some bring others they embed: HTML's brings JavaScript's and CSS's, for its script and
+  // style elements, SCSS's brings CSS's, and XML's brings Java's.
+  html: () => import("@shikijs/langs/html"),
+  xml: () => import("@shikijs/langs/xml"),
+  css: () => import("@shikijs/langs/css"),
+  scss: () => import("@shikijs/langs/scss"),
   // For the fenced JSON inside comments: module and test contracts.
   json: () => import("@shikijs/langs/json"),
 };
 
-/** The grammar a file is highlighted with: its language's, TSX for a .tsx file. */
+/** The grammar a file is highlighted with: its language's, TSX for a .tsx file, HTML for an HTL one. */
 function grammarOf(language: string, path = ""): string {
-  return language === "typescript" && path.endsWith(".tsx") ? "tsx" : language;
+  if (language === "typescript" && path.endsWith(".tsx")) return "tsx";
+  // HTL is HTML with expressions in its attributes and text, which read as strings and text.
+  if (language === "htl") return "html";
+  return language;
 }
 
 // The tones are read off a theme of Shiki's whose colours are not colours but
@@ -51,12 +63,38 @@ const TONE_OF = new Map<string, Tone>(Object.entries(COLOUR).map(([tone, colour]
 const SCOPES: [Tone | null, string[]][] = [
   ["comment", ["comment", "punctuation.definition.comment"]],
   ["string", ["string", "constant.character", "constant.other.character-class.regexp"]],
-  ["number", ["constant.numeric"]],
+  // A CSS unit is part of its number, and a colour written as hex is a literal like one.
+  ["number", ["constant.numeric", "keyword.other.unit", "constant.other.color"]],
   ["keyword", ["keyword", "storage", "constant.language", "variable.language", "keyword.operator.new", "keyword.operator.expression", "keyword.operator.word"]],
   [null, ["keyword.operator", "storage.type.function.arrow", "meta.template.expression"]],
-  ["type", ["entity.name.type", "entity.name.class", "entity.other.inherited-class", "entity.name.tag", "support.type", "support.class"]],
+  // Java names its types as storage, and a CSS selector's classes and ids as attribute names.
+  [
+    "type",
+    [
+      "entity.name.type",
+      "entity.name.class",
+      "entity.other.inherited-class",
+      "entity.name.tag",
+      "support.type",
+      "support.class",
+      "storage.type.java",
+      "storage.type.generic.java",
+      "storage.type.generic.wildcard.java",
+      "storage.type.object.array.java",
+      "storage.type.primitive.java",
+      "storage.type.primitive.array.java",
+      "entity.other.attribute-name.class.css",
+      "entity.other.attribute-name.id.css",
+      "entity.other.attribute-name.pseudo-class.css",
+      "entity.other.attribute-name.pseudo-element.css",
+      "entity.other.attribute-name.parent-selector-suffix.css",
+      "entity.other.attribute-name.placeholder.css",
+    ],
+  ],
+  // A Java import's or package's dotted name is a name, though its grammar calls it storage.
+  [null, ["storage.modifier.import.java", "storage.modifier.package.java"]],
   ["function", ["entity.name.function", "support.function"]],
-  ["meta", ["support.type.property-name", "entity.other.attribute-name", "meta.attribute", "meta.decorator", "punctuation.definition.attribute"]],
+  ["meta", ["support.type.property-name", "entity.other.attribute-name", "meta.attribute", "meta.decorator", "punctuation.definition.attribute", "storage.type.annotation.java", "punctuation.definition.annotation.java"]],
 ];
 
 const THEME: ThemeRegistrationRaw = {

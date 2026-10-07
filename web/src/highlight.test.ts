@@ -142,3 +142,88 @@ test("highlighting gives one line of tokens per line, tones carried across line 
   expect(plain.map(text)).toEqual(["a <b>", "", "c"]);
   expect(plain.flat().every((t) => t.tone === null)).toBe(true);
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "each-language-has-its-grammar", "checks": ["web/src/highlight#lines-of-tokens"]}
+ * ```
+ */
+test("each language the extractor reads is toned by its own grammar", async () => {
+  const one = async (code: string, language: string, path = "") => {
+    const lines = await highlight(code, language, path);
+    expect(lines.map(text)).toEqual(code.split("\n"));
+    return lines;
+  };
+
+  // JavaScript, its markup included, in a .js file and a .jsx one alike.
+  for (const path of ["src/a.js", "src/a.jsx", "src/a.mjs", "src/a.cjs"]) {
+    const [js] = await one('export function go(x) { return <div className="y">{x + 1}</div>; }', "javascript", path);
+    expect(toneAt(js, "export")).toBe("keyword");
+    expect(toneAt(js, "go")).toBe("function");
+    expect(toneAt(js, "div")).toBe("type");
+    expect(toneAt(js, "className")).toBe("meta");
+    expect(toneAt(js, '"y"')).toBe("string");
+    expect(toneAt(js, "1")).toBe("number");
+  }
+
+  // Java: annotations are meta, as Rust's attributes are; its types are types, primitives among them; an import's name is plain.
+  const java = await one('import java.util.List;\nclass A extends B {\n@Override\npublic List<? extends String> names(int n) { return of("a", 1); } /** doc */\nString[] xs;\n}', "java");
+  expect(toneAt(java[0], "import")).toBe("keyword");
+  expect(toneAt(java[0], "java.util")).toBeNull();
+  expect(toneAt(java[1], "class")).toBe("keyword");
+  expect(toneAt(java[1], "A")).toBe("type");
+  expect(toneAt(java[1], "B")).toBe("type");
+  expect(java[2].map((t) => t.tone)).toEqual(["meta"]);
+  expect(toneAt(java[3], "public")).toBe("keyword");
+  expect(toneAt(java[3], "List")).toBe("type");
+  expect(toneAt(java[3], "String")).toBe("type");
+  expect(toneAt(java[3], "?")).toBe("type");
+  expect(toneAt(java[3], "names")).toBe("function");
+  expect(toneAt(java[3], "int")).toBe("type");
+  expect(toneAt(java[3], '"a"')).toBe("string");
+  expect(toneAt(java[3], "/** doc */")).toBe("comment");
+  expect(toneAt(java[4], "String")).toBe("type");
+
+  // HTML, its script and style read as JavaScript and CSS; HTL by the same grammar.
+  for (const language of ["html", "htl"]) {
+    const html = await one('<!-- note -->\n<div class="a" data-sly-test="${x}"><script>let n = 1;</script><style>p { color: red; }</style></div>', language, "a.html");
+    expect(html[0].map((t) => t.tone)).toEqual(["comment"]);
+    expect(toneAt(html[1], "div")).toBe("type");
+    expect(toneAt(html[1], "class")).toBe("meta");
+    expect(toneAt(html[1], '"${x}"')).toBe("string");
+    expect(toneAt(html[1], "let")).toBe("keyword");
+    expect(toneAt(html[1], "1")).toBe("number");
+    expect(toneAt(html[1], "color")).toBe("meta");
+  }
+
+  // XML.
+  const [xml] = await one('<?xml version="1.0"?><!-- c --><a:b scope="1">t</a:b>', "xml");
+  expect(toneAt(xml, "<!-- c -->")).toBe("comment");
+  expect(toneAt(xml, "a:b")).toBe("type");
+  expect(toneAt(xml, "scope")).toBe("meta");
+  expect(toneAt(xml, '"1"')).toBe("string");
+
+  // CSS and SCSS: selectors are types, properties meta, a number keeps its unit and a hex colour is a literal.
+  const [css] = await one("/* c */ @media screen { .b, a[href]:hover { font-size: 12px; color: #fff; } }", "css");
+  expect(toneAt(css, "/* c */")).toBe("comment");
+  expect(toneAt(css, "@media")).toBe("keyword");
+  expect(toneAt(css, ".b")).toBe("type");
+  expect(toneAt(css, ":hover")).toBe("type");
+  expect(toneAt(css, "font-size")).toBe("meta");
+  expect(css.find((t) => t.text.includes("12"))).toEqual({ text: "12px", tone: "number" });
+  expect(toneAt(css, "#fff")).toBe("number");
+  const scss = await one('// c\n@use "x"; .b { &-d { margin: 2px; } @include mix(1); } %ph { }', "scss");
+  expect(scss[0].map((t) => t.tone)).toEqual(["comment"]);
+  expect(toneAt(scss[1], "@use")).toBe("keyword");
+  expect(toneAt(scss[1], ".b")).toBe("type");
+  expect(toneAt(scss[1], "margin")).toBe("meta");
+  expect(toneAt(scss[1], "mix")).toBe("function");
+  expect(toneAt(scss[1], "%ph")).toBe("type");
+
+  // A contract in a markup comment is JSON, as in code, laid out under its line as a one-line block is.
+  const contract = await highlight('<!--\n# Module contract\n```json\n{"purpose": "P", "n": 1}\n```\n-->\n<p></p>', "html");
+  expect(toneAt(contract[3], "purpose")).toBe("meta");
+  expect(toneAt(contract[3], "1")).toBe("number");
+});
