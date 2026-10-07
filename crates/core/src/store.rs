@@ -696,7 +696,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "config-rules", "checks": ["crates/core/src/model#config-record", "crates/core/src/store#config-rules"]}
+    /// {"test": "config-rules", "checks": ["crates/core/src/model/config#config-record", "crates/core/src/store#config-rules"]}
     /// ```
     #[test]
     fn config_rules() {
