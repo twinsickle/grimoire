@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Carry a ticket through its life: file, update, start, decide and close it, keep a change's priority with the answers it relies on, settle those answers when it lands or goes, and name the ticket a write belongs to.","criteria":[{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of a ticket that is not closed, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"priority-follows","statement":"keep_pace keeps a change that is not closed no lower priority than the gaps and questions it relies on that are not closed: after a change was lowered, each such answer now above it is lowered to the most urgent priority among the changes not closed that rely on it; then a change below any such answer is raised to the most urgent of them; after a gap or question was raised, or filed when a change already names it, every change not closed that relies on it and sits below it is raised to it; a closed ticket is never moved, lowering an answer or raising a change moves nothing, and it answers each slug it moved once."},{"id":"closes-when-landed","statement":"decide_ticket writes a decision ahead of a landing: an active ticket becomes landing and a landing one has its decision replaced, keeping its body, proposal and start, and an open or closed ticket is a conflict; a gap or question becomes landing only when a change that is not closed relies on it, invalid otherwise, and only with an empty proposal, invalid otherwise, its proposal then dropped and the current ticket cleared when it was that one; close_ticket refuses a landing gap or question as a conflict."},{"id":"withdraw","statement":"withdraw_ticket closes an open, active or landing change with nothing of it applied: its decision marked withdrawn, its body emptied, its proposal and start dropped and the current ticket cleared when it was this one; a closed ticket is a conflict and a gap or question invalid, nothing changing."},{"id":"settles-answers","statement":"settle looks only at the given gaps and questions that are landing and that no change not closed relies on: after a change closed it closes each with its decision, its body emptied and its start removed; after a change went away, deleted, withdrawn or no longer relying on them, it closes each that a closed change relying on it, not withdrawn, closed on or after its decision's date, and reopens every other, open with no decision and its start removed, its body followed by the answer's date, why it reopened and the answer's text, cut with an ellipsis to the body's limit; it answers the slugs it closed and reopened."},{"id":"current-ticket","statement":"start_ticket makes the started ticket the store's current one and close_ticket clears it when it closes that one, a landing ticket staying current until then; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."}]}
+//! {"purpose":"Carry a ticket through its life: file, update, start, decide and close it, keep a change's priority with the answers it relies on, settle those answers when it lands or goes, and name the ticket a write belongs to.","criteria":[{"id":"file-ticket","statement":"file_ticket creates an open ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of a ticket that is not closed, and is a conflict on a closed one."},{"id":"start-ticket","statement":"start_ticket moves a ticket from open to active and is a conflict from any other status."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a closed ticket cannot be reopened or edited."},{"id":"priority-follows","statement":"keep_pace keeps a change that is not closed no lower priority than the gaps and questions it relies on that are not closed: after a change was lowered, each such answer now above it is lowered to the most urgent priority among the changes not closed that rely on it; then a change below any such answer is raised to the most urgent of them; after a gap or question was raised, or filed when a change already names it, every change not closed that relies on it and sits below it is raised to it; a closed ticket is never moved, lowering an answer or raising a change moves nothing, and it answers each slug it moved once."},{"id":"closes-when-landed","statement":"decide_ticket writes a decision ahead of a landing: an active ticket becomes landing and a landing one has its decision replaced, keeping its body, proposal and start, and an open or closed ticket is a conflict; a gap or question becomes landing only when a change that is not closed relies on it, invalid otherwise, and only with an empty proposal, invalid otherwise, its proposal then dropped and the current ticket cleared when it was that one; close_ticket refuses a landing gap or question as a conflict."},{"id":"withdraw","statement":"withdraw_ticket closes an open, active or landing change with nothing of it applied: its decision marked withdrawn, its body emptied, its proposal and start dropped and the current ticket cleared when it was this one; a closed ticket is a conflict and a gap or question invalid, nothing changing."},{"id":"settles-answers","statement":"settle looks only at the given gaps and questions that are landing and that no change not closed relies on: after a change closed it closes each with its decision, its body emptied and its start removed; after a change went away, deleted, withdrawn or no longer relying on them, it closes each that a closed change relying on it, not withdrawn, closed on or after its decision's date, and reopens every other, open with no decision and its start removed, its body followed by the answer's date, why it reopened and the answer's text, cut with an ellipsis to the body's limit; it answers the slugs it closed and reopened."},{"id":"current-ticket","statement":"start_ticket makes the started ticket the store's current one and close_ticket clears it when it closes that one, a landing ticket staying current until then; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"waits-here","statement":"decide_ticket records on a change's start, when it has one, the checkout it was last decided in, the store's repository, as closed_in, answering the start among what changed when it moved; waiting_here answers, in slug order, every landing ticket whose start names this store's repository as closed_in, but the one given, the same folder spelt with the other slash, a trailing one or another case counting as one."}]}
 //! ```
 
 use super::*;
@@ -164,7 +164,16 @@ pub fn decide_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Re
     invalid_if(validate_ticket(&t), "ticket")?;
     store.tickets.insert(r.id.clone(), t.clone());
     if !answer {
-        return Ok((t, Changed::Ticket(r.id.clone())));
+        // The checkout it was decided in carries it until it lands, so that checkout takes no other meanwhile
+        // without being told (req:one-ticket-per-branch); its start, this checkout's own, says which.
+        let repository = store.config.repository.clone();
+        return Ok(match store.starts.get_mut(&r.id) {
+            Some(start) if start.closed_in.as_deref() != Some(repository.as_str()) => {
+                start.closed_in = Some(repository);
+                (t, Changed::Many(vec![Changed::Ticket(r.id.clone()), Changed::Started(r.id.clone())]))
+            }
+            _ => (t, Changed::Ticket(r.id.clone())),
+        });
     }
     // It is no longer worked: what names it as worked goes first, so a writer
     // stopped part way leaves an active answer, not a waiting one still named.
@@ -177,6 +186,23 @@ pub fn decide_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Re
     store.starts.remove(&r.id);
     changes.extend([Changed::Proposed(r.id.clone()), Changed::Closed(r.id.clone())]);
     Ok((t, Changed::Many(changes)))
+}
+
+/// The changes this checkout closed `when: landed` that have not landed, but `except`, in slug order:
+/// each landing ticket whose start names this store's repository as where it was closed, the same
+/// folder spelt with the other slash, a trailing one or another case counting as one.
+pub fn waiting_here<'a>(store: &'a Store, except: Option<&str>) -> Vec<&'a Ticket> {
+    let here = same_place(&store.config.repository);
+    store
+        .tickets
+        .values()
+        .filter(|t| t.status == Status::Landing && Some(t.slug.as_str()) != except)
+        .filter(|t| store.starts.get(&t.slug).and_then(|s| s.closed_in.as_deref()).is_some_and(|c| same_place(c) == here))
+        .collect()
+}
+
+fn same_place(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_lowercase()
 }
 
 /// The changes, of any status, that rely on a gap or question and so apply its answer.
@@ -358,7 +384,7 @@ mod tests {
         let mut s = store();
         // later-1 is being worked: current, with a start and a proposal of a page the truth lacks.
         s.current = Some("later-1".into());
-        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default() });
+        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default(), closed_in: None });
         crate::ops::propose(&mut s, "later-1", crate::ops::Proposing::Whole, |w| {
             crate::ops::put_page(w, Page { slug: "never".into(), title: "Never".into(), body: "b".into(), links: vec![] }).map(|(_, c)| ((), c))
         })

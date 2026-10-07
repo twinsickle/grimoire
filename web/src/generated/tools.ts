@@ -85,6 +85,8 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
+export type FindingKey = { rule: Rule, check: string, ref: Ref, edge?: FindingEdge, };
+
 export type Ingredient = { recipe: string, id: string, says: string, };
 
 export type Judged = { recipe: Ref, judgement: Judgement, due: boolean | null, };
@@ -101,7 +103,9 @@ export type LibraryEntry = { name: string, repository: string, server: string | 
 
 export type Linked = { ref: Ref, title: string | null, };
 
-export type LintAnswer = { findings: Array<Finding>, advisories: Array<Advisory>, omens: Array<Omen>, counts: { [key in string]: number }, new: number, without_code: boolean, };
+export type LintAnswer = { findings: Array<Finding>, advisories: Array<Advisory>, mended: Array<Mended>, omens: Array<Omen>, counts: { [key in string]: number }, new: number, without_code: boolean, };
+
+export type Mended = { ticket: string, title: string, finding: FindingKey, };
 
 export type Module = { id: string, files: Array<string>, purpose: string | null, criteria: Array<Criterion>, imports: Array<string>, 
 /**
@@ -183,7 +187,7 @@ export type SourceAnswer = { file: Ref, language: string, text: string, focus: n
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
-export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, recipes: Array<RecipeState>, };
+export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, };
 
 export type Status = "open" | "active" | "landing" | "closed";
 
@@ -225,6 +229,8 @@ checks: Array<string>,
  * a constraint that names no criterion.
  */
 tests: number, rollup: Rollup, rites: boolean, children: Array<Tree>, };
+
+export type WaitingHere = { ticket: string, title: string, warning: string, };
 
 export type Withdrawn = { node: NodeView, settled: Array<Summary>, reopened: Array<Summary>, };
 

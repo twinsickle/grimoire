@@ -247,7 +247,7 @@ mod tests {
         assert!(moved(&s, "later-1").is_empty());
         // Deleting the ticket takes its start, its proposal and its currency with it.
         start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
-        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default() });
+        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), closed_in: None });
         let lost = s.pages["lost"].clone();
         propose(&mut s, "phase-62", Proposing::Whole, |w| put_page(w, Page { body: "theirs".into(), ..lost })).unwrap();
         let changed = delete_node(&mut s, &Reference::ticket("phase-62")).unwrap();

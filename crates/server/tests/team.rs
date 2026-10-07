@@ -76,7 +76,7 @@ fn host() -> Host {
         s.tickets.insert(slug.into(), ticket(slug, status));
     }
     s.current = Some("0003".into());
-    s.starts.insert("0003".into(), Start { ticket: "0003".into(), fingerprints: Default::default() });
+    s.starts.insert("0003".into(), Start { ticket: "0003".into(), fingerprints: Default::default(), closed_in: None });
     store_io::write_all(&store, &s, false).unwrap();
     let writer = store_io::tokens::add(&store, "ana", true).unwrap();
     let reader = store_io::tokens::add(&store, "pipeline-check", false).unwrap();
@@ -382,6 +382,36 @@ fn the_current_ticket_is_each_checkouts_own() {
         assert!(!m.holds("current.json") && !m.holds("starts/0001.json"));
     }
     assert_eq!(code(a.call("put_page", page("after")).unwrap_err()), "invalid", "no ticket is current here any more");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-checkout-is-told-of-a-ticket-it-still-carries", "checks": ["crates/core/src/tools/write#start-warns", "crates/core/src/ops/tickets#waits-here"]}
+/// ```
+#[test]
+fn a_checkout_is_told_of_a_ticket_it_still_carries() {
+    let h = host();
+    let (ana, ben) = (machine(), machine());
+    let (a, b) = (ana.open(h.as_writer()), ben.open(h.as_writer()));
+    a.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    b.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    // Closed to wait for its landing in Ana's checkout: her copy's start says so, and the server keeps no start.
+    a.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap();
+    assert!(std::fs::read_to_string(ana.copy.join("starts").join("0001.json")).unwrap().contains("closed_in"));
+    assert!(!h.store.join("starts").join("0001.json").exists());
+    // Ben helped with it, but it was not closed in his checkout: his next start is not warned.
+    assert_eq!(b.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"], json!([]));
+    // Ana's is, and the start goes ahead; read again from her copy, it still is.
+    let started = a.call("start_ticket", json!({ "ref": "ticket:0003" })).unwrap();
+    assert_eq!((started["node"]["status"].clone(), started["waiting"][0]["ticket"].clone()), (json!("active"), json!("0001")));
+    drop(a);
+    let a = ana.open(h.as_writer());
+    assert_eq!(a.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"][0]["ticket"], "0001");
+    // Landed on the main line, it is waiting nowhere.
+    assert_eq!(h.daemon.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap()["landed"], true);
+    a.sync_now().unwrap();
+    assert_eq!(a.call("start_ticket", json!({ "ref": "ticket:0003" })).unwrap()["waiting"], json!([]));
 }
 
 /// # Test contract

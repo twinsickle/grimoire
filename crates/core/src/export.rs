@@ -166,7 +166,7 @@ mod tests {
     fn an_export_holds_the_intent_and_nothing_of_a_machine() {
         let mut s = store();
         s.current = Some("later-1".into());
-        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default() });
+        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default(), closed_in: None });
         s.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         s.config.site = vec!["overview".into()];
         s.config.large_file = Some(600);
@@ -207,7 +207,7 @@ mod tests {
         server.config.recipe_kinds.insert("quest".into(), RecipeKind { uses: vec!["quest".into()] });
         let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has an active ticket");
         let other: String = server.tickets.values().find(|t| !t.status.is_live()).map(|t| t.slug.clone()).expect("and one that is not");
-        let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default() };
+        let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default(), closed_in: None };
         let mut own = Store { current: Some(live.clone()), ..Default::default() };
         own.starts.insert(live.clone(), start(&live));
         own.starts.insert(other.clone(), start(&other));
@@ -257,7 +257,7 @@ mod tests {
         new.requirements.remove(&gone);
         let live: String = new.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).unwrap();
         new.current = Some(live.clone());
-        new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default() });
+        new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default(), closed_in: None });
         new.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         new.config.roots.rites = Some("extra".into());
         new.judgements.insert("button".into(), vec![judgement("button")]);

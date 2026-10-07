@@ -447,6 +447,42 @@ fn a_branch_is_judged_by_its_own_work() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "the-check-names-a-ticket-still-waiting-to-land-here", "checks": ["crates/cli/src/check#check-own-work"]}
+/// ```
+#[test]
+fn the_check_names_a_ticket_still_waiting_to_land_here() {
+    let (p, _) = project();
+    let start = |title: &str| {
+        let filed: serde_json::Value =
+            serde_json::from_slice(&run(&p.repo, &["tool", "file_ticket", &format!(r#"{{"title":"{title}","kind":"change","priority":"next","body":"b"}}"#)]).stdout).unwrap();
+        let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
+        let started: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "start_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).stdout).unwrap();
+        (ticket, started)
+    };
+    // The first ticket adds module b with a requirement naming its criterion, and is closed to wait for its landing.
+    let (first, _) = start("b lands");
+    let req = r#"{"slug":"b-exports","title":"b exports b","statement":"The module b SHALL export b.","scenarios":[{"title":"b","given":"b","when":"b","then":"b"}],"covered_by":["criterion:src/b#exports-b"]}"#;
+    assert!(run(&p.repo, &["tool", "put_requirement", req]).status.success());
+    std::fs::write(p.repo.join("src").join("b.rs"), CONTRACTED.replace("exports-a", "exports-b")).unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{first}","decision":{{"text":"b lands"}},"when":"landed"}}"#)]);
+    assert!(close.status.success(), "{}", text(&close));
+    // A second ticket started in the same checkout is told the first still waits here.
+    let (_, started) = start("more");
+    assert_eq!(started["waiting"][0]["ticket"], first.as_str(), "{started}");
+    // Its check judges b's criterion against its own proposal, which lacks the first's requirement: it fails, naming the first beside it.
+    let check = run(&p.repo, &["check"]);
+    assert!(!check.status.success(), "the finding still fails: {}", text(&check));
+    let out = text(&check);
+    let at = out.find("criterion:src/b#exports-b").unwrap_or_else(|| panic!("{out}"));
+    assert!(out[at..].contains(&format!("ticket:{first} (b lands) would mend this")) && out.contains("still waiting to land from this checkout"), "{out}");
+    let json: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["check", "--json"]).stdout).unwrap();
+    assert!(json["mended"].as_array().unwrap().iter().any(|m| m["ticket"] == first.as_str() && m["finding"]["ref"] == "criterion:src/b#exports-b"), "{json}");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#library", "crates/server/src/library#named-by-checkouts"]}
 /// ```
 #[test]

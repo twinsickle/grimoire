@@ -821,11 +821,11 @@ mod tests {
         let baseline: Baseline =
             serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();
         assert_eq!(validate_baseline(&baseline)[0].field, "findings[0].check");
-        let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into() };
+        let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into(), closed_in: None };
         assert!(validate_start(&start("page:goal", "f1")).is_empty());
         assert!(!validate_start(&start("page:goal ", "f1")).is_empty(), "a key that is not a reference");
         assert!(!validate_start(&start("page:goal", " f1")).is_empty(), "an untrimmed fingerprint");
-        assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default() }).is_empty());
+        assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default(), closed_in: None }).is_empty());
         // A decision supersedes each earlier one once.
         let mut req = Requirement {
             slug: "r".into(),

@@ -656,7 +656,7 @@ mod tests {
         b.baseline = Some(Baseline { date: "2026-09-30".into(), reason: "adopted ".into(), findings: vec![] });
         assert!(refused(&b));
         let mut st = good.clone();
-        st.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), " f".to_string())].into() });
+        st.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), " f".to_string())].into(), closed_in: None });
         assert!(refused(&st));
         let mut k = good.clone();
         k.pages.insert("other".into(), good.pages["goal"].clone());
@@ -711,7 +711,7 @@ mod tests {
         assert!(refused(&cu), "no such ticket is current");
         // Replacing writes the starts, proposals, current ticket and baseline given, and leaves none of the old store's behind.
         let mut full = with_ticket.clone();
-        full.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), "f".to_string())].into() });
+        full.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), "f".to_string())].into(), closed_in: None });
         full.proposals.insert("0001".into(), proposal("0001", "Goal"));
         full.current = Some("0001".into());
         full.baseline = Some(Baseline { date: "2026-09-30".into(), reason: "adopted".into(), findings: vec![] });
@@ -760,7 +760,9 @@ mod tests {
         store.tickets.insert(ticket.slug.clone(), ticket);
         store.baseline =
             Some(serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-requirement", "ref": "page:vision"}]})).unwrap());
-        store.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:vision".to_string(), "f".to_string()), ("page:goal".to_string(), "g".to_string())].into() });
+        store
+            .starts
+            .insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:vision".to_string(), "f".to_string()), ("page:goal".to_string(), "g".to_string())].into(), closed_in: None });
         // The ticket's proposal holds a changed vision resting on the truth's, and a new page linking both the old and the new slug.
         let base = grimoire_core::fingerprint::of_record(&store.pages["vision"]);
         store.proposals.insert(
@@ -1188,14 +1190,19 @@ mod tests {
                 decision: None,
             },
         );
-        store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect() });
+        store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect(), closed_in: None });
         write_all(dir, &store, false).unwrap();
         persist(dir, &store, &Changed::Started("0040".into())).unwrap();
         let text = std::fs::read_to_string(dir.join(STARTS_DIR).join("0040.json")).unwrap();
         assert!(!text.contains("date"), "a start carries no date");
+        assert!(!text.contains("closed_in"), "only a start closed when: landed names its checkout");
         let (loaded, malformed) = load(dir).unwrap();
         assert!(malformed.is_empty(), "{malformed:?}");
         assert_eq!(loaded.starts, store.starts);
+        // Closed to wait for its landing, it names the checkout it was closed in, and reads back so.
+        store.starts.get_mut("0040").unwrap().closed_in = Some("C:/repo".into());
+        persist(dir, &store, &Changed::Started("0040".into())).unwrap();
+        assert_eq!(load(dir).unwrap().0.starts, store.starts);
         store.starts.remove("0040");
         persist(dir, &store, &Changed::Closed("0040".into())).unwrap();
         assert!(!dir.join(STARTS_DIR).join("0040.json").exists());

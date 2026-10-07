@@ -114,6 +114,20 @@ it created in `warnings`. Every warning is work to do now.
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
   `high`, `later`; statuses `open`, `active`, `landing` (its decision
   written, its change yet to land) and `closed`.
+- **A branch holds one ticket** until that ticket lands, where the project
+  is worked in git: landed with `grimoire land`, which on a team is once
+  the branch has merged to the main line.
+  The check judges a checkout's code against its current ticket's proposal
+  alone, so a second ticket started beside one still waiting to land splits
+  the branch's intent, and its check fails on the first one's code. Start
+  the next ticket on a new branch, or wait for the landing. Work too big
+  for one checkout is split into branches of the ticket's branch: each
+  helper takes the same ticket up there with `start_ticket`, shares its one
+  proposal and merges back into the ticket's branch, which alone lands.
+  Work found along the way is filed as a ticket of its own. Nothing refuses
+  a second ticket: `start_ticket` answers in `waiting` each ticket this
+  checkout still carries, and the check names such a ticket beside a
+  finding it would mend, the finding still failing.
 - `put_page` and `put_requirement` **replace** the record. To add or remove
   a page's links, `patch_page`; it touches nothing else. For a requirement,
   `get` first and send the whole thing back; existing decisions are kept.
@@ -157,8 +171,11 @@ edges.
    first, with the decisions behind each requirement), `related` (open gaps
    and questions touching what it touches) and `recipes` (the recipes resting
    on what it touches, each saying whether it is `due`: what the project
-   promises the people who build with it, which this work may break). If the
-   ticket is already active,
+   promises the people who build with it, which this work may break). If
+   it answers `waiting`, this checkout still carries a ticket that has not
+   landed: say so, and land that one first or move this work to a new
+   branch (see "A branch holds one ticket" above). If the ticket is already
+   active,
    use `get`, `rests_on` and `related_tickets` instead; on a team,
    `start_ticket` on a ticket already active takes it up in this checkout:
    it becomes the current ticket here and nothing of it changes.

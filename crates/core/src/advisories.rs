@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, and which it shows as advisories naming the work that may conflict with it.","criteria":[{"id":"own-work","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base; every other finding stays, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is active or landing, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."}]}
+//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, which it shows as advisories naming the work that may conflict with it, and which a change still waiting to land from it would mend.","criteria":[{"id":"own-work","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base; every other finding stays, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is active or landing, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."},{"id":"mended","statement":"mended gives, for each change ops::waiting_here names for this checkout other than the current ticket, each finding that is not baselined and that the truth with that change's proposal laid beneath the current ticket's does not produce against this checkout's code, naming the change; it takes nothing out of the findings, which still fail."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -79,6 +79,34 @@ pub fn others(store: &Store, ticket: Option<&str>, truth: &[Finding], mine: &[Fi
     out
 }
 
+/// A finding the check fails on that a change this checkout closed `when: landed`, and that has not
+/// landed, would mend: named beside it, the finding still failing (req:one-ticket-per-branch).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Mended {
+    pub ticket: String,
+    pub title: String,
+    pub finding: FindingKey,
+}
+
+/// For each change waiting to land from this checkout but `ticket`, the new findings among
+/// `findings` that `judge` does not give for it: the truth with that change's proposal laid
+/// beneath `ticket`'s, as the main line will hold it once that change lands.
+pub fn mended(store: &Store, ticket: Option<&str>, findings: &[Finding], mut judge: impl FnMut(&str) -> Vec<Finding>) -> Vec<Mended> {
+    let failing: Vec<&Finding> = findings.iter().filter(|f| !f.baselined).collect();
+    if failing.is_empty() {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    for t in crate::ops::waiting_here(store, ticket) {
+        let after: HashSet<FindingKey> = judge(&t.slug).iter().map(Finding::key).collect();
+        for f in failing.iter().filter(|f| !after.contains(&f.key())) {
+            out.push(Mended { ticket: t.slug.clone(), title: t.title.clone(), finding: f.key() });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +154,43 @@ mod tests {
         assert!(advised.is_empty());
         // With no base, nothing moves.
         assert_eq!(own(findings.clone(), None, &s, Some("later-1")).0, findings);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-waiting-change-is-named-beside-what-it-would-mend", "checks": ["crates/core/src/advisories#mended"]}
+    /// ```
+    #[test]
+    fn a_waiting_change_is_named_beside_what_it_would_mend() {
+        let ext = crate::extraction::fixtures::extraction();
+        let mut s = crate::graph::fixtures::store();
+        // phase-62 waits to land from this checkout, its proposal mending req:stale; later-1 is current.
+        s.tickets.get_mut("phase-62").unwrap().status = Status::Landing;
+        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), closed_in: Some(s.config.repository.clone()) });
+        let mut mended_req = s.requirements["stale"].clone();
+        mended_req.covered_by = vec!["criterion:src/a/ready#guarantee".parse().unwrap()];
+        let mut p = Proposal::new("phase-62");
+        p.requirements.insert("stale".into(), Proposed { record: mended_req, base: None });
+        s.proposals.insert("phase-62".into(), p);
+        let rules = [Rule::Dangling];
+        let findings = lint(&Graph::with_proposal(&s, "later-1", &ext, &[]), &rules);
+        let judge = |t: &str| lint(&Graph::with_proposal(&s.applied(t), "later-1", &ext, &[]), &rules);
+        let named = mended(&s, Some("later-1"), &findings, judge);
+        assert_eq!(named.len(), 1);
+        assert_eq!((named[0].ticket.as_str(), named[0].finding.r#ref.to_string()), ("phase-62", "req:stale".to_string()));
+        // A baselined finding is not failing, so nothing is named beside it; nor is a change closed in another checkout.
+        let baselined: Vec<Finding> = findings
+            .iter()
+            .cloned()
+            .map(|mut f| {
+                f.baselined = true;
+                f
+            })
+            .collect();
+        assert!(mended(&s, Some("later-1"), &baselined, |t| lint(&Graph::with_proposal(&s.applied(t), "later-1", &ext, &[]), &rules)).is_empty());
+        s.starts.get_mut("phase-62").unwrap().closed_in = Some("C:/elsewhere".into());
+        assert!(mended(&s, Some("later-1"), &findings, |t| lint(&Graph::with_proposal(&s.applied(t), "later-1", &ext, &[]), &rules)).is_empty());
     }
 
     /// # Test contract

@@ -95,6 +95,8 @@ pub struct LintAnswer {
     pub findings: Vec<Finding>,
     // What other work causes, shown apart and never counted as new (req:check-own-work).
     pub advisories: Vec<crate::advisories::Advisory>,
+    // Each finding above that a change this checkout closed `when: landed`, not landed yet, would mend; it still fails (req:check-own-work).
+    pub mended: Vec<crate::advisories::Mended>,
     // Signs that something may be wrong, apart from the findings: never failing, never baselined (req:lint-omens).
     pub omens: Vec<crate::lint::Omen>,
     pub counts: BTreeMap<String, usize>,
@@ -203,6 +205,17 @@ pub struct Started {
     pub related: Vec<Summary>,
     // The recipes resting on what the ticket touches, each with whether it is due (req:recipe-in-tickets).
     pub recipes: Vec<RecipeState>,
+    // The changes this checkout closed `when: landed` that have not landed: a warning each, never a refusal (req:tool-start-ticket).
+    pub waiting: Vec<WaitingHere>,
+}
+
+/// A change this checkout closed `when: landed` that has not landed yet, with the warning a start here gives.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct WaitingHere {
+    pub ticket: String,
+    pub title: String,
+    pub warning: String,
 }
 
 /// `close_ticket`: the closed ticket, new findings on what it touched, the
