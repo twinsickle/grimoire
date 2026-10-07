@@ -433,6 +433,14 @@ impl Daemon {
         grimoire_core::query::site(state.graph(), &config, show)
     }
 
+    /// The site, its list of pages and its catalog, with the recipe `id` names in full, read under one lock.
+    pub fn site_recipe(&self, id: &str) -> (grimoire_core::query::Site, Option<grimoire_core::query::SiteRecipe>) {
+        let mut state = self.state.lock().expect("state lock");
+        let config = state.store().config.clone();
+        // An empty slug names no page, so only the list, the catalog and the name are gathered.
+        (grimoire_core::query::site(state.graph(), &config, Some("")), grimoire_core::query::recipe(state.graph(), id))
+    }
+
     /// Run one tool, persisting any write.
     pub fn call(&self, name: &str, input: Value) -> Result<Value, ToolError> {
         self.call_as(name, input, None)

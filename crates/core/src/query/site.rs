@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's grimoire root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."}]}
+//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's grimoire root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."},{"id":"recipes","statement":"site lists every recipe the graph holds as the catalog, ordered by kind, then title, then id, each with its id, title, kind, the first paragraph of its text that is not a heading, and whether it is due, and gives with the page shown the recipes it links that exist, an ingredient's link placing its recipe, each once, in link order; recipe gives one recipe in full by its id, none for an id no recipe has: its id, title, kind and text, its ingredients each by id and what it says, the recipes it uses that exist in the order it names them and those that use it ordered by title, its last judgement's date and outcome when it has one, and whether it is due, and nothing of its files, file or line."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -11,13 +11,53 @@ use serde::Serialize;
 use crate::graph::{Graph, Node};
 use crate::model::*;
 
-/// The project's site: its name, every page in reading order, and the one page asked for in full.
+/// The project's site: its name, every page in reading order, the catalog of recipes, and the one page asked for in full.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Site {
     /// The title of the store's grimoire root page, when there is one.
     pub name: Option<String>,
     pub pages: Vec<SiteEntry>,
+    /// Every recipe the code reads, by kind, then title.
+    pub recipes: Vec<SiteRecipeEntry>,
     pub shown: Option<SitePage>,
+}
+
+/// A recipe as the catalog lists it: what it is called, its kind, the first thing it says, and whether it is due.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SiteRecipeEntry {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub summary: String,
+    pub due: bool,
+}
+
+/// One recipe in full, as someone who builds with the project reads it: never its files.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SiteRecipe {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub text: String,
+    pub ingredients: Vec<SiteIngredient>,
+    pub uses: Vec<SiteRecipeEntry>,
+    pub used_by: Vec<SiteRecipeEntry>,
+    pub judged: Option<SiteJudged>,
+    pub due: bool,
+}
+
+/// An ingredient: its id and what it says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SiteIngredient {
+    pub id: String,
+    pub says: String,
+}
+
+/// When a recipe was last judged, and how.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SiteJudged {
+    pub date: String,
+    pub outcome: JudgementOutcome,
 }
 
 /// A page's place in the site: what it is called, and how deep it sits beneath the named page it came under.
@@ -35,6 +75,8 @@ pub struct SitePage {
     pub title: String,
     pub body: String,
     pub requirements: Vec<SiteRequirement>,
+    /// The recipes the page links, which it places.
+    pub recipes: Vec<SiteRecipeEntry>,
 }
 
 /// A requirement as an outsider reads it: what it says, and the cases it holds for.
@@ -100,9 +142,85 @@ pub fn site(g: &Graph, config: &StoreConfig, show: Option<&str>) -> Site {
                 _ => None,
             })
             .collect(),
+        recipes: {
+            // An ingredient's link places its recipe, once.
+            let mut ids: Vec<&str> = Vec::new();
+            for l in p.links.iter().filter(|l| l.kind == Kind::Recipe) {
+                let id = l.id.split_once('#').map_or(l.id.as_str(), |(r, _)| r);
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+            ids.into_iter().filter_map(|id| recipe_node(g, id)).map(|r| entry(g, r)).collect()
+        },
     });
     let name = config.roots.grimoire.as_ref().and_then(|r| page(g, r)).map(|p| p.title.clone());
-    Site { name, pages, shown }
+    let mut recipes: Vec<SiteRecipeEntry> = all_recipes(g).map(|r| entry(g, r)).collect();
+    recipes.sort_by(|a, b| (&a.kind, &a.title, &a.id).cmp(&(&b.kind, &b.title, &b.id)));
+    Site { name, pages, recipes, shown }
+}
+
+fn recipe_node<'g>(g: &'g Graph, id: &str) -> Option<&'g Recipe> {
+    match g.get(&Reference::recipe(id)) {
+        Some(Node::Recipe(r)) => Some(r),
+        _ => None,
+    }
+}
+
+fn all_recipes(g: &Graph) -> impl Iterator<Item = &Recipe> {
+    g.nodes.values().filter_map(|n| match n {
+        Node::Recipe(r) => Some(r),
+        _ => None,
+    })
+}
+
+/// The first paragraph of a recipe's prose, outside a heading or a fenced block: what the catalog says of it.
+fn summary(text: &str) -> String {
+    let mut paragraph = String::new();
+    // The fence's character while inside one: a block opened with backticks is closed only by backticks.
+    let mut fence: Option<char> = None;
+    for line in text.lines().map(str::trim) {
+        let heading = line.trim_start_matches('#').is_empty() && line.starts_with('#') || line.split_once(' ').is_some_and(|(h, _)| !h.is_empty() && h.len() <= 6 && h.chars().all(|c| c == '#'));
+        if let Some(c) = ['`', '~'].into_iter().find(|c| line.starts_with(&c.to_string().repeat(3))) {
+            match fence {
+                None => fence = Some(c),
+                Some(open) if open == c => fence = None,
+                Some(_) => {}
+            }
+        } else if fence.is_none() && !line.is_empty() && !heading {
+            if !paragraph.is_empty() {
+                paragraph.push(' ');
+            }
+            paragraph.push_str(line);
+            continue;
+        }
+        if !paragraph.is_empty() {
+            break;
+        }
+    }
+    paragraph
+}
+
+fn entry(g: &Graph, r: &Recipe) -> SiteRecipeEntry {
+    SiteRecipeEntry { id: r.id.clone(), title: r.title.clone(), kind: r.kind.clone(), summary: summary(&r.text), due: g.is_due(r) }
+}
+
+/// One recipe in full, by its id: what it says, its ingredients, how it is connected to other recipes and when it was last judged; never its files.
+pub fn recipe(g: &Graph, id: &str) -> Option<SiteRecipe> {
+    let r = recipe_node(g, id)?;
+    let mut used_by: Vec<SiteRecipeEntry> = all_recipes(g).filter(|o| o.uses.iter().any(|u| u == id)).map(|o| entry(g, o)).collect();
+    used_by.sort_by(|a, b| (&a.title, &a.id).cmp(&(&b.title, &b.id)));
+    Some(SiteRecipe {
+        id: r.id.clone(),
+        title: r.title.clone(),
+        kind: r.kind.clone(),
+        text: r.text.clone(),
+        ingredients: r.ingredients.iter().map(|i| SiteIngredient { id: i.id.clone(), says: i.says.clone() }).collect(),
+        uses: r.uses.iter().filter_map(|u| recipe_node(g, u)).map(|u| entry(g, u)).collect(),
+        used_by,
+        judged: g.judgements.get(id).and_then(|all| all.last()).map(|j| SiteJudged { date: j.date.clone(), outcome: j.outcome }),
+        due: g.is_due(r),
+    })
 }
 
 #[cfg(test)]
@@ -177,5 +295,70 @@ mod tests {
             None,
             "a grimoire root that names no page gives no name, not the rites' title"
         );
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-catalog-is-every-recipe-and-a-recipe-is-what-it-says", "checks": ["crates/core/src/query/site#recipes"]}
+    /// ```
+    #[test]
+    fn the_catalog_is_every_recipe_and_a_recipe_is_what_it_says() {
+        use crate::extraction::fixtures::{extraction_files, recipe_file};
+        use crate::extraction::Extraction;
+        let mut files = extraction_files();
+        files.push(recipe_file("ui/button.recipe.md", "button", "component", &["icon", "nowhere"], &["src/a"], &[]));
+        files.push(recipe_file("ui/icon.recipe.md", "icon", "component", &[], &["src/b"], &[]));
+        files.push(recipe_file("content/quest.recipe.md", "quest", "content", &["button"], &[], &[]));
+        // Two more: one titled as button is, and one using it, so the orders are seen.
+        files.push(recipe_file("ui/abutton.recipe.md", "abutton", "component", &["icon"], &[], &[]));
+        files.push(recipe_file("ui/aaa.recipe.md", "aaa", "component", &["button"], &[], &[]));
+        for f in files.iter_mut() {
+            if let Some(Ok(r)) = f.recipe.as_mut() {
+                match r.id.as_str() {
+                    "abutton" => r.title = "BUTTON".into(),
+                    "aaa" => r.title = "ZED".into(),
+                    "button" => r.uses = vec!["nowhere".into(), "quest".into(), "icon".into()],
+                    _ => {}
+                }
+            }
+        }
+        if let Some(r) = files.iter_mut().find_map(|f| f.recipe.as_mut().and_then(|r| r.as_mut().ok()).filter(|r| r.id == "icon")) {
+            r.text = "# Usage\n\n```json\n~~~\n\nnot this\n```\n\n#1 icon,\non one line.\n\nMore.".into();
+        }
+        let mut s = crate::graph::fixtures::store();
+        let judged = |fingerprint: &str, date: &str, outcome| Judgement { recipe: "button".into(), fingerprint: fingerprint.into(), date: date.into(), ticket: "later-1".into(), outcome };
+        let digest = crate::fingerprint::of_text("ui/button.recipe.md:button");
+        s.judgements.insert("button".into(), vec![judged("old", "2026-10-01", JudgementOutcome::Updated), judged(&digest, "2026-10-07", JudgementOutcome::Held)]);
+        s.pages.get_mut("git-readiness").unwrap().links.extend(["recipe:icon#label".parse().unwrap(), "recipe:icon".parse().unwrap(), "recipe:gone".parse().unwrap()]);
+        let g = Graph::build(&s, &Extraction::from_files(&files), &[]);
+        let mut config = s.config.clone();
+        config.site = vec!["git-readiness".into()];
+        let site = site(&g, &config, None);
+        // Every recipe, by kind, then title, whether a page places it or not.
+        let listed: Vec<(&str, &str, bool)> = site.recipes.iter().map(|r| (r.kind.as_str(), r.id.as_str(), r.due)).collect();
+        assert_eq!(
+            listed,
+            [("component", "abutton", true), ("component", "button", false), ("component", "icon", true), ("component", "aaa", true), ("content", "quest", true)],
+            "by kind, title, then id"
+        );
+        assert_eq!(site.recipes[2].summary, "#1 icon, on one line.", "the first paragraph, past a heading and a block another fence does not close");
+        assert_eq!(site.recipes[1].summary, "How to use button.");
+        // The page shown lists the recipes it links that exist.
+        assert_eq!(site.shown.unwrap().recipes.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["icon"], "an ingredient's link places its recipe, once");
+        // One recipe in full: what it says, how it is connected, when last judged.
+        let button = recipe(&g, "button").expect("button");
+        assert_eq!((button.title.as_str(), button.kind.as_str(), button.text.as_str()), ("BUTTON", "component", "How to use button."));
+        assert_eq!(button.ingredients, [SiteIngredient { id: "label".into(), says: "The text shown.".into() }]);
+        assert_eq!(button.uses.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["quest", "icon"], "in the order named, a use leading nowhere left out");
+        assert_eq!(button.used_by.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["quest", "aaa"], "by title: QUEST before ZED");
+        assert_eq!(button.judged, Some(SiteJudged { date: "2026-10-07".into(), outcome: JudgementOutcome::Held }), "the last judgement");
+        assert!(!button.due);
+        let icon = recipe(&g, "icon").expect("icon");
+        assert!(icon.judged.is_none() && icon.due && icon.used_by.iter().any(|r| r.id == "button"));
+        assert_eq!(recipe(&g, "gone"), None);
+        // Nothing of its files reaches the answer.
+        let json = serde_json::to_string(&button).unwrap();
+        assert!(!json.contains("src/a") && !json.contains("ui/button.recipe.md") && !json.contains("\"line\""), "{json}");
     }
 }
