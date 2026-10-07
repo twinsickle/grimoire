@@ -2,21 +2,20 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: the node's fields by kind, what it rests on with decisions, what rests on it, its edges and findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"rests-on","statement":"The Rests on panel lists every node rests_on returns at depth 3, each with the newest decision it carries in full and the earlier ones, newest first, behind a toggle naming their count, a decision recorded as an adoption marked so and a requirement whose decisions there are all adoptions marked described; past 20 nodes it shows the first 20 and a Show all naming the count, which unfolds the rest; nothing is cut."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page shows each reference of the ticket's whose node the graph no longer holds, under Touches, Relies on, Rests on and Links out, with the mark web/src/components gives a reference that no longer exists, never as a link, and hands the graph the same references to draw so; the references of a ticket that is not closed are links as before, since the check reports those."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
+ * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration and test; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement; then its findings and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. A file's page is its annotated source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
  * ```
  */
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
-import { TicketGraph } from "./TicketGraph";
+import { NodeGraph } from "./NodeGraph";
 import { decisionsInForce, isDescribed } from "../decisions";
 import { TAB, highlight, indentWidth, type Token, type Tone } from "../highlight";
 import {
   Badge,
   ErrorBox,
-  GoneRef,
   KindTag,
   Markdown,
   PriorityTag,
@@ -24,7 +23,6 @@ import {
   SourceLink,
   StatusTag,
   Handoff,
-  TicketTable,
   card,
   decision as decisionBox,
   decisionDate,
@@ -43,8 +41,6 @@ import {
   kindOf,
   type AnyNode,
   type Annotation,
-  type CoverageAnswer,
-  type CriterionCoverage,
   type CriterionNode,
   type DeclNode,
   type TestNode,
@@ -52,8 +48,6 @@ import {
   type ModuleNode,
   type Ref,
   type ReqNode,
-  type RestsOn as RestsOnNode,
-  type Summary,
   type TicketNode,
 } from "../types";
 
@@ -73,7 +67,7 @@ export function NodeView() {
   const kind = kindOf(ref);
   const gone = goneOf(node);
   return (
-    <div className={`grid grid-cols-1 gap-6 items-start max-w-[150ch] mx-auto ${kind === "file" ? "" : "lg:grid-cols-[minmax(0,1fr)_360px]"}`}>
+    <div className="max-w-[150ch] mx-auto">
       <div>
         <div className="flex flex-col gap-1.5 mb-3">
           <div className="flex gap-2.5 items-center">
@@ -83,21 +77,20 @@ export function NodeView() {
           <h1>{titleOf(node)}</h1>
           <DraftNotice ref={ref} ticket={ticket} drafts={data.drafts} />
         </div>
-        {kind === "req" && <Req n={node as ReqNode} />}
-        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} gone={gone} />}
-        {kind === "module" && <Module n={node as ModuleNode} />}
+        {/* What the node is comes first, then its graph, then the rest of what it holds. */}
+        {kind === "req" && <Req n={node as ReqNode} part="lead" />}
+        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} part="lead" />}
+        {kind === "module" && <Module n={node as ModuleNode} part="lead" />}
         {kind === "criterion" && <Criterion n={node as CriterionNode} />}
+        {kind !== "file" && <NodeGraph key={`${ref}|${ticket ?? ""}`} node={ref} title={titleOf(node)} incoming={node.in} gone={gone} ticket={ticket} />}
+        {kind === "req" && <Req n={node as ReqNode} part="rest" />}
+        {kind === "ticket" && <Ticket n={node as TicketNode} proposal={data.proposal} part="rest" />}
+        {kind === "module" && <Module n={node as ModuleNode} part="rest" />}
         {kind === "file" && <File n={node as FileNode} />}
         {kind === "decl" && <Decl n={node as DeclNode} />}
         {kind === "test" && <TestView n={node as TestNode} />}
         <Findings ref={ref} />
       </div>
-      <aside>
-        <RestsOn key={ref} ref={ref} gone={gone} />
-        <RestsOnMe ref={ref} />
-        <Edges title="Links out" edges={node.out} gone={gone} />
-        <Edges title="Linked from" edges={node.in} />
-      </aside>
     </div>
   );
 }
@@ -169,21 +162,30 @@ function Decisions({ n }: { n: ReqNode }) {
   );
 }
 
-function Req({ n }: { n: ReqNode }) {
+/** Which part of a node's page a renderer draws: what it is, above the graph, or the rest, below it. */
+type Part = "lead" | "rest";
+
+function Req({ n, part }: { n: ReqNode; part: Part }) {
   const label = "text-fg-dim font-semibold text-xs uppercase tracking-[0.04em] mr-1.5";
+  if (part === "lead") {
+    return (
+      <>
+        {n.retired && (
+          <p>
+            <Badge tone="warn">retired</Badge> <span className="text-fg-dim">It no longer holds: no page links it and it covers no criterion. Its last decision says why.</span>
+          </p>
+        )}
+        {!n.retired && isDescribed(n.decisions) && (
+          <p data-described>
+            <Badge tone="warn">described</Badge> <span className="text-fg-dim">Read off the code at adoption: it says what the code did, not what anyone chose, until a decision is recorded on it.</span>
+          </p>
+        )}
+        <p>{n.statement}</p>
+      </>
+    );
+  }
   return (
     <>
-      {n.retired && (
-        <p>
-          <Badge tone="warn">retired</Badge> <span className="text-fg-dim">It no longer holds: no page links it and it covers no criterion. Its last decision says why.</span>
-        </p>
-      )}
-      {!n.retired && isDescribed(n.decisions) && (
-        <p data-described>
-          <Badge tone="warn">described</Badge> <span className="text-fg-dim">Read off the code at adoption: it says what the code did, not what anyone chose, until a decision is recorded on it.</span>
-        </p>
-      )}
-      <p>{n.statement}</p>
       {n.scenarios.length > 0 && <h2>Scenarios</h2>}
       {n.scenarios.map((s, i) => (
         <div className="bg-bg border border-line rounded-md px-2.5 py-2 my-1.5" key={i}>
@@ -202,27 +204,21 @@ function Req({ n }: { n: ReqNode }) {
         </div>
       ))}
       <Decisions n={n} />
-      <h2>{n.retired ? "Named while it held" : "Covered by"}</h2>
-      {n.covered_by.length === 0 && <p className={empty}>No criterion yet: the code does not satisfy this.</p>}
-      <ul className={list}>
-        {n.covered_by.map((c) => (
-          <li key={c} className={item}>
-            <RefLink ref={c} />
-          </li>
-        ))}
-      </ul>
     </>
   );
 }
 
-function Ticket({ n, proposal, gone }: { n: TicketNode; proposal?: ProposalView; gone: Set<Ref> }) {
+function Ticket({ n, proposal, part }: { n: TicketNode; proposal?: ProposalView; part: Part }) {
   const ref = `ticket:${n.slug}`;
-  const related = useQuery(() => api.relatedTickets(ref), [ref]);
-  return (
-    <>
+  if (part === "lead") {
+    return (
       <p>
         <PriorityTag p={n.priority} /> · <span className="text-fg-dim">{n.kind}</span> · <StatusTag s={n.status} withdrawn={n.decision?.withdrawn} />
       </p>
+    );
+  }
+  return (
+    <>
       {n.body && <Markdown text={n.body} />}
       {/* A landing ticket's decision is written, not in force: it closes when its change lands. */}
       {n.decision && <Decision date={n.decision.date} text={n.decision.text} label={n.status === "landing" ? "written, waiting for its change to land" : n.decision.withdrawn ? "withdrawn: nothing of it was applied" : undefined} />}
@@ -233,22 +229,8 @@ function Ticket({ n, proposal, gone }: { n: TicketNode; proposal?: ProposalView;
         </div>
       )}
       {(n.status === "active" || n.status === "landing") && <Proposed ticket={ref} proposal={proposal} />}
-      <TicketGraph key={ref} ticket={ref} title={n.title} gone={gone} />
-      <h2>Touches</h2>
-      <RefList refs={n.touches} empty="Nothing." titles={titlesOf(n.out)} gone={gone} />
-      <h2>Relies on</h2>
-      <RefList refs={n.relies_on} empty="Nothing declared." titles={titlesOf(n.out)} gone={gone} />
-      <h2>Related gaps and questions</h2>
-      {related.data && <TicketTable tickets={related.data.tickets} empty="None touch what this ticket touches." />}
     </>
   );
-}
-
-/** Titles for the other ends of a node's edges, so lists of references read as names. */
-function titlesOf(edges: { ref: Ref; title: string | null }[]): Record<string, string> {
-  const m: Record<string, string> = {};
-  for (const e of edges) if (e.title) m[e.ref] = e.title;
-  return m;
 }
 
 /** An active or landing ticket's proposal: what it would change in the truth, and how, each readable as proposed. */
@@ -282,76 +264,43 @@ function Proposed({ ticket, proposal }: { ticket: Ref; proposal?: ProposalView }
   );
 }
 
-function RefList({ refs, empty: emptyText, titles = {}, gone }: { refs: Ref[]; empty: string; titles?: Record<string, string>; gone?: Set<Ref> }) {
-  if (refs.length === 0) return <p className={empty}>{emptyText}</p>;
-  return (
-    <ul className={list}>
-      {refs.map((r) => (
-        <li key={r} className={item}>
-          {gone?.has(r) ? <GoneRef ref={r} /> : <RefLink ref={r} title={titles[r]} />}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Module({ n }: { n: ModuleNode }) {
-  const ref = `module:${n.id}`;
-  const cov = useQuery(() => api.coverage(ref), [ref]);
+function Module({ n, part }: { n: ModuleNode; part: Part }) {
+  if (part === "lead") {
+    return (
+      <>
+        {n.contract_error && <p className={errorBox}>Contract: {n.contract_error}</p>}
+        {n.contract_at && (
+          <p className="text-fg-dim">
+            Contract at <SourceLink file={n.contract_at[0]} line={n.contract_at[1]} />
+          </p>
+        )}
+      </>
+    );
+  }
   return (
     <>
-      {n.contract_error && <p className={errorBox}>Contract: {n.contract_error}</p>}
-      {n.contract_at && (
-        <p className="text-fg-dim">
-          Contract at <SourceLink file={n.contract_at[0]} line={n.contract_at[1]} />
-        </p>
-      )}
       <h2>Criteria</h2>
       {n.criteria.length === 0 && <p className={empty}>None.</p>}
       <ul className={list}>
-        {moduleCriteria(cov.data).map((c) => (
-          <li key={c.ref} className="flex flex-col items-stretch gap-0.5">
-            <RefLink ref={c.ref} title={c.statement} />
-            <span className="text-fg-faint pl-2">
-              {c.requirements.length === 0 ? (
-                <Badge tone="warn">uncovered</Badge>
-              ) : (
-                c.requirements.map((r) => (
-                  <span key={r.ref} className="mr-2">
-                    <RefLink ref={r.ref} title={r.title} />
-                  </span>
-                ))
-              )}
-            </span>
+        {n.criteria.map((c) => (
+          <li key={c.id} className={item}>
+            <Link to={nodePath(`criterion:${n.id}#${c.id}`)} className="text-fg-dim font-mono text-[12.5px] shrink-0">
+              #{c.id}
+            </Link>
+            <span>{c.statement}</span>
           </li>
         ))}
       </ul>
-      <h2>Files</h2>
-      <RefList refs={n.files.map((f) => `file:${f}`)} empty="None." />
-      <h2>Imports</h2>
-      <RefList refs={n.imports.map((m) => `module:${m}`)} empty="No resolved imports." titles={titlesOf(n.out)} />
     </>
   );
 }
 
-/** A module's criteria from its coverage answer, each with what names and checks it. */
-function moduleCriteria(a: CoverageAnswer | undefined): CriterionCoverage[] {
-  if (!a || !("criteria" in a)) return [];
-  return a.criteria.filter((c): c is CriterionCoverage => "requirements" in c);
-}
-
-/** The requirements naming a criterion, from its coverage answer. */
-function coveredBy(a: CoverageAnswer | undefined): Summary[] | undefined {
-  return a && "requirements" in a ? a.requirements : undefined;
-}
-
 function Criterion({ n }: { n: CriterionNode }) {
   const ref = `criterion:${n.module}#${n.id}`;
-  const cov = useQuery(() => api.coverage(ref), [ref]);
   const src = useQuery(() => api.moduleSource(ref), [ref]);
+  // Its title is its statement, so only where it is written is said beneath.
   return (
     <>
-      <p>{n.statement}</p>
       <p className="text-fg-dim">
         In <RefLink ref={`module:${n.module}`} />
         {src.data && (
@@ -361,15 +310,6 @@ function Criterion({ n }: { n: CriterionNode }) {
           </>
         )}
       </p>
-      <h2>Covered by</h2>
-      {coveredBy(cov.data)?.length === 0 && <p className={empty}>No requirement names this criterion.</p>}
-      <ul className={list}>
-        {coveredBy(cov.data)?.map((r) => (
-          <li key={r.ref} className={item}>
-            <RefLink ref={r.ref} title={r.title} />
-          </li>
-        ))}
-      </ul>
     </>
   );
 }
@@ -519,100 +459,7 @@ function TestView({ n }: { n: TestNode }) {
       <p className="text-fg-dim">
         Test block at <SourceLink file={n.file} line={n.line} />
       </p>
-      <h2>Checks</h2>
-      <RefList refs={n.checks.map((c) => (c.startsWith("req:") ? c : `criterion:${c}`))} empty="Nothing." titles={titlesOf(n.out)} />
     </>
-  );
-}
-
-/** A node it rests on: its newest decision in full, the earlier ones folded beneath. */
-function RestsOnItem({ r, gone }: { r: RestsOnNode; gone: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [newest, ...earlier] = r.decisions;
-  // The decisions here are those in force: all of them adoptions leaves the requirement described.
-  const described = r.ref.startsWith("req:") && r.decisions.length > 0 && r.decisions.every((d) => d.adopted === true);
-  return (
-    <li className="flex flex-col items-stretch" data-described={described || undefined}>
-      <span className="flex gap-2 items-baseline">
-        {gone ? <GoneRef ref={r.ref} /> : <RefLink ref={r.ref} title={r.title} />}
-        {described && <Badge tone="warn">described</Badge>}
-      </span>
-      {newest && <Decision label={newest.adopted ? "adoption" : undefined} date={newest.date} text={newest.text} />}
-      {earlier.length > 0 && (
-        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="self-start text-[12.5px] text-accent bg-transparent border-none p-0 hover:underline">
-          {open ? "Hide earlier decisions" : `${earlier.length} earlier decision${earlier.length === 1 ? "" : "s"}`}
-        </button>
-      )}
-      {open && earlier.map((d, i) => <Decision key={i} label={d.adopted ? "adoption" : undefined} date={d.date} text={d.text} />)}
-    </li>
-  );
-}
-
-/** How many nodes the Rests on panel shows before folding the rest behind Show all. */
-const FOLD_AT = 20;
-
-function RestsOn({ ref, gone }: { ref: Ref; gone: Set<Ref> }) {
-  const { data } = useQuery(() => api.restsOn(ref, 3), [ref]);
-  const [all, setAll] = useState(false);
-  if (!data) return null;
-  const shown = all ? data.nodes : data.nodes.slice(0, FOLD_AT);
-  return (
-    <div className={card}>
-      <h3 className="mb-2">Rests on</h3>
-      {data.nodes.length === 0 && <p className={empty}>Nothing below this node.</p>}
-      <ul className={list} aria-label="Rests on">
-        {shown.map((r) => (
-          <RestsOnItem key={r.ref} r={r} gone={gone.has(r.ref)} />
-        ))}
-      </ul>
-      {data.nodes.length > FOLD_AT && (
-        <button type="button" aria-expanded={all} onClick={() => setAll(!all)} className="mt-2 text-[13px] text-accent bg-transparent border-none p-0 hover:underline">
-          {all ? "Show fewer" : `Show all ${data.nodes.length}`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function RestsOnMe({ ref }: { ref: Ref }) {
-  const { data } = useQuery(() => api.restsOnMe(ref), [ref]);
-  if (!data) return null;
-  return (
-    <div className={card}>
-      <h3 className="mb-2">Rests on this</h3>
-      {data.nodes.length === 0 && <p className={empty}>Nothing depends on this node.</p>}
-      <ul className={list}>
-        {data.nodes.map((a) => (
-          <li key={a.ref} className={item}>
-            <span className={rel}>{a.relation}</span>
-            <RefLink ref={a.ref} title={a.title} />
-          </li>
-        ))}
-      </ul>
-      {data.tickets.length > 0 && (
-        <>
-          <h3 className="mt-2.5 mb-2">Open tickets reaching it</h3>
-          <TicketTable tickets={data.tickets} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function Edges({ title, edges, gone }: { title: string; edges: { ref: Ref; relation: string; title: string | null }[]; gone?: Set<Ref> }) {
-  if (edges.length === 0) return null;
-  return (
-    <div className={card}>
-      <h3 className="mb-2">{title}</h3>
-      <ul className={list}>
-        {edges.map((e, i) => (
-          <li key={i} className={item}>
-            <span className={rel}>{e.relation}</span>
-            {gone?.has(e.ref) ? <GoneRef ref={e.ref} /> : <RefLink ref={e.ref} title={e.title ?? undefined} />}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

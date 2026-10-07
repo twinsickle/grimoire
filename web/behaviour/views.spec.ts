@@ -356,21 +356,21 @@ test("a page holds one event stream however many queries it mounts", async ({ pa
  * ```
  */
 test("a reference is a link to its node, tagged with its kind", async ({ page }) => {
+  // In the active ticket's Proposed list, the requirement it proposes a change to.
   await page.goto("/n/ticket%3A0001");
-  // Under Touches, not in the graph, which draws the same node when its own query answers.
-  const under = (heading: string) => page.locator("main h2", { hasText: heading }).locator("xpath=following-sibling::ul[1]");
-  const link = under("Touches").locator('a[href="/n/module%3Asrc%2Fready"]');
+  const proposed = page.locator("main h2", { hasText: "Proposed" }).locator("xpath=following-sibling::ul[1]");
+  const link = proposed.locator('a[href="/n/req%3Aready-needs-commit"]');
   await expect(link).toBeVisible();
-  await expect(link.locator("xpath=..")).toContainText("module");
+  await expect(link.locator("xpath=..")).toContainText("req");
   await link.click();
-  await expect(page).toHaveURL("/n/module%3Asrc%2Fready");
+  await expect(page).toHaveURL("/n/req%3Aready-needs-commit");
   // The one exception: a closed ticket's reference to a node that no longer exists keeps its kind tag and is text, marked.
-  await page.goto("/n/ticket%3A0004");
-  const gone = under("Touches").locator("[data-gone='req:ready-old-name']");
+  await page.goto("/cauldron");
+  await page.getByRole("button", { name: /^Closed/ }).click();
+  await page.getByRole("button", { name: "Show Name the readiness module" }).click();
+  const gone = page.locator("#closed li[data-ticket='ticket:0004'] [data-gone='req:ready-old-name']").first();
   await expect(gone).toHaveText("reqready-old-nameno longer exists");
   await expect(gone.locator("a")).toHaveCount(0);
-  // In the list this spec reads: the graph, drawn by a query of its own, is the spec's further down.
-  await expect(under("Touches").locator("a[href='/n/req%3Aready-old-name']")).toHaveCount(0);
 });
 
 /**
@@ -600,7 +600,7 @@ test("the board keeps the tool's order, and a change is moved by dragging or fro
  * # Test contract
  *
  * ```json
- * {"test": "an-adopted-requirement-reads-as-described", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Node#rests-on", "web/src/views/Home#marks"]}
+ * {"test": "an-adopted-requirement-reads-as-described", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Home#marks"]}
  * ```
  */
 test("an adopted requirement reads as described, on its page and where a page lists it", async ({ page }) => {
@@ -635,17 +635,6 @@ test("an adopted requirement reads as described, on its page and where a page li
   const decided = page.getByRole("meter", { name: "Requirements decided" }).first();
   await expect(decided).toBeVisible();
   await expect(decided).toHaveAttribute("aria-valuenow", "0");
-  // What rests on it says so too: ticket 0002 touches the page that holds the requirement.
-  await page.route("**/api/rests_on", async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
-    for (const n of body.nodes) if (n.ref === "req:ready-needs-commit") n.decisions = [adoption];
-    await route.fulfill({ response, json: body });
-  });
-  await page.goto("/n/ticket%3A0002");
-  const item = page.getByRole("list", { name: "Rests on" }).locator("li", { has: page.locator("a[href='/n/req%3Aready-needs-commit']") });
-  await expect(item).toContainText("described");
-  await expect(item).toContainText("adoption");
 });
 
 /**
@@ -912,7 +901,6 @@ test("every node kind has a page", async ({ page }) => {
     const ref = decodeURIComponent(path.slice("/n/".length));
     await expect(page.locator("main"), path).not.toContainText(`${ref} does not exist`);
   }
-  await expect(page.locator("main")).toContainText("Checks");
 });
 
 /**
@@ -959,53 +947,37 @@ test("a ticket's page hands its next step to an agent, and starts and closes not
  * # Test contract
  *
  * ```json
- * {"test": "a-closed-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/TicketGraph#on-ticket-page"]}
+ * {"test": "a-closed-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/NodeGraph#centred"]}
  * ```
  */
-test("a closed ticket's reference that leads nowhere is marked and not a link; an open ticket's stays a link", async ({ page }) => {
-  // The fixture's closed ticket touches a module that exists and a requirement that does not.
+test("a closed ticket's reference that leads nowhere is drawn marked and not a link; an open ticket's stays a link", async ({ page }) => {
+  // The fixture's closed ticket touches a module that exists and a requirement that does not, and relied on a page that is gone.
   const closed = await tool<{ node: { status: string; touches: string[]; out: { ref: string; title: string | null }[] } }>(page, "get", { ref: "ticket:0004" });
   expect(closed.node.status).toBe("closed");
   expect(closed.node.out.find((e) => e.ref === "req:ready-old-name")?.title, "get gives the missing end no title").toBeNull();
   await page.goto("/n/ticket%3A0004");
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
-  // Under Touches, Rests on and Links out: text with the mark, never a link.
-  const gone = page.locator("main [data-gone='req:ready-old-name']:not([data-graph-node])");
-  await expect(gone).toHaveCount(3);
-  for (const mark of await gone.all()) {
-    await expect(mark).toContainText("ready-old-name");
-    await expect(mark).toContainText("no longer exists");
-    await expect(mark.locator("a")).toHaveCount(0);
-  }
   // In the graph: a box that says so and is no link, beside the module's, which is one.
-  const graph = page.getByRole("region", { name: "What this ticket rests on" });
+  const graph = page.getByRole("region", { name: "Graph" });
   const box = graph.locator("[data-graph-node='req:ready-old-name']");
   await expect(box).toHaveText("reqready-old-name");
   await expect(box).toHaveAttribute("aria-label", "req ready-old-name, no longer exists, under Name the readiness module");
   expect(await box.evaluate((e) => e.tagName)).toBe("SPAN");
-  expect(await graph.locator("[data-graph-node='module:src/ready']").evaluate((e) => e.tagName)).toBe("A");
-  // Under Relies on too: the page it relied on is gone, marked there, in Rests on and in Links out, and drawn so.
-  const relied = page.locator("main [data-gone='page:old-naming']:not([data-graph-node])");
-  await expect(relied).toHaveCount(3);
-  await expect(page.locator("main h2", { hasText: "Relies on" }).locator("xpath=following-sibling::ul[1]").locator("[data-gone='page:old-naming']")).toContainText("no longer exists");
-  await expect(page.locator("main h2", { hasText: "Touches" }).locator("xpath=following-sibling::ul[1]").locator("[data-gone='req:ready-old-name']")).toContainText("no longer exists");
   expect(await graph.locator("[data-graph-node='page:old-naming']").evaluate((e) => e.tagName)).toBe("SPAN");
+  expect(await graph.locator("[data-graph-node='module:src/ready']").evaluate((e) => e.tagName)).toBe("A");
   const refs = await linkedRefs(page);
   expect(refs).not.toContain("req:ready-old-name");
   expect(refs).not.toContain("page:old-naming");
   expect(refs, "what still exists is a link as before").toContain("module:src/ready");
-  // The same answer for a ticket still open: the check reports that one, and the page links it as before.
+  // The same answer for a ticket still open: the check reports that one, and the graph links it as before.
   await page.route("**/api/get", async (route) => {
     if (route.request().postDataJSON().ref !== "ticket:0004") return route.continue();
     await route.fulfill({ json: { ...closed, node: { ...closed.node, status: "open", decision: null } } });
   });
   await page.reload();
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
-  // Each panel draws when its own query answers: the links are counted until all four are there.
-  const linksTo = async (ref: string) => (await linkedRefs(page)).filter((r) => r === ref).length;
-  await expect.poll(() => linksTo("req:ready-old-name"), "the graph, Touches, Rests on and Links out").toBe(4);
-  await expect.poll(() => linksTo("page:old-naming"), "the graph, Relies on, Rests on and Links out").toBe(4);
-  // And with every panel drawn, none of them marks anything as gone.
+  await expect.poll(async () => (await linkedRefs(page)).includes("req:ready-old-name"), "the graph links it").toBe(true);
+  await expect.poll(async () => (await linkedRefs(page)).includes("page:old-naming")).toBe(true);
   await expect(page.locator("main [data-gone]")).toHaveCount(0);
 });
 
@@ -1163,12 +1135,12 @@ test("drilling down from a declaration ends at its line in the annotated source"
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/NodeGraph#centred"]}
  * ```
  */
 test("a ticket's page draws what it rests on, and a node in the graph opens its page", async ({ page }) => {
   await page.goto("/n/ticket%3A0006");
-  const graph = page.getByRole("region", { name: "What this ticket rests on" });
+  const graph = page.getByRole("region", { name: "Graph" });
   // The ticket at the left, what it relies on and touches beside it, the module's criteria a column further.
   await expect(graph.locator("[data-graph-node='ticket:0006']")).toBeVisible();
   await expect(graph.locator("[data-graph-node='ticket:0005']")).toContainText("Should readiness count submodules?");
@@ -1188,7 +1160,7 @@ test("a ticket's page draws what it rests on, and a node in the graph opens its 
  * # Test contract
  *
  * ```json
- * {"test": "a-large-graph-folds-and-unfolds", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * {"test": "a-large-graph-folds-and-unfolds", "checks": ["web/src/views/NodeGraph#centred"]}
  * ```
  */
 test("a ticket resting on many nodes folds them into counts that unfold, and folds them again", async ({ page }) => {
@@ -1205,8 +1177,8 @@ test("a ticket resting on many nodes folds them into counts that unfold, and fol
     await route.fulfill({ json: { nodes } });
   });
   await page.goto("/n/ticket%3A0006");
-  const graph = page.getByRole("region", { name: "What this ticket rests on" });
-  await expect(graph).toContainText("46 nodes it rests on, deeper branches folded");
+  const graph = page.getByRole("region", { name: "Graph" });
+  await expect(graph).toContainText("rests on 46, deeper branches folded");
   await expect(graph.locator("[data-graph-node='page:readiness']")).toBeVisible();
   await expect(graph.locator("[data-graph-node^='req:']")).toHaveCount(0);
   await expect(graph.getByRole("button", { name: "Fold all" })).toHaveCount(0);
@@ -1222,68 +1194,78 @@ test("a ticket resting on many nodes folds them into counts that unfold, and fol
  * # Test contract
  *
  * ```json
- * {"test": "rests-on-folds-and-cuts-nothing", "checks": ["web/src/views/Node#rests-on"]}
+ * {"test": "a-ticket-resting-on-nothing-draws-no-graph", "checks": ["web/src/views/NodeGraph#centred"]}
  * ```
  */
-test("the Rests on panel shows every node with every decision, folding past twenty and earlier decisions", async ({ page }) => {
-  // A synthetic answer of 46 nodes; the last a requirement with two decisions in force, newest first.
-  const nodes = [
-    ...Array.from({ length: 45 }, (_, i) => ({ ref: `req:r${i}`, title: `Requirement ${i}`, via: [], decisions: [] })),
-    {
-      ref: "req:last",
-      title: "The last requirement",
-      via: [],
-      decisions: [
-        { date: "2026-09-30", text: "The newer decision." },
-        { date: "2026-09-15", text: "The middle decision." },
-        { date: "2026-09-01", text: "The older decision." },
-      ],
-    },
-  ];
-  await page.route("**/api/rests_on", async (route) => {
-    if (route.request().postDataJSON().depth !== 3) return route.continue();
-    await route.fulfill({ json: { nodes } });
-  });
-  await page.goto("/n/req%3Aready-needs-commit");
-  const panel = page.getByRole("list", { name: "Rests on" });
-  await expect(panel.locator(":scope > li")).toHaveCount(20);
-  // The first twenty, in the tool's order.
-  expect(await panel.locator(":scope > li").evaluateAll((ls) => ls.map((l) => l.querySelector("a")?.textContent?.trim()))).toEqual(Array.from({ length: 20 }, (_, i) => expect.stringContaining(`Requirement ${i}`)));
-  const all = page.getByRole("button", { name: "Show all 46" });
-  await all.click();
-  await expect(panel.locator(":scope > li")).toHaveCount(46);
-  const last = panel.locator(":scope > li").last();
-  await expect(last).toContainText("The last requirement");
-  await expect(last).toContainText("The newer decision.");
-  await expect(last).not.toContainText("The middle decision.");
-  await expect(last).not.toContainText("The older decision.");
-  await last.getByRole("button", { name: "2 earlier decisions" }).click();
-  await expect(last).toContainText("The older decision.");
-  const text = await last.innerText();
-  expect(text.indexOf("The newer decision.")).toBeGreaterThan(-1);
-  expect(text.indexOf("The newer decision.")).toBeLessThan(text.indexOf("The middle decision."));
-  expect(text.indexOf("The middle decision.")).toBeLessThan(text.indexOf("The older decision."));
-  await page.getByRole("button", { name: "Show fewer" }).click();
-  await expect(panel.locator(":scope > li")).toHaveCount(20);
+test("a ticket that rests on nothing, and that nothing rests on, draws no graph", async ({ page }) => {
+  // The graph asks its own walk, with no depth: its absence is said once that has answered.
+  const walked = page.waitForResponse((r) => r.url().endsWith("/api/rests_on") && r.request().postDataJSON().depth === undefined);
+  await page.goto("/n/ticket%3A0008");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Should readiness follow symlinks?");
+  await walked;
+  // The answer has arrived; the page still has to take it in. Nothing shows while it does, so the absence is said after a pause.
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("region", { name: "Graph" })).toHaveCount(0);
 });
 
 /**
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-resting-on-nothing-draws-no-graph", "checks": ["web/src/views/TicketGraph#on-ticket-page"]}
+ * {"test": "a-node-page-is-what-it-is-then-its-graph", "checks": ["web/src/views/Node#content-then-graph", "web/src/views/NodeGraph#centred", "web/src/views/Node#draft-shown"]}
  * ```
  */
-test("a ticket that rests on nothing draws no graph", async ({ page }) => {
-  // The graph asks its own walk, with no depth: its absence is said once that has answered.
-  const walked = page.waitForResponse((r) => r.url().endsWith("/api/rests_on") && r.request().postDataJSON().depth === undefined);
-  await page.goto("/n/ticket%3A0008");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Should readiness follow symlinks?");
-  await expect(page.getByText("Nothing below this node.", { exact: true })).toBeVisible();
-  await walked;
-  // The answer has arrived; the page still has to take it in. Nothing shows while it does, so the absence is said after a pause.
-  await page.waitForTimeout(300);
-  await expect(page.getByRole("region", { name: "What this ticket rests on" })).toHaveCount(0);
+test("a node's page is what it is, then its graph centred on it, then the rest it holds, and nothing else", async ({ page }) => {
+  // A requirement: its statement, then the graph, then its scenarios; no panels of what it rests on or what rests on it.
+  await page.goto("/n/req%3Aready-needs-commit");
+  const graph = page.getByRole("region", { name: "Graph" });
+  await expect(graph.locator("[data-graph-node='req:ready-needs-commit']")).toBeVisible();
+  const main = page.locator("main");
+  const text = await main.innerText();
+  const statement = text.indexOf("A workspace SHALL be ready only when it has a commit.");
+  const scenarios = text.indexOf("Scenarios");
+  const graphY = (await graph.boundingBox())!.y;
+  const statementY = (await main.getByText("A workspace SHALL be ready only when it has a commit.").boundingBox())!.y;
+  const scenariosY = (await main.getByRole("heading", { name: "Scenarios" }).boundingBox())!.y;
+  expect(statement).toBeGreaterThan(-1);
+  expect(scenarios).toBeGreaterThan(statement);
+  expect(statementY).toBeLessThan(graphY);
+  expect(graphY).toBeLessThan(scenariosY);
+  for (const gone of ["Rests on", "Rests on this", "Links out", "Linked from", "Covered by"]) {
+    await expect(main.getByRole("heading", { name: gone, exact: true })).toHaveCount(0);
+  }
+  // Centred: the page linking it to the left, the criterion covering it to the right.
+  const [centre, linker, covering] = await Promise.all([
+    graph.locator("[data-graph-node='req:ready-needs-commit']").boundingBox(),
+    graph.locator("[data-graph-node='page:readiness']").boundingBox(),
+    graph.locator("[data-graph-node='criterion:src/ready#needs-commit']").boundingBox(),
+  ]);
+  expect(linker!.x).toBeLessThan(centre!.x);
+  expect(covering!.x).toBeGreaterThan(centre!.x);
+  await expect(graph.getByRole("link", { name: "page Readiness, rests on Ready only with a commit" })).toBeVisible();
+
+  // A module: what rests on it to the left, the requirements behind its criteria among them; its own criteria are what it holds.
+  await page.goto("/n/module%3Asrc%2Fready");
+  const mod = page.getByRole("region", { name: "Graph" });
+  await expect(mod.locator("[data-graph-node='req:ready-needs-commit']")).toBeVisible();
+  await expect(mod.locator("[data-graph-node='page:readiness']")).toBeVisible();
+  await expect(mod.locator("[data-graph-node^='criterion:']")).toHaveCount(0);
+  await expect(page.locator("main").getByRole("heading", { name: "Criteria" })).toBeVisible();
+  // A box re-centres the graph on its node.
+  await mod.locator("[data-graph-node='req:ready-needs-commit']").click();
+  await expect(page).toHaveURL(/\/n\/req%3Aready-needs-commit$/);
+  await expect(page.getByRole("region", { name: "Graph" }).locator("[data-graph-node='req:ready-needs-commit']")).toBeVisible();
+
+  // Read through a ticket's proposal, the graph is asked through it too; and the walk of all that rests on a node is never asked.
+  const asked: { tool: string; ticket?: string }[] = [];
+  page.on("request", (r) => {
+    const tool = r.url().split("/api/")[1];
+    if (tool && r.method() === "POST") asked.push({ tool, ticket: (r.postDataJSON() ?? {}).ticket });
+  });
+  await page.goto("/n/req%3Aready-needs-commit?ticket=0001");
+  await expect(page.getByRole("region", { name: "Graph" }).locator("[data-graph-node='req:ready-needs-commit']")).toBeVisible();
+  expect(asked.filter((a) => a.tool === "rests_on").map((a) => a.ticket)).toContain("0001");
+  expect(asked.some((a) => a.tool === "rests_on_me"), "no walk of all that rests on it").toBe(false);
 });
 
 /**
@@ -1381,7 +1363,7 @@ test("an active ticket lists what it proposes, and a node page reads it as propo
   // An open ticket has nothing proposed and no section.
   await page.goto("/n/ticket%3A0006");
   await expect(main.locator("h1")).toHaveText("Report readiness per workspace");
-  await expect(main.getByRole("heading", { name: "Touches" })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "Next step" })).toBeVisible();
   await expect(main.getByRole("heading", { name: "Proposed" })).toHaveCount(0);
 });
 

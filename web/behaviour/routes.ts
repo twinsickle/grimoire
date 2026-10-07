@@ -17,11 +17,11 @@ export const ROUTES: Route[] = [
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
   // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
   { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "main h2:has-text('Other work may conflict')" },
-  { name: "node-ticket", path: node("ticket:0006"), content: "section[aria-label='What this ticket rests on']" },
+  { name: "node-ticket", path: node("ticket:0006"), content: "section[aria-label='Graph']" },
   // A closed ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
-  { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='What this ticket rests on']" },
+  { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='Graph']" },
   // A landing ticket: its decision written, its change yet to land.
-  { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='What this ticket rests on']" },
+  { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='Graph']" },
   { name: "node-module", path: node("module:src/ready"), content: "h1" },
   { name: "node-criterion", path: node("criterion:src/ready#needs-commit"), content: "h1" },
   { name: "node-file", path: node("file:src/ready.rs"), content: "[aria-label='Source of src/ready.rs'] table" },
