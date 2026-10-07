@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 mod codex;
-pub mod command;
+pub(crate) mod command;
 mod guidance;
 mod uninstall;
 
