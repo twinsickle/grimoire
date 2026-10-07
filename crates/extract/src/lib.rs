@@ -108,12 +108,19 @@ pub trait Adapter: Send + Sync {
     fn leading_doc(&self, source: &str) -> Option<(String, u32)>;
     /// Declarations and imports.
     fn parse(&self, source: &str, module_id: &str) -> Parsed;
+    /// Declarations and imports of the file at a repository-relative path.
+    /// The module id is enough for most languages; an adapter whose reading
+    /// needs the file itself, its extension or the directory an index file
+    /// sits in, reads it here.
+    fn parse_file(&self, source: &str, rel_path: &str) -> Parsed {
+        self.parse(source, &self.module_id(rel_path))
+    }
 }
 
 /// Extract one file whose contents are already read.
 pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> FileExtraction {
     let module = adapter.module_id(rel_path);
-    let parsed = adapter.parse(source, &module);
+    let parsed = adapter.parse_file(source, rel_path);
     let (contract, contract_line) = match adapter.leading_doc(source).and_then(|(text, line)| contract::find(&text, line)) {
         Some(found) => (Some(found.contract), Some(found.heading_line)),
         None => (None, None),
@@ -162,7 +169,7 @@ pub enum ExtractError {
 
 /// The languages this build has an adapter of their own for, each with its
 /// tier. A language here is never read by the comment-syntax table.
-const ADAPTERS: &[(&str, u8)] = &[("rust", 2), ("typescript", 2), ("java", 2)];
+const ADAPTERS: &[(&str, u8)] = &[("rust", 2), ("typescript", 2), ("javascript", 2), ("java", 2)];
 
 /// The languages this build reads, each with the tier it reads it at
 /// (req:extract-tiers): those with an adapter of their own, then those read by
@@ -191,6 +198,7 @@ fn adapter_named(language: &str, root: &Path) -> Option<Box<dyn Adapter>> {
     match language {
         "rust" => Some(Box::new(rust::RustAdapter::new(root))),
         "typescript" => Some(Box::new(typescript::TypeScriptAdapter::new(root))),
+        "javascript" => Some(Box::new(typescript::TypeScriptAdapter::of(typescript::Dialect::JavaScript, root))),
         "java" => Some(Box::new(java::JavaAdapter::new(root))),
         _ => comments::syntax_of(language).map(|s| Box::new(comments::CommentAdapter::new(s)) as Box<dyn Adapter>),
     }
@@ -428,7 +436,7 @@ export class Box {
             assert_eq!((a.language(), a.tier()), (*l, *tier));
         }
         let tier_of = |l: &str| supported.iter().find(|(s, _)| *s == l).map(|(_, t)| *t);
-        assert_eq!((tier_of("rust"), tier_of("typescript"), tier_of("java")), (Some(2), Some(2), Some(2)), "the adapters read declarations and imports");
+        assert_eq!((tier_of("rust"), tier_of("typescript"), tier_of("javascript"), tier_of("java")), (Some(2), Some(2), Some(2), Some(2)), "the adapters read declarations and imports");
         for l in ["html", "htl", "xml", "css", "scss"] {
             assert_eq!(tier_of(l), Some(0), "{l} is read by its comments");
         }

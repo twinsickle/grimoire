@@ -20,7 +20,7 @@ git history before the grimoire replaced them.
 A Cargo workspace and one web package.
 
 - `crates/core` — domain model, store, graph and queries, lints, scaffold, and the tool dispatcher. No I/O.
-- `crates/extract` — code extractor: tree-sitter parsing, module contracts, language adapters (Rust so far).
+- `crates/extract` — code extractor: tree-sitter parsing, module contracts, language adapters (Rust, TypeScript and JavaScript, Java) and a comment table for the languages read by their comments alone.
 - `crates/server` — the `grimoire serve` daemon: store I/O, watcher, JSON API, MCP over streamable HTTP, SSE.
 - `crates/cli` — the `grimoire` binary: `serve`, `check`, `scaffold`, `init`, `tool`.
 - `web` — React/Vite UI: the map, the board, node pages. Dark only. `npm run build` writes `web/dist`, which `serve --ui-dir web/dist` serves.

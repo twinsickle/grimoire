@@ -56,10 +56,11 @@ directory, `build.rs`, `examples/`, `benches/`. Module identity is the path
 without `.rs`; `mod.rs` folds into its directory; test files fold into the
 module they test.
 
-## TypeScript
+## TypeScript and JavaScript
 
 The leading `/** */` block (or a run of `//` lines) at the top of the file,
-before any import.
+before any import; a `#!` line may come first. `typescript` and `javascript`
+are named apart in the config's languages, and read the same way.
 
 ```ts
 /**
@@ -73,11 +74,16 @@ before any import.
 import { useEffect } from "react";
 ```
 
-Expected to carry a contract: every `.ts` or `.tsx` under a package's
-`src/` (a package is a directory with `package.json`). Not expected:
-`*.test.*`, `*.spec.*`, `*.d.ts`, anything under `__tests__/`, and files
-outside `src/` such as `vite.config.ts`. Module identity is the path without
-extension; `index` folds into its directory.
+Expected to carry a contract: every `.ts`, `.tsx`, `.mts` or `.cts` file,
+and with `javascript` named every `.js`, `.jsx`, `.mjs` or `.cjs` file, under
+a package's `src/` (a package is a directory with `package.json`). Not
+expected: `*.test.*`, `*.spec.*`, declaration files (`*.d.ts`, `*.d.mts`,
+`*.d.cts`), anything under `__tests__/`, and
+files outside `src/` such as `vite.config.ts`. Module identity is the path
+without extension, the same in both languages; `index` folds into its
+directory. Imports are `import`, `export ... from`, `require(...)` and
+`import(...)` with a string literal; a package of the repository is entered
+through its package.json `exports`, else its `module` or `main`.
 
 ## Java
 
