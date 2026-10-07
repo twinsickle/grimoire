@@ -1309,6 +1309,34 @@ test("drilling down from a declaration ends at its line in the annotated source"
  * # Test contract
  *
  * ```json
+ * {"test": "a-file-waits-for-its-highlighting-and-falls-back-to-plain", "checks": ["web/src/views/Node#annotated-source"]}
+ * ```
+ */
+test("a file says Loading until it is highlighted, and is shown plain when the highlighter cannot load", async ({ page }) => {
+  // Hold the highlighter's WASM, then refuse it.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/assets/onig-*.wasm", async (route) => {
+    await held;
+    await route.abort();
+  });
+  await page.goto("/n/file%3Asrc%2Fready.rs#L7");
+  await expect(page.getByText("Loading…")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Source of src/ready.rs" })).toHaveCount(0);
+  release();
+  // Plain: every line, numbered, marked and linked, with no tone.
+  const region = page.getByRole("region", { name: "Source of src/ready.rs" });
+  await expect(region.locator("tr#L7")).toContainText("pub fn ready() -> bool");
+  await expect(page.locator("tr[aria-current='location']")).toHaveAttribute("id", "L7");
+  await expect(region.locator("[data-annotation='contract'] a[href='/n/module%3Asrc%2Fready']")).toBeVisible();
+  await expect(region.locator("[data-tone]")).toHaveCount(0);
+  await expect(page.getByText("Loading…")).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/NodeGraph#centred"]}
  * ```
  */

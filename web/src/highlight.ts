@@ -2,23 +2,13 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a language with no grammar comes back as plain lines; the highlighter's HTML is read, never rendered."},{"id":"plain","statement":"plain answers a file's text as one line per line of text with no tone and nothing laid out, its text being the line's, only a line feed ending a line, a final one starting none, and the CR before one dropped, without running the highlighter."}]}
+ * {"purpose":"Syntax highlighting for the annotated source: a file's text as lines of tokens, each named by a syntax tone the palette colours.","criteria":[{"id":"lines-of-tokens","statement":"highlight answers a file's text, once Shiki and the grammar of the file's language are loaded (each imported only the first time it is needed, so the first page load holds none of them), as one line of tokens per line of text, their text joined being the line's text, each token named by the tone of its innermost highlighted scope, only a line feed ending a line and a lone CR kept as text; a construct spanning lines (a block comment, a string) keeps its tone on every line; a fenced json block inside a comment, as a module or test contract is, is highlighted as JSON with each line's comment marker left as comment, a one-line block that parses laid out indented under its line, only whitespace between its tokens changing (the one case where a line's tokens do not join to its text), and a fence never closed stays comment; a .tsx file is read with the TSX grammar, so code inside markup is toned as code; a language with no grammar comes back as plain lines; the highlighter's tokens are read and no HTML is ever made."},{"id":"plain","statement":"plain answers a file's text as one line per line of text with no tone and nothing laid out, its text being the line's, only a line feed ending a line, a final one starting none, and the CR before one dropped, without running the highlighter."}]}
  * ```
  */
 
-import hljs from "highlight.js/lib/core";
-import rust from "highlight.js/lib/languages/rust";
-import typescript from "highlight.js/lib/languages/typescript";
-import json from "highlight.js/lib/languages/json";
-import xml from "highlight.js/lib/languages/xml";
-
-// Only the languages Grimoire extracts, by the name a file node carries.
-hljs.registerLanguage("rust", rust);
-hljs.registerLanguage("typescript", typescript);
-// Not a language of its own here: the TypeScript grammar highlights JSX markup through it.
-hljs.registerLanguage("xml", xml);
-// For the fenced JSON inside comments: module and test contracts.
-hljs.registerLanguage("json", json);
+import type { HighlighterCore, LanguageRegistration, ThemeRegistrationRaw } from "shiki/core";
+// Only the file's address: the build emits the WASM as an asset of its own.
+import onigWasm from "shiki/onig.wasm?url";
 
 /** The syntax tones the palette has a colour for. */
 export type Tone = "keyword" | "string" | "comment" | "number" | "type" | "function" | "meta";
@@ -26,55 +16,99 @@ export type Tone = "keyword" | "string" | "comment" | "number" | "type" | "funct
 /** A run of a line's text, with the tone it is coloured in, or none. */
 export type Token = { text: string; tone: Tone | null };
 
-// highlight.js scopes, full (`title.function`) or by their first part, onto tones.
-const TONES: Record<string, Tone> = {
-  keyword: "keyword",
-  literal: "keyword",
-  string: "string",
-  regexp: "string",
-  char: "string",
-  comment: "comment",
-  doc: "comment",
-  quote: "comment",
-  number: "number",
-  type: "type",
-  built_in: "type",
-  "title.class": "type",
-  name: "type",
-  title: "function",
-  "title.function": "function",
-  meta: "meta",
-  attr: "meta",
-  attribute: "meta",
-  symbol: "meta",
+type Grammar = () => Promise<{ default: LanguageRegistration[] }>;
+
+// Each grammar is imported the first time a file in it is opened, so none of
+// them, nor Shiki itself, is part of the first page load. Named by the
+// language a file node carries; TypeScript's .tsx files take the TSX grammar.
+const GRAMMARS: Record<string, Grammar> = {
+  rust: () => import("@shikijs/langs/rust"),
+  typescript: () => import("@shikijs/langs/typescript"),
+  tsx: () => import("@shikijs/langs/tsx"),
+  // For the fenced JSON inside comments: module and test contracts.
+  json: () => import("@shikijs/langs/json"),
 };
 
-const ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'", "&#39;": "'" };
+/** The grammar a file is highlighted with: its language's, TSX for a .tsx file. */
+function grammarOf(language: string, path = ""): string {
+  return language === "typescript" && path.endsWith(".tsx") ? "tsx" : language;
+}
+
+// The tones are read off a theme of Shiki's whose colours are not colours but
+// the tones' names in disguise: each scope the palette tones gets one, and
+// everything else the plain foreground. Shiki's HTML is never made.
+// Made up rather than written as literals, since they are not colours: the
+// palette's colours are tokens in the stylesheet (req:web-theme-tokens).
+const TONES: Tone[] = ["keyword", "string", "comment", "number", "type", "function", "meta"];
+const disguise = (n: number) => `#${String(n).padStart(6, "0")}`;
+const PLAIN = disguise(0);
+const COLOUR = Object.fromEntries(TONES.map((tone, i) => [tone, disguise(i + 1)])) as Record<Tone, string>;
+const TONE_OF = new Map<string, Tone>(Object.entries(COLOUR).map(([tone, colour]) => [colour, tone as Tone]));
+
+// TextMate scopes onto tones; the most specific selector wins, so an
+// operator is plain though it is a keyword, and a JSON key is meta though it
+// is a support type.
+const SCOPES: [Tone | null, string[]][] = [
+  ["comment", ["comment", "punctuation.definition.comment"]],
+  ["string", ["string", "constant.character", "constant.other.character-class.regexp"]],
+  ["number", ["constant.numeric"]],
+  ["keyword", ["keyword", "storage", "constant.language", "variable.language", "keyword.operator.new", "keyword.operator.expression", "keyword.operator.word"]],
+  [null, ["keyword.operator", "storage.type.function.arrow", "meta.template.expression"]],
+  ["type", ["entity.name.type", "entity.name.class", "entity.other.inherited-class", "entity.name.tag", "support.type", "support.class"]],
+  ["function", ["entity.name.function", "support.function"]],
+  ["meta", ["support.type.property-name", "entity.other.attribute-name", "meta.attribute", "meta.decorator", "punctuation.definition.attribute"]],
+];
+
+const THEME: ThemeRegistrationRaw = {
+  name: "grimoire-tones",
+  type: "dark",
+  settings: [
+    { settings: { foreground: PLAIN, background: PLAIN } },
+    ...SCOPES.map(([tone, scope]) => ({ scope, settings: { foreground: tone ? COLOUR[tone] : PLAIN } })),
+  ],
+};
+
+let core: Promise<HighlighterCore> | null = null;
 
 /**
- * A span's class attribute as a tone: `hljs-title class_ inherited__` is the
- * scope `title.class.inherited`, looked up whole and then by ever shorter
- * prefixes, so it is a `title.class`.
+ * Shiki with the Oniguruma engine, made once and on first use. Its WASM is a
+ * file of the build's own, fetched only then, so the first page load carries
+ * none of it; the JavaScript regex engine was measured several times slower
+ * on TypeScript (question 0246).
  */
-function toneOf(classes: string): Tone | null {
-  const parts = classes
-    .split(/\s+/)
-    .map((c) => c.replace(/^hljs-/, "").replace(/_+$/, ""))
-    .filter(Boolean);
-  for (let n = parts.length; n > 0; n--) {
-    const tone = TONES[parts.slice(0, n).join(".")];
-    if (tone) return tone;
-  }
-  return null;
+function highlighter(): Promise<HighlighterCore> {
+  core ??= (async () => {
+    const [{ createHighlighterCore }, { createOnigurumaEngine }] = await Promise.all([import("shiki/core"), import("shiki/engine/oniguruma")]);
+    return createHighlighterCore({ themes: [THEME], langs: [GRAMMARS.json()], engine: createOnigurumaEngine(() => fetch(onigWasm)) });
+  })();
+  // A failure to bring Shiki up is not kept, so a chunk that failed to load is tried again with the next file;
+  // a WASM that failed to load stays failed, since Shiki keeps its first attempt.
+  core.catch(() => {
+    core = null;
+  });
+  return core;
+}
+
+/** Shiki with a grammar loaded, or null when there is none for it. */
+async function load(grammar: string): Promise<HighlighterCore | null> {
+  const grammarFor = GRAMMARS[grammar];
+  if (!grammarFor) return null;
+  const hl = await highlighter();
+  if (!hl.getLoadedLanguages().includes(grammar)) await hl.loadLanguage(grammarFor());
+  return hl;
 }
 
 /**
  * A file's text as lines of tokens; plain lines when there is no grammar for
  * its language. A fenced JSON block inside a comment, as a contract is, is
- * highlighted as JSON with its comment markers left as comment.
+ * highlighted as JSON with its comment markers left as comment. The grammar
+ * is loaded first, the first time a file in it is asked for.
  */
-export function highlight(text: string, language: string): Token[][] {
-  return jsonInComments(tokens(text, language));
+export async function highlight(text: string, language: string, path = ""): Promise<Token[][]> {
+  const grammar = grammarOf(language, path);
+  const hl = await load(grammar);
+  if (!hl) return text.split(/\r?\n/).map((line) => (line ? [{ text: line, tone: null }] : []));
+  return jsonInComments(hl, tokens(hl, text, grammar));
 }
 
 /** A file's text as untoned lines, for one too long to highlight: the highlighter never runs. A final line feed ends the last line and starts none, as the daemon counts. */
@@ -89,35 +123,20 @@ export function plain(text: string): Token[][] {
   });
 }
 
-function tokens(text: string, language: string): Token[][] {
-  if (!hljs.getLanguage(language)) return text.split(/\r?\n/).map((line) => (line ? [{ text: line, tone: null }] : []));
-  const html = hljs.highlight(text, { language, ignoreIllegals: true }).value;
-  const lines: Token[][] = [[]];
-  // The tones of the spans open here, innermost last; an unmapped span inherits its parent's.
-  const open: (Tone | null)[] = [];
-  const push = (raw: string) => {
-    const decoded = raw.replace(/&(?:amp|lt|gt|quot|#x27|#39);/g, (e) => ENTITIES[e]);
-    decoded.split("\n").forEach((piece, i) => {
-      if (i > 0) lines.push([]);
-      if (piece) lines[lines.length - 1].push({ text: piece, tone: open[open.length - 1] ?? null });
-    });
-  };
-  for (const [, tag, classes, textRun] of html.matchAll(/<(\/?)span(?: class="([^"]*)")?>|([^<]+)/g)) {
-    if (textRun !== undefined) push(textRun);
-    else if (tag) open.pop();
-    else open.push(toneOf(classes ?? "") ?? open[open.length - 1] ?? null);
-  }
-  // Only a CR before a line feed ends a line, as it does for the extractor: drop
-  // that one, wherever a span boundary left it, and keep a lone CR as text.
-  const source = text.split("\n");
-  lines.forEach((line, i) => {
-    const last = line[line.length - 1];
-    if (i < source.length - 1 && source[i].endsWith("\r") && last?.text.endsWith("\r")) {
-      last.text = last.text.slice(0, -1);
-      if (!last.text) line.pop();
+/** Shiki's tokens for a text as lines of toned tokens, a run of one tone merged. */
+function tokens(hl: HighlighterCore, text: string, grammar: string): Token[][] {
+  // Shiki ends a line at a line feed, dropping a CR before it and keeping a lone one as text.
+  return hl.codeToTokensBase(text, { lang: grammar, theme: THEME.name }).map((line) => {
+    const out: Token[] = [];
+    for (const t of line) {
+      if (!t.content) continue;
+      const tone = TONE_OF.get((t.color ?? PLAIN).toLowerCase()) ?? null;
+      const last = out[out.length - 1];
+      if (last && last.tone === tone) last.text += t.content;
+      else out.push({ text: t.content, tone });
     }
+    return out;
   });
-  return lines;
 }
 
 // A comment line's marker (`//!`, `///`, `//`, ` *`, `#`) and what follows it, so
@@ -127,7 +146,7 @@ const OPENS = /^\s*[^\w\s{["]*\s*```json\s*$/;
 const CLOSES = /^\s*[^\w\s{["]*\s*```\s*$/;
 
 /** Re-highlights, as JSON, the lines between a comment's ```json fence and its closing one. */
-function jsonInComments(lines: Token[][]): Token[][] {
+function jsonInComments(hl: HighlighterCore, lines: Token[][]): Token[][] {
   const text = (line: Token[]) => line.map((t) => t.text).join("");
   // A blank line is outside any comment: a fence never spans one.
   const comment = (line: Token[]) => line.length > 0 && line.every((t) => t.tone === "comment");
@@ -147,12 +166,12 @@ function jsonInComments(lines: Token[][]): Token[][] {
     if (pretty !== null) {
       const { marker } = parts[0];
       const gap = " ".repeat(marker.length);
-      const rows = tokens(pretty, "json").flatMap((row, k) => (k === 0 ? row : [{ text: `\n${gap}`, tone: null }, ...row]));
+      const rows = tokens(hl, pretty, "json").flatMap((row, k) => (k === 0 ? row : [{ text: `\n${gap}`, tone: null }, ...row]));
       lines[i + 1] = [...(marker ? [{ text: marker, tone: "comment" as const }] : []), ...rows];
       i = end;
       continue;
     }
-    const body = tokens(parts.map((p) => p.body).join("\n"), "json");
+    const body = tokens(hl, parts.map((p) => p.body).join("\n"), "json");
     parts.forEach((p, k) => {
       lines[i + 1 + k] = [...(p.marker ? [{ text: p.marker, tone: "comment" as const }] : []), ...(body[k] ?? [])];
     });

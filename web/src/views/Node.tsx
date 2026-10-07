@@ -2,11 +2,11 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. A file's page is its annotated source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens, long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"plain-source","statement":"A file whose source answer is marked plain is shown with web/src/highlight's plain lines, no tone and no JSON laid out, under a note that it is shown plain because of its length, keeping its numbers, marks, links and #L<n>."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
+ * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. A file's page is its annotated source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"annotated-source","statement":"A file's page shows its text from the source tool, line by line with numbers, syntax highlighted by web/src/highlight in the palette's syntax tokens (Loading until its lines are highlighted, the same file's last lines kept while a changed text is highlighted, and plain lines if its grammar fails to load), long lines wrapping under their own indent and a contract's one-line JSON laid out indented under its line, each annotated line marked with links to its node and what that node links (a contract's criteria, a test block's checks); opened at #L<n> it scrolls to that line and marks it; the pages of a module, criterion, declaration and test link to their line there."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its position and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"plain-source","statement":"A file whose source answer is marked plain is shown with web/src/highlight's plain lines, no tone and no JSON laid out, under a note that it is shown plain because of its length, keeping its numbers, marks, links and #L<n>."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
  * ```
  */
 
-import { Fragment, useEffect, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
@@ -387,29 +387,29 @@ function File({ n }: { n: FileNode }) {
   const src = useQuery(() => api.source(ref), [ref]);
   const { hash } = useLocation();
   const focus = /^#L\d+$/.test(hash) ? Number(hash.slice(2)) : null;
-  // Once the text is in, bring the line asked for into view.
-  useEffect(() => {
-    if (focus && src.data) document.getElementById(`L${focus}`)?.scrollIntoView({ block: "center" });
-  }, [focus, src.data]);
   const byLine = new Map<number, Annotation[]>();
   for (const a of src.data?.annotations ?? []) byLine.set(a.line, [...(byLine.get(a.line) ?? []), a]);
   const text = src.data?.text;
   // Past the project's plain-file limit the highlighter never runs: it would drag (req:web-annotated-source).
   const asPlain = src.data?.plain ?? false;
-  const lines = useMemo(() => (text === undefined ? [] : asPlain ? plain(text) : highlight(text, n.language)), [text, n.language, asPlain]);
+  const lines = useLines(text, asPlain, n.language, n.path);
+  // Each time lines are drawn, bring the line asked for into view.
+  useEffect(() => {
+    if (focus && lines) document.getElementById(`L${focus}`)?.scrollIntoView({ block: "center" });
+  }, [focus, lines]);
   return (
     <>
       <p className="text-fg-dim">
         {n.language} · in <RefLink ref={`module:${n.module}`} />
       </p>
       {src.error && <ErrorBox error={src.error} />}
-      {!src.data && !src.error && <p className="text-fg-dim">Loading…</p>}
+      {!lines && !src.error && <p className="text-fg-dim">Loading…</p>}
       {asPlain && (
         <p className="text-fg-dim" id="plain-note">
           Shown plain: at {countLines(text ?? "").toLocaleString("en")} lines this file is longer than the project highlights.
         </p>
       )}
-      {src.data && (
+      {lines && (
         <div className="bg-bg-1 border border-line rounded-md overflow-x-auto" role="region" aria-label={`Source of ${n.path}`}>
           <table className="border-collapse w-full font-mono text-[12.5px] leading-[1.55]" style={{ tabSize: TAB }}>
             <caption className="sr-only">Source of {n.path}, each line the grimoire attaches a node to described by its marks</caption>
@@ -473,6 +473,34 @@ function File({ n }: { n: FileNode }) {
       )}
     </>
   );
+}
+
+/**
+ * A file's lines as its page shows them: plain past the project's limit, else
+ * highlighted, which waits for the file's grammar the first time one in its
+ * language is opened; null until there is something to draw. While a changed
+ * text is highlighted, the same file's last lines stay shown rather than
+ * blinking out; a grammar that fails to load leaves the file plain.
+ */
+function useLines(text: string | undefined, asPlain: boolean, language: string, path: string): Token[][] | null {
+  const plainLines = useMemo(() => (text !== undefined && asPlain ? plain(text) : null), [text, asPlain]);
+  const [done, setDone] = useState<{ path: string; lines: Token[][] } | null>(null);
+  useEffect(() => {
+    if (text === undefined || asPlain) return;
+    let live = true;
+    highlight(text, language, path).then(
+      (lines) => live && setDone({ path, lines }),
+      (error: unknown) => {
+        console.warn("highlighting failed, the file is shown plain", error);
+        if (live) setDone({ path, lines: plain(text) });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [text, asPlain, language, path]);
+  if (text === undefined) return null;
+  return plainLines ?? (done?.path === path ? done.lines : null);
 }
 
 /** How many lines a text has, as the daemon counts them: a final line feed ends the last line and starts none. */
