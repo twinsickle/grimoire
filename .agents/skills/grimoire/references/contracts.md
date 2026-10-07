@@ -79,6 +79,37 @@ Expected to carry a contract: every `.ts` or `.tsx` under a package's
 outside `src/` such as `vite.config.ts`. Module identity is the path without
 extension; `index` folds into its directory.
 
+## Java
+
+A top-level `/** */` Javadoc, outside every type's body: the first one
+holding the heading, so a class's own Javadoc after the package and imports
+carries it, and a `/* */` licence header above is never taken for it. A
+package's contract goes in the Javadoc of its `package-info.java`.
+
+```java
+package com.example.core;
+
+import com.example.core.util.Strings;
+
+/**
+ * # Module contract
+ *
+ * ```json
+ * {"purpose":"Greet people by name.","criteria":[{"id":"greets","statement":"A greeting names the person greeted."}]}
+ * ```
+ */
+public class Greeter { /* ... */ }
+```
+
+Expected to carry a contract: every `.java` under a `src/main/java`
+directory, at any depth. Not expected: `package-info.java` and
+`module-info.java` (either may carry one), anything under `src/test`, and
+files elsewhere. Module identity is the path without `.java`;
+`package-info.java` folds into its directory, the package. Imports resolve
+through the packages the repository's own files declare; an on-demand
+import stands for every type file of its package and its
+`package-info.java`.
+
 ## Test contracts
 
 A test says which criteria it checks in a `# Test contract` block, in any

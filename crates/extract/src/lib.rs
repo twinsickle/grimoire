@@ -5,6 +5,7 @@
 //! ```
 
 pub mod contract;
+pub mod java;
 pub mod recipe;
 pub mod rust;
 pub mod typescript;
@@ -61,7 +62,7 @@ pub(crate) fn slash_comments(root: tree_sitter::Node, src: &[u8], is_comment: fn
 
 /// Comment text without `//`, `///`, `//!`, `/*`, `/**`, `*/` or a leading
 /// ` * ` on each line, one line per source line.
-fn strip_slash_comment(raw: &str) -> String {
+pub(crate) fn strip_slash_comment(raw: &str) -> String {
     let mut out = String::new();
     if let Some(body) = raw.strip_prefix("/*") {
         let body = body.strip_suffix("*/").unwrap_or(body);
@@ -157,7 +158,7 @@ pub enum ExtractError {
 /// The languages this build has an adapter for, in the order
 /// [`Extractor::for_languages`] recognises them. What `status` reports as
 /// `supported_languages`.
-pub const SUPPORTED_LANGUAGES: &[&str] = &["rust", "typescript"];
+pub const SUPPORTED_LANGUAGES: &[&str] = &["rust", "typescript", "java"];
 
 /// A repository root with its adapters.
 pub struct Extractor {
@@ -171,6 +172,7 @@ fn adapter_named(language: &str, root: &Path) -> Option<Box<dyn Adapter>> {
     match language {
         "rust" => Some(Box::new(rust::RustAdapter::new(root))),
         "typescript" => Some(Box::new(typescript::TypeScriptAdapter::new(root))),
+        "java" => Some(Box::new(java::JavaAdapter::new(root))),
         _ => None,
     }
 }
@@ -315,7 +317,7 @@ impl Extractor {
 
 /// Whether a folder is a checkout of its own: a git repository, a worktree or a submodule, or a
 /// folder a Grimoire project file names a grimoire for.
-fn is_checkout(dir: &Path) -> bool {
+pub(crate) fn is_checkout(dir: &Path) -> bool {
     dir.join(".git").exists() || dir.join(".grimoire.toml").exists()
 }
 
