@@ -17,7 +17,7 @@
  * something from the same query is there, or polled; and an absence is
  * checked only once the query that would have drawn the thing has answered.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { ROUTES } from "./routes";
 
 type Rollup = { modules: number; contracted: number; criteria: number; tested: number; requirements: number; held: number };
@@ -158,19 +158,90 @@ test("the application is mounted into #root, and the page holds nothing else", a
  */
 test("\"It's almost magic\" shows where a whole view has nothing yet, and nowhere else", async ({ page }) => {
   const jingle = page.getByText("It's almost magic.", { exact: true });
+  const empty = page.locator("main [data-empty-state]");
+  // The empty state as drawn: the section's own icon, the header's tab icon (0 the book, 1 the cauldron) drawn large, with a
+  // glint beside it in the jingle's accent colour, then the direction, then the jingle beneath, in that order down the view.
+  const drawn = async (tab: 0 | 1) => {
+    const svgs = empty.locator("svg");
+    const icon = svgs.first();
+    const markup = (l: typeof icon) => l.evaluate((el) => el.innerHTML);
+    expect(await markup(icon), "the section's own icon").toBe(await markup(page.locator("header nav a").nth(tab).locator("svg")));
+    const iconBox = (await icon.boundingBox())!;
+    expect(iconBox.height, "drawn large").toBeGreaterThan(3 * (await page.locator("header nav a").nth(tab).locator("svg").boundingBox())!.height);
+    const glint = icon.locator("xpath=following-sibling::*[local-name()='svg']").first();
+    await expect(glint, "a glint beside the icon").toBeVisible();
+    // A glint, drawn as the smaller glint near it is, not some other figure in its place.
+    expect(await markup(glint), "the glint's own figure").toBe(await markup(icon.locator("xpath=following-sibling::*[local-name()='svg']").nth(1)));
+    expect(await markup(glint), "the glint's own figure").not.toBe(await markup(icon));
+    // Beside it: level with the icon, reaching past its right edge and no further away than the glint is wide.
+    const glintBox = (await glint.boundingBox())!;
+    expect(glintBox.y + glintBox.height, "the glint level with the icon").toBeGreaterThan(iconBox.y);
+    expect(glintBox.y, "the glint level with the icon").toBeLessThan(iconBox.y + iconBox.height);
+    expect(glintBox.x + glintBox.width, "the glint at the icon's side").toBeGreaterThan(iconBox.x + iconBox.width);
+    expect(glintBox.x, "the glint at the icon's side").toBeLessThan(iconBox.x + iconBox.width + glintBox.width);
+    // The accent colour is the token's, resolved by the page, not merely whatever the jingle happens to be.
+    const accent = await page.evaluate(() => {
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.color = "var(--color-accent)";
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    });
+    const color = (l: typeof icon) => l.evaluate((el) => getComputedStyle(el).color);
+    // The glint is painted, fill and every path, in the accent colour, not merely given it as its text colour.
+    const paint = await glint.evaluate((el) => [el, ...el.querySelectorAll("path")].map((e) => [getComputedStyle(e).fill, getComputedStyle(e).stroke]));
+    for (const [fill, stroke] of paint) {
+      expect(fill, "the glint in the accent colour").toBe(accent);
+      expect(stroke, "the glint drawn with no other colour").toBe("none");
+    }
+    expect(await color(jingle), "the jingle in the accent colour").toBe(accent);
+    const direction = empty.locator("p").filter({ hasNotText: "It's almost magic." });
+    await expect(direction).toHaveCount(1);
+    const [d, j] = [(await direction.boundingBox())!, (await jingle.boundingBox())!];
+    expect(d.y, "the direction beneath the icon").toBeGreaterThanOrEqual(iconBox.y + iconBox.height);
+    expect(j.y, "the jingle beneath the direction").toBeGreaterThanOrEqual(d.y + d.height);
+    return glint;
+  };
+  // What the glint is doing: each running animation's name, whether it lasts, and whether its keyframes change how it looks.
+  const twinkle = (glint: Locator) =>
+    glint.evaluate((el) =>
+      el.getAnimations().map((a) => {
+        const effect = a.effect as KeyframeEffect;
+        const looks = new Set(effect.getKeyframes().map((k) => `${k.opacity ?? ""}|${k.transform ?? ""}`));
+        return {
+          name: (a as CSSAnimation).animationName,
+          running: a.playState === "running" && a.playbackRate !== 0,
+          lasts: Number(effect.getComputedTiming().duration) > 0,
+          moves: looks.size > 1,
+        };
+      }),
+    );
+  const moving = [{ name: "twinkle", running: true, lasts: true, moves: true }];
   // ledger, the empty grimoire of the fixture's library: no pages, so its grimoire view is the empty state, with no rail.
   await page.goto("/g/ledger/");
-  const empty = page.locator("main [data-empty-state]");
   await expect(empty).toContainText("has no page yet");
-  await expect(empty.locator("svg").first()).toBeVisible();
-  await expect(empty.locator("code").first()).toBeVisible();
+  // Each span between backticks, the root's slug twice, is set as code, and no backtick is left in the text.
+  await expect(empty.locator("code")).toHaveText(["overview", "overview"]);
+  await expect(empty.locator("p").first()).toHaveText("The grimoire root overview has no page yet: put a page overview under a ticket.");
+  await expect(empty).not.toContainText("`");
   await expect(jingle).toHaveCount(1);
   await expect(page.locator(rail)).toHaveCount(0);
+  const glint = await drawn(0);
+  // The glint twinkles where motion is allowed, and is still where the person asks for reduced motion.
+  expect(await twinkle(glint)).toEqual(moving);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await twinkle(glint)).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   // Its cauldron: the filters, then the empty state in place of the bands and the Unsettled section.
   await page.goto("/g/ledger/cauldron");
   await expect(page.locator("main h1")).toHaveText("Cauldron");
-  await expect(page.locator("main [data-empty-state]")).toContainText("The cauldron is empty");
+  await expect(empty.locator("p").first()).toHaveText("The cauldron is empty: no change is open and no gap or question waits. A ticket an agent files shows here.");
   await expect(jingle).toHaveCount(1);
+  const glinting = await drawn(1);
+  expect(await twinkle(glinting)).toEqual(moving);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await twinkle(glinting)).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(page.locator("section[id^='band-'], #unattached")).toHaveCount(0);
   // Unplaced and a page asked for by name in the empty grimoire say what is missing, plainly, with no jingle.
   for (const path of ["/g/ledger/unplaced", "/g/ledger/n/page%3Aoverview"]) {
