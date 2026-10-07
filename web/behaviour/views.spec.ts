@@ -1247,7 +1247,7 @@ test("a change dragged with the mouse into an empty band lands there and shows a
  * # Test contract
  *
  * ```json
- * {"test": "drill-down-ends-at-the-annotated-source", "checks": ["web/src/views/Node#annotated-source"]}
+ * {"test": "drill-down-ends-at-the-annotated-source", "checks": ["web/src/views/Source#annotated-source", "web/src/views/Node#content-then-graph"]}
  * ```
  */
 test("drilling down from a declaration ends at its line in the annotated source", async ({ page }) => {
@@ -1309,7 +1309,7 @@ test("drilling down from a declaration ends at its line in the annotated source"
  * # Test contract
  *
  * ```json
- * {"test": "a-file-waits-for-its-highlighting-and-falls-back-to-plain", "checks": ["web/src/views/Node#annotated-source"]}
+ * {"test": "a-file-waits-for-its-highlighting-and-falls-back-to-plain", "checks": ["web/src/views/Source#annotated-source"]}
  * ```
  */
 test("a file says Loading until it is highlighted, and is shown plain when the highlighter cannot load", async ({ page }) => {
@@ -1504,7 +1504,7 @@ test("a file past the large-file limit is shown as an omen, dimmed and apart fro
  * # Test contract
  *
  * ```json
- * {"test": "a-file-past-the-plain-limit-is-shown-plain", "checks": ["web/src/views/Node#plain-source"]}
+ * {"test": "a-file-past-the-plain-limit-is-shown-plain", "checks": ["web/src/views/Source#plain-source"]}
  * ```
  */
 test("a file past the plain-file limit is shown plain, its numbers, marks and #L kept", async ({ page }) => {
