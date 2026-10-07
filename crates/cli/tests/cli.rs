@@ -108,7 +108,7 @@ fn init_adopts_what_it_finds() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "check-fails-only-on-new-findings", "checks": ["crates/cli/src#check-without-daemon"]}
+/// {"test": "check-fails-only-on-new-findings", "checks": ["crates/cli/src/check#check-without-daemon"]}
 /// ```
 #[test]
 fn check_fails_only_on_new_findings() {
@@ -129,7 +129,7 @@ fn check_fails_only_on_new_findings() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-unsupported-language-is-the-first-line", "checks": ["crates/cli/src#unsupported-first"]}
+/// {"test": "an-unsupported-language-is-the-first-line", "checks": ["crates/cli/src/check#unsupported-first"]}
 /// ```
 #[test]
 fn an_unsupported_language_is_the_first_line() {
@@ -370,7 +370,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-branch-is-judged-by-its-own-work", "checks": ["crates/cli/src#check-own-work"]}
+/// {"test": "a-branch-is-judged-by-its-own-work", "checks": ["crates/cli/src/check#check-own-work"]}
 /// ```
 #[test]
 fn a_branch_is_judged_by_its_own_work() {
@@ -822,7 +822,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
@@ -884,7 +884,7 @@ fn a_store_of_its_own_serves_every_checkout() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-worktrees-check-prunes-nothing", "checks": ["crates/cli/src#check-without-daemon", "req:store-checkouts"]}
+/// {"test": "a-worktrees-check-prunes-nothing", "checks": ["crates/cli/src/check#check-without-daemon", "req:store-checkouts"]}
 /// ```
 #[test]
 fn a_worktrees_check_prunes_nothing() {
@@ -922,7 +922,7 @@ fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
+/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src/uninstall#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn the_library_follows_what_the_machine_holds() {
@@ -1074,7 +1074,7 @@ fn bare_repo() -> Project {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src#uninstall-store"]}
+/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
 /// ```
 #[test]
 fn init_then_uninstall_leaves_the_repository_as_it_was() {
@@ -1110,7 +1110,7 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-takes-up-a-store-whose-deletion-is-queued", "checks": ["crates/cli/src#queues-deletion", "crates/server/src#queued-not-served", "req:store-deletion-queued"]}
+/// {"test": "init-takes-up-a-store-whose-deletion-is-queued", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/server/src#queued-not-served", "req:store-deletion-queued"]}
 /// ```
 #[test]
 fn init_takes_up_a_store_whose_deletion_is_queued() {
@@ -1137,7 +1137,7 @@ fn init_takes_up_a_store_whose_deletion_is_queued() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src#queues-deletion", "crates/cli/src#uninstall-store", "crates/cli/src#takes-the-lock", "req:store-deletion-queued"]}
+/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#takes-the-lock", "req:store-deletion-queued"]}
 /// ```
 #[test]
 fn a_held_store_is_queued_for_deletion_and_deleted_later() {
@@ -1186,7 +1186,7 @@ fn a_refused_codex_config_stops_init_before_anything_is_written() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src#uninstall-store"]}
+/// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
 /// ```
 #[test]
 fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
@@ -1220,7 +1220,7 @@ fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src#uninstall-store"]}
+/// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
 /// ```
 #[test]
 fn uninstall_never_deletes_more_than_a_store() {
@@ -1422,7 +1422,7 @@ fn a_store_inside_the_repository_is_refused() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-finishes-a-deletion-stopped-part-way", "checks": ["crates/cli/src#uninstall-store"]}
+/// {"test": "uninstall-finishes-a-deletion-stopped-part-way", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
 /// ```
 #[test]
 fn uninstall_finishes_a_deletion_stopped_part_way() {
@@ -1615,7 +1615,7 @@ fn init_adopts_a_scaffolded_store() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-commit-lands-the-ticket-waiting-on-it", "checks": ["crates/cli/src#land", "crates/cli/src/init#landing-hook"]}
+/// {"test": "a-commit-lands-the-ticket-waiting-on-it", "checks": ["crates/cli/src/check#land", "crates/cli/src/init#landing-hook"]}
 /// ```
 #[test]
 fn a_commit_lands_the_ticket_waiting_on_it() {
@@ -1750,7 +1750,7 @@ fn a_store_is_served_for_a_team_behind_tokens() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src#uninstall-store", "crates/server/src/store_io/tokens#digests-only"]}
+/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src/uninstall#uninstall-store", "crates/server/src/store_io/tokens#digests-only"]}
 /// ```
 #[test]
 fn a_store_with_tokens_is_deleted_under_their_lock() {
@@ -1999,7 +1999,7 @@ fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src#check-main-line", "crates/cli/src#land", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
+/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line", "crates/cli/src/check#land", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
 /// ```
 #[test]
 fn the_main_line_prunes_a_teams_baseline() {
@@ -2107,7 +2107,7 @@ fn http(port: u16, request: &str) -> (u16, String) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src#land"]}
+/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/check#land"]}
 /// ```
 #[test]
 fn a_build_that_cannot_read_a_language_does_not_prune() {
@@ -2135,7 +2135,7 @@ fn a_build_that_cannot_read_a_language_does_not_prune() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src#check-names-a-ticket", "crates/cli/src/team#opens-the-copy"]}
+/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src/check#check-names-a-ticket", "crates/cli/src/team#opens-the-copy"]}
 /// ```
 #[test]
 fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
