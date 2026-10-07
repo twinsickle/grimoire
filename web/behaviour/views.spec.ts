@@ -92,7 +92,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#three-views", "web/src/App#library-switcher", "web/src/api#grimoire-base"]}
  * ```
  */
-test("a grimoire of the library is read at its own address, and the header switches between them", async ({ page }) => {
+test("a grimoire of the library is read at its own address, and the header switches between them", async ({ page }, testInfo) => {
   // The fixture's daemon serves a library of two: its own checkout, `repo`, and `ledger`.
   const calls: string[] = [];
   page.on("request", (r) => {
@@ -105,6 +105,16 @@ test("a grimoire of the library is read at its own address, and the header switc
   const switcher = page.locator("header select[aria-label='Grimoire']");
   await expect(switcher.locator("option:checked")).toHaveText("ledger");
   await expect(switcher.locator("option")).toHaveText(["ledger", "repo"]);
+  // As a team, `repo` is a copy of the team's server and `ledger` a store on this machine: grouped by where each comes from.
+  if (testInfo.project.name === "team") {
+    await expect(switcher.locator("optgroup")).toHaveCount(2);
+    expect(await switcher.locator("optgroup").evaluateAll((gs) => gs.map((g) => [g.getAttribute("label"), g.textContent]))).toEqual([
+      ["this machine", "ledger"],
+      [expect.stringMatching(/^127\.0\.0\.1:\d+$/), "repo"],
+    ]);
+  } else {
+    await expect(switcher.locator("optgroup")).toHaveCount(0);
+  }
   // Every call and the event stream went to ledger's address, none to the bare routes.
   expect(calls.length).toBeGreaterThan(0);
   expect(calls.filter((c) => !c.startsWith("/g/ledger/api/")), "calls outside ledger's address").toEqual([]);

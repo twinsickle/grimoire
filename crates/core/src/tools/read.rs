@@ -355,11 +355,11 @@ mod tests {
         let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
         assert_eq!((out.output["grimoire"].clone(), out.output["library"].clone()), (json!(null), json!([])));
         // Served in a library, which is listed in name order.
-        let entry = |name: &str| crate::answer::LibraryEntry { name: name.into(), repository: format!("C:/{name}") };
-        s.set_library("shop".into(), vec![entry("shop"), entry("ledger")]);
+        let entry = |name: &str| crate::answer::LibraryEntry { name: name.into(), repository: format!("C:/{name}"), server: None };
+        s.set_library("shop".into(), vec![entry("shop"), crate::answer::LibraryEntry { server: Some("https://team.example".into()), ..entry("ledger") }]);
         let out = call(&mut s, "status", json!({}), "2026-10-05").unwrap();
         assert_eq!(out.output["grimoire"], "shop");
-        assert_eq!(out.output["library"], json!([{ "name": "ledger", "repository": "C:/ledger" }, { "name": "shop", "repository": "C:/shop" }]));
+        assert_eq!(out.output["library"], json!([{ "name": "ledger", "repository": "C:/ledger", "server": "https://team.example" }, { "name": "shop", "repository": "C:/shop", "server": null }]));
     }
 
     /// # Test contract

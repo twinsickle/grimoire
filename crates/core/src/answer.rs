@@ -142,6 +142,8 @@ pub struct StatusAnswer {
 pub struct LibraryEntry {
     pub name: String,
     pub repository: String,
+    // Where it comes from: the team's server it is a copy of, that server's address without a grimoire's /g/<name>; none for a store on this machine.
+    pub server: Option<String>,
 }
 
 /// What a machine's intent is a copy of: the server's address, when the copy

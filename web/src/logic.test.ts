@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { goneOf, idOf, kindOf, libraryChoices, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
+import { goneOf, idOf, kindOf, libraryChoices, libraryGroups, libraryShown, localId, missingRoot, serverAway, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -404,6 +404,37 @@ test("the switcher offers each checkout of a grimoire, named by its folder, the 
   expect(choices[2].href).toBe("/g/shop/?checkout=C%3A%2Fcode%2Fshop%2F.claude%2Fworktrees%2Fwt");
   // Before the checkout is known, the grimoire on screen is chosen.
   expect(libraryChoices("ledger", null, library).map((c) => c.chosen)).toEqual([true, false, false]);
+  // From one place, the choices are one group with no heading.
+  expect(libraryGroups(choices)).toEqual([{ key: "", label: null, choices }]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-switcher-groups-by-where-each-comes-from", "checks": ["web/src/App#library-switcher"]}
+ * ```
+ */
+test("the switcher groups grimoires by where each comes from, this machine first, then each server by its address", () => {
+  const library = [
+    { name: "billing", repository: "C:/code/billing", server: "https://teams.example/b" },
+    { name: "notes", repository: "C:/code/notes", server: null },
+    { name: "shop", repository: "C:/code/shop", server: "http://127.0.0.1:4243" },
+    { name: "zeta", repository: "C:/code/zeta", server: "https://teams.example/b" },
+  ];
+  const groups = libraryGroups(libraryChoices("shop", null, library));
+  expect(groups.map((g) => [g.label, g.choices.map((c) => c.label)])).toEqual([
+    ["this machine", ["notes"]],
+    ["127.0.0.1:4243", ["shop"]],
+    ["teams.example/b", ["billing", "zeta"]],
+  ]);
+  expect(groups[1].choices[0].chosen).toBe(true);
+  // Two servers that differ only by scheme keep it, each its own group.
+  const twins = libraryGroups(libraryChoices("a", null, [{ name: "a", repository: "C:/a", server: "http://team.example" }, { name: "b", repository: "C:/b", server: "https://team.example" }]));
+  expect(twins.map((g) => [g.key, g.label])).toEqual([
+    ["http://team.example", "http://team.example"],
+    ["https://team.example", "https://team.example"],
+  ]);
 });
 
 /**

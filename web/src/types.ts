@@ -58,7 +58,7 @@ export function libraryShown(grimoire: string | null, library: { name: string }[
  * checkout's folder when the grimoire is served for several, the address opens it as
  * /g/<name>/?checkout=<checkout>, and the one on screen is chosen.
  */
-export function libraryChoices(grimoire: string | null, checkout: string | null, library: { name: string; repository: string }[]): { key: string; label: string; href: string; chosen: boolean }[] {
+export function libraryChoices(grimoire: string | null, checkout: string | null, library: { name: string; repository: string; server?: string | null }[]): { key: string; label: string; href: string; chosen: boolean; server: string | null }[] {
   const several = (name: string) => library.filter((g) => g.name === name).length > 1;
   const folder = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? path;
   return library.map((g) => ({
@@ -66,7 +66,24 @@ export function libraryChoices(grimoire: string | null, checkout: string | null,
     label: several(g.name) ? `${g.name} · ${folder(g.repository)}` : g.name,
     href: `/g/${g.name}/?checkout=${encodeURIComponent(g.repository)}`,
     chosen: g.name === grimoire && (checkout === null || g.repository === checkout),
+    server: g.server ?? null,
   }));
+}
+
+/**
+ * The switcher's choices grouped by where each grimoire comes from: this machine's
+ * stores first, then each team's server in address order, keyed by its address and
+ * labelled by it without the scheme, unless another differs from it only by that.
+ * Choices that all come from one place make one group with no label, since a lone
+ * heading says nothing.
+ */
+export function libraryGroups<C extends { server: string | null }>(choices: C[]): { key: string; label: string | null; choices: C[] }[] {
+  const places = [...new Set(choices.map((c) => c.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
+  if (places.length < 2) return [{ key: "", label: null, choices }];
+  const bare = (place: string) => place.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  // Two servers that differ only by scheme keep it, so no two headings read alike.
+  const label = (place: string) => (places.some((p) => p !== null && p !== place && bare(p) === bare(place)) ? place : bare(place));
+  return places.map((place) => ({ key: place ?? "", label: place === null ? "this machine" : label(place), choices: choices.filter((c) => c.server === place) }));
 }
 
 /**

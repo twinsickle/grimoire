@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; every checkout of a copy of a team's grimoire is returned, so several share one name when they copy the same server's grimoire, and so is every checkout of a store of its own, the one grimoire.json names and each checkouts.json lists whose project file names the store, sharing the store's name and folder; one whose name the default checkout's grimoire or an earlier one already holds is skipped, the reason naming both checkouts, unless both are copies of that same server's grimoire or checkouts of that same store; and the default checkout itself is never returned."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
+//! {"purpose":"Find the grimoires a library serves: on a machine, those its checkouts name among the stores and copies of a server's intent kept on it; on a team's server, the stores under its library directory.","criteria":[{"id":"named-by-checkouts","statement":"find returns, in name order, each store under the stores directory and each copy under the copies directory whose recorded repository holds a project file naming that very folder, with the file's grimoire name and, for a copy, its server's address; one whose repository is gone, holds no project file, or names something else is skipped with why; every checkout of a copy of a team's grimoire is returned, so several share one name when they copy the same server's grimoire, and so is every checkout of a store of its own, the one grimoire.json names and each checkouts.json lists whose project file names the store, sharing the store's name and folder; one whose name the default checkout's grimoire or an earlier one already holds is refused and skipped, the reason naming both checkouts and saying to give it another name in its project file, since its address is /g/<name>, unless both are copies of that same server's grimoire or checkouts of that same store; and the default checkout itself is never returned."},{"id":"comes-from","statement":"server_of names the team's server a copy of a grimoire comes from: its address with any trailing slash and /g/<name> taken off, so every grimoire of one server names it alike, whichever grimoire its address names."},{"id":"shared-stores","statement":"find_shared returns, in name order, every folder directly under the library directory that holds a store and whose name is a slug, named by that folder; a folder holding no store, or named by no slug, is skipped with why."}]}
 //! ```
 
 pub mod live;
@@ -103,10 +103,29 @@ fn checkout_of(store_dir: &Path, shown: &str, repo: PathBuf, repository: &str, d
     let one_project = |g: &Grimoire| (g.server.is_some() && g.server == server) || (g.server.is_none() && server.is_none() && same(&g.store_dir, &store_dir));
     let other = std::iter::once(default).chain(taken.iter()).find(|g| g.name == name && !one_project(g)).map(|g| g.repo.display().to_string());
     if let Some(other) = other {
-        skipped.push(format!("{shown}: the grimoire `{name}` is served already, with the checkout {other}; this checkout, {repository}, is not served beside it"));
+        skipped.push(format!("{shown}: {}", name_taken(&name, &other, repository)));
         return None;
     }
     Some(Grimoire { name, store_dir, repo, server })
+}
+
+/// Why a checkout of another grimoire of a name already served is refused, and what to do:
+/// the address on this machine is /g/<name>, so one name is one grimoire.
+pub fn name_taken(name: &str, served: &str, this: &str) -> String {
+    format!(
+        "the grimoire `{name}` is served already, with the checkout {served}; this checkout, {this}, is refused: its address here would be /g/{name} too, so give it another `name` in its {}",
+        store_io::PROJECT_FILE
+    )
+}
+
+/// The team's server a copy of a grimoire comes from: its address without a
+/// grimoire's /g/<name>, so the grimoires of one server name it alike.
+pub fn server_of(address: &str) -> String {
+    let address = address.trim_end_matches('/');
+    match address.rsplit_once("/g/") {
+        Some((server, name)) if grimoire_core::store::is_slug(name) => server.trim_end_matches('/').to_string(),
+        _ => address.to_string(),
+    }
 }
 
 /// The grimoires of a team's server: every store directly under `dir`, named by
@@ -173,6 +192,20 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
+    /// {"test": "a-copy-names-its-server", "checks": ["crates/server/src/library#comes-from"]}
+    /// ```
+    #[test]
+    fn a_copy_names_its_server() {
+        for address in ["https://team.example/g/shop", "https://team.example/g/ledger/", "https://team.example", "https://team.example/"] {
+            assert_eq!(server_of(address), "https://team.example", "{address}");
+        }
+        // A path that names no grimoire is the server's own.
+        assert_eq!(server_of("http://127.0.0.1:4243/teams/a"), "http://127.0.0.1:4243/teams/a");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
     /// {"test": "the-library-is-what-checkouts-name", "checks": ["crates/server/src/library#named-by-checkouts"]}
     /// ```
     #[test]
@@ -198,6 +231,7 @@ mod tests {
         let why = found.skipped.join("\n");
         assert!(why.contains("names another grimoire") && why.contains("is gone"), "{why}");
         assert!(why.contains("`ledger` is served already") && why.contains("ledger-two"), "the second checkout is named with the first: {why}");
+        assert!(why.contains("give it another `name` in its .grimoire.toml") && why.contains("/g/ledger"), "the refusal says how to serve it beside: {why}");
         // A second checkout of the default's grimoire is not served beside it either.
         checkout(root, "shop-two", &at("shop-2"), "shop", &at("shop-2").to_string_lossy());
         assert!(find(&stores, &copies, &default).skipped.iter().any(|s| s.contains("`shop` is served already")));

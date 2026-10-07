@@ -228,7 +228,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-call-is-answered-by-the-checkout-it-names", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused"]}
+    /// {"test": "a-call-is-answered-by-the-checkout-it-names", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library/live#checkout-registered"]}
     /// ```
     #[tokio::test]
     async fn a_call_is_answered_by_the_checkout_it_names() {
@@ -278,7 +278,7 @@ mod tests {
         let solo = Arc::new(Daemon::open(&ledger.store_dir).unwrap().0);
         {
             let mut held = live.held.lock().unwrap();
-            let shelved = Shelved { store_dir: ledger.store_dir.clone(), repo: ledger.repo.clone(), canon: canonical(&ledger.repo), team: false, daemon: solo.clone(), lock: None, watcher: None };
+            let shelved = Shelved { store_dir: ledger.store_dir.clone(), repo: ledger.repo.clone(), canon: canonical(&ledger.repo), server: None, daemon: solo.clone(), lock: None, watcher: None };
             held.served.insert(("ledger".into(), ledger.repo.clone()), shelved);
         }
         assert!(live.choose("ledger", None, false).is_ok(), "one checkout needs no naming");
@@ -286,6 +286,34 @@ mod tests {
         let message = why(live.choose("ledger", Some(&named(&main.repo)), false));
         assert!(message.contains("is no checkout of the grimoire `ledger`"), "{message}");
         assert!(matches!(live.take_checkout("ledger", &named(&main.repo)), Took::NotOurs), "its project file names another store");
+        // Another project that names its own store `ledger` too is refused, told to give it another name.
+        let other = project(root, "other");
+        std::fs::write(
+            other.repo.join(store_io::PROJECT_FILE),
+            format!(
+                "name = \"ledger\"
+store = {}
+",
+                toml::Value::String(other.store_dir.to_string_lossy().to_string())
+            ),
+        )
+        .unwrap();
+        match live.take_checkout("ledger", &named(&other.repo)) {
+            Took::Failed(why) => assert!(why.contains("`ledger` is served already") && why.contains("give it another `name`") && why.contains("/g/ledger"), "{why}"),
+            _ => panic!("refused, saying why"),
+        }
+        // So is one whose project file names a copy of another server's grimoire `ledger`.
+        std::fs::write(
+            other.repo.join(store_io::PROJECT_FILE),
+            "name = \"ledger\"
+server = \"https://elsewhere.example/g/ledger\"
+",
+        )
+        .unwrap();
+        match live.take_checkout("ledger", &named(&other.repo)) {
+            Took::Failed(why) => assert!(why.contains("`ledger` is served already") && why.contains("give it another `name`"), "{why}"),
+            _ => panic!("refused, saying why"),
+        }
         assert!(matches!(live.choose("audit", None, true), Err(Refusal::NotFound(_))));
     }
 
@@ -302,8 +330,15 @@ mod tests {
         let other = Arc::new(Daemon::open(&worktree.store_dir).unwrap().0);
         {
             let mut held = live.held.lock().unwrap();
-            let shelved =
-                Shelved { store_dir: worktree.store_dir.clone(), repo: worktree.repo.clone(), canon: canonical(&worktree.repo), team: true, daemon: other.clone(), lock: None, watcher: None };
+            let shelved = Shelved {
+                store_dir: worktree.store_dir.clone(),
+                repo: worktree.repo.clone(),
+                canon: canonical(&worktree.repo),
+                server: Some("http://team".into()),
+                daemon: other.clone(),
+                lock: None,
+                watcher: None,
+            };
             held.served.insert(("shop".into(), worktree.repo.clone()), shelved);
         }
         (live, main, worktree, locks)

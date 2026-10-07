@@ -87,7 +87,7 @@ export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
 export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
-export type LibraryEntry = { name: string, repository: string, };
+export type LibraryEntry = { name: string, repository: string, server: string | null, };
 
 export type Linked = { ref: Ref, title: string | null, };
 

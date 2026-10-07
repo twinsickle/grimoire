@@ -590,6 +590,9 @@ fn a_teams_server_serves_its_library() {
     let (_, status) = post(daemon_port, "/g/shop/api/status", "{}", "");
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
     assert_eq!((status["server"]["address"].as_str(), status["server"]["reachable"].as_bool()), (Some(address.as_str()), Some(true)), "{status}");
+    // The library names where the copy comes from: its server, without the grimoire's /g/<name>.
+    let server = format!("http://127.0.0.1:{port}");
+    assert!(status["library"].as_array().unwrap().iter().any(|g| g["name"] == "shop" && g["server"].as_str() == Some(server.as_str())), "{status}");
     // A project file pointed at another grimoire of the library takes that grimoire's name.
     let q = uninitialised();
     assert!(team(&q.repo, &home, None, &["init", "--server", &format!("http://127.0.0.1:{port}"), "--name", "old-name"]).status.success());
