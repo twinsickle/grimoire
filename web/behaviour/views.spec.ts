@@ -449,6 +449,40 @@ test("a page body is rendered as Markdown", async ({ page }) => {
   await expect(page.locator("main")).not.toContainText("**What it is.**");
 });
 
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-recipes-page-and-where-it-is-placed", "checks": ["web/src/views/Node#content-then-graph", "web/src/views/Node#every-kind", "web/src/components#markdown-bodies", "web/src/views/Home#contracts-grouped", "web/src/views/Home#marks"]}
+ * ```
+ */
+test("a recipe's page says what it is, then its graph, prose, ingredients and files; a page places it", async ({ page }) => {
+  await page.goto("/n/recipe%3Aready-check");
+  const main = page.locator("main");
+  await expect(page.locator("h1")).toHaveText("Ready check");
+  // What it is, above the graph: its kind, where it is written, and the path not found.
+  await expect(main).toContainText("A check recipe, written in src/ready.recipe.md at line 7");
+  await expect(main).toContainText("Not found in the checkout: src/report.rs");
+  const order = await main.locator("section[aria-label='Graph'], h2, .md").evaluateAll((els) => els.map((e) => (e.matches(".md") ? "prose" : e.matches("section") ? "graph" : e.textContent)));
+  // In that order: the graph, then the prose, its ingredients and its files.
+  const at = (what: string | null) => order.indexOf(what);
+  expect([at("graph"), at("prose"), at("Ingredients"), at("Files")].every((n, i, all) => n >= 0 && (i === 0 || n > all[i - 1])), `${order}`).toBe(true);
+  // The prose is Markdown, rendered; each ingredient links to its own page, which names its recipe.
+  await expect(main.locator(".md p", { hasText: "for asking whether a build will pass" })).toBeVisible();
+  await expect(main.locator(".md strong", { hasText: "Not" })).toBeVisible();
+  await expect(main).not.toContainText("**Not**");
+  await expect(main).not.toContainText('"kind"');
+  await main.getByRole("link", { name: "#answer" }).click();
+  await expect(page.locator("h1")).toHaveText("Yes or no, never maybe.");
+  await expect(main.locator("p", { hasText: "In" }).getByRole("link", { name: "ready-check" })).toHaveAttribute("href", /recipe%3Aready-check$/);
+  // The page that places it lists it with its title, and a requirement it carries counts it as a recipe.
+  await page.goto("/n/page%3Areadiness");
+  await expect(page.locator("#recipes a", { hasText: "ready-check" })).toHaveAttribute("href", /recipe%3Aready-check$/);
+  await expect(page.locator("#recipes")).toContainText("Ready check");
+  await expect(page.locator("#requirements li", { hasText: "Readiness answers plainly" })).toContainText("1 recipe");
+  await expect(page.locator("#requirements li", { hasText: "Readiness answers plainly" })).not.toContainText("uncovered");
+});
+
 /** A row on the board, found by its ticket reference. */
 function row(page: Page, ref: string) {
   return page.locator(`li[data-ticket="${ref}"]`);
@@ -960,7 +994,9 @@ test("pages mark new findings apart from inherited ones, and criteria and requir
 test("every node kind has a page", async ({ page }) => {
   const nodes = ROUTES.filter((r) => r.path.startsWith("/n/"));
   const kinds = [...new Set(nodes.map((r) => decodeURIComponent(r.path.slice("/n/".length)).split(":")[0]))].sort();
-  expect(kinds, "a node page of every kind").toEqual(["criterion", "decl", "file", "module", "page", "req", "test", "ticket"]);
+  expect(kinds, "a node page of every kind").toEqual(["criterion", "decl", "file", "module", "page", "recipe", "req", "test", "ticket"]);
+  // An ingredient is of the kind recipe: its route is there too, as one of the recipe's.
+  expect(nodes.some((r) => decodeURIComponent(r.path).includes("recipe:ready-check#")), "an ingredient's page").toBe(true);
   for (const { path } of nodes) {
     await page.goto(path);
     await expect(page.locator("h1"), path).toBeVisible();

@@ -16,6 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 grimoire-core.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ignore.workspace = true

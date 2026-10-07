@@ -57,6 +57,7 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
         languages: vec!["rust".into()],
         scope: Scope::default(),
         order: Default::default(),
+        recipe_kinds: Default::default(),
     };
     // An active, current ticket, so a write that changes intent has a proposal to land in; reads of it name the ticket.
     let mut s = Store::new(config);
@@ -525,6 +526,7 @@ fn serve_shared() -> (Served, String, String) {
         languages: vec!["rust".into()],
         scope: Scope::default(),
         order: Default::default(),
+        recipe_kinds: Default::default(),
     };
     store_io::write_all(&store, &Store::new(config), false).unwrap();
     let writer = store_io::tokens::add(&store, "ana", true).unwrap();

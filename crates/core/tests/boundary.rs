@@ -89,11 +89,14 @@ fn every_finding_is_about_connection() {
     let connections = [
         ("checks-retired", "a test names a requirement that no longer holds"),
         ("dangling-edge", "a reference leads nowhere"),
+        ("duplicate-recipe", "two recipes are written with one id"),
         ("landing-moved", "a landing ticket's proposal rests on a truth that moved"),
         // An omen, not a finding: it fails nothing, and counts lines the extractor read, judging no meaning (req:lint-omens).
         ("large-file", "a file in the contract scope reaches the large-file limit, its tests aside"),
         ("malformed-file", "a store record cannot be read"),
+        ("malformed-recipe", "a recipe file cannot be read"),
         ("malformed-test", "a test block cannot be read"),
+        ("missing-file", "a path a recipe names leads nowhere"),
         ("missing-{which}-root", "a root the config does not name, or names as no page"),
         ("no-contract", "a module in the contract scope carries no contract"),
         ("no-scenario", "a requirement has no scenario"),
@@ -101,12 +104,15 @@ fn every_finding_is_about_connection() {
         ("rite-names-code", "a rule of work names a criterion"),
         ("ticket-cycle", "tickets rely on one another in a loop"),
         ("uncovered-criterion", "no requirement names a criterion"),
+        ("undeclared-kind", "a recipe is of a kind the config does not declare"),
         ("unheld", "nothing holds a requirement"),
         ("unlinked-module", "no page links a module"),
         ("unlinked-page", "no page links a page"),
+        ("unlinked-recipe", "no page links a recipe"),
         ("unlinked-requirement", "no page links a requirement"),
         ("unsupported-language", "a configured language has no adapter in this build"),
         ("untested", "no test checks a criterion"),
+        ("use-not-allowed", "a recipe uses a recipe of a kind its own may not use"),
     ];
     assert!(!lint_sources.is_empty(), "the lint's source was found");
     let found = check_names(&lint_sources.concat());

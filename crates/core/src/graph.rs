@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, and each ticket whose references it edits with the references the edit holds, so every query and lint answers over a branch's own intent when asked to; such a graph names as judged that ticket and the tickets it edits, and the truth's graph names none; it names the ticket it is read with, and holds that ticket's moved records when it is active as well as every landing ticket's."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, and each ticket whose references it edits with the references the edit holds, so every query and lint answers over a branch's own intent when asked to; such a graph names as judged that ticket and the tickets it edits, and the truth's graph names none; it names the ticket it is read with, and holds that ticket's moved records when it is active as well as every landing ticket's."},{"id":"recipes","statement":"Each recipe is a node recipe:<id> with a uses edge to recipe:<id> for each id it uses, and each of its ingredients a node recipe:<id>#<ingredient> that belongs to it; of two recipes with one id the first by file path is the node and every file holding that id is kept for the lint, with the recipe files that could not be read and the config's recipe kinds."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -24,6 +24,8 @@ pub enum Node {
     File(File),
     Decl(Decl),
     Test(Test),
+    Recipe(Recipe),
+    Ingredient(Ingredient),
 }
 
 impl Node {
@@ -37,6 +39,7 @@ impl Node {
             Node::File(_) => Kind::File,
             Node::Decl(_) => Kind::Decl,
             Node::Test(_) => Kind::Test,
+            Node::Recipe(_) | Node::Ingredient(_) => Kind::Recipe,
         }
     }
 
@@ -51,6 +54,8 @@ impl Node {
             Node::File(f) => f.path.clone(),
             Node::Decl(d) => d.path.clone(),
             Node::Test(t) => t.name.clone(),
+            Node::Recipe(r) => r.title.clone(),
+            Node::Ingredient(i) => i.says.clone(),
         }
     }
 
@@ -71,6 +76,8 @@ impl Node {
             Node::File(f) => vec![&f.path],
             Node::Decl(d) => vec![&d.path],
             Node::Test(t) => vec![&t.name],
+            Node::Recipe(r) => vec![&r.id, &r.title, &r.text],
+            Node::Ingredient(i) => vec![&i.id, &i.says],
         }
     }
 }
@@ -110,6 +117,12 @@ pub struct Graph {
     pub supported_languages: Vec<String>,
     /// Test blocks that could not be read, for the lint.
     pub test_errors: Vec<TestError>,
+    /// Recipe files that could not be read, for the lint.
+    pub recipe_errors: Vec<RecipeError>,
+    /// Each recipe id held by more than one file, with every such file by path, for the lint.
+    pub recipe_duplicates: BTreeMap<String, Vec<String>>,
+    /// The project's recipe kinds, from the config, for the lint.
+    pub recipe_kinds: BTreeMap<String, RecipeKind>,
     /// The order set within each priority band, for the board.
     pub order: Order,
     /// The tickets whose references the lint judges: none on the truth's
@@ -225,6 +238,7 @@ impl Graph {
             g.nodes.insert(from, Node::Test(t.clone()));
         }
         g.test_errors = extraction.test_errors.clone();
+        g.recipes(store, extraction);
         for f in extraction.files.values() {
             let from = Reference::file(&f.path);
             for d in &f.decls {
@@ -238,6 +252,33 @@ impl Graph {
         let (grimoire, rites) = (g.under(store.config.roots.grimoire.as_deref()), g.under(store.config.roots.rites.as_deref()));
         g.rites = rites.difference(&grimoire).cloned().collect();
         g
+    }
+
+    /// Each recipe a node with its ingredients and uses; the first of one id by path, the rest kept as duplicates.
+    fn recipes(&mut self, store: &Store, extraction: &Extraction) {
+        self.recipe_errors = extraction.recipe_errors.clone();
+        self.recipe_kinds = store.config.recipe_kinds.clone();
+        let mut by_path: Vec<&Recipe> = extraction.recipes.iter().collect();
+        by_path.sort_by(|a, b| a.file.cmp(&b.file));
+        let mut files_of: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+        for r in by_path {
+            let held = files_of.entry(&r.id).or_default();
+            held.push(r.file.clone());
+            if held.len() > 1 {
+                continue;
+            }
+            let from = Reference::recipe(&r.id);
+            for u in &r.uses {
+                self.edge(&from, &Reference::recipe(u), Relation::Uses);
+            }
+            for i in &r.ingredients {
+                let iref = Reference::ingredient(&r.id, &i.id);
+                self.edge(&iref, &from, Relation::BelongsTo);
+                self.nodes.insert(iref, Node::Ingredient(i.clone()));
+            }
+            self.nodes.insert(from, Node::Recipe(r.clone()));
+        }
+        self.recipe_duplicates = files_of.into_iter().filter(|(_, f)| f.len() > 1).map(|(id, f)| (id.to_string(), f)).collect();
     }
 
     fn edge(&mut self, from: &Reference, to: &Reference, relation: Relation) {
@@ -329,6 +370,7 @@ impl Graph {
             (Kind::File, Node::File(f)) => Some(SourceLocation { file: f.path.clone(), line: 1, contract_line: None }),
             (Kind::Decl, Node::Decl(d)) => Some(SourceLocation { file: d.file.clone(), line: d.line, contract_line: None }),
             (Kind::Test, Node::Test(t)) => Some(SourceLocation { file: t.file.clone(), line: t.line, contract_line: None }),
+            (Kind::Recipe, Node::Recipe(r)) => Some(SourceLocation { file: r.file.clone(), line: r.line, contract_line: None }),
             _ => None,
         }
     }
@@ -397,6 +439,7 @@ pub(crate) mod fixtures {
             languages: vec!["rust".into()],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         for p in [
             page("overview", &["page:git-readiness"]),
@@ -520,6 +563,35 @@ mod tests {
         let loc = g.source_of(&decl).expect("the declaration is found");
         assert_eq!((loc.file.as_str(), loc.line), ("src/a#b.ts", 7));
         assert_eq!(g.source_of(&criterion).map(|l| l.file), Some("src/a#b.ts".to_string()));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-recipe-is-a-node-with-its-ingredients", "checks": ["crates/core/src/graph#recipes", "crates/core/src/model#kinds"]}
+    /// ```
+    #[test]
+    fn a_recipe_is_a_node_with_its_ingredients() {
+        use crate::extraction::fixtures::{extraction_files, recipe_file};
+        let mut files = extraction_files();
+        files.push(recipe_file("ui/button.recipe.md", "button", "component", &["icon", "nowhere"], &[], &[]));
+        files.push(recipe_file("ui/icon.recipe.md", "icon", "component", &[], &[], &[]));
+        files.push(recipe_file("z/button.recipe.md", "button", "token", &[], &[], &[]));
+        let mut s = super::fixtures::store();
+        s.config.recipe_kinds.insert("component".into(), RecipeKind { uses: vec!["component".into()] });
+        let g = Graph::build(&s, &Extraction::from_files(&files), &[]);
+        let button = Reference::recipe("button");
+        assert!(matches!(g.get(&button), Some(Node::Recipe(r)) if r.file == "ui/button.recipe.md" && r.kind == "component"), "the first by path is the node");
+        let label = Reference::ingredient("button", "label");
+        assert!(matches!(g.get(&label), Some(Node::Ingredient(i)) if i.recipe == "button"));
+        assert!(g.out_with(&label, Relation::BelongsTo).any(|e| e.to == button));
+        assert!(g.inbound_with(&Reference::recipe("icon"), Relation::Uses).any(|e| e.from == button), "the reverse is derived");
+        assert!(g.out_with(&button, Relation::Uses).any(|e| e.to == Reference::recipe("nowhere")), "a use leading nowhere is kept");
+        assert_eq!(g.recipe_duplicates["button"], ["ui/button.recipe.md", "z/button.recipe.md"]);
+        assert!(g.recipe_kinds.contains_key("component"));
+        assert_eq!(g.get(&button).map(|n| n.kind()), Some(Kind::Recipe));
+        assert_eq!(g.source_of(&button).map(|s| (s.file, s.line)), Some(("ui/button.recipe.md".to_string(), 3)));
+        assert!(!g.nodes.keys().any(|r| r.kind == Kind::Module && r.id.is_empty()), "a recipe file is no module");
     }
 
     /// # Test contract

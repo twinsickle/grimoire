@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, and a module from its files' fingerprints together."},{"id":"unnamed","statement":"unnamed gives, in reference order, every page, requirement and module whose fingerprint differs between the start and now, one present at only one end among them, that the given touches do not list; a page or requirement renamed since the start is named by its new slug alone, since a rename moves the start's entry with it."}]}
+//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, a recipe from its record as read, missing paths included, an ingredient from what it says, and a module from its files' fingerprints together."},{"id":"unnamed","statement":"unnamed gives, in reference order, every page, requirement and module whose fingerprint differs between the start and now, one present at only one end among them, that the given touches do not list; a page or requirement renamed since the start is named by its new slug alone, since a rename moves the start's entry with it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -62,6 +62,8 @@ pub fn all(g: &Graph) -> BTreeMap<Reference, String> {
                     .collect();
                 of_text(&digests.join("\n"))
             }
+            Node::Recipe(x) => of_json(x),
+            Node::Ingredient(i) => of_text(&i.says),
             Node::Decl(_) => continue,
         };
         out.insert(r.clone(), fp);
@@ -123,6 +125,15 @@ mod tests {
         let changed = all(&Graph::build(&crate::graph::fixtures::store(), &crate::extraction::Extraction::from_files(&files), &[]));
         assert_ne!(changed[&Reference::module("src/a/ready")], fp[&Reference::module("src/a/ready")]);
         assert_eq!(changed[&Reference::module("src/a/layout")], fp[&Reference::module("src/a/layout")]);
+        // A recipe from its record, what it found included, and an ingredient from what it says.
+        let with = |missing: &[&str]| {
+            let mut files = crate::extraction::fixtures::extraction_files();
+            files.push(crate::extraction::fixtures::recipe_file("ui/b.recipe.md", "b", "k", &[], &["src/x"], missing));
+            all(&Graph::build(&crate::graph::fixtures::store(), &crate::extraction::Extraction::from_files(&files), &[]))
+        };
+        let (found, lost) = (with(&[]), with(&["src/x"]));
+        assert_ne!(found[&Reference::recipe("b")], lost[&Reference::recipe("b")], "a file it names going changes it");
+        assert_eq!(found[&Reference::ingredient("b", "label")], of_text("The text shown."));
     }
 
     #[test]

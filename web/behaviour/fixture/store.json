@@ -3,6 +3,16 @@
     "overview",
     "handbook"
   ],
+  "recipe_kinds": {
+    "check": {
+      "uses": [
+        "rule"
+      ]
+    },
+    "rule": {
+      "uses": []
+    }
+  },
   "pages": [
     {
       "slug": "overview",
@@ -36,7 +46,9 @@
         "req:ready-needs-commit",
         "module:src/ready",
         "module:src",
-        "req:not-built"
+        "req:not-built",
+        "req:ready-answers-plainly",
+        "recipe:ready-check"
       ]
     },
     {
@@ -106,6 +118,22 @@
         }
       ],
       "covered_by": []
+    },
+    {
+      "slug": "ready-answers-plainly",
+      "title": "Readiness answers plainly",
+      "statement": "A readiness check SHALL answer yes or no, as its recipe promises.",
+      "scenarios": [
+        {
+          "title": "Asked",
+          "given": "a workspace",
+          "when": "readiness is asked",
+          "then": "the answer is yes or no"
+        }
+      ],
+      "covered_by": [
+        "recipe:ready-check#answer"
+      ]
     }
   ],
   "tickets": [

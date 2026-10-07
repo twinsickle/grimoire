@@ -71,6 +71,9 @@ test("a reference splits at the first colon and nowhere else", () => {
   expect(idOf("decl:src/a.rs#Repo::open")).toBe("src/a.rs#Repo::open");
   // A criterion or test id after the last #, though the module or file name holds one.
   expect(localId("criterion:src/a#b#kept")).toBe("kept");
+  // An ingredient is of the kind recipe; its id is what follows the #.
+  expect(kindOf("recipe:button#label")).toBe("recipe");
+  expect(localId("recipe:button#label")).toBe("label");
   expect(localId("test:src/a#b.ts#holds")).toBe("holds");
 });
 
@@ -456,7 +459,7 @@ test("the app mounts under StrictMode", () => {
  * ```
  */
 test("colours are named by token, never written as literals", () => {
-  for (const kind of ["page", "req", "module", "criterion", "ticket", "file", "decl", "test"]) {
+  for (const kind of ["page", "req", "module", "criterion", "ticket", "file", "decl", "test", "recipe"]) {
     expect(css).toContain(`--color-${kind}:`);
   }
   // And one per syntax tone, which the source view names as a utility of the same name.

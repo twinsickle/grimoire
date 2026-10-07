@@ -117,6 +117,7 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
         scope: Scope::default(),
         order: Default::default(),
         site: Vec::new(),
+        recipe_kinds: Default::default(),
     });
 
     let mut page_slugs = Slugs(BTreeSet::from([ROOT_SLUG.to_string(), RITES_SLUG.to_string(), CONVENTIONS.0.to_string()]));

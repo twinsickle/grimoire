@@ -28,6 +28,9 @@ export const ROUTES: Route[] = [
   { name: "node-file", path: node("file:src/ready.rs"), content: "[aria-label='Source of src/ready.rs'] table" },
   { name: "node-decl", path: node("decl:src/ready.rs#ready"), content: "h1" },
   { name: "node-test", path: node("test:src/ready.rs#ready-needs-a-commit"), content: "h1" },
+  // A recipe that names a file the checkout lacks, so the mark for it is seen, and one of its ingredients.
+  { name: "node-recipe", path: node("recipe:ready-check"), content: "main h2:has-text('Ingredients')" },
+  { name: "node-ingredient", path: node("recipe:ready-check#answer"), content: "h1" },
   // The fixture library's empty grimoire: nothing yet to show, so its views are the empty states.
   { name: "empty-grimoire", path: "/g/ledger/", content: "[data-empty-state]" },
   { name: "empty-cauldron", path: "/g/ledger/cauldron", content: "[data-empty-state]" },

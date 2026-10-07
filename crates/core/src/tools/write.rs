@@ -828,6 +828,12 @@ mod tests {
         assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), None));
         call(&mut s, "configure", json!({ "plain_file": 4000 }), "2026-09-28").unwrap();
         assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), Some(4000)));
+        // The recipe kinds are replaced whole, and leave the rest alone.
+        call(&mut s, "configure", json!({ "recipe_kinds": { "component": { "uses": ["component", "token"] }, "token": {} } }), "2026-09-28").unwrap();
+        assert_eq!(s.store().config.recipe_kinds.keys().collect::<Vec<_>>(), ["component", "token"]);
+        let out = call(&mut s, "configure", json!({ "recipe_kinds": { "quest": { "uses": [] } } }), "2026-09-28").unwrap();
+        assert_eq!(out.output["config"]["recipe_kinds"], json!({ "quest": { "uses": [] } }));
+        assert_eq!(s.store().config.languages, ["rust", "typescript"]);
     }
 
     /// # Test contract
@@ -851,6 +857,8 @@ mod tests {
         assert!(serde_json::to_value(&prefix).unwrap()["details"][0]["field"] == "scope.include");
         let zero = call(&mut s, "configure", json!({ "plain_file": 0 }), "2026-09-28").unwrap_err();
         assert!(serde_json::to_value(&zero).unwrap()["details"][0]["field"] == "plain_file", "{zero}");
+        let kinds = call(&mut s, "configure", json!({ "recipe_kinds": { "component": { "uses": ["token"] } } }), "2026-09-28").unwrap_err();
+        assert!(serde_json::to_value(&kinds).unwrap()["details"][0]["field"] == "recipe_kinds", "a use of a kind not declared");
         assert_eq!(s.store().config, before, "nothing changed");
     }
 

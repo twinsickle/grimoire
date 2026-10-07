@@ -137,6 +137,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         super::super::write_all(&store_dir, &Store::new(config), false).unwrap();
         (store_dir, main, wt)

@@ -22,7 +22,7 @@ const BOX_H = 26;
 const LEFT_OPEN_UP_TO = 6;
 
 /** The order kinds are drawn in on the left, the grimoire's reading order. */
-const LEFT_ORDER: Kind[] = ["page", "req", "ticket", "module", "criterion", "file", "decl", "test"];
+const LEFT_ORDER: Kind[] = ["page", "req", "ticket", "recipe", "module", "criterion", "file", "decl", "test"];
 
 const PLURAL: Record<Kind, string> = {
   page: "pages",
@@ -33,6 +33,7 @@ const PLURAL: Record<Kind, string> = {
   file: "files",
   decl: "declarations",
   test: "tests",
+  recipe: "recipes",
 };
 
 /** An item placed to draw; `up` marks one on the left, which rests on the node. */

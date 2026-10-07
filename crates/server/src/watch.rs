@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles or marks a nested checkout's boundary, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles, a recipe file among them, marks a nested checkout's boundary, or is a path a held recipe names, lies under one or is a folder holding one, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
 //! ```
 
 use std::collections::HashMap;
@@ -112,9 +112,16 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
             for p in events.iter().flat_map(|e| e.paths.iter()) {
                 ignorer.forget(p);
             }
+            // The paths the recipes name, read before the extractor as every other reading takes them.
+            let named = daemon.recipe_paths();
             let rels = {
                 let extractor = daemon.extractor.read().expect("extractor lock");
-                to_reextract(events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)), |p| ignorer.ignores(p), |p| daemon.relative(p), |r| extractor.handles(r) || extractor.is_boundary(r))
+                to_reextract(
+                    events.iter().flat_map(|e| e.paths.iter().map(PathBuf::as_path)),
+                    |p| ignorer.ignores(p),
+                    |p| daemon.relative(p),
+                    |r| extractor.handles(r) || extractor.is_boundary(r) || named_by(&named, r),
+                )
             };
             if !rels.is_empty() {
                 daemon.reextract(&rels);
@@ -128,6 +135,13 @@ pub fn start(daemon: Arc<Daemon>) -> notify::Result<Debouncer<notify::Recommende
     })?;
     debouncer.watch(&root, RecursiveMode::Recursive)?;
     Ok(debouncer)
+}
+
+/// Whether a repository path is one a recipe names, lies under one, or is a folder holding one:
+/// a file it represents changed, or a folder above it went or came.
+fn named_by(named: &[String], rel: &str) -> bool {
+    let under = |a: &str, b: &str| a.strip_prefix(b).is_some_and(|r| r.starts_with('/'));
+    named.iter().any(|n| rel == n || under(rel, n) || under(n, rel))
 }
 
 /// The paths one debounced batch re-extracts: each repository-relative path
@@ -167,6 +181,12 @@ mod tests {
         let rel = |p: &Path| p.strip_prefix(root).ok().map(|r| r.to_string_lossy().replace('\\', "/"));
         let handed = to_reextract(paths, |_| false, rel, |r| e.handles(r) || e.is_boundary(r));
         assert_eq!(handed, ["src/a.rs", "worktrees/wt/src/b.rs", "worktrees/wt/.git", "pkg/.grimoire.toml"]);
+        // A recipe file whatever the languages, and a path a held recipe names or one under it.
+        let named = ["ui/button".to_string(), "levels/one.txt".to_string()];
+        let paths =
+            ["C:/repo/docs/quest.recipe.md", "C:/repo/ui/button/dialog.xml", "C:/repo/levels/one.txt", "C:/repo/levels", "C:/repo/ui/buttons.xml", "C:/repo/lev", "C:/repo/notes.txt"].map(Path::new);
+        let handed = to_reextract(paths, |_| false, rel, |r| e.handles(r) || e.is_boundary(r) || named_by(&named, r));
+        assert_eq!(handed, ["docs/quest.recipe.md", "ui/button/dialog.xml", "levels/one.txt", "levels"], "a folder holding a named file too");
     }
 
     /// # Test contract

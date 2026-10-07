@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join per-file extraction results into modules with their criteria and resolved imports, without reading anything.","criteria":[{"id":"per-file-input","statement":"The input is one record per source file, so a caller can replace one file's record and re-join without re-extracting the rest."},{"id":"imports-resolve-to-known","statement":"An import resolves to the first candidate that names an existing module other than the importing one; anything else is dropped and counted."}]}
+//! {"purpose":"Join per-file extraction results into modules with their criteria and resolved imports, without reading anything.","criteria":[{"id":"per-file-input","statement":"The input is one record per source file, so a caller can replace one file's record and re-join without re-extracting the rest."},{"id":"imports-resolve-to-known","statement":"An import resolves to the first candidate that names an existing module other than the importing one; anything else is dropped and counted."},{"id":"recipes-joined","statement":"A recipe file's record joins as its recipe, or as the reason it could not be read, in the order of the files' paths, and never as a module or a file."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -43,6 +43,10 @@ pub struct FileExtraction {
     pub lines: u32,
     #[serde(default)]
     pub test_lines: u32,
+    /// For a recipe file, which is no module's, the recipe it holds or why it could not be read;
+    /// `None` for a source file.
+    #[serde(default)]
+    pub recipe: Option<Result<Recipe, RecipeError>>,
 }
 
 /// The joined view: every module and file the repository declares.
@@ -53,6 +57,10 @@ pub struct Extraction {
     pub unresolved_imports: usize,
     pub tests: Vec<Test>,
     pub test_errors: Vec<TestError>,
+    /// Every recipe read, by its file's path, two of one id among them.
+    pub recipes: Vec<Recipe>,
+    /// Recipe files that could not be read as one.
+    pub recipe_errors: Vec<RecipeError>,
 }
 
 impl Extraction {
@@ -63,8 +71,22 @@ impl Extraction {
         let mut modules: BTreeMap<String, Module> = BTreeMap::new();
         let mut raw_imports: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
         let mut out_files: BTreeMap<String, File> = BTreeMap::new();
+        let mut recipes = Vec::new();
+        let mut recipe_errors = Vec::new();
 
         for f in &files {
+            // A recipe file is no module's: it joins as its recipe.
+            match &f.recipe {
+                Some(Ok(r)) => {
+                    recipes.push(r.clone());
+                    continue;
+                }
+                Some(Err(e)) => {
+                    recipe_errors.push(e.clone());
+                    continue;
+                }
+                None => {}
+            }
             let m = modules.entry(f.module.clone()).or_insert_with(|| Module {
                 id: f.module.clone(),
                 files: Vec::new(),
@@ -136,7 +158,7 @@ impl Extraction {
 
         let tests = files.iter().flat_map(|f| f.tests.iter().cloned()).collect();
         let test_errors = files.iter().flat_map(|f| f.test_errors.iter().cloned()).collect();
-        Extraction { modules, files: out_files, unresolved_imports: unresolved, tests, test_errors }
+        Extraction { modules, files: out_files, unresolved_imports: unresolved, tests, test_errors, recipes, recipe_errors }
     }
 
     pub fn criterion(&self, module: &str, id: &str) -> Option<&Criterion> {
@@ -167,6 +189,39 @@ pub(crate) mod fixtures {
             contract_line: Some(1),
             lines: 40,
             test_lines: 0,
+            recipe: None,
+        }
+    }
+
+    /// A recipe file's record: `button` of kind `component`, with one ingredient and the given uses and files.
+    pub fn recipe_file(path: &str, id: &str, kind: &str, uses: &[&str], files: &[&str], missing: &[&str]) -> FileExtraction {
+        let recipe = Recipe {
+            id: id.into(),
+            kind: kind.into(),
+            title: id.to_uppercase(),
+            text: format!("How to use {id}."),
+            ingredients: vec![Ingredient { recipe: id.into(), id: "label".into(), says: "The text shown.".into() }],
+            files: files.iter().map(|s| s.to_string()).collect(),
+            uses: uses.iter().map(|s| s.to_string()).collect(),
+            file: path.into(),
+            line: 3,
+            missing: missing.iter().map(|s| s.to_string()).collect(),
+        };
+        FileExtraction {
+            path: path.into(),
+            language: "recipe".into(),
+            module: String::new(),
+            decls: vec![],
+            imports: vec![],
+            expects_contract: false,
+            digest: crate::fingerprint::of_text(path),
+            tests: vec![],
+            test_errors: vec![],
+            contract: None,
+            contract_line: None,
+            lines: 0,
+            test_lines: 0,
+            recipe: Some(Ok(recipe)),
         }
     }
 
@@ -233,5 +288,25 @@ mod tests {
         let unrelated = &x.modules["src/b/unrelated"];
         assert!(unrelated.purpose.is_none());
         assert!(unrelated.contract_error.is_some());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-recipe-file-joins-as-its-recipe", "checks": ["crates/core/src/extraction#recipes-joined"]}
+    /// ```
+    #[test]
+    fn a_recipe_file_joins_as_its_recipe() {
+        let mut files = extraction_files();
+        files.push(recipe_file("z/button.recipe.md", "button", "component", &[], &[], &[]));
+        files.push(recipe_file("a/button.recipe.md", "button", "component", &[], &[], &[]));
+        let mut broken = recipe_file("docs/broken.recipe.md", "x", "component", &[], &[], &[]);
+        broken.recipe = Some(Err(crate::model::RecipeError { file: "docs/broken.recipe.md".into(), line: 2, reason: "no block".into() }));
+        files.push(broken);
+        let x = Extraction::from_files(&files);
+        assert_eq!(x.recipes.iter().map(|r| r.file.as_str()).collect::<Vec<_>>(), ["a/button.recipe.md", "z/button.recipe.md"], "in the order of the files' paths");
+        assert_eq!(x.recipe_errors.len(), 1);
+        assert_eq!(x.modules.len(), 3, "no module of a recipe file");
+        assert!(!x.files.keys().any(|f| f.ends_with(".recipe.md")), "no file of one either");
     }
 }

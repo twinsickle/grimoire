@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl and test (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, and a test's is file path, #, the name in its test block; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements and modules, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, and optional large-file and plain-file line limits, 1,000 and 5,000 when absent; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's at the first, since a recipe id never holds one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -23,6 +23,8 @@ pub enum Kind {
     File,
     Decl,
     Test,
+    /// A recipe, or one of its ingredients when its id holds `#`.
+    Recipe,
 }
 
 impl Kind {
@@ -36,6 +38,7 @@ impl Kind {
             Kind::File => "file",
             Kind::Decl => "decl",
             Kind::Test => "test",
+            Kind::Recipe => "recipe",
         }
     }
 
@@ -49,6 +52,7 @@ impl Kind {
             "file" => Kind::File,
             "decl" => Kind::Decl,
             "test" => Kind::Test,
+            "recipe" => Kind::Recipe,
             _ => return None,
         })
     }
@@ -60,10 +64,10 @@ impl Kind {
 
     /// Whether nodes of this kind come from the code and not the store.
     pub fn is_derived(self) -> bool {
-        matches!(self, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test)
+        matches!(self, Kind::Module | Kind::Criterion | Kind::File | Kind::Decl | Kind::Test | Kind::Recipe)
     }
 
-    pub const ALL: [Kind; 8] = [Kind::Page, Kind::Req, Kind::Ticket, Kind::Module, Kind::Criterion, Kind::File, Kind::Decl, Kind::Test];
+    pub const ALL: [Kind; 9] = [Kind::Page, Kind::Req, Kind::Ticket, Kind::Module, Kind::Criterion, Kind::File, Kind::Decl, Kind::Test, Kind::Recipe];
 }
 
 impl fmt::Display for Kind {
@@ -108,15 +112,24 @@ impl Reference {
     pub fn test(file: &str, name: &str) -> Self {
         Self::new(Kind::Test, format!("{file}#{name}"))
     }
+    pub fn recipe(id: &str) -> Self {
+        Self::new(Kind::Recipe, id)
+    }
+    pub fn ingredient(recipe: &str, id: &str) -> Self {
+        Self::new(Kind::Recipe, format!("{recipe}#{id}"))
+    }
 
     /// For `criterion` and `test` references, the module or file before the
     /// last `#` and the criterion id or test name after it, which never hold
-    /// one. `None` for other kinds, a `decl` among them: a file and a
+    /// one; for an ingredient, the recipe before the first `#`, since a recipe
+    /// id never holds one, and the ingredient after it. `None` for a recipe
+    /// itself and for other kinds, a `decl` among them: a file and a
     /// declaration path may both hold `#`, so a declaration's file is read
     /// from its node, never from its reference.
     pub fn split_hash(&self) -> Option<(&str, &str)> {
         match self.kind {
             Kind::Criterion | Kind::Test => self.id.rsplit_once('#'),
+            Kind::Recipe => self.id.split_once('#'),
             _ => None,
         }
     }
@@ -173,6 +186,11 @@ pub enum Relation {
     /// A test to a criterion it checks. Written on the test, pointing down,
     /// as a requirement's `covered_by` is.
     Checks,
+    /// A recipe to another recipe it uses. Written in the recipe's block.
+    Uses,
+    /// A recipe to a path its `files` names: the implementation it represents. Only a finding's
+    /// edge names it, for a path not found; the graph draws no such edge.
+    Represents,
 }
 
 impl Relation {
@@ -186,6 +204,8 @@ impl Relation {
             Relation::Imports => "imports",
             Relation::BelongsTo => "belongs_to",
             Relation::Checks => "checks",
+            Relation::Uses => "uses",
+            Relation::Represents => "represents",
         }
     }
 }
@@ -607,6 +627,19 @@ pub struct StoreConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub plain_file: Option<u32>,
+    // The project's own kinds of recipe, each with the kinds its recipes may use (req:recipe-kinds).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<std::collections::BTreeMap<String, RecipeKind>>", optional))]
+    pub recipe_kinds: std::collections::BTreeMap<String, RecipeKind>,
+}
+
+/// A kind of recipe the project declares: the kinds its recipes may use.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecipeKind {
+    #[serde(default)]
+    pub uses: Vec<String>,
 }
 
 /// The order a person set within each priority band, as ticket slugs. A
@@ -781,6 +814,46 @@ pub struct TestError {
     pub reason: String,
 }
 
+/// A recipe, read from a `.recipe.md` file: something the project offers the people who build with it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipe {
+    pub id: String,
+    pub kind: String,
+    // The prose's own first heading, or the id.
+    pub title: String,
+    // The prose for people, Markdown, without the title's heading and the recipe block.
+    pub text: String,
+    pub ingredients: Vec<Ingredient>,
+    // The implementation it represents: repository paths, each a file or a folder.
+    pub files: Vec<String>,
+    // The ids of the recipes it uses.
+    pub uses: Vec<String>,
+    // The `.recipe.md` file it is written in, and the line of its `Recipe` heading.
+    pub file: String,
+    pub line: u32,
+    // The paths of `files` not found in the checkout when it was read.
+    pub missing: Vec<String>,
+}
+
+// One part of a recipe: an id and what it says.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ingredient {
+    pub recipe: String,
+    pub id: String,
+    pub says: String,
+}
+
+// A `.recipe.md` file that could not be read as a recipe, and why.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecipeError {
+    pub file: String,
+    pub line: u32,
+    pub reason: String,
+}
+
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decl {
@@ -852,6 +925,12 @@ mod tests {
         assert_eq!(Reference::decl("src/a.rs", "Repo::open").to_string(), "decl:src/a.rs#Repo::open");
         assert_eq!(Reference::test("src/a.rs", "opens").to_string(), "test:src/a.rs#opens");
         assert_eq!(Reference::test("src/a.rs", "opens").split_hash(), Some(("src/a.rs", "opens")));
+        // A recipe, and an ingredient of the same kind, split at the first #.
+        assert!(Kind::Recipe.is_derived() && !Kind::Recipe.is_stored());
+        assert_eq!(Reference::recipe("button").to_string(), "recipe:button");
+        assert_eq!(Reference::recipe("button").split_hash(), None);
+        assert_eq!(Reference::ingredient("button", "label").to_string(), "recipe:button#label");
+        assert_eq!("recipe:button#label".parse::<Reference>().unwrap().split_hash(), Some(("button", "label")));
     }
 
     /// # Test contract
@@ -880,6 +959,12 @@ mod tests {
         let c: StoreConfig = serde_json::from_str(r#"{"version":1,"repository":"C:/repo","roots":["overview"],"languages":["rust"]}"#).unwrap();
         assert!(c.scope.is_empty());
         assert!(!serde_json::to_string(&c).unwrap().contains("scope"), "an empty scope is not written");
+        assert!(c.recipe_kinds.is_empty() && !serde_json::to_string(&c).unwrap().contains("recipe_kinds"), "no recipe kinds, none written");
+        let kinds: StoreConfig =
+            serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":[],"recipe_kinds":{"component":{"uses":["component","token"]},"token":{}}}"#).unwrap();
+        assert_eq!(kinds.recipe_kinds["component"].uses, ["component", "token"]);
+        assert!(kinds.recipe_kinds["token"].uses.is_empty());
+        assert!(serde_json::from_str::<RecipeKind>(r#"{"uses":[],"colour":"red"}"#).is_err(), "a kind holds its uses and nothing else");
     }
 
     /// # Test contract

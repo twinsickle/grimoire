@@ -100,6 +100,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         write_all(&store_dir, &Store::new(config), false).unwrap();
         let held = lock(&store_dir).unwrap();
@@ -129,6 +130,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         write_all(&inside, &Store::new(config), false).unwrap();
         assert!(matches!(lock(&inside), Err(StoreIoError::InsideRepository(..))));

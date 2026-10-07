@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"empty-grimoire","statement":"When the outline has no grimoire root to show, the grimoire view at its root is an EmptyState with the book, saying missingRoot of the root status names, with no rail beside it; at Unplaced or a page it says missingRoot alone, plainly, with no jingle."},{"id":"story-order","statement":"At the root, only the grimoire root's level is shown: the grimoire root page drawn as any page is, with its rollup bars, and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, none for a page or card the outline marks as the rites, whose requirements are held by the work and not by the code the bars measure, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, and its requirements; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed, and a page or card its omens apart, dimmed and never as a warning; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows its criteria, or the tests holding it when it names none, and warns only when it has neither, but a rite, which the outline marks as the rites, says it is held by the work; a requirement the outline counts as described is marked described, and a rollup with any described requirement adds a bar of the requirements decided."},{"id":"draft-line","statement":"A page's view carries one line naming each active or landing ticket whose proposal would change the page, linking to the page read as proposed; opened with ?ticket= it reads the page and its pane (its outline at depth 2) through that ticket's proposal and says so, the rail staying the truth's, and a page the proposal adds, which the truth's outline cannot place, opens this way with no breadcrumb; nothing else of a proposal is shown in the grimoire view."}]}
+ * {"purpose":"The grimoire view: every page as a tree in a rail, and beside it the root, a page or the unplaced modules, with how far adoption has come as bars; a page's view is its node page.","criteria":[{"id":"empty-grimoire","statement":"When the outline has no grimoire root to show, the grimoire view at its root is an EmptyState with the book, saying missingRoot of the root status names, with no rail beside it; at Unplaced or a page it says missingRoot alone, plainly, with no jingle."},{"id":"story-order","statement":"At the root, only the grimoire root's level is shown: the grimoire root page drawn as any page is, with its rollup bars, and the pages it links as cards in link order, each with its first paragraph, rollup bars and findings."},{"id":"contracts-grouped","statement":"At a page, its body is rendered as Markdown with its rollup bars, none for a page or card the outline marks as the rites, whose requirements are held by the work and not by the code the bars measure, the pages it links as cards, every module it links once with its purpose and its criteria beneath it, a module with no contract marked so, its requirements, and the recipes it places, each linking to its page with its title; a body longer than five lines shows five and a Show more; files and declarations are not shown."},{"id":"outline-driven","statement":"The rail and every number shown are the outline tool's answer: the rail reads outline with pages_only and lists every root it returns as a top-level entry in its order, each with its pages nested and ordered as its tree, a page under any root opening with a breadcrumb from that root, ending with Unplaced only when the outline's unplaced list is not empty; the root or a page beside it is drawn from outline rooted at that page at depth 2; and the bars and finding counts are the outline's own."},{"id":"marks","statement":"The rail shows each page's new findings as a warning and its inherited ones dimmed, and a page or card its omens apart, dimmed and never as a warning; a criterion is marked uncovered, untested or inherited from the checks and baselined count outline reports; a requirement shows how many criteria and how many recipes or ingredients it names, or the tests holding it when it names none, and warns only when it has neither, but a rite, which the outline marks as the rites, says it is held by the work; a requirement the outline counts as described is marked described, and a rollup with any described requirement adds a bar of the requirements decided."},{"id":"draft-line","statement":"A page's view carries one line naming each active or landing ticket whose proposal would change the page, linking to the page read as proposed; opened with ?ticket= it reads the page and its pane (its outline at depth 2) through that ticket's proposal and says so, the rail staying the truth's, and a page the proposal adds, which the truth's outline cannot place, opens this way with no breadcrumb; nothing else of a proposal is shown in the grimoire view."}]}
  * ```
  */
 
@@ -273,6 +273,7 @@ function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref 
   const page = data?.node as PageNode | undefined;
   const modules = tree.children.filter((c) => kindOf(c.ref) === "module");
   const reqs = tree.children.filter((c) => kindOf(c.ref) === "req");
+  const recipes = tree.children.filter((c) => kindOf(c.ref) === "recipe");
   return (
     <div className="flex flex-col gap-6 max-w-[110ch]">
       <header className="flex flex-col gap-2.5">
@@ -313,6 +314,24 @@ function PageView({ tree, above, home }: { tree: Tree; above: Tree[]; home: Ref 
             <span className="text-fg-dim text-[13px] font-normal">{reqs.length}</span>
           </h2>
           <RequirementList reqs={reqs} />
+        </section>
+      )}
+      {recipes.length > 0 && (
+        <section id="recipes">
+          <h2 className={sectionHead}>
+            <span className="text-recipe">Recipes</span>
+            <span className="text-fg-dim text-[13px] font-normal">{recipes.length}</span>
+          </h2>
+          <ul className="list-none m-0 p-0 flex flex-col gap-1.5">
+            {recipes.map((r) => (
+              <li key={r.ref} className="grid grid-cols-[minmax(180px,30ch)_minmax(0,1fr)] gap-x-4 items-baseline">
+                <Link to={nodePath(r.ref)} className={`${mono} text-recipe overflow-hidden text-ellipsis whitespace-nowrap`}>
+                  {idOf(r.ref)}
+                </Link>
+                <span className="text-fg-dim text-[13px]">{r.title}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </div>
@@ -371,6 +390,10 @@ function RequirementList({ reqs }: { reqs: Tree[] }) {
     <ul className="list-none m-0 mt-2 p-0 grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-x-6 gap-y-1">
       {reqs.map((r) => {
         const count = typeof r.coverage === "number" ? r.coverage : 0;
+        // What carries it, by kind: criteria, and recipes or their ingredients (req:recipe-nodes).
+        const recipes = r.children.filter((c) => kindOf(c.ref) === "recipe").length;
+        const criteria = r.children.length > 0 ? r.children.length - recipes : count;
+        const carried = [criteria > 0 && `${criteria} criteri${criteria === 1 ? "on" : "a"}`, recipes > 0 && `${recipes} recipe${recipes === 1 ? "" : "s"}`].filter(Boolean).join(", ");
         return (
           <li key={r.ref} className="flex gap-2 items-baseline text-[13px] min-w-0">
             <KindTag ref={r.ref} />
@@ -379,7 +402,7 @@ function RequirementList({ reqs }: { reqs: Tree[] }) {
             </Link>
             {count > 0 && (
               <span className="text-fg-dim text-xs whitespace-nowrap">
-                {count} criteri{count === 1 ? "on" : "a"}
+                {carried}
               </span>
             )}
             {r.rites && <span className="text-fg-dim text-xs whitespace-nowrap">held by the work</span>}

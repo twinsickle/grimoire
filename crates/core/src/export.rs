@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site and line limits, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, its config's site and line limits included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,8 @@ pub struct Exported {
     pub large_file: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plain_file: Option<u32>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub recipe_kinds: std::collections::BTreeMap<String, RecipeKind>,
     pub pages: Vec<Page>,
     pub requirements: Vec<Requirement>,
     pub tickets: Vec<Ticket>,
@@ -47,6 +49,7 @@ pub fn exported(store: &Store) -> Exported {
         site: store.config.site.clone(),
         large_file: store.config.large_file,
         plain_file: store.config.plain_file,
+        recipe_kinds: store.config.recipe_kinds.clone(),
         pages: store.pages.values().cloned().collect(),
         requirements: store.requirements.values().cloned().collect(),
         tickets: store.tickets.values().cloned().collect(),
@@ -74,6 +77,7 @@ impl Exported {
             scope: self.scope,
             order: self.order,
             site: self.site,
+            recipe_kinds: self.recipe_kinds,
         };
         let mut store = Store::new(config);
         store.pages = self.pages.into_iter().map(|p| (p.slug.clone(), p)).collect();
@@ -159,6 +163,11 @@ mod tests {
         assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
         assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone(), e.site.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone(), s.config.site.clone()));
         assert_eq!((e.large_file, e.plain_file), (Some(600), None), "the line limits too");
+        s.config.recipe_kinds.insert("component".into(), RecipeKind { uses: vec![] });
+        let e = exported(&s);
+        assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
+        assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone(), e.site.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone(), s.config.site.clone()));
+        assert_eq!(e.recipe_kinds, s.config.recipe_kinds, "the recipe kinds too");
         let text = serde_json::to_string(&e).unwrap();
         // Both roots named: written as the list an older machine reads; one missing, as the pair, which reads back the same.
         assert_eq!(serde_json::to_value(&e).unwrap()["roots"], serde_json::json!(["overview", "rites"]));
@@ -180,6 +189,7 @@ mod tests {
         let mut server = store();
         server.config.site = vec!["overview".into()];
         server.config.plain_file = Some(3_000);
+        server.config.recipe_kinds.insert("quest".into(), RecipeKind { uses: vec!["quest".into()] });
         let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has an active ticket");
         let other: String = server.tickets.values().find(|t| !t.status.is_live()).map(|t| t.slug.clone()).expect("and one that is not");
         let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default() };
@@ -189,6 +199,7 @@ mod tests {
         let joined = exported(&server).joined(&own, "C:/checkout").unwrap();
         assert_eq!((joined.config.repository.as_str(), &joined.config.site), ("C:/checkout", &server.config.site), "the machine's checkout, and the server's site");
         assert_eq!(joined.config.plain_file, Some(3_000), "and its line limits");
+        assert_eq!(joined.config.recipe_kinds, server.config.recipe_kinds, "and its recipe kinds");
         assert_eq!((&joined.pages, &joined.requirements, &joined.tickets, &joined.proposals), (&server.pages, &server.requirements, &server.tickets, &server.proposals));
         assert_eq!(joined.current.as_deref(), Some(live.as_str()));
         assert_eq!(joined.starts.keys().collect::<Vec<_>>(), vec![&live], "a start for a ticket no longer being worked is dropped");

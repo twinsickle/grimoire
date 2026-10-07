@@ -85,6 +85,8 @@ baselined: boolean, };
 
 export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
+export type Ingredient = { recipe: string, id: string, says: string, };
+
 export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
 
 export type LibraryEntry = { name: string, repository: string, server: string | null, };
@@ -112,7 +114,7 @@ export type ModuleSummary = { ref: Ref, purpose: string | null, };
 
 export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, };
 
-export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test);
+export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient);
 
 export type NodesAnswer = { nodes: Array<Summary>, };
 
@@ -130,9 +132,13 @@ export type Priority = "next" | "high" | "later";
 
 export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, tickets: Array<Draft>, };
 
+export type Recipe = { id: string, kind: string, title: string, text: string, ingredients: Array<Ingredient>, files: Array<string>, uses: Array<string>, file: string, line: number, missing: Array<string>, };
+
+export type RecipeKind = { uses: Array<string>, };
+
 export type Ref = string;
 
-export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks";
+export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks" | "uses" | "represents";
 
 export type Renamed = { node: NodeView, still_named_in: Array<StillNamed>, };
 
@@ -175,7 +181,7 @@ export type StatusAnswer = { repository: string, roots: Roots, languages: Array<
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 
-export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, large_file?: number, plain_file?: number, };
+export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, large_file?: number, plain_file?: number, recipe_kinds?: { [key in string]: RecipeKind }, };
 
 export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 

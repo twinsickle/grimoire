@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -92,6 +92,7 @@ impl Default for StoreConfig {
             site: Vec::new(),
             large_file: None,
             plain_file: None,
+            recipe_kinds: Default::default(),
         }
     }
 }
@@ -241,7 +242,11 @@ pub fn validate_page(p: &Page) -> Vec<FieldError> {
     check_slug(&mut e, "slug", &p.slug);
     check_one_line(&mut e, "title", &p.title);
     check_required(&mut e, "body", &p.body);
-    check_refs(&mut e, "links", &p.links, Some(&[Kind::Page, Kind::Req, Kind::Module]));
+    check_refs(&mut e, "links", &p.links, Some(&[Kind::Page, Kind::Req, Kind::Module, Kind::Recipe]));
+    // A page places a recipe; an ingredient is placed by its recipe.
+    for r in p.links.iter().filter(|r| r.kind == Kind::Recipe && r.split_hash().is_some()) {
+        e.push(FieldError::new("links", format!("{r} is an ingredient: a page links its recipe")));
+    }
     e
 }
 
@@ -256,7 +261,7 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
         check_required(&mut e, &format!("scenarios[{i}].when"), &s.when);
         check_required(&mut e, &format!("scenarios[{i}].then"), &s.then);
     }
-    check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion]));
+    check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion, Kind::Recipe]));
     for (i, d) in r.decisions.iter().enumerate() {
         if d.withdrawn {
             e.push(FieldError::new(&format!("decisions[{i}].withdrawn"), "only a closed change's decision is withdrawn"));
@@ -425,6 +430,14 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
             e.push(FieldError::new(field, "a line limit is a positive number of lines"));
         }
     }
+    for (kind, k) in &c.recipe_kinds {
+        if !is_slug(kind) {
+            e.push(FieldError::new("recipe_kinds", format!("the kind `{kind}` is not a slug")));
+        }
+        for u in k.uses.iter().filter(|u| !c.recipe_kinds.contains_key(*u)) {
+            e.push(FieldError::new("recipe_kinds", format!("`{kind}` uses `{u}`, which is not a declared kind")));
+        }
+    }
     for (band, slugs) in [("order.next", &c.order.next), ("order.high", &c.order.high), ("order.later", &c.order.later)] {
         for s in slugs {
             check_slug(&mut e, band, s);
@@ -519,7 +532,8 @@ mod tests {
         };
         assert!(validate_requirement(&req(vec![Reference::criterion("m", "c")], &["2026-01-01", "2026-02-01"])).is_empty());
         let e = validate_requirement(&req(vec![Reference::module("m")], &[]));
-        assert_eq!(e[0].field, "covered_by", "covered_by names only criteria");
+        assert_eq!(e[0].field, "covered_by", "covered_by names only criteria, recipes and ingredients");
+        assert!(validate_requirement(&req(vec![Reference::recipe("button"), Reference::ingredient("button", "label")], &[])).is_empty(), "a recipe or an ingredient may carry it");
         let e = validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"]));
         assert_eq!(e[0].field, "decisions", "decisions are oldest first");
         // A decision supersedes only earlier ones, by position from 1.
@@ -552,6 +566,7 @@ mod tests {
             order: Default::default(),
             large_file: None,
             plain_file: None,
+            recipe_kinds: Default::default(),
         };
         assert!(validate_config(&config(StoreConfig::CURRENT_VERSION, vec!["overview".into()])).is_empty());
         assert_eq!(validate_config(&config(99, vec!["overview".into()]))[0].field, "version", "an unknown version is refused");
@@ -575,6 +590,53 @@ mod tests {
         assert!(validate_config(&limits(Some(600), Some(1))).is_empty());
         assert_eq!(validate_config(&limits(Some(0), None))[0].field, "large_file");
         assert_eq!(validate_config(&limits(None, Some(0)))[0].field, "plain_file");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "recipe-kinds-name-declared-kinds", "checks": ["crates/core/src/store#recipe-kinds"]}
+    /// ```
+    #[test]
+    fn recipe_kinds_name_declared_kinds() {
+        let with = |kinds: &[(&str, &[&str])]| {
+            let mut c = StoreConfig {
+                version: StoreConfig::CURRENT_VERSION,
+                repository: "C:/repo".into(),
+                roots: Roots::new("o", "r"),
+                languages: vec![],
+                scope: Scope::default(),
+                order: Default::default(),
+                site: vec![],
+                recipe_kinds: Default::default(),
+                large_file: None,
+                plain_file: None,
+            };
+            for (k, uses) in kinds {
+                c.recipe_kinds.insert(k.to_string(), RecipeKind { uses: uses.iter().map(|u| u.to_string()).collect() });
+            }
+            validate_config(&c)
+        };
+        assert!(with(&[("component", &["component", "token"]), ("token", &[])]).is_empty(), "a kind may use itself and another declared");
+        let e = with(&[("component", &["token"])]);
+        assert_eq!((e.len(), e[0].field.as_str()), (1, "recipe_kinds"));
+        assert!(e[0].reason.contains("`token`"), "{}", e[0].reason);
+        assert_eq!(with(&[("Big Kind", &[])])[0].field, "recipe_kinds", "a kind is a slug");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-page-places-a-recipe-not-an-ingredient", "checks": ["crates/core/src/model#page-record"]}
+    /// ```
+    #[test]
+    fn a_page_places_a_recipe_not_an_ingredient() {
+        let page = |links: Vec<Reference>| Page { slug: "p".into(), title: "P".into(), body: "b".into(), links };
+        assert!(validate_page(&page(vec![Reference::recipe("button"), Reference::module("m")])).is_empty());
+        let e = validate_page(&page(vec![Reference::ingredient("button", "label")]));
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].field, "links");
+        assert_eq!(validate_page(&page(vec![Reference::criterion("m", "c")]))[0].field, "links", "nor a criterion");
     }
 
     /// # Test contract
@@ -725,6 +787,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Order { next: vec!["0055 ".into()], ..Default::default() },
+            recipe_kinds: Default::default(),
         };
         assert_eq!(validate_config(&order)[0].field, "order.next");
         // A baseline finding's check, and a start's ticket and fingerprints.

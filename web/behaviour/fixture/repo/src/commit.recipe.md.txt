@@ -1,0 +1,9 @@
+# Commit rule
+
+What counts as a commit when a workspace is checked.
+
+## Recipe
+
+```json
+{"id":"commit-rule","kind":"rule","files":["src/ready.rs"]}
+```

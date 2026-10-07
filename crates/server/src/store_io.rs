@@ -609,6 +609,7 @@ mod tests {
             languages: vec!["rust ".into()],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         let store = Store::new(config);
         assert!(matches!(write_all(&dir.join("store"), &store, false), Err(StoreIoError::Invalid(..))));
@@ -721,6 +722,7 @@ mod tests {
             languages: vec!["rust".into()],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         // vision links itself, so the rename moves a link inside the record it moves.
         for p in [page("goal", &["page:vision"]), page("vision", &["page:vision", "page:goal"]), page("plan", &["page:goal", "page:vision"])] {
@@ -844,6 +846,7 @@ mod tests {
             languages: vec!["rust".into()],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         store.pages.insert("overview".into(), Page { slug: "overview".into(), title: "O".into(), body: "b".into(), links: vec![] });
         write_all(dir, &store, false).unwrap();
@@ -930,6 +933,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         write_all(dir, &store, false).unwrap();
         let cfg = dir.join(CONFIG_FILE);
@@ -957,6 +961,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         store.baseline = Some(Baseline {
             date: "2026-09-28".into(),
@@ -1005,6 +1010,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         write_all(dir, &store, false).unwrap();
         let text = std::fs::read_to_string(dir.join(CONFIG_FILE)).unwrap();
@@ -1034,6 +1040,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         write_all(dir, &store, false).unwrap();
         let path = dir.join("pages").join("big.json");
@@ -1083,6 +1090,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         });
         store.tickets.insert(
             "0040".into(),

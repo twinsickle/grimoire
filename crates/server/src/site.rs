@@ -277,6 +277,7 @@ mod tests {
             languages: vec![],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         let mut store = Store::new(config);
         for p in [

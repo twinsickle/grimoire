@@ -12,7 +12,7 @@ import { kindOf, type Kind, type Ref, type RestsOn } from "./types";
 export const OPEN_UP_TO = 40;
 
 /** The order kinds are listed in under one node: the grimoire's reading order, down to the code. */
-const KIND_ORDER: Kind[] = ["page", "req", "ticket", "module", "criterion", "file", "decl", "test"];
+const KIND_ORDER: Kind[] = ["page", "req", "ticket", "recipe", "module", "criterion", "file", "decl", "test"];
 
 /** A node drawn in the graph. */
 /** A node drawn in the graph; `parentTitle` names the node it hangs under, null for the start. */

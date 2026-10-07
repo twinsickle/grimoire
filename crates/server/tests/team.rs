@@ -56,6 +56,7 @@ fn host() -> Host {
         languages: vec!["rust".into()],
         scope: Scope::default(),
         order: Default::default(),
+        recipe_kinds: Default::default(),
     };
     let mut s = Store::new(config);
     s.pages.insert("overview".into(), Page { slug: "overview".into(), title: "Overview".into(), body: "What it is.".into(), links: vec![Reference::req("says-a"), Reference::module("src/a")] });

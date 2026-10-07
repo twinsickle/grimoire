@@ -134,6 +134,34 @@ A TypeScript spec, even one whose tests are generated in a loop:
 for (const v of views) test(v.name, async ({ page }) => { /* ... */ });
 ```
 
+## Recipes
+
+What a project offers the people who build with it (a component, a
+content schema, a kind of game content) is declared in a recipe: a
+Markdown file anywhere in the repository whose name ends `.recipe.md`,
+read whatever the project's languages. The prose is for those people:
+what the thing is for and when not to use it; its first level-one
+heading is the recipe's title. A heading `Recipe`, at any level, and the
+fenced `json` block after it hold what Grimoire reads:
+
+```json
+{"id":"button","kind":"component","ingredients":[{"id":"label","says":"The text on the button, one line."}],"files":["src/components/button"],"uses":["icon"]}
+```
+
+- `id` and `kind` are slugs; the kind is one the project declares with
+  `configure {"recipe_kinds": {"component": {"uses": ["component", "icon"]}, ...}}`,
+  each kind naming the kinds its recipes may use.
+- `ingredients` are its parts, each an id and what it `says`;
+  `files` are the paths, files or folders, of the implementation it
+  represents; `uses` names other recipes by id. All three may be left out.
+- The block is strict, as a contract is. The recipe is `recipe:<id>`, an
+  ingredient `recipe:<id>#<ingredient>`. A page links a recipe to place
+  it; a requirement may name a recipe or an ingredient in `covered_by`.
+- A recipe is judged, not tested: no test names it and the code carries
+  no marker. The check reports only its connection: a kind not declared,
+  a use its kind may not make, a use or a path that leads nowhere, a
+  recipe no page links, a file not in the format, an id used twice.
+
 ## Writing a good criterion
 
 - One sentence, one claim. "Writes are atomic" and "malformed files are

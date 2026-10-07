@@ -606,6 +606,7 @@ mod tests {
             languages: vec!["rust".into()],
             scope: Scope::default(),
             order: Default::default(),
+            recipe_kinds: Default::default(),
         };
         store_io::write_all(&store_dir, &grimoire_core::Store::new(config), false).unwrap();
         std::fs::write(repo.join(store_io::PROJECT_FILE), format!("name = \"{name}\"\nstore = {}\n", toml::Value::String(store_dir.to_string_lossy().to_string()))).unwrap();

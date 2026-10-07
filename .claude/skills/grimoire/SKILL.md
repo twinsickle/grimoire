@@ -52,7 +52,8 @@ it created in `warnings`. Every warning is work to do now.
 
 - **References** are `kind:id`: `page:<slug>`, `req:<slug>`,
   `ticket:<slug>`, `module:<module id>`, `criterion:<module id>#<criterion id>`,
-  `file:<path>`, `decl:<path>#<decl path>`. **`find` before every reference
+  `file:<path>`, `decl:<path>#<decl path>`, `recipe:<id>`,
+  `recipe:<id>#<ingredient>`. **`find` before every reference
   you write**, in `touches`, `relies_on`, `links` and `covered_by`. A wrong
   guess comes back as a dangling warning; a guess that names the wrong node
   does not. A reference names a node of this project's own grimoire, never

@@ -1,10 +1,11 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"recipes-read","statement":"Every file whose name ends .recipe.md is read as a recipe whatever languages the extractor is built for, by the same walk and under the same ignore, hidden and nested-checkout rules as source, handles and reads answering for it as for source; extract_text gives any handled file's record from text already read."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."}]}
 //! ```
 
 pub mod contract;
+pub mod recipe;
 pub mod rust;
 pub mod typescript;
 
@@ -137,6 +138,7 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         contract_line,
         lines: u32::try_from(source.lines().count()).unwrap_or(u32::MAX),
         test_lines: parsed.test_lines,
+        recipe: None,
     }
 }
 
@@ -213,10 +215,19 @@ impl Extractor {
         self.adapters.iter().find(|a| a.handles(rel_path)).map(|a| a.as_ref())
     }
 
-    /// Whether a path is one this extractor would parse: handled by an
-    /// adapter and not ignored.
+    /// Whether a path is one this extractor would parse: a recipe file, whatever the languages,
+    /// or a file an adapter handles.
     pub fn handles(&self, rel_path: &str) -> bool {
-        self.adapter_for(rel_path).is_some()
+        recipe::is_recipe_path(rel_path) || self.adapter_for(rel_path).is_some()
+    }
+
+    /// The record of a handled file whose text is already read: its recipe, or its source's
+    /// extraction; `None` for a path this extractor does not handle.
+    pub fn extract_text(&self, rel_path: &str, text: &str) -> Option<FileExtraction> {
+        if recipe::is_recipe_path(rel_path) {
+            return Some(recipe::extract(&self.root, rel_path, text));
+        }
+        self.adapter_for(rel_path).map(|a| extract_source(a, rel_path, text))
     }
 
     /// Whether this repository path marks a checkout nested below the root, a `.git` or a
@@ -278,11 +289,13 @@ impl Extractor {
 
     /// Read and extract one repository-relative path.
     pub fn extract_path(&self, rel_path: &str) -> Result<FileExtraction, ExtractError> {
-        let adapter = self.adapter_for(rel_path).ok_or_else(|| ExtractError::Unhandled(rel_path.to_string()))?;
+        if !self.handles(rel_path) {
+            return Err(ExtractError::Unhandled(rel_path.to_string()));
+        }
         let full = self.root.join(rel_path.replace('/', std::path::MAIN_SEPARATOR_STR));
         let bytes = std::fs::read(&full).map_err(|e| ExtractError::Read { path: rel_path.to_string(), source: e })?;
         let source = String::from_utf8(bytes).map_err(|_| ExtractError::NotUtf8(rel_path.to_string()))?;
-        Ok(extract_source(adapter, rel_path, &source))
+        self.extract_text(rel_path, &source).ok_or_else(|| ExtractError::Unhandled(rel_path.to_string()))
     }
 
     /// Walk and extract everything. Unreadable files are skipped and
@@ -401,6 +414,39 @@ export class Box {
             std::fs::write(p, bytes).unwrap();
         }
         dir
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "recipes-are-read-whatever-the-languages", "checks": ["crates/extract/src#recipes-read", "req:recipe-read"]}
+    /// ```
+    #[test]
+    fn recipes_are_read_whatever_the_languages() {
+        let recipe = b"# Quest\n\n## Recipe\n\n```json\n{\"id\":\"find-the-key\",\"kind\":\"quest\",\"files\":[\"levels/one.txt\"]}\n```\n";
+        let tmp = temp_repo(&[
+            (".gitignore", b"out/\n"),
+            ("docs/quest.recipe.md", recipe),
+            ("out/old.recipe.md", recipe),
+            (".hidden/h.recipe.md", recipe),
+            ("nested/.grimoire.toml", b"store = \"x\"\n"),
+            ("nested/n.recipe.md", recipe),
+            ("docs/README.md", b"# Recipe\n"),
+            ("src/lib.rs", b"pub fn a() {}\n"),
+        ]);
+        // No language at all: the recipe is read; what .gitignore, a hidden folder and a nested checkout keep out stays out.
+        let x = Extractor::for_languages(tmp.path(), &[]);
+        assert_eq!(x.walk().unwrap(), ["docs/quest.recipe.md"]);
+        assert!(x.reads("docs/quest.recipe.md") && !x.reads("nested/n.recipe.md") && !x.reads(".hidden/h.recipe.md") && !x.reads("docs/README.md"));
+        let (files, errors) = x.extract_all().unwrap();
+        assert!(errors.is_empty());
+        let r = files[0].recipe.clone().expect("a recipe file").expect("in the format");
+        assert_eq!((r.id.as_str(), r.title.as_str(), r.missing.clone()), ("find-the-key", "Quest", vec!["levels/one.txt".to_string()]));
+        // With a language, the source beside it.
+        let both = Extractor::for_languages(tmp.path(), &["rust".to_string()]);
+        assert_eq!(both.walk().unwrap(), ["docs/quest.recipe.md", "src/lib.rs"]);
+        assert_eq!(both.extract_text("docs/quest.recipe.md", std::str::from_utf8(recipe).unwrap()), Some(files[0].clone()));
+        assert!(both.extract_text("docs/README.md", "# Recipe\n").is_none());
     }
 
     /// # Test contract

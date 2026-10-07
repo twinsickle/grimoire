@@ -591,6 +591,7 @@ fn main() -> anyhow::Result<()> {
                     languages: languages.clone(),
                     scope: grimoire_core::model::Scope::default(),
                     order: Default::default(),
+                    recipe_kinds: Default::default(),
                 });
                 let lock = write_whole_store(&store_dir, &empty, false)?;
                 println!("created empty store at {}", store_dir.display());

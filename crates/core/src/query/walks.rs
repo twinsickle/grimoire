@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and an ingredient to its recipe."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -46,6 +46,13 @@ fn says_of(g: &Graph, r: &Reference) -> Option<String> {
             }
             Some(out)
         }
+        Node::Recipe(x) => {
+            let mut out = x.text.clone();
+            for i in &x.ingredients {
+                out.push_str(&format!("\n- {}: {}", i.id, i.says));
+            }
+            Some(out)
+        }
         Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Landing => {
             t.decision.as_ref().map(|d| format!("Answered {}, waiting for the change that applies it: {}", d.date, d.text))
         }
@@ -68,6 +75,8 @@ fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
         Some(Node::Req(q)) => q.covered_by.clone(),
         Some(Node::Criterion(c)) => vec![Reference::module(&c.module)],
         Some(Node::Module(m)) => m.imports.iter().map(|i| Reference::module(i)).collect(),
+        Some(Node::Recipe(x)) => x.uses.iter().map(|u| Reference::recipe(u)).collect(),
+        Some(Node::Ingredient(i)) => vec![Reference::recipe(&i.recipe)],
         _ => Vec::new(),
     }
 }
@@ -332,6 +341,26 @@ mod tests {
         let r = rests_on(&g, &Reference::ticket("new"), None);
         let decisions = |slug: &str| r.iter().find(|x| x.r#ref == Reference::ticket(slug)).unwrap().decisions.len();
         assert_eq!((decisions("waits"), decisions("old")), (0, 1), "a decision written is not one in force until the change lands");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-recipe-rests-on-what-it-uses", "checks": ["crates/core/src/query/walks#says-direct", "crates/core/src/query/walks#bounded-walk"]}
+    /// ```
+    #[test]
+    fn a_recipe_rests_on_what_it_uses() {
+        use crate::extraction::fixtures::{extraction_files, recipe_file};
+        let mut files = extraction_files();
+        files.push(recipe_file("ui/button.recipe.md", "button", "component", &["icon"], &[], &[]));
+        files.push(recipe_file("ui/icon.recipe.md", "icon", "component", &[], &[], &[]));
+        let g = Graph::build(&crate::graph::fixtures::store(), &crate::extraction::Extraction::from_files(&files), &[]);
+        let r = rests_on(&g, &Reference::recipe("button"), None);
+        let icon = r.iter().find(|x| x.r#ref == Reference::recipe("icon")).expect("a recipe rests on what it uses");
+        assert_eq!(icon.says.as_deref(), Some("How to use icon.\n- label: The text shown."), "its text, then each ingredient");
+        let from_ingredient = rests_on(&g, &Reference::ingredient("button", "label"), None);
+        assert_eq!(from_ingredient.first().map(|x| x.r#ref.clone()), Some(Reference::recipe("button")), "an ingredient rests on its recipe");
+        assert!(from_ingredient.iter().any(|x| x.r#ref == Reference::recipe("icon")));
     }
 
     /// # Test contract

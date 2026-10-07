@@ -1,0 +1,11 @@
+# Ready check
+
+Ask whether a workspace is ready before building in it. It answers yes only once the workspace's repository has a commit.
+
+**Not** for asking whether a build will pass: it says nothing of the code.
+
+## Recipe
+
+```json
+{"id":"ready-check","kind":"check","ingredients":[{"id":"answer","says":"Yes or no, never maybe."},{"id":"needs-commit","says":"A workspace with no commit is never ready."}],"files":["src/ready.rs","src/report.rs"],"uses":["commit-rule"]}
+```
