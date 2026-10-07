@@ -154,8 +154,11 @@ edges.
 
 1. `start_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
    `active` and returns the ticket, `rests_on` (everything below it, nearest
-   first, with the decisions behind each requirement) and `related` (open gaps
-   and questions touching what it touches). If the ticket is already active,
+   first, with the decisions behind each requirement), `related` (open gaps
+   and questions touching what it touches) and `recipes` (the recipes resting
+   on what it touches, each saying whether it is `due`: what the project
+   promises the people who build with it, which this work may break). If the
+   ticket is already active,
    use `get`, `rests_on` and `related_tickets` instead; on a team,
    `start_ticket` on a ticket already active takes it up in this checkout:
    it becomes the current ticket here and nothing of it changes.
@@ -174,7 +177,8 @@ edges.
 3. Read `related`. A gap or question that touches the same nodes is context
    for this work and may be closed by it; say which.
 4. For each module in `touches`, `rests_on_me` shows the blast radius: the
-   requirements and pages above it and the other open tickets reaching it.
+   requirements, recipes and pages above it and the other open tickets
+   reaching it.
    Then `get` the module for its files and declarations before opening any
    of them.
 5. Plan the work. Include the grimoire updates in the plan: which pages and
@@ -219,14 +223,24 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    changed but whose body did not is the failure this step exists to catch.
    Fix it, or remove the reference from `touches` with `update_ticket` and
    say why it did not need changing.
-4. If the project documents a review step (in its rites, or a skill or
+4. Judge the recipes. Each recipe the start named as `due`, and any the
+   `lint` reports `due-recipe`, is judged now against what it represents: read the recipe
+   and its `files` as they are after this work. If it still says truly how
+   to use what it represents, `judge_recipe { "ref": "recipe:<id>", "outcome":
+   "held" }`; if not, update the recipe so it does, then `judge_recipe` with
+   `"outcome": "updated"`. Judge after the last change to the recipe and its
+   files: a judgement holds only of them as they were when it was made, so a
+   later edit makes the recipe due again. The judgement is yours or the
+   person's, never Grimoire's; the decision below names the recipes judged
+   and what was updated.
+5. If the project documents a review step (in its rites, or a skill or
    a hook), run it now, before closing: a finding
    that holds is fixed now or filed as its own ticket, and the decision
    below says what the review found. Grimoire has no opinion on what the
    review is.
    If the project has a visual check for a user interface, run it and look
    at the output; a type check proves nothing about how a view renders.
-5. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
+6. `close_ticket { "ref", "decision": { "text" } }`. The decision is one
    paragraph: what was chosen and why, written so someone reading it in a
    year without the ticket body understands. The close applies the ticket's
    proposal to the truth. It is refused as a `conflict` when the truth moved
@@ -235,6 +249,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    under the ticket, and close again. It returns `findings`, the new
    findings on the nodes the ticket touched; if any are present, fix them and
    re-run `lint`. Closing is allowed with findings; leaving them is not.
+   `due` lists the recipes the work reached that no judgement holds of as
+   they are now: judge each (step 4), since each is a finding.
    `baselined` counts the inherited ones there; they are not this ticket's.
    `unnamed` lists what changed since the ticket started that `touches`
    never named, each with what it says and the requirements resting on it:
@@ -280,7 +296,7 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    marked withdrawn, and an answer it was to apply reopens unless another
    change applied it. Withdrawing is the person's call, laid out like any
    question; never withdraw a change to make a check pass.
-6. Commit the code only when the user has asked for a commit. The store is
+7. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
    `landing` ticket the commit closes it where the post-commit hook is
    installed and the store is the project's own (on a team the main line

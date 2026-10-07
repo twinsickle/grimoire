@@ -16,6 +16,7 @@ find it with `rests_on_me` on the module, or `find`.
 | New area (a group of modules with its own purpose) | A page under architecture (or the right parent), with intent in the body, linking its requirements and modules. `patch_page` the parent with `add_links`. |
 | A choice made while working, however small it feels | `record_decision` on the requirement it governs: what was chosen and why, one paragraph, written for a reader a year from now. |
 | Behaviour added to a module the ticket does not touch | `update_ticket` to add the module to `touches`, then the row above that fits. A ticket's `touches` is a claim about what changed; keep it true. |
+| A file a recipe names changed, or the recipe itself | Judge the recipe against what it represents now: `judge_recipe` with `held` when it still says truly how to use it, or update the recipe to match and judge it `updated`. A recipe no judgement holds of as it is now is `due`, a finding. |
 | A question or gap discovered while working | `file_ticket` with kind `question` or `gap`, `relies_on` this ticket. Do not resolve it alone. |
 | Code that turns out to contradict a requirement | Stop. Either the code is wrong (fix it) or the requirement is (reword it and `record_decision` why). Never leave both standing. |
 

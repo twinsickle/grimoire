@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and an ingredient to its recipe."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and the modules it represents, and an ingredient to its recipe."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"recipes-resting","statement":"recipes_resting gives, for the given nodes, every recipe that is one of them, whose ingredient is one of them, or that rests_on_me of one of them reaches, each once, in reference order, with its title, whether it is due and the first given node it was reached from; an ingredient is not a recipe, and a node the graph does not hold reaches none."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, and separately the tickets not closed whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -75,7 +75,8 @@ fn downward(g: &Graph, r: &Reference, is_start: bool) -> Vec<Reference> {
         Some(Node::Req(q)) => q.covered_by.clone(),
         Some(Node::Criterion(c)) => vec![Reference::module(&c.module)],
         Some(Node::Module(m)) => m.imports.iter().map(|i| Reference::module(i)).collect(),
-        Some(Node::Recipe(x)) => x.uses.iter().map(|u| Reference::recipe(u)).collect(),
+        // What it uses, then what it represents: its implementation (req:recipe-in-tickets).
+        Some(Node::Recipe(x)) => x.uses.iter().map(|u| Reference::recipe(u)).chain(g.out_with(r, Relation::Represents).map(|e| e.to.clone())).collect(),
         Some(Node::Ingredient(i)) => vec![Reference::recipe(&i.recipe)],
         _ => Vec::new(),
     }
@@ -217,6 +218,36 @@ pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
     RestsOnMe { nodes, tickets: tickets.into_iter().map(ticket_summary).collect() }
 }
 
+/// A recipe resting on what a ticket touches, and whether a judgement holds of it as it is.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RecipeState {
+    pub r#ref: Reference,
+    pub title: String,
+    pub due: bool,
+    // The node it rests on that it was first reached from, or itself when it was given.
+    pub via: Reference,
+}
+
+/// Every recipe that is one of `nodes` or rests on one of them, once each, in reference order (req:recipe-in-tickets).
+pub fn recipes_resting(g: &Graph, nodes: &[Reference]) -> Vec<RecipeState> {
+    let mut out: std::collections::BTreeMap<Reference, RecipeState> = std::collections::BTreeMap::new();
+    for n in nodes.iter().filter(|n| g.contains(n)) {
+        let above = rests_on_me(g, n).nodes.into_iter().map(|a| a.r#ref);
+        // An ingredient touched is its recipe's: the recipe is what is judged.
+        let own = match g.get(n) {
+            Some(Node::Ingredient(i)) => Some(Reference::recipe(&i.recipe)),
+            _ => None,
+        };
+        for r in std::iter::once(n.clone()).chain(own).chain(above) {
+            if let Some(Node::Recipe(x)) = g.get(&r) {
+                out.entry(r.clone()).or_insert_with(|| RecipeState { r#ref: r.clone(), title: x.title.clone(), due: g.is_due(x), via: n.clone() });
+            }
+        }
+    }
+    out.into_values().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,10 +383,13 @@ mod tests {
     fn a_recipe_rests_on_what_it_uses() {
         use crate::extraction::fixtures::{extraction_files, recipe_file};
         let mut files = extraction_files();
-        files.push(recipe_file("ui/button.recipe.md", "button", "component", &["icon"], &[], &[]));
+        files.push(recipe_file("ui/button.recipe.md", "button", "component", &["icon"], &["src/a/ready.rs"], &[]));
         files.push(recipe_file("ui/icon.recipe.md", "icon", "component", &[], &[], &[]));
         let g = Graph::build(&crate::graph::fixtures::store(), &crate::extraction::Extraction::from_files(&files), &[]);
         let r = rests_on(&g, &Reference::recipe("button"), None);
+        // Its implementation too: the module it represents, and what that module imports.
+        assert!(r.iter().any(|x| x.r#ref == Reference::module("src/a/ready") && x.via == [Reference::recipe("button")]), "{r:?}");
+        assert!(r.iter().any(|x| x.r#ref == Reference::module("src/a/layout")));
         let icon = r.iter().find(|x| x.r#ref == Reference::recipe("icon")).expect("a recipe rests on what it uses");
         assert_eq!(icon.says.as_deref(), Some("How to use icon.\n- label: The text shown."), "its text, then each ingredient");
         let from_ingredient = rests_on(&g, &Reference::ingredient("button", "label"), None);
@@ -435,5 +469,38 @@ mod tests {
         let reaching: Vec<String> = rests_on_me(&g, &Reference::page("orphan")).tickets.iter().map(|t| t.r#ref.to_string()).collect();
         assert!(reaching.contains(&"ticket:waits".to_string()), "{reaching:?}");
         assert!(!reaching.contains(&"ticket:done".to_string()), "a closed ticket no longer reaches it: {reaching:?}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-recipes-resting-on-what-is-touched", "checks": ["crates/core/src/query/walks#recipes-resting", "crates/core/src/query/walks#rests-on-me", "req:recipe-in-tickets"]}
+    /// ```
+    #[test]
+    fn the_recipes_resting_on_what_is_touched() {
+        use crate::extraction::fixtures::{extraction_files, recipe_file};
+        let mut files = extraction_files();
+        // `layout` represents the module src/a/ready imports; `ready` the module itself; `other` neither.
+        files.push(recipe_file("ui/layout.recipe.md", "layout", "component", &[], &["src/a/layout.rs"], &[]));
+        files.push(recipe_file("ui/ready.recipe.md", "ready", "component", &[], &["src/a/ready.rs"], &[]));
+        files.push(recipe_file("ui/other.recipe.md", "other", "component", &[], &["src/b/unrelated.rs"], &[]));
+        let mut store = crate::graph::fixtures::store();
+        store.judgements.insert("ready".into(), vec![]);
+        let g = Graph::build(&store, &crate::extraction::Extraction::from_files(&files), &[]);
+        // Upward from the imported module: the module importing it, and both recipes, through represents.
+        let up = rests_on_me(&g, &Reference::module("src/a/layout"));
+        assert!(up.nodes.iter().any(|a| a.r#ref == Reference::recipe("layout") && a.relation == Relation::Represents));
+        assert!(up.nodes.iter().any(|a| a.r#ref == Reference::recipe("ready")), "through the module that imports it");
+        let at = |nodes: &[Reference]| -> Vec<(String, bool, String)> { recipes_resting(&g, nodes).into_iter().map(|x| (x.r#ref.to_string(), x.due, x.via.to_string())).collect() };
+        assert_eq!(
+            at(&[Reference::module("src/a/layout"), Reference::module("src/a/ready")]),
+            [("recipe:layout".to_string(), true, "module:src/a/layout".to_string()), ("recipe:ready".to_string(), true, "module:src/a/layout".to_string())],
+            "each once, by reference, with the first node that reached it"
+        );
+        // A recipe given is itself; an ingredient is none, and a node the graph lacks reaches nothing.
+        assert_eq!(at(&[Reference::recipe("other")]), [("recipe:other".to_string(), true, "recipe:other".to_string())]);
+        assert_eq!(at(&[Reference::ingredient("other", "label")]), [("recipe:other".to_string(), true, "recipe:other#label".to_string())], "an ingredient's recipe");
+        assert!(at(&[Reference::module("gone"), Reference::page("orphan")]).is_empty());
+        assert!(!recipes_resting(&g, &[Reference::recipe("other")]).iter().any(|x| x.r#ref.id.contains('#')));
     }
 }

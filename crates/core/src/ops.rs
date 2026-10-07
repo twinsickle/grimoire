@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a closed ticket and a gap or question waiting, landing, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a closed one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a closed ticket and a gap or question waiting, landing, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::Serialize;
@@ -91,6 +91,8 @@ pub enum Changed {
     Proposed(String),
     /// The current ticket changed: written as it now is, or removed when none.
     Current,
+    /// A recipe's judgements changed: written as they now are, by recipe id.
+    Judged(String),
     /// Several changes from one write, persisted in this order.
     Many(Vec<Changed>),
 }
@@ -201,6 +203,22 @@ pub fn adopt(store: &mut Store, findings: Vec<FindingKey>, reason: String, date:
     invalid_if(validate_baseline(&baseline), "baseline")?;
     let replaced = store.baseline.replace(baseline.clone()).map(|b| b.findings.len());
     Ok((baseline, replaced, Changed::Baseline))
+}
+
+/// Record a judgement of a recipe: appended to its judgements, made in a ticket the store holds and
+/// that is not closed (req:tool-judge-recipe).
+pub fn judge(store: &mut Store, judgement: Judgement) -> Result<(Judgement, Changed), ToolError> {
+    match store.tickets.get(&judgement.ticket) {
+        None => return Err(ToolError::not_found(&Reference::ticket(&judgement.ticket))),
+        Some(t) if t.status == Status::Closed => return Err(ToolError::conflict(format!("ticket:{} is closed: a recipe is judged in a ticket that is not closed", judgement.ticket))),
+        Some(_) => {}
+    }
+    let recipe = judgement.recipe.clone();
+    let mut all = store.judgements.get(&recipe).cloned().unwrap_or_default();
+    all.push(judgement.clone());
+    invalid_if(crate::store::validate_judgements(&Judgements { recipe: recipe.clone(), judgements: all.clone() }), "judgement")?;
+    store.judgements.insert(recipe.clone(), all);
+    Ok((judgement, Changed::Judged(recipe)))
 }
 
 /// No page links a retired requirement: it no longer holds.

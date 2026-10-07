@@ -76,7 +76,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 29] = [
+pub const TOOL_NAMES: [&str; 30] = [
     "find",
     "get",
     "outline",
@@ -105,6 +105,7 @@ pub const TOOL_NAMES: [&str; 29] = [
     "adopt",
     "configure",
     "reorder",
+    "judge_recipe",
     "status",
 ];
 
@@ -113,10 +114,11 @@ pub fn proposes(name: &str) -> bool {
     matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "delete_node")
 }
 
-/// The writes that take `ticket`: those that change intent, and update_ticket,
-/// whose edits to another ticket's references wait in a change's proposal.
+/// The writes that take `ticket`: those that change intent, update_ticket,
+/// whose edits to another ticket's references wait in a change's proposal, and
+/// judge_recipe, whose judgement names the ticket it was made in.
 pub fn takes_ticket(name: &str) -> bool {
-    proposes(name) || name == "update_ticket"
+    proposes(name) || name == "update_ticket" || name == "judge_recipe"
 }
 
 pub fn is_write(name: &str) -> bool {
@@ -139,6 +141,7 @@ pub fn is_write(name: &str) -> bool {
             | "adopt"
             | "configure"
             | "reorder"
+            | "judge_recipe"
     )
 }
 

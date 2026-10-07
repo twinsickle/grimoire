@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, and a baseline's date of adoption."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's at the first, since a recipe id never holds one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's at the first, since a recipe id never holds one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of date, text, the positions of earlier decisions each supersedes and whether it was recorded as an adoption, ordered oldest first, and whether it is retired; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, and the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
 //! ```
 
 use std::fmt;
@@ -304,6 +304,38 @@ pub struct Decision {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub withdrawn: bool,
+}
+
+/// What judging a recipe found: it still says truly how to use what it
+/// represents, or it was updated to say so.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JudgementOutcome {
+    Held,
+    Updated,
+}
+
+/// One judgement of a recipe against its files (req:store-judgement-record): a
+/// person's or an agent's act, so dated, and bound to the state it judged by the
+/// fingerprint of the recipe and its files then.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Judgement {
+    pub recipe: String,
+    pub fingerprint: String,
+    pub date: String,
+    pub ticket: String,
+    pub outcome: JudgementOutcome,
+}
+
+/// `judgements/<recipe>.json`: one recipe's judgements, oldest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Judgements {
+    pub recipe: String,
+    pub judgements: Vec<Judgement>,
 }
 
 impl Decision {
@@ -834,6 +866,8 @@ pub struct Recipe {
     pub line: u32,
     // The paths of `files` not found in the checkout when it was read.
     pub missing: Vec<String>,
+    // The fingerprint of the recipe file and of every file its `files` name, as read: what a judgement is matched against.
+    pub digest: String,
 }
 
 // One part of a recipe: an id and what it says.

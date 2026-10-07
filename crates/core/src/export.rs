@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,9 @@ pub struct Exported {
     pub tickets: Vec<Ticket>,
     pub proposals: Vec<Proposal>,
     pub baseline: Option<Baseline>,
+    // Each judged recipe's judgements; absent from an older server's export, and ignored by an older machine.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub judgements: std::collections::BTreeMap<String, Vec<Judgement>>,
 }
 
 /// The intent `store` holds, with nothing of the machine it is on.
@@ -55,6 +58,7 @@ pub fn exported(store: &Store) -> Exported {
         tickets: store.tickets.values().cloned().collect(),
         proposals: store.proposals.values().cloned().collect(),
         baseline: store.baseline.clone(),
+        judgements: store.judgements.clone(),
     }
 }
 
@@ -86,6 +90,7 @@ impl Exported {
         let live = |slug: &str| store.tickets.get(slug).is_some_and(Ticket::is_worked);
         store.proposals = self.proposals.into_iter().filter(|p| live(&p.ticket)).map(|p| (p.ticket.clone(), p)).collect();
         store.baseline = self.baseline;
+        store.judgements = self.judgements;
         store.current = own.current.clone().filter(|c| live(c));
         store.starts = own.starts.iter().filter(|(slug, _)| live(slug)).map(|(slug, s)| (slug.clone(), s.clone())).collect();
         Ok(store)
@@ -132,6 +137,8 @@ pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
     if old.current != new.current && new.current.is_some() {
         out.push(Changed::Current);
     }
+    let judged: std::collections::BTreeSet<&String> = old.judgements.keys().chain(new.judgements.keys()).collect();
+    out.extend(judged.into_iter().filter(|r| old.judgements.get(*r) != new.judgements.get(*r)).map(|r| Changed::Judged(r.clone())));
     if old.baseline != new.baseline {
         out.push(Changed::Baseline);
     }
@@ -145,6 +152,10 @@ pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
 mod tests {
     use super::*;
     use crate::graph::fixtures::store;
+
+    fn judgement(recipe: &str) -> Judgement {
+        Judgement { recipe: recipe.into(), fingerprint: "0123456789abcdef".into(), date: "2026-10-07".into(), ticket: "later-1".into(), outcome: JudgementOutcome::Held }
+    }
 
     /// # Test contract
     ///
@@ -168,6 +179,10 @@ mod tests {
         assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
         assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone(), e.site.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone(), s.config.site.clone()));
         assert_eq!(e.recipe_kinds, s.config.recipe_kinds, "the recipe kinds too");
+        assert!(e.judgements.is_empty() && !serde_json::to_string(&e).unwrap().contains("judgements"), "none judged, none written: an older machine reads it as before");
+        s.judgements.insert("button".into(), vec![judgement("button")]);
+        let e = exported(&s);
+        assert_eq!(e.judgements, s.judgements, "the recipes' judgements");
         let text = serde_json::to_string(&e).unwrap();
         // Both roots named: written as the list an older machine reads; one missing, as the pair, which reads back the same.
         assert_eq!(serde_json::to_value(&e).unwrap()["roots"], serde_json::json!(["overview", "rites"]));
@@ -200,6 +215,9 @@ mod tests {
         assert_eq!((joined.config.repository.as_str(), &joined.config.site), ("C:/checkout", &server.config.site), "the machine's checkout, and the server's site");
         assert_eq!(joined.config.plain_file, Some(3_000), "and its line limits");
         assert_eq!(joined.config.recipe_kinds, server.config.recipe_kinds, "and its recipe kinds");
+        let mut judged = server.clone();
+        judged.judgements.insert("button".into(), vec![judgement("button")]);
+        assert_eq!(exported(&judged).joined(&own, "C:/checkout").unwrap().judgements, judged.judgements, "and the recipes' judgements");
         assert_eq!((&joined.pages, &joined.requirements, &joined.tickets, &joined.proposals), (&server.pages, &server.requirements, &server.tickets, &server.proposals));
         assert_eq!(joined.current.as_deref(), Some(live.as_str()));
         assert_eq!(joined.starts.keys().collect::<Vec<_>>(), vec![&live], "a start for a ticket no longer being worked is dropped");
@@ -242,8 +260,13 @@ mod tests {
         new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default() });
         new.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         new.config.roots.rites = Some("extra".into());
+        new.judgements.insert("button".into(), vec![judgement("button")]);
         let d = difference(&old, &new);
-        assert_eq!(d, vec![Changed::Deleted(Reference::req(&gone)), Changed::Page(page), Changed::Started(live.clone()), Changed::Current, Changed::Baseline, Changed::Config]);
+        assert_eq!(
+            d,
+            vec![Changed::Deleted(Reference::req(&gone)), Changed::Page(page), Changed::Started(live.clone()), Changed::Current, Changed::Judged("button".into()), Changed::Baseline, Changed::Config]
+        );
+        assert!(difference(&new, &old).contains(&Changed::Judged("button".into())), "judgements gone are named too");
         // Back again: the start goes beside its ticket, and a deleted ticket takes its own with it.
         assert!(difference(&new, &old).contains(&Changed::Closed(live.clone())));
         let mut without = new.clone();

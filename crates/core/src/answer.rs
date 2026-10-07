@@ -10,8 +10,8 @@ use serde::Serialize;
 
 use crate::graph::SourceLocation;
 use crate::lint::Finding;
-use crate::model::{Priority, Reference, StoreConfig};
-use crate::query::{Annotation, Board, CoveringCriterion, CriterionCoverage, NodeView, Outline, RestsOn, RestsOnMe, Summary};
+use crate::model::{Judgement, Priority, Reference, StoreConfig};
+use crate::query::{Annotation, Board, CoveringCriterion, CriterionCoverage, NodeView, Outline, RecipeState, RestsOn, RestsOnMe, Summary};
 
 /// A tool's answer: a value of a declared type, listing the tools that answer with it.
 pub trait Answer: Serialize {
@@ -201,6 +201,8 @@ pub struct Started {
     pub node: NodeView,
     pub rests_on: Vec<RestsOn>,
     pub related: Vec<Summary>,
+    // The recipes resting on what the ticket touches, each with whether it is due (req:recipe-in-tickets).
+    pub recipes: Vec<RecipeState>,
 }
 
 /// `close_ticket`: the closed ticket, new findings on what it touched, the
@@ -216,6 +218,8 @@ pub struct Closed {
     pub untouched: Option<Vec<Reference>>,
     pub unnamed: Option<Vec<RestsOn>>,
     pub settled: Vec<Summary>,
+    // The recipes it reached that are due: above what it touched, or changed since it started; null with no code held.
+    pub due: Option<Vec<RecipeState>>,
 }
 
 /// `land_ticket`: whether a ticket landed, and when one did what its close
@@ -230,6 +234,7 @@ pub struct Landed {
     pub untouched: Option<Vec<Reference>>,
     pub unnamed: Option<Vec<RestsOn>>,
     pub settled: Vec<Summary>,
+    pub due: Option<Vec<RecipeState>>,
     pub waiting: Vec<Summary>,
     // Why nothing landed, when the reason is not that no ticket was waiting.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -304,6 +309,16 @@ pub struct Withdrawn {
     pub reopened: Vec<Summary>,
 }
 
+/// `judge_recipe`: the recipe judged, the judgement recorded, and whether the recipe is still due
+/// over this checkout's code, null where none is held.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Judged {
+    pub recipe: Reference,
+    pub judgement: Judgement,
+    pub due: Option<bool>,
+}
+
 /// `source`: a node's file, its text, the node's line, and what the graph attaches to the file.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -366,6 +381,7 @@ answers! {
     Adopted => ["adopt"],
     Deleted => ["delete_node"],
     Withdrawn => ["withdraw_ticket"],
+    Judged => ["judge_recipe"],
 }
 
 /// The UI's generated TypeScript: every type the answers and the tool error

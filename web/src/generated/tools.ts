@@ -26,7 +26,7 @@ export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summa
  */
 drafts?: Array<Ref>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
-export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, };
+export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, };
 
 export type Configured = { config: StoreConfig, new: number, };
 
@@ -87,7 +87,13 @@ export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
 export type Ingredient = { recipe: string, id: string, says: string, };
 
-export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, waiting: Array<Summary>, note?: string, };
+export type Judged = { recipe: Ref, judgement: Judgement, due: boolean | null, };
+
+export type Judgement = { recipe: string, fingerprint: string, date: string, ticket: string, outcome: JudgementOutcome, };
+
+export type JudgementOutcome = "held" | "updated";
+
+export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, waiting: Array<Summary>, note?: string, };
 
 export type LanguageTier = { language: string, tier: number | null, };
 
@@ -134,9 +140,11 @@ export type Priority = "next" | "high" | "later";
 
 export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, tickets: Array<Draft>, };
 
-export type Recipe = { id: string, kind: string, title: string, text: string, ingredients: Array<Ingredient>, files: Array<string>, uses: Array<string>, file: string, line: number, missing: Array<string>, };
+export type Recipe = { id: string, kind: string, title: string, text: string, ingredients: Array<Ingredient>, files: Array<string>, uses: Array<string>, file: string, line: number, missing: Array<string>, digest: string, };
 
 export type RecipeKind = { uses: Array<string>, };
+
+export type RecipeState = { ref: Ref, title: string, due: boolean, via: Ref, };
 
 export type Ref = string;
 
@@ -175,7 +183,7 @@ export type SourceAnswer = { file: Ref, language: string, text: string, focus: n
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
-export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, };
+export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, recipes: Array<RecipeState>, };
 
 export type Status = "open" | "active" | "landing" | "closed";
 
@@ -253,4 +261,5 @@ export type ToolAnswers = {
   adopt: Adopted;
   delete_node: Deleted;
   withdraw_ticket: Withdrawn;
+  judge_recipe: Judged;
 };

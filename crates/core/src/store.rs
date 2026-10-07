@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
+//! {"purpose":"Hold the store's pages, requirements, tickets and baseline as values and validate each record against the schema.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -25,6 +25,8 @@ pub struct Store {
     pub proposals: BTreeMap<String, Proposal>,
     /// The ticket a write lands in when it names none: the one last started.
     pub current: Option<String>,
+    /// Each judged recipe's judgements, oldest first, by recipe id (req:store-judgement-record).
+    pub judgements: BTreeMap<String, Vec<Judgement>>,
 }
 
 impl Store {
@@ -328,6 +330,31 @@ pub fn validate_baseline(b: &Baseline) -> Vec<FieldError> {
     check_required(&mut e, "reason", &b.reason);
     for (i, f) in b.findings.iter().enumerate() {
         check_required(&mut e, &format!("findings[{i}].check"), &f.check);
+    }
+    e
+}
+
+/// Whether a string is a fingerprint as the tool writes one: sixteen lowercase hexadecimal digits.
+pub fn is_fingerprint(s: &str) -> bool {
+    s.len() == 16 && s.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+}
+
+/// One recipe's judgements: each of that recipe, its ticket a slug, its date a day and its
+/// fingerprint of the form every fingerprint has (req:store-judgement-record).
+pub fn validate_judgements(j: &Judgements) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    check_slug(&mut e, "recipe", &j.recipe);
+    for (i, x) in j.judgements.iter().enumerate() {
+        if x.recipe != j.recipe {
+            e.push(FieldError::new(&format!("judgements[{i}].recipe"), format!("names `{}`, in the judgements of `{}`", x.recipe, j.recipe)));
+        }
+        check_slug(&mut e, &format!("judgements[{i}].ticket"), &x.ticket);
+        if !is_date(&x.date) {
+            e.push(FieldError::new(&format!("judgements[{i}].date"), "must be an ISO date YYYY-MM-DD"));
+        }
+        if !is_fingerprint(&x.fingerprint) {
+            e.push(FieldError::new(&format!("judgements[{i}].fingerprint"), "must be sixteen lowercase hexadecimal digits, as every fingerprint is"));
+        }
     }
     e
 }
@@ -828,5 +855,30 @@ mod tests {
         let p = Page { slug: "p".into(), title: "P".into(), body: "b".into(), links: vec![Reference::ticket("x"), Reference::page("q"), Reference::page("q")] };
         let e = validate_page(&p);
         assert_eq!(e.len(), 2);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-judgement-is-checked-whole", "checks": ["crates/core/src/store#judgement-rules", "crates/core/src/model#judgement-record", "req:store-judgement-record"]}
+    /// ```
+    #[test]
+    fn a_judgement_is_checked_whole() {
+        let good = Judgement { recipe: "button".into(), fingerprint: "0123456789abcdef".into(), date: "2026-10-07".into(), ticket: "0232".into(), outcome: JudgementOutcome::Held };
+        let all = |judgements: Vec<Judgement>| Judgements { recipe: "button".into(), judgements };
+        assert!(validate_judgements(&all(vec![good.clone()])).is_empty());
+        let bad = Judgement { recipe: "icon".into(), fingerprint: "XYZ".into(), date: "2026-02-30".into(), ticket: "Not A Slug".into(), outcome: JudgementOutcome::Updated };
+        let fields: Vec<String> = validate_judgements(&all(vec![good.clone(), bad])).into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["judgements[1].recipe", "judgements[1].ticket", "judgements[1].date", "judgements[1].fingerprint"], "every violation, in one pass");
+        assert!(!is_fingerprint("0123456789ABCDEF") && !is_fingerprint("0123") && is_fingerprint(&crate::fingerprint::of_text("x")));
+        // The record is exactly its five fields, the outcome held or updated.
+        let json = serde_json::to_value(&good).unwrap();
+        assert_eq!(json, serde_json::json!({ "recipe": "button", "fingerprint": "0123456789abcdef", "date": "2026-10-07", "ticket": "0232", "outcome": "held" }));
+        let mut extra = json.clone();
+        extra["note"] = "why".into();
+        assert!(serde_json::from_value::<Judgement>(extra).is_err(), "a field the record lacks is refused");
+        let mut other = json;
+        other["outcome"] = "maybe".into();
+        assert!(serde_json::from_value::<Judgement>(other).is_err());
     }
 }

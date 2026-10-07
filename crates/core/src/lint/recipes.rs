@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report how each recipe is connected, never what it says: its kind, its uses, its files, its place and its format.","criteria":[{"id":"undeclared-kind","statement":"A recipe whose kind the config's recipe kinds do not declare is malformed with the check undeclared-kind, on the recipe, naming the kind."},{"id":"use-not-allowed","statement":"A recipe of a declared kind that uses a recipe whose kind its own kind's uses do not name is malformed with the check use-not-allowed, on the recipe, naming the uses edge to the recipe used and both kinds; a use leading nowhere is left to the dangling edge, and a recipe of an undeclared kind is reported for that alone."},{"id":"missing-file","statement":"Each path of a recipe's files not found in the checkout when it was read is dangling with the check missing-file, on the recipe, naming an edge represents to file:<path>, so two such paths are two findings."},{"id":"unlinked-recipe","statement":"A recipe that no page links is uncovered with the check unlinked-recipe; a requirement naming it does not place it."},{"id":"malformed-recipe","statement":"A recipe file that could not be read as a recipe is malformed with the check malformed-recipe, on file:<path>, with the line and the reason."},{"id":"duplicate-recipe","statement":"A recipe id held by more than one file is malformed with the check duplicate-recipe, on the recipe, naming every file that holds it."}]}
+//! {"purpose":"Report how each recipe is connected, never what it says: its kind, its uses, its files, its place, its format and whether a judgement holds of it as it is.","criteria":[{"id":"undeclared-kind","statement":"A recipe whose kind the config's recipe kinds do not declare is malformed with the check undeclared-kind, on the recipe, naming the kind."},{"id":"use-not-allowed","statement":"A recipe of a declared kind that uses a recipe whose kind its own kind's uses do not name is malformed with the check use-not-allowed, on the recipe, naming the uses edge to the recipe used and both kinds; a use leading nowhere is left to the dangling edge, and a recipe of an undeclared kind is reported for that alone."},{"id":"missing-file","statement":"Each path of a recipe's files not found in the checkout when it was read is dangling with the check missing-file, on the recipe, naming an edge represents to file:<path>, so two such paths are two findings."},{"id":"unlinked-recipe","statement":"A recipe that no page links is uncovered with the check unlinked-recipe; a requirement naming it does not place it."},{"id":"malformed-recipe","statement":"A recipe file that could not be read as a recipe is malformed with the check malformed-recipe, on file:<path>, with the line and the reason."},{"id":"due-recipe","statement":"A recipe whose digest no judgement of it was made at is uncovered with the check due-recipe, on the recipe, saying it was never judged when it has no judgement and otherwise that it changed since its last judgement, naming that judgement's date and ticket; a judgement made at any earlier digest holds whenever the recipe's digest is that again."},{"id":"duplicate-recipe","statement":"A recipe id held by more than one file is malformed with the check duplicate-recipe, on the recipe, naming every file that holds it."}]}
 //! ```
 
 use super::{Finding, Rule};
@@ -26,11 +26,21 @@ pub(super) fn dangling(g: &Graph, out: &mut Vec<Finding>) {
     }
 }
 
-/// A recipe no page places.
+/// A recipe no page places, and one no judgement holds of as it is now.
 pub(super) fn uncovered(g: &Graph, out: &mut Vec<Finding>) {
-    for (r, _) in recipes(g) {
+    for (r, x) in recipes(g) {
         if g.inbound_with(r, Relation::Links).next().is_none() {
             out.push(Finding::node(Rule::Uncovered, "unlinked-recipe", r, "no page links to this recipe"));
+        }
+        if g.is_due(x) {
+            let reason = match g.judgements.get(&x.id).and_then(|all| all.last()) {
+                None => "never judged: judge whether it still says truly how to use what it represents, with `judge_recipe`".to_string(),
+                Some(last) => format!(
+                    "the recipe or its files changed since it was last judged, on {} in ticket:{}: judge it again with `judge_recipe`, confirming it held or updating it to match",
+                    last.date, last.ticket
+                ),
+            };
+            out.push(Finding::node(Rule::Uncovered, "due-recipe", r, reason));
         }
     }
 }
@@ -162,7 +172,40 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-file-not-in-the-format", "checks": ["crates/core/src/lint/recipes#malformed-recipe"]}
+    /// {"test": "a-recipe-is-due-until-judged-as-it-is", "checks": ["crates/core/src/lint/recipes#due-recipe", "req:recipe-due"]}
+    /// ```
+    #[test]
+    fn a_recipe_is_due_until_judged_as_it_is() {
+        let file = recipe_file("ui/button.recipe.md", "button", "component", &[], &[], &[]);
+        let Some(Ok(button)) = file.recipe.clone() else { panic!("a recipe") };
+        let judged =
+            |fingerprint: &str, date: &str| Judgement { recipe: "button".into(), fingerprint: fingerprint.into(), date: date.into(), ticket: "later-1".into(), outcome: JudgementOutcome::Held };
+        let due = |judgements: Vec<Judgement>| {
+            let mut g = graph_with(vec![file.clone()]);
+            if !judgements.is_empty() {
+                g.judgements.insert("button".into(), judgements);
+            }
+            let f = lint(&g, &Rule::ALL);
+            found(&f, "due-recipe", &Reference::recipe("button")).into_iter().cloned().collect::<Vec<_>>()
+        };
+        // Never judged.
+        let hit = due(vec![]);
+        assert_eq!(hit.len(), 1);
+        assert_eq!(hit[0].rule, Rule::Uncovered);
+        assert!(hit[0].reason.contains("never judged"), "{}", hit[0].reason);
+        // Judged at another state: changed since, naming the last judgement.
+        let hit = due(vec![judged("0000000000000000", "2026-10-01"), judged("1111111111111111", "2026-10-05")]);
+        assert_eq!(hit.len(), 1);
+        assert!(hit[0].reason.contains("changed since") && hit[0].reason.contains("2026-10-05") && hit[0].reason.contains("ticket:later-1"), "{}", hit[0].reason);
+        // A judgement at its digest holds, its last or any earlier one: as on a branch merged back to a state judged before.
+        assert!(due(vec![judged(&button.digest, "2026-10-06")]).is_empty());
+        assert!(due(vec![judged(&button.digest, "2026-10-01"), judged("1111111111111111", "2026-10-05")]).is_empty(), "an earlier judgement holds again");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-file-not-in-the-format","checks": ["crates/core/src/lint/recipes#malformed-recipe"]}
     /// ```
     #[test]
     fn a_file_not_in_the_format() {

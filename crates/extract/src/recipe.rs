@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a recipe file: the fixed-format block Grimoire checks, and the prose around it for the people who build with the project.","criteria":[{"id":"format","statement":"A recipe file holds one heading whose text is Recipe, at any level and outside a fenced block opened with backticks or tildes, followed by a fenced json block of exactly id and kind, each a slug, and optionally ingredients of {id, says}, files and uses, each id a slug used once, says non-empty, each file a repository-relative /-separated path used once and each use a slug used once; any other field, a required one missing, no heading, no block, a second Recipe heading or invalid JSON is reported as the file's error with the heading's line and the reason, never as no recipe."},{"id":"prose","statement":"A recipe's title is the text of the first level-one heading outside a fenced block that is not the Recipe heading, or its id when there is none, and its text is the rest of the file without that heading, the Recipe heading and the block, blank lines at its ends trimmed."},{"id":"files-looked-for","statement":"Each path of a recipe's files is looked for under the repository root when the recipe is read, as a file or a folder, and those not found are kept with the recipe as missing, in the order the block gives them; nothing is written."}]}
+//! {"purpose":"Read a recipe file: the fixed-format block Grimoire checks, and the prose around it for the people who build with the project.","criteria":[{"id":"format","statement":"A recipe file holds one heading whose text is Recipe, at any level and outside a fenced block opened with backticks or tildes, followed by a fenced json block of exactly id and kind, each a slug, and optionally ingredients of {id, says}, files and uses, each id a slug used once, says non-empty, each file a repository-relative /-separated path used once and each use a slug used once; any other field, a required one missing, no heading, no block, a second Recipe heading or invalid JSON is reported as the file's error with the heading's line and the reason, never as no recipe."},{"id":"prose","statement":"A recipe's title is the text of the first level-one heading outside a fenced block that is not the Recipe heading, or its id when there is none, and its text is the rest of the file without that heading, the Recipe heading and the block, blank lines at its ends trimmed."},{"id":"files-looked-for","statement":"Each path of a recipe's files is looked for under the repository root when the recipe is read, as a file or a folder, and those not found are kept with the recipe as missing, in the order the block gives them; nothing is written."},{"id":"digest","statement":"A recipe's digest is the fingerprint of its own file's text, whatever its path, and of every file its files name, a named file whatever its kind and a named folder's files as the repository's own .gitignore files leave them, a file or folder whose name begins with a dot, a link and a checkout nested below it skipped, never a person's global ignore or .git/info/exclude nor a platform's hidden attribute, each by its repository path and its text, every CRLF read as LF in a file that is UTF-8, in path order, a path not found counted as missing; any change to the recipe's text or to a file it represents, one added, moved or removed among them, changes it, and the same files committed give the same digest whatever the platform, the person or the line endings checked out, but for a .gitignore in a folder above the repository, which the walk reads as the reading of the checkout does."}]}
 //! ```
 
 use std::path::Path;
@@ -64,7 +64,7 @@ fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
     (n >= 3).then(|| (c, n, t[n..].trim()))
 }
 
-/// Read a recipe file's text. The paths of `files` are not looked for here: `missing` is empty.
+/// Read a recipe file's text. The paths of `files` are not looked for here: `missing` and `digest` are empty.
 pub fn parse(rel_path: &str, text: &str) -> Result<Recipe, RecipeError> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let lines: Vec<&str> = text.lines().collect();
@@ -128,6 +128,7 @@ pub fn parse(rel_path: &str, text: &str) -> Result<Recipe, RecipeError> {
         file: rel_path.to_string(),
         line: at as u32 + 1,
         missing: Vec::new(),
+        digest: String::new(),
         id: block.id,
         kind: block.kind,
     })
@@ -178,10 +179,56 @@ pub fn missing(root: &Path, files: &[String]) -> Vec<String> {
     files.iter().filter(|f| !root.join(f.replace('/', std::path::MAIN_SEPARATOR_STR)).exists()).cloned().collect()
 }
 
+/// Text as the digest reads it: a UTF-8 file's CRLF line endings as LF, so one commit checked out
+/// on Windows and on Linux gives one digest; any other file's bytes as they are.
+fn normalised(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) if text.contains("\r\n") => std::borrow::Cow::Owned(text.replace("\r\n", "\n").into_bytes()),
+        _ => std::borrow::Cow::Borrowed(bytes),
+    }
+}
+
+/// The digest of a recipe: its own file's text, whatever its path, and every file its `files` name, each by its path,
+/// a folder's files as the reading of the checkout would find them, a path not found as missing.
+/// What a judgement of the recipe is matched against (req:recipe-due).
+pub fn digest(root: &Path, text: &str, files: &[String]) -> String {
+    use grimoire_core::fingerprint::{of_bytes, of_text};
+    // The recipe's own text, not its path: a recipe moved keeps its judgements.
+    let mut parts = vec![format!("recipe {}", of_bytes(&normalised(text.as_bytes())))];
+    let read = |at: &Path| std::fs::read(at).map(|b| of_bytes(&normalised(&b))).unwrap_or_else(|_| "unreadable".to_string());
+    for named in files {
+        let at = root.join(named.replace('/', std::path::MAIN_SEPARATOR_STR));
+        if at.is_file() {
+            parts.push(format!("{named} {}", read(&at)));
+        } else if at.is_dir() {
+            parts.push(format!("{named}/"));
+            // Only what every checkout of one commit shares: the repository's own .gitignore files, a dot
+            // name, never a person's global ignore, .git/info/exclude or a platform's hidden attribute.
+            let walker = ignore::WalkBuilder::new(&at)
+                .hidden(false)
+                .git_ignore(true)
+                .git_exclude(false)
+                .git_global(false)
+                .ignore(false)
+                .require_git(false)
+                .filter_entry(|e| e.depth() == 0 || !(e.file_name().to_string_lossy().starts_with('.') || (e.file_type().is_some_and(|t| t.is_dir()) && super::is_checkout(e.path()))))
+                .build();
+            let mut found: Vec<(String, std::path::PathBuf)> =
+                walker.flatten().filter(|e| e.file_type().is_some_and(|t| t.is_file())).filter_map(|e| super::relative(root, e.path()).map(|rel| (rel, e.into_path()))).collect();
+            found.sort();
+            parts.extend(found.iter().map(|(rel, path)| format!("{rel} {}", read(path))));
+        } else {
+            parts.push(format!("{named} missing"));
+        }
+    }
+    of_text(&parts.join("\n"))
+}
+
 /// Extract one recipe file whose text is already read: its record joins as the recipe, never as a module.
 pub fn extract(root: &Path, rel_path: &str, text: &str) -> FileExtraction {
     let recipe = parse(rel_path, text).map(|mut r| {
         r.missing = missing(root, &r.files);
+        r.digest = digest(root, text, &r.files);
         r
     });
     FileExtraction {
@@ -312,5 +359,53 @@ not a heading, inside a fence
         assert_eq!(x.digest, grimoire_core::fingerprint::of_text(text));
         let names: Vec<_> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(names.len(), 1, "nothing written");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-digest-covers-the-recipe-and-its-files", "checks": ["crates/extract/src/recipe#digest", "req:recipe-due"]}
+    /// ```
+    #[test]
+    fn the_digest_covers_the_recipe_and_its_files() {
+        let dir = tempfile::Builder::new().prefix("grimoire-recipe-").tempdir().unwrap();
+        let root = dir.path();
+        let write = |rel: &str, text: &str| {
+            let p = root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        write("src/button/button.ts", "export const a = 1;\nexport const b = 2;\n");
+        write("src/button/button.css", ".a {}\n");
+        write("src/button/.gitignore", "out/\n");
+        write("src/button/out/built.js", "built\n");
+        write("src/icon.ts", "export {};\n");
+        let text = "# Button\n\n## Recipe\n\n```json\n{\"id\":\"button\",\"kind\":\"k\",\"files\":[\"src/button\",\"src/icon.ts\",\"gone\"]}\n```\n";
+        let files: Vec<String> = ["src/button", "src/icon.ts", "gone"].iter().map(|s| s.to_string()).collect();
+        let digest = || digest(root, text, &files);
+        let first = digest();
+        assert_eq!(first, digest(), "the same content, the same digest");
+        assert_eq!(extract(root, "src/button.recipe.md", text).recipe.unwrap().unwrap().digest, first, "extract gives the recipe its digest");
+        assert_eq!(extract(root, "docs/moved.recipe.md", text).recipe.unwrap().unwrap().digest, first, "a recipe moved to another file keeps its digest, and so its judgements");
+        // CRLF line endings, as a Windows checkout has them, read as LF: the same digest.
+        write("src/button/button.ts", "export const a = 1;\r\nexport const b = 2;\r\n");
+        assert_eq!(digest(), first);
+        assert_eq!(digest(), super::digest(root, &text.replace('\n', "\r\n"), &files));
+        // What the reading of the checkout ignores is not the implementation: built output, hidden files.
+        write("src/button/out/built.js", "built again\n");
+        write("src/button/.cache", "x\n");
+        assert_eq!(digest(), first);
+        // Any byte of a file it represents, a file added to a folder it names, and the recipe itself change it.
+        write("src/button/button.css", ".a { color: red }\n");
+        let second = digest();
+        assert_ne!(second, first);
+        write("src/button/new.ts", "\n");
+        assert_ne!(digest(), second);
+        std::fs::remove_file(root.join("src").join("button").join("new.ts")).unwrap();
+        assert_eq!(digest(), second, "back as it was, the digest is as it was");
+        assert_ne!(super::digest(root, &text.replace("Button", "Buttons"), &files), second, "the recipe's own text");
+        // A path not found counts as missing: its appearing changes the digest.
+        write("gone", "here\n");
+        assert_ne!(digest(), second);
     }
 }

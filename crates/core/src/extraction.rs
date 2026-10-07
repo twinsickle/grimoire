@@ -206,6 +206,7 @@ pub(crate) mod fixtures {
             file: path.into(),
             line: 3,
             missing: missing.iter().map(|s| s.to_string()).collect(),
+            digest: crate::fingerprint::of_text(&format!("{path}:{id}")),
         };
         FileExtraction {
             path: path.into(),

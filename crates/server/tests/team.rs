@@ -262,6 +262,42 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/export#whole-intent", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
+/// ```
+#[test]
+fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
+    let h = host();
+    let recipe = "# A\n\n## Recipe\n\n```json\n{\"id\":\"says-a\",\"kind\":\"part\",\"files\":[\"src/a.rs\"]}\n```\n";
+    let (m, other) = (machine(), machine());
+    for each in [&m, &other] {
+        std::fs::write(each.repo.join("src").join("a.recipe.md"), recipe).unwrap();
+    }
+    let d = m.open(h.as_writer());
+    d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    let digest = match d.call("get", json!({ "ref": "recipe:says-a" })).unwrap()["node"]["digest"].as_str() {
+        Some(digest) => digest.to_string(),
+        None => panic!("the recipe carries its digest"),
+    };
+    // A recipe this machine's code does not hold is refused here, and nothing reaches the server.
+    assert_eq!(code(d.call("judge_recipe", json!({ "ref": "recipe:gone", "outcome": "held" })).unwrap_err()), "not_found");
+    let judged = d.call("judge_recipe", json!({ "ref": "recipe:says-a", "outcome": "held" })).unwrap();
+    assert_eq!((judged["judgement"]["fingerprint"].clone(), judged["judgement"]["ticket"].clone(), judged["due"].clone()), (json!(digest), json!("0001"), json!(false)), "{judged}");
+    // The server, which holds no code, keeps the fingerprint the machine's code gave, and the copy follows.
+    let on_server = store_io::load(&h.store).unwrap().0.judgements;
+    assert_eq!(on_server["says-a"].iter().map(|j| j.fingerprint.as_str()).collect::<Vec<_>>(), [digest.as_str()]);
+    assert!(m.holds("judgements/says-a.json"));
+    // Another machine with the same files finds the recipe judged; with the file changed there, due.
+    let o = other.open(h.as_writer());
+    let due = |d: &Daemon| d.call("lint", json!({})).unwrap()["findings"].as_array().unwrap().iter().any(|f| f["check"] == "due-recipe" && f["ref"] == "recipe:says-a");
+    assert!(!due(&o));
+    std::fs::write(other.repo.join("src").join("a.rs"), format!("{CONTRACTED}pub fn b() {{}}\n")).unwrap();
+    let o = other.open(h.as_writer());
+    assert!(due(&o), "a judgement holds only where the files are as they were judged");
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "a-close-is-judged-with-the-languages-the-server-now-reads", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]

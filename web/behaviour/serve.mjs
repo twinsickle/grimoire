@@ -92,6 +92,8 @@ under("Seed the pages and requirements", () => {
   // A large-file limit low enough that src/ready.rs, ten lines with its tests aside, is an omen for the views to show.
   tool("configure", { large_file: 10 });
   for (const req of records.requirements) tool("put_requirement", req);
+  // One recipe judged against its files, the other left due, so the views have both.
+  tool("judge_recipe", { ref: "recipe:ready-check", outcome: "held" });
 });
 for (const { close, ref } of tickets) {
   if (close) {

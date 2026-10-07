@@ -18,4 +18,4 @@ pub use lookup::{find, summary, ticket_summary, view, EdgeView, NodeView, Summar
 pub use outline::{outline, Outline, Rollup, Tree};
 pub use site::{site, Site, SiteEntry, SitePage, SiteRequirement};
 pub use source::{module_source, source_annotations, Annotation, AnnotationKind, Linked};
-pub use walks::{intent_of, rests_on, rests_on_me, Affected, RestsOn, RestsOnMe};
+pub use walks::{intent_of, recipes_resting, rests_on, rests_on_me, Affected, RecipeState, RestsOn, RestsOnMe};

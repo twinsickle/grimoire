@@ -89,6 +89,8 @@ fn every_finding_is_about_connection() {
     let connections = [
         ("checks-retired", "a test names a requirement that no longer holds"),
         ("dangling-edge", "a reference leads nowhere"),
+        // Whether a judgement was recorded at the recipe's present fingerprint, never what it concluded (req:recipe-due).
+        ("due-recipe", "no judgement of a recipe was made at its recipe and files as they are now"),
         ("duplicate-recipe", "two recipes are written with one id"),
         ("landing-moved", "a landing ticket's proposal rests on a truth that moved"),
         // An omen, not a finding: it fails nothing, and counts lines the extractor read, judging no meaning (req:lint-omens).

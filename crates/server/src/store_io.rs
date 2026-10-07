@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal or current that does not parse, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current or judgements file that does not parse or is named for another recipe, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, judgements, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use grimoire_core::model::*;
 use grimoire_core::ops::Changed;
-use grimoire_core::store::{validate_baseline, validate_config, validate_page, validate_proposal, validate_requirement, validate_start, validate_ticket};
+use grimoire_core::store::{validate_baseline, validate_config, validate_judgements, validate_page, validate_proposal, validate_requirement, validate_start, validate_ticket};
 use grimoire_core::{Malformed, Store};
 
 pub mod checkouts;
@@ -55,6 +55,7 @@ pub const SERVE_FILE: &str = "serve.json";
 pub const STARTS_DIR: &str = "starts";
 pub const PROPOSALS_DIR: &str = "proposals";
 pub const CURRENT_FILE: &str = "current.json";
+pub const JUDGEMENTS_DIR: &str = "judgements";
 
 /// `serve.json`: which daemon serves this store. A hint, never trusted
 /// without asking the daemon itself (see `client::serving`).
@@ -233,6 +234,23 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             }
         }
     }
+    if let Ok(entries) = std::fs::read_dir(store_dir.join(JUDGEMENTS_DIR)) {
+        let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        paths.sort();
+        for path in paths {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            match read_record::<Judgements>(&path, trim) {
+                Ok(j) if j.recipe != stem => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("file is named `{stem}` but its recipe is `{}`", j.recipe) }),
+                Ok(j) if !validate_judgements(&j).is_empty() => {
+                    malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_judgements(&j).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") })
+                }
+                Ok(j) => {
+                    store.judgements.insert(stem, j.judgements);
+                }
+                Err(reason) => malformed.push(Malformed { path: rel(store_dir, &path), reason }),
+            }
+        }
+    }
     let current_path = store_dir.join(CURRENT_FILE);
     if current_path.is_file() {
         match read_record::<Current>(&current_path, trim) {
@@ -284,7 +302,7 @@ fn migrate(store_dir: &Path) -> Result<usize, StoreIoError> {
     // a version 1 store was read as is what it now holds, and a record malformed for another
     // reason, once fixed, has no stray whitespace left to fail on.
     let mut files: Vec<PathBuf> = [BASELINE_FILE].iter().map(|f| store_dir.join(f)).filter(|p| p.is_file()).collect();
-    for dir in ["pages", "requirements", "tickets", STARTS_DIR, PROPOSALS_DIR] {
+    for dir in ["pages", "requirements", "tickets", STARTS_DIR, PROPOSALS_DIR, JUDGEMENTS_DIR] {
         if let Ok(entries) = std::fs::read_dir(store_dir.join(dir)) {
             files.extend(entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")));
         }
@@ -395,6 +413,10 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             Some(b) => write_atomic(&store_dir.join(BASELINE_FILE), &to_pretty(b)),
             None => remove_if_present(&store_dir.join(BASELINE_FILE)),
         },
+        Changed::Judged(recipe) => match store.judgements.get(recipe) {
+            Some(all) => write_atomic(&store_dir.join(JUDGEMENTS_DIR).join(format!("{recipe}.json")), &to_pretty(&Judgements { recipe: recipe.clone(), judgements: all.clone() })),
+            None => remove_if_present(&store_dir.join(JUDGEMENTS_DIR).join(format!("{recipe}.json"))),
+        },
         Changed::Deleted(r) => {
             // A deleted ticket's start and proposal go with its record.
             if r.kind == Kind::Ticket {
@@ -463,13 +485,16 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     if let Some(b) = &store.baseline {
         invalid("baseline.json".into(), validate_baseline(b))?;
     }
+    for (recipe, all) in &store.judgements {
+        invalid(format!("judgements {recipe}"), validate_judgements(&Judgements { recipe: recipe.clone(), judgements: all.clone() }))?;
+    }
     let config_path = store_dir.join(CONFIG_FILE);
     if config_path.exists() {
         if !replace {
             return Err(StoreIoError::Exists(store_dir.to_path_buf()));
         }
-        // Replaced whole: the records, the starts, the proposals, the current ticket and the baseline the old store held go.
-        for dir in [dir_of(Kind::Page), dir_of(Kind::Req), dir_of(Kind::Ticket), STARTS_DIR, PROPOSALS_DIR] {
+        // Replaced whole: the records, the starts, the proposals, the judgements, the current ticket and the baseline the old store held go.
+        for dir in [dir_of(Kind::Page), dir_of(Kind::Req), dir_of(Kind::Ticket), STARTS_DIR, PROPOSALS_DIR, JUDGEMENTS_DIR] {
             let dir = store_dir.join(dir);
             if dir.is_dir() {
                 std::fs::remove_dir_all(&dir).map_err(|e| StoreIoError::Io(dir.clone(), e))?;
@@ -499,6 +524,9 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     }
     for p in store.proposals.values() {
         persist(store_dir, store, &Changed::Proposed(p.ticket.clone()))?;
+    }
+    for recipe in store.judgements.keys() {
+        persist(store_dir, store, &Changed::Judged(recipe.clone()))?;
     }
     if store.current.is_some() {
         persist(store_dir, store, &Changed::Current)?;
@@ -940,6 +968,60 @@ mod tests {
         let text = std::fs::read_to_string(&cfg).unwrap();
         std::fs::write(&cfg, format!("\u{feff}{text}")).unwrap();
         assert!(load(dir).is_ok());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "judgements-are-kept-by-recipe", "checks": ["crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#whole-store-valid", "req:store-judgement-record"]}
+    /// ```
+    #[test]
+    fn judgements_are_kept_by_recipe() {
+        let tmp = temp();
+        let dir = tmp.path();
+        let mut store = Store::new(StoreConfig { repository: "C:/repo".into(), roots: vec!["overview".into()].into(), ..Default::default() });
+        store.tickets.insert(
+            "0300".into(),
+            Ticket {
+                slug: "0300".into(),
+                title: "T".into(),
+                kind: TicketKind::Change,
+                priority: Priority::Next,
+                status: Status::Open,
+                touches: vec![],
+                relies_on: vec![],
+                body: "Do it.".into(),
+                decision: None,
+            },
+        );
+        let judged =
+            |fingerprint: &str, ticket: &str| Judgement { recipe: "button".into(), fingerprint: fingerprint.into(), date: "2026-10-07".into(), ticket: ticket.into(), outcome: JudgementOutcome::Held };
+        store.judgements.insert("button".into(), vec![judged("00000000000000aa", "0300"), judged("00000000000000bb", "0310")]);
+        write_all(dir, &store, false).unwrap();
+        let file = dir.join(JUDGEMENTS_DIR).join("button.json");
+        assert!(file.is_file());
+        let (loaded, malformed) = load(dir).unwrap();
+        assert!(malformed.is_empty(), "{malformed:?}");
+        assert_eq!(loaded.judgements, store.judgements, "both, the older first");
+        // One appended is written again whole, and a recipe with none has no file.
+        store.judgements.get_mut("button").unwrap().push(judged("00000000000000cc", "0300"));
+        persist(dir, &store, &Changed::Judged("button".into())).unwrap();
+        assert_eq!(load(dir).unwrap().0.judgements["button"].len(), 3);
+        // A fingerprint not of the form, and a file named for another recipe: malformed, the rest loads.
+        std::fs::write(&file, std::fs::read_to_string(&file).unwrap().replace("00000000000000cc", "xyz")).unwrap();
+        std::fs::write(dir.join(JUDGEMENTS_DIR).join("icon.json"), std::fs::read_to_string(&file).unwrap()).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
+        assert!(loaded.judgements.is_empty() && loaded.tickets.contains_key("0300"));
+        let reasons: Vec<(String, String)> = malformed.into_iter().map(|m| (m.path, m.reason)).collect();
+        assert!(reasons.iter().any(|(p, r)| p == "judgements/button.json" && r.contains("fingerprint")), "{reasons:?}");
+        assert!(reasons.iter().any(|(p, r)| p == "judgements/icon.json" && r.contains("recipe is `button`")), "{reasons:?}");
+        // write_all refuses one that would not load back, and replacing a store takes its judgements with it.
+        let mut bad = store.clone();
+        bad.judgements.get_mut("button").unwrap()[0].fingerprint = "nope".into();
+        assert!(matches!(write_all(dir, &bad, true), Err(StoreIoError::Invalid(..))));
+        store.judgements.clear();
+        write_all(dir, &store, true).unwrap();
+        assert!(!dir.join(JUDGEMENTS_DIR).exists() && load(dir).unwrap().0.judgements.is_empty());
     }
 
     /// # Test contract
