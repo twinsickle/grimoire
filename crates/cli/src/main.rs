@@ -155,18 +155,20 @@ enum Command {
         #[command(subcommand)]
         command: TokenCommand,
     },
-    /// Sign in to a team's server, once: the token is checked with the server
-    /// and kept outside any repository. Read from standard input when not given.
+    /// Sign in to a grimoire of a team's server, once per grimoire address: the
+    /// token is checked with the server and kept outside any repository, under
+    /// that address. Read from standard input when not given.
     Login {
-        /// The server's address. Defaults to the one the project names.
+        /// The grimoire's address on the server. Defaults to the one the project names.
         #[arg(long)]
         server: Option<String>,
         /// The token, as `grimoire token add` printed it.
         #[arg(long)]
         token: Option<String>,
     },
-    /// Forget the token kept for a team's server.
+    /// Forget the token kept for a grimoire of a team's server.
     Logout {
+        /// The grimoire's address on the server. Defaults to the one the project names.
         #[arg(long)]
         server: Option<String>,
     },

@@ -29,10 +29,10 @@ In order of preference:
 grimoire is kept there, shared by everyone. You reach the tools the same
 way: the daemon in this checkout reads the server's intent with this
 checkout's code and sends every write to the server. Signing in is the
-person's, once, with `grimoire login`. A write needs the server and is
-refused as `store_unavailable` without it; reads and `grimoire check` go on
-from the copy last fetched, and `status` says so under `server`. A check
-that names a ticket, as a pipeline's does, fails instead: it is judged only
+person's, once for each grimoire, with `grimoire login`. A write needs the
+server and is refused as `store_unavailable` without it; reads and
+`grimoire check` go on from the copy last fetched, and `status` says so
+under `server`. A check that names a ticket, as a pipeline's does, fails instead: it is judged only
 against the server's intent as it is now.
 
 **Name your checkout.** Pass `checkout`, your working directory as an
