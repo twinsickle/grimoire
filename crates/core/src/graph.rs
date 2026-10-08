@@ -141,6 +141,8 @@ pub struct Graph {
     /// For each ticket whose references a proposal would change, the tickets
     /// proposing it.
     pub drafted: BTreeMap<String, Vec<String>>,
+    /// Who has each ticket checked out and since when, by slug, as the store keeps it (req:ticket-checked-out).
+    pub checked_out: BTreeMap<String, Vec<crate::model::CheckedOut>>,
     /// A file of this many lines or more, its tests aside, is an omen: the config's limit or its default.
     pub large_file: u32,
     /// A file of more lines than this is shown plain.
@@ -180,6 +182,7 @@ impl Graph {
             order: store.config.order.clone(),
             landing_moved: crate::ops::landing_moved(store),
             drafted: store.ticket_drafts(),
+            checked_out: store.checked_out.clone(),
             large_file: store.config.large_file(),
             plain_file: store.config.plain_file(),
             ..Default::default()

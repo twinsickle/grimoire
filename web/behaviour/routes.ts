@@ -10,7 +10,7 @@
  * A route: a name for its screenshot, its path, a selector for the view's own content, which a screenshot waits for
  * before the tool calls settle, for a part of the page drawn only when asked, what to press to open it and what then shows
  * (a dialog when not named), and what the
- * visual test masks because it changes with the port the fixture is served on.
+ * visual test masks because it changes with the port the fixture is served on, or with the time a ticket was checked out.
  */
 export type Route = { name: string; path: string; content: string; press?: string; pressed?: string; mask?: string[] };
 
@@ -22,9 +22,9 @@ export const ROUTES: Route[] = [
   { name: "grimoire", path: `${repo}/`, content: "#pages" },
   { name: "grimoire-page", path: node("page:readiness"), content: "#modules" },
   { name: "unplaced", path: `${repo}/unplaced`, content: "main h1" },
-  { name: "cauldron", path: `${repo}/cauldron`, content: "section[id^='band-']" },
+  { name: "cauldron", path: `${repo}/cauldron`, content: "section[id^='band-']", mask: ["[data-checked-out]"] },
   // The header's pill opened: the project's checkouts, the finding counts and the way to every project.
-  { name: "header-open", path: `${repo}/cauldron`, content: "section[id^='band-']", press: "header button[aria-label^='Where you are']" },
+  { name: "header-open", path: `${repo}/cauldron`, content: "section[id^='band-']", press: "header button[aria-label^='Where you are']", mask: ["[data-checked-out]"] },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
   // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
   { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "[aria-label='Trouble here'] [data-mark-line='conflict']" },
@@ -34,7 +34,7 @@ export const ROUTES: Route[] = [
   // A closed ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
   { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='Graph']" },
   // A landing ticket: its decision written, its change yet to land.
-  { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='Graph']" },
+  { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='Graph']", mask: ["[data-checked-out]"] },
   { name: "node-module", path: node("module:src/ready"), content: "h1" },
   // A module the scope leaves out, with no contract: said quietly, never as an error.
   { name: "node-module-outside-scope", path: node("module:src/generated"), content: "[data-contract-scope='outside']" },

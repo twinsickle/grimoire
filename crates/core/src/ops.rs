@@ -95,6 +95,8 @@ pub enum Changed {
     Judged(String),
     /// The recipes the main line last sent were replaced: written whole.
     MainLineRecipes,
+    /// Who has the tickets being worked checked out changed: written whole.
+    CheckedOut,
     /// Several changes from one write, persisted in this order.
     Many(Vec<Changed>),
 }

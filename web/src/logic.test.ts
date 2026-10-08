@@ -7,7 +7,7 @@ import { decisionsInForce, isDescribed, saidId } from "./decisions";
 import main from "./main.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
-import { checkoutsOf, folderOf, goneOf, idOf, kindOf, libraryStacks, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
+import { checkedOutWords, checkoutsOf, folderOf, goneOf, idOf, kindOf, libraryStacks, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
 
 /** Every .ts and .tsx file under src, with its text, loaded by Vite as it would any module. */
 const sources: Record<string, string> = import.meta.glob(["./**/*.ts", "./**/*.tsx", "!./**/*.test.ts"], { query: "?raw", import: "default", eager: true });
@@ -565,4 +565,20 @@ test("the Library stacks one book per grimoire by where each comes from, this ma
   expect(twins.map((s) => s.label)).toEqual(["http://team.example", "https://team.example"]);
   // No library, as for a store served alone: nothing to stack.
   expect(libraryStacks({ library: [] })).toEqual([]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "who-has-a-ticket-in-words", "checks": ["web/src/types#checked-out-words"]}
+ * ```
+ */
+test("who has a ticket, in words", () => {
+  const at = (h: number, m: number, day = 8) => new Date(2026, 9, day, h, m).toISOString();
+  const now = new Date(2026, 9, 8, 18, 0);
+  expect(checkedOutWords([{ by: "alex", since: at(14, 10) }], now)).toBe("checked out by alex · since 14:10");
+  expect(checkedOutWords([{ by: "alex", since: at(14, 10, 7) }, { by: "ben", since: at(9, 5) }], now)).toBe("checked out by alex · since 2026-10-07 14:10 and ben · since 09:05");
+  expect(checkedOutWords([{ by: "alex", since: "soon" }], now)).toBe("checked out by alex · since soon");
+  expect(checkedOutWords([], now)).toBe("checked out by someone unknown");
 });

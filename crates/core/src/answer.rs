@@ -38,6 +38,10 @@ pub struct NodeAnswer {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub drafts: Option<Vec<Reference>>,
+    // A ticket being worked: who has it checked out and since when, empty when who is unknown (req:ticket-checked-out).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub checked_out: Option<Vec<crate::model::CheckedOut>>,
 }
 
 /// A ticket's proposal as a reader sees it: each proposed page and
@@ -222,6 +226,20 @@ pub struct Started {
     pub recipes: Vec<RecipeState>,
     // The changes this checkout closed `when: landed` that have not landed: a warning each, never a refusal (req:tool-start-ticket).
     pub waiting: Vec<WaitingHere>,
+    // Who has the ticket checked out now, the caller among them, and since when (req:ticket-checked-out).
+    pub checked_out: Vec<crate::model::CheckedOut>,
+    // Each who had it checked out before this start but the caller: a warning each, never a refusal.
+    pub others: Vec<Holder>,
+}
+
+/// Someone else who has a ticket checked out, met by a start or a close: who and since when, both null for one
+/// started before who was recorded, and the sentence to show (req:ticket-checked-out).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Holder {
+    pub by: Option<String>,
+    pub since: Option<String>,
+    pub warning: String,
 }
 
 /// The rest of a ticket's walk, nearest first: how many nodes, and their references.
@@ -261,6 +279,10 @@ pub struct Closed {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub filed: Option<Written>,
+    // Each but the caller who had the ticket checked out, with a note that it was closed all the same (req:ticket-checked-out).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<Vec<Holder>>", optional))]
+    pub others: Vec<Holder>,
 }
 
 /// `land_ticket`: whether a ticket landed, and when one did what its close

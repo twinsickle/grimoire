@@ -191,7 +191,10 @@ edges.
    active,
    use `get`, `rests_on` and `related_tickets` instead; on a team,
    `start_ticket` on a ticket already active takes it up in this checkout:
-   it becomes the current ticket here and nothing of it changes.
+   it becomes the current ticket here and nothing of it changes. The answer's
+   `checked_out` is who has the ticket now and since when, you among them;
+   if `others` names someone, they have it too: say so before you both work
+   it. Nothing refuses the start.
 2. Read `rests_on` as a list of assumptions. Each node the ticket names
    itself carries `says`, its text (a page's body, a requirement's statement
    and scenarios, a module's contract, an answer waiting for this change):
@@ -354,7 +357,10 @@ Read the spec back with `ticket` on the reads, or they show the truth.
 A gap or question closes on the person's decision, never on yours.
 
 1. `start_ticket`; read what it rests on and the related tickets, as for
-   any ticket.
+   any ticket. On a gap or question it claims it: active, with you listed as
+   having it checked out, but never the current ticket, so the change your
+   branch works on stays current. If `others` names someone, they are
+   answering it too: say so. Closing one needs no start.
 2. Lay out two to four resolutions for the person: what each costs, what
    each rules out, and which you would pick and why. Write nothing yet.
 3. The person chooses, amends or adds one. Their choice, in their terms, is

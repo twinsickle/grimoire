@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a landing one being answered and waiting for the change; unattached lists the gaps and questions not closed that no change not closed relies on, ordered as the changes are, by band and then by the band's order list; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does; a ticket in tickets or closed whose references the proposal of an active or landing ticket would change carries drafts, those tickets, its own references staying the truth's."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the open gaps and questions that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns open, active and landing change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not closed that it relies on, then landing before active before open, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a landing one being answered and waiting for the change; unattached lists the gaps and questions not closed that no change not closed relies on, ordered as the changes are, by band and then by the band's order list; closed lists the requested number of most recently decided closed tickets, each closed gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does; a ticket in tickets or closed whose references the proposal of an active or landing ticket would change carries drafts, those tickets, its own references staying the truth's; each ticket being worked, active or a change waiting to land, carries checked_out, who has it checked out as the graph holds it, empty when none is held, and every other ticket none; unattached lists its gaps and questions as rows of the same shape as tickets."},{"id":"related-tickets","statement":"related_tickets returns the open gaps and questions whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -29,7 +29,7 @@ pub struct BoardFilter<'a> {
 #[derive(Debug, Clone, Serialize)]
 pub struct Board {
     pub tickets: Vec<BoardTicket>,
-    pub unattached: Vec<Summary>,
+    pub unattached: Vec<BoardTicket>,
     pub closed: Vec<BoardTicket>,
 }
 
@@ -55,6 +55,20 @@ pub struct BoardTicket {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub drafts: Option<Vec<Reference>>,
+    // A ticket being worked: who has it checked out and since when, empty when who is unknown (req:ticket-checked-out).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub checked_out: Option<Vec<crate::model::CheckedOut>>,
+}
+
+/// Who has `t` checked out, while it is being worked.
+fn checked_out(g: &Graph, t: &Ticket) -> Option<Vec<crate::model::CheckedOut>> {
+    t.is_worked().then(|| g.checked_out.get(&t.slug).cloned().unwrap_or_default())
+}
+
+/// A ticket as the board lists it.
+fn row(g: &Graph, t: &Ticket, waits_on: Option<Vec<Summary>>, followed_by: Option<Vec<Summary>>) -> BoardTicket {
+    BoardTicket { summary: ticket_summary(t), waits_on, followed_by, drafts: drafts(g, t), checked_out: checked_out(g, t) }
 }
 
 /// The tickets whose proposals would change `t`'s references, if any.
@@ -69,21 +83,14 @@ pub fn board(g: &Graph, f: &BoardFilter) -> Board {
     let kinds = f.kinds.unwrap_or(&default_kinds);
     let narrowed = |t: &&Ticket| f.priority.is_none_or(|p| p.contains(&t.priority)) && f.touching.is_none_or(|x| t.touches.contains(x) || t.relies_on.contains(x));
     let tickets: Vec<&Ticket> = g.tickets().filter(|t| status.contains(&t.status) && kinds.contains(&t.kind)).filter(narrowed).collect();
-    let tickets = ordered(g, tickets)
-        .into_iter()
-        .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: (t.kind == TicketKind::Change).then(|| waits_on(g, t)), followed_by: None, drafts: drafts(g, t) })
-        .collect();
+    let tickets = ordered(g, tickets).into_iter().map(|t| row(g, t, (t.kind == TicketKind::Change).then(|| waits_on(g, t)), None)).collect();
     // Gaps and questions a change that is not closed relies on are attached to it.
     let attached: HashSet<&Reference> = g.tickets().filter(|t| t.kind == TicketKind::Change && t.status != Status::Closed).flat_map(|t| t.relies_on.iter()).collect();
     let unattached = g.tickets().filter(|t| t.kind != TicketKind::Change && t.status != Status::Closed).filter(|t| !attached.contains(&Reference::ticket(&t.slug))).filter(narrowed).collect();
-    let unattached = ordered(g, unattached).into_iter().map(ticket_summary).collect();
+    let unattached = ordered(g, unattached).into_iter().map(|t| row(g, t, None, None)).collect();
     let mut closed: Vec<&Ticket> = g.tickets().filter(|t| t.status == Status::Closed).filter(narrowed).collect();
     closed.sort_by_key(|t| std::cmp::Reverse(newest_decision(t)));
-    let closed = closed
-        .into_iter()
-        .take(f.closed)
-        .map(|t| BoardTicket { summary: ticket_summary(t), waits_on: None, followed_by: (t.kind != TicketKind::Change).then(|| followed_by(g, t)), drafts: drafts(g, t) })
-        .collect();
+    let closed = closed.into_iter().take(f.closed).map(|t| row(g, t, None, (t.kind != TicketKind::Change).then(|| followed_by(g, t)))).collect();
     Board { tickets, unattached, closed }
 }
 
@@ -252,14 +259,14 @@ mod tests {
         assert_eq!(unanswered, vec!["q"]);
         let other = b.tickets.iter().find(|t| t.summary.r#ref.id == "other").expect("listed");
         assert_eq!(other.waits_on.as_deref(), Some(&[][..]), "a ready change waits on nothing");
-        let unattached: Vec<&str> = b.unattached.iter().map(|t| t.r#ref.id.as_str()).collect();
+        let unattached: Vec<&str> = b.unattached.iter().map(|t| t.summary.r#ref.id.as_str()).collect();
         assert_eq!(unattached, vec!["loose", "orphaned"]);
         assert!(b.closed.is_empty(), "closed only when asked for");
         // Ranked as the changes are: the band's order list first, whichever list a ticket is in.
         s.config.order.later = vec!["orphaned".into(), "other".into(), "loose".into()];
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let b = board(&g, &BoardFilter { status: None, kinds: None, priority: None, touching: None, closed: 0 });
-        let unattached: Vec<&str> = b.unattached.iter().map(|t| t.r#ref.id.as_str()).collect();
+        let unattached: Vec<&str> = b.unattached.iter().map(|t| t.summary.r#ref.id.as_str()).collect();
         assert_eq!(unattached, vec!["orphaned", "loose"], "the order list ranks the unsettled too");
     }
 

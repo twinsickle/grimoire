@@ -34,8 +34,7 @@ pub fn copy_note(copy_dir: &Path) -> Option<CopyNote> {
 }
 
 fn now() -> String {
-    let now = time::OffsetDateTime::now_utc().replace_nanosecond(0).unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
-    now.format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
+    store_io::now()
 }
 
 /// Take the write lock of a machine's copy, making its folder when this is the first sync.
@@ -124,6 +123,7 @@ fn mend(malformed: &[grimoire_core::Malformed], new: &Store) -> Vec<Changed> {
             ("", file) if file == store_io::CURRENT_FILE => Changed::Current,
             ("", file) if file == store_io::BASELINE_FILE => Changed::Baseline,
             ("", file) if file == store_io::RECIPES_FILE => Changed::MainLineRecipes,
+            ("", file) if file == store_io::CHECKED_OUT_FILE => Changed::CheckedOut,
             ("pages", s) if new.pages.contains_key(s) => Changed::Page(s.to_string()),
             ("pages", s) => Changed::Deleted(Reference::page(s)),
             ("requirements", s) if new.requirements.contains_key(s) => Changed::Requirement(s.to_string()),

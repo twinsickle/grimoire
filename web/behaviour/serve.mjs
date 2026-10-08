@@ -53,7 +53,8 @@ const repo = join(dir, "repo");
 const store = join(dir, "store");
 // The run's own Grimoire data: credentials and a checkout's copy of a server's intent land here.
 // A token in the person's environment would be sent in place of the fixture's own, so none is passed on.
-const env = { ...process.env, GRIMOIRE_HOME: join(dir, "home") };
+// The person on this machine is named, so who has a ticket checked out reads the same on any machine.
+const env = { ...process.env, GRIMOIRE_HOME: join(dir, "home"), USERNAME: "alex", USER: "alex" };
 delete env.GRIMOIRE_TOKEN;
 cpSync(join(here, "fixture", "repo"), repo, { recursive: true });
 for (const name of readdirSync(join(repo, "src"))) {

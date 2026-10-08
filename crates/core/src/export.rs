@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the recipes the main line last sent when it has sent any, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements and the recipes the main line last sent among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the recipes the main line last sent when it has sent any, the baseline, who has each ticket being worked checked out, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements, the recipes the main line last sent and who has each ticket checked out among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,9 @@ pub struct Exported {
     // The recipes the main line last sent, for a server's site; absent until it sends any, and ignored by an older machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_line_recipes: Option<MainLineRecipes>,
+    // Who has each ticket being worked checked out, kept by the server; absent from an older server's export, and ignored by an older machine.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub checked_out: std::collections::BTreeMap<String, Vec<CheckedOut>>,
 }
 
 /// The intent `store` holds, with nothing of the machine it is on.
@@ -68,6 +71,7 @@ pub fn exported(store: &Store) -> Exported {
         baseline: store.baseline.clone(),
         judgements: store.judgements.clone(),
         main_line_recipes: store.main_line_recipes.clone(),
+        checked_out: store.checked_out.clone(),
     }
 }
 
@@ -123,6 +127,8 @@ impl Exported {
         store.baseline = self.baseline;
         store.judgements = self.judgements;
         store.main_line_recipes = self.main_line_recipes;
+        // Who has a ticket checked out is the team's, kept by the server: the machine holds it as the server does.
+        store.checked_out = self.checked_out;
         store.current = own.current.clone().filter(|c| live(c));
         store.starts = own.starts.iter().filter(|(slug, _)| live(slug)).map(|(slug, s)| (slug.clone(), s.clone())).collect();
         store.settle_proposals();
@@ -175,6 +181,9 @@ pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
     if old.main_line_recipes != new.main_line_recipes {
         out.push(Changed::MainLineRecipes);
     }
+    if old.checked_out != new.checked_out {
+        out.push(Changed::CheckedOut);
+    }
     if old.baseline != new.baseline {
         out.push(Changed::Baseline);
     }
@@ -188,6 +197,32 @@ pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
 mod tests {
     use super::*;
     use crate::graph::fixtures::store;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "who-has-a-ticket-travels-with-the-intent", "checks": ["crates/core/src/export#whole-intent", "crates/core/src/export#joined", "crates/core/src/export#difference"]}
+    /// ```
+    #[test]
+    fn who_has_a_ticket_travels_with_the_intent() {
+        let mut server = store();
+        let ana = vec![CheckedOut { by: "ana".into(), since: "2026-10-08T14:10:00Z".into() }];
+        assert!(!serde_json::to_string(&exported(&server)).unwrap().contains("checked_out"), "nobody, nothing written: an older machine reads it as before");
+        server.checked_out.insert("later-1".into(), ana.clone());
+        let e = exported(&server);
+        assert_eq!(e.checked_out.get("later-1"), Some(&ana));
+        // The machine holds the server's list, whatever its own copy held.
+        let mut own = Store::default();
+        own.checked_out.insert("later-1".into(), vec![]);
+        let joined = e.clone().joined(&own, "C:/checkout").unwrap();
+        assert_eq!(joined.checked_out.get("later-1"), Some(&ana));
+        assert!(difference(&own, &joined).contains(&Changed::CheckedOut));
+        assert!(!difference(&joined, &joined.clone()).contains(&Changed::CheckedOut));
+        // From a server older than the field, nobody is listed.
+        let mut older = serde_json::to_value(&e).unwrap();
+        older.as_object_mut().unwrap().remove("checked_out");
+        assert!(serde_json::from_value::<Exported>(older).unwrap().joined(&own, "C:/checkout").unwrap().checked_out.is_empty());
+    }
 
     fn sent() -> MainLineRecipes {
         MainLineRecipes {

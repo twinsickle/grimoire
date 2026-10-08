@@ -368,13 +368,15 @@ fn a_close_is_judged_with_the_languages_the_server_now_reads() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-is-the-checkouts"]}
+/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-is-the-checkouts", "crates/server/src/daemon#who-calls", "crates/server/src/http#passes-the-token", "req:ticket-checked-out"]}
 /// ```
 #[test]
 fn the_current_ticket_is_each_checkouts_own() {
     let h = host();
     let (ana, ben) = (machine(), machine());
-    let (a, b) = (ana.open(h.as_writer()), ben.open(h.as_writer()));
+    // Ben signs in with a token of his own, so the server lists each by name.
+    let bens = store_io::tokens::add(&h.store, "ben", true).unwrap();
+    let (a, b) = (ana.open(h.as_writer()), ben.open(Server::new(&h.address, Some(bens))));
     a.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     b.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
     // Each write that names no ticket lands in its own checkout's.
@@ -399,10 +401,19 @@ fn the_current_ticket_is_each_checkouts_own() {
     // Kept in each copy, with the checkout's own start.
     assert!(std::fs::read_to_string(ana.copy.join("current.json")).unwrap().contains("0001") && ana.holds("starts/0001.json"));
     assert!(std::fs::read_to_string(ben.copy.join("current.json")).unwrap().contains("0002") && !ben.holds("starts/0001.json"));
-    // A ticket already being worked is taken up in a second checkout: the server would refuse to start it again.
-    assert_eq!(code(h.daemon.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap_err()), "conflict");
+    // Who started each is listed on the server by the name of the token that started it.
+    let who = |r: &str| h.daemon.call("get", json!({ "ref": r })).unwrap()["checked_out"].as_array().unwrap().iter().map(|c| c["by"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!((who("ticket:0001"), who("ticket:0002")), (vec!["ana".to_string()], vec!["ben".to_string()]));
+    // A ticket already being worked is taken up in a second checkout: sent, so the server lists ben beside ana,
+    // and ben is told she has it; nothing else of it changes.
+    let before = h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"].clone();
     let taken = b.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     assert_eq!(taken["node"]["status"], "active");
+    assert_eq!(who("ticket:0001"), ["ana", "ben"]);
+    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"], before);
+    assert_eq!((taken["others"][0]["by"].clone(), taken["others"].as_array().map(Vec::len)), (json!("ana"), Some(1)));
+    assert_eq!(taken["checked_out"].as_array().map(Vec::len), Some(2));
+    assert!(std::fs::read_to_string(ben.copy.join("checked_out.json")).unwrap().contains("\"ben\""), "the copy holds who has it as the server does");
     assert!(ben.holds("starts/0001.json") && std::fs::read_to_string(ben.copy.join("current.json")).unwrap().contains("0001"));
     b.call("put_page", page("from-ben-too")).unwrap();
     assert!(h.daemon.call("get", json!({ "ref": "page:from-ben-too", "ticket": "0001" })).is_ok());
@@ -540,7 +551,9 @@ fn answers_then_goes(answers: Vec<Value>) -> String {
             let mut buf = [0u8; 8192];
             while matches!(s.read(&mut buf), Ok(n) if n > 0) {}
             let body = answer.to_string();
-            let _ = write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: {}\r\n\r\n{body}", body.len());
+            // An error object is answered as a server answers a conflict.
+            let status = if answer.get("error").is_some() { "409 Conflict" } else { "200 OK" };
+            let _ = write!(s, "HTTP/1.1 {status}\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: {}\r\n\r\n{body}", body.len());
         }
     });
     address
@@ -554,7 +567,7 @@ fn takes_one_write_and_goes(answer: Value) -> String {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#writes-through"]}
+/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]
 fn a_write_the_server_took_is_answered_when_the_copy_lags() {
@@ -590,6 +603,42 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
     let (kept, malformed) = store_io::load(&m.copy).unwrap();
     assert!(malformed.is_empty(), "{malformed:?}");
     assert_eq!((kept.current.as_deref(), kept.starts.contains_key("0002"), kept.tickets["0002"].status), (Some("0002"), true, Status::Active));
+    assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
+    // And a close: the server takes the close `when: landed` and is gone. Which checkout closed it is held nowhere
+    // else, so the machine's run is kept too, and a later start here is told the change still waits to land.
+    h.daemon.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
+    let gone = Server::new(&answers_then_goes(vec![intent, json!({ "node": { "ref": "ticket:0002", "status": "landing" }, "findings": [], "baselined": 0 })]), Some(h.writer.clone()));
+    let close = json!({ "ref": "ticket:0002", "decision": { "text": "Done." }, "when": "landed" });
+    let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "close_ticket", close, "2026-10-03").unwrap();
+    assert_eq!((answer["node"]["status"].clone(), changed.len()), (json!("landing"), 1));
+    let (kept, malformed) = store_io::load(&m.copy).unwrap();
+    assert!(malformed.is_empty(), "{malformed:?}");
+    let repository = kept.config.repository.clone();
+    assert_eq!((kept.tickets["0002"].status, kept.starts["0002"].closed_in.as_deref()), (Status::Landing, Some(repository.as_str())));
+    assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
+    assert_eq!(grimoire_core::ops::waiting_here(&kept, None).len(), 1, "a start here would be told it still waits");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "an-older-server-still-lets-a-ticket-be-taken-up", "checks": ["crates/server/src/remote#current-is-the-checkouts"]}
+/// ```
+#[test]
+fn an_older_server_still_lets_a_ticket_be_taken_up() {
+    let h = host();
+    let m = machine();
+    h.daemon.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    drop(m.open(h.as_writer()));
+    // A server older than who has a ticket refuses to start one already active: the take-up is the machine's alone.
+    let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
+    let older = Server::new(&answers_then_goes(vec![intent, json!({ "error": "conflict", "message": "ticket:0002 is active, not open" })]), Some(h.writer.clone()));
+    let mut loaded = grimoire_server::load(&m.copy).unwrap();
+    let (answer, _) = remote::write_through(&older, &m.copy, &mut loaded.state, "start_ticket", json!({ "ref": "ticket:0002" }), "2026-10-08").unwrap();
+    assert_eq!(answer["node"]["status"], "active");
+    let (kept, _) = store_io::load(&m.copy).unwrap();
+    assert_eq!((kept.current.as_deref(), kept.starts.contains_key("0002")), (Some("0002"), true), "current here, with this checkout's start");
     assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
 }
 

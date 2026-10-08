@@ -33,6 +33,8 @@ pub struct Store {
     pub judgements: BTreeMap<String, Vec<Judgement>>,
     /// The recipes the main line last sent a team's server, for its site; none until it first sends them (req:recipe-main-line-snapshot).
     pub main_line_recipes: Option<MainLineRecipes>,
+    /// Who has each ticket being worked checked out and since when, by slug, apart from its record (req:ticket-checked-out).
+    pub checked_out: BTreeMap<String, Vec<CheckedOut>>,
 }
 
 impl Store {
@@ -72,6 +74,12 @@ impl Store {
             }
         }
         s
+    }
+
+    /// Who has ticket `slug` checked out, while it is being worked: the list as kept, empty when who is
+    /// unknown, as for one started before it was recorded; none for a ticket not being worked (req:ticket-checked-out).
+    pub fn checked_out_of(&self, slug: &str) -> Option<Vec<CheckedOut>> {
+        self.tickets.get(slug).filter(|t| t.is_worked()).map(|_| self.checked_out.get(slug).cloned().unwrap_or_default())
     }
 
     /// For each ticket whose references a proposal would change at its

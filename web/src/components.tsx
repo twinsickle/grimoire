@@ -11,7 +11,7 @@ import { marked } from "marked";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { handoff } from "./handoff";
 import { Link } from "react-router-dom";
-import { idOf, kindOf, nodePath, type Kind, type Priority, type Ref, type Status, type Summary, type TicketKind } from "./types";
+import { checkedOutWords, idOf, kindOf, nodePath, type CheckedOut, type Kind, type Priority, type Ref, type Status, type Summary, type TicketKind } from "./types";
 
 /** Class sets several views share. Colours are always theme tokens. */
 export const card = "bg-bg-1 border border-line rounded-md px-3 py-2.5 mb-3";
@@ -131,6 +131,17 @@ const STATUS_COLOR: Record<Status, string> = { open: "text-fg-dim", active: "tex
 export function StatusTag({ s, withdrawn }: { s: Status; withdrawn?: boolean }) {
   if (s === "closed" && withdrawn) return <span className="text-fg-faint italic">withdrawn</span>;
   return <span className={STATUS_COLOR[s]}>{s}</span>;
+}
+
+/** Who has a ticket being worked checked out, and since when; nothing for a ticket no one works (req:ticket-checked-out). */
+export function CheckedOutBy({ list }: { list?: CheckedOut[] | null }) {
+  if (!list) return null;
+  // Figures of one width, so the row's layout is the same at any hour, and room past the last one, so its ink stays in the box.
+  return (
+    <span data-checked-out className="text-fg-dim text-xs tabular-nums pr-0.5">
+      {checkedOutWords(list)}
+    </span>
+  );
 }
 
 const cell = "px-2.5 py-2 border-b border-line align-top group-hover:bg-bg-1";

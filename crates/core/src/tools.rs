@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed, but for the passage a body edit replaces and its replacement, `replace`, which are matched and put exactly as given; a read tool's input is left as given."},{"id":"schema-errors","statement":"An input that does not match a tool's schema is refused as invalid naming the path of the field it is about, in the message and in details, as scenarios[0].title, a missing or unknown field named beneath the path it was met at; and a field the tool does not know is answered with the fields the dispatcher takes beside the tool's own, checkout for every tool and ticket for a read and for a write that takes it."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"as-caller","statement":"call_by runs a tool as call does with its caller, who is calling and when, held on the state for that call alone and cleared whatever it answers; call runs one with no caller."},{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed, but for the passage a body edit replaces and its replacement, `replace`, which are matched and put exactly as given; a read tool's input is left as given."},{"id":"schema-errors","statement":"An input that does not match a tool's schema is refused as invalid naming the path of the field it is about, in the message and in details, as scenarios[0].title, a missing or unknown field named beneath the path it was met at; and a field the tool does not know is answered with the fields the dispatcher takes beside the tool's own, checkout for every tool and ticket for a read and for a write that takes it."}]}
 //! ```
 
 use serde::Deserialize;
@@ -157,7 +157,20 @@ pub fn is_destructive(name: &str) -> bool {
 }
 
 /// Run one tool. `today` is the ISO date used when a decision has none.
-pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
+pub fn call(state: &mut State, name: &str, input: Value, today: &str) -> Result<Outcome, ToolError> {
+    call_by(state, name, input, today, None)
+}
+
+/// `call`, as `caller`, who is calling and when: a start adds them to who has its ticket checked out, and a start
+/// or a close names the others who have it (req:ticket-checked-out). Set for this call alone, whatever it answers.
+pub fn call_by(state: &mut State, name: &str, input: Value, today: &str, caller: Option<crate::model::CheckedOut>) -> Result<Outcome, ToolError> {
+    state.caller = caller;
+    let answered = dispatch(state, name, input, today);
+    state.caller = None;
+    answered
+}
+
+fn dispatch(state: &mut State, name: &str, mut input: Value, today: &str) -> Result<Outcome, ToolError> {
     // The caller's checkout routed the call here; the tool has no use for it.
     if let Some(o) = input.as_object_mut() {
         o.remove("checkout");

@@ -2432,3 +2432,24 @@ test("a withdrawn change reads as withdrawn on its page and in the cauldron, apa
   // A change that landed still reads as closed.
   await expect(page.locator("#closed li[data-ticket='ticket:0010']")).not.toContainText("withdrawn");
 });
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "who-has-a-ticket-is-shown", "checks": ["web/src/views/Board#checked-out", "web/src/views/Node#checked-out", "req:ticket-checked-out"]}
+ * ```
+ */
+test("who has a ticket checked out is shown on its row and its page, and not on one no one works", async ({ page }) => {
+  const said = /checked out by alex · since \d\d:\d\d/;
+  await page.goto("/g/repo/cauldron");
+  // The draft is active, started by the person on this machine; the open change beside it is no one's.
+  await expect(row(page, "ticket:0001").locator("[data-checked-out]")).toHaveText(said);
+  await expect(row(page, "ticket:0006").locator("[data-checked-out]")).toHaveCount(0);
+  const main = page.locator("main");
+  await page.goto("/g/repo/n/ticket%3A0001");
+  await expect(main.locator("[data-checked-out]")).toHaveText(said);
+  await page.goto("/g/repo/n/ticket%3A0006");
+  await expect(main.locator("p").first()).toBeVisible();
+  await expect(main.locator("[data-checked-out]")).toHaveCount(0);
+});

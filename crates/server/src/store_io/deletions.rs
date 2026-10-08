@@ -14,8 +14,17 @@ pub const RECORD_DIRS: [&str; 5] = ["pages", "requirements", "tickets", STARTS_D
 /// The files a store directory may hold beside its record folders. Anything
 /// else, or one of these of the wrong type, means the path is not only a
 /// store, and deleting it would take something else with it.
-pub const STORE_FILES: [&str; 8] =
-    [CONFIG_FILE, super::BASELINE_FILE, super::SERVE_FILE, super::CURRENT_FILE, super::checkouts::CHECKOUTS_FILE, super::tokens::TOKENS_FILE, super::tokens::TOKENS_LOCK, LOCK_FILE];
+pub const STORE_FILES: [&str; 9] = [
+    CONFIG_FILE,
+    super::BASELINE_FILE,
+    super::SERVE_FILE,
+    super::CURRENT_FILE,
+    super::CHECKED_OUT_FILE,
+    super::checkouts::CHECKOUTS_FILE,
+    super::tokens::TOKENS_FILE,
+    super::tokens::TOKENS_LOCK,
+    LOCK_FILE,
+];
 
 /// Whether a name in a record folder is one store_io writes: `<slug>.json`,
 /// or the `.<slug>.json.tmp-<pid>` a write left behind.

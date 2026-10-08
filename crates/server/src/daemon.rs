@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"main-line-recipes","statement":"take_main_line_recipes on a shared daemon validates the recipes the main line sent and replaces the store's record of them whole, persists it and announces it, unless it holds them already, and answers how many it holds; an invalid record is refused as invalid and changes nothing, and a daemon that holds code refuses it as a conflict, since it reads its own; site and site_recipe on a shared daemon read the recipes from that record, none until there is one, and on a daemon that holds code from its code, whatever record its store holds."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket, land_ticket or judge_recipe, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held source file whose text's digest matches, extracts each that differs or appeared and every recipe file whatever its digest, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close, landing or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"main-line-recipes","statement":"take_main_line_recipes on a shared daemon validates the recipes the main line sent and replaces the store's record of them whole, persists it and announces it, unless it holds them already, and answers how many it holds; an invalid record is refused as invalid and changes nothing, and a daemon that holds code refuses it as a conflict, since it reads its own; site and site_recipe on a shared daemon read the recipes from that record, none until there is one, and on a daemon that holds code from its code, whatever record its store holds."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket, land_ticket or judge_recipe, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held source file whose text's digest matches, extracts each that differs or appeared and every recipe file whatever its digest, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close, landing or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"who-calls","statement":"A start or a close a daemon runs itself is run as its caller, with the time now as RFC 3339 text in UTC: on a shared daemon by the name call_for is given, the token's, and on any other by the person signed in to the machine, else the machine's name, as a command run with no daemon runs one through as_this_person; on a project that names a server the server says who called."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 mod kin;
@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
+use grimoire_core::model::CheckedOut;
 use grimoire_core::{lint, tools};
 use grimoire_core::{Extraction, FileExtraction, State, ToolError};
 use grimoire_extract::Extractor;
@@ -74,6 +75,25 @@ pub enum OpenError {
     Server(#[from] crate::remote::RemoteError),
 }
 
+/// Who a start or a close `name` is run as on a store of one's own, by a daemon or a command: the person
+/// signed in to the machine, else the machine, now; none for any other tool (req:ticket-checked-out).
+pub fn as_this_person(name: &str) -> Option<CheckedOut> {
+    caller_of(name, None)
+}
+
+/// Who a start or a close `name` is run as: `who` when given, else the person signed in to the machine, now.
+fn caller_of(name: &str, who: Option<String>) -> Option<CheckedOut> {
+    matches!(name, "start_ticket" | "close_ticket").then(|| CheckedOut { by: who.unwrap_or_else(this_person), since: store_io::now() })
+}
+
+/// Who a daemon on a store of one's own runs as: the person signed in to the machine, else the machine, by name.
+fn this_person() -> String {
+    ["USERNAME", "USER", "COMPUTERNAME", "HOSTNAME"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && !v.contains('\n')))
+        .unwrap_or_else(|| "this machine".to_string())
+}
+
 /// What a write changed, as references, for the event it announces.
 pub(crate) fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
     use grimoire_core::ops::Changed;
@@ -87,6 +107,7 @@ pub(crate) fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
         Changed::Config => vec!["config".to_string()],
         Changed::Judged(recipe) => vec![format!("recipe:{recipe}")],
         Changed::MainLineRecipes => vec!["recipes".to_string()],
+        Changed::CheckedOut => vec!["checked_out".to_string()],
         Changed::Many(cs) => cs.iter().flat_map(describe).collect(),
     }
 }
@@ -330,6 +351,12 @@ impl Daemon {
     }
 
     pub fn call_as(&self, name: &str, input: Value, token: Option<String>) -> Result<Value, ToolError> {
+        self.call_for(name, input, token, None)
+    }
+
+    /// Run one tool for a caller the trust step named `who`: on a shared daemon a start lists them by that name as
+    /// having its ticket checked out (req:ticket-checked-out); `call_as` otherwise.
+    pub fn call_for(&self, name: &str, input: Value, token: Option<String>, who: Option<String>) -> Result<Value, ToolError> {
         // A close or a landing judges the code as it is on disk, not as the watcher last reported it,
         // before a write sent to a team's server too, whose answer is judged over this checkout's code.
         // So does a recipe's judgement, bound to the recipe and its files as they are on disk (req:tool-judge-recipe).
@@ -369,7 +396,9 @@ impl Daemon {
             return Err(ToolError::unavailable(format!("the server at {} refused this machine's token, so its intent is not read here: sign in with `grimoire login`", refused.address)));
         }
         let languages = state.store().config.languages.clone();
-        let outcome = tools::call(&mut state, name, input, &today)?;
+        // Who is calling, and when: the token's name on a shared daemon, the person or machine on a store of one's own.
+        let caller = caller_of(name, who.filter(|_| self.shared));
+        let outcome = tools::call_by(&mut state, name, input, &today, caller)?;
         if let Some(changed) = &outcome.changed {
             if let Err(e) = store_io::persist(&self.store_dir, state.store(), changed) {
                 tracing::error!("persist failed, reloading store from disk: {e}");
@@ -675,6 +704,33 @@ mod tests {
 
     fn page(slug: &str) -> Value {
         json!({ "slug": slug, "title": "T", "body": "b", "links": [] })
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-start-is-run-as-its-caller", "checks": ["crates/server/src/daemon#who-calls", "crates/server/src/remote#intent-digest"]}
+    /// ```
+    #[test]
+    fn a_start_is_run_as_its_caller() {
+        let h = Harness::new();
+        let d = h.open();
+        let filed = d.call("file_ticket", json!({ "title": "Why", "kind": "question", "priority": "later", "body": "b" })).unwrap();
+        let r = filed["node"]["ref"].as_str().unwrap().to_string();
+        // On a store of one's own, by the person signed in to the machine, as RFC 3339 text in UTC.
+        let out = d.call_for("start_ticket", json!({ "ref": r }), None, Some("ignored".into())).unwrap();
+        let since = out["checked_out"][0]["since"].as_str().unwrap().to_string();
+        assert_eq!(out["checked_out"][0]["by"], json!(this_person()));
+        assert!(time::OffsetDateTime::parse(&since, &time::format_description::well_known::Rfc3339).is_ok() && since.ends_with('Z'), "{since}");
+        assert!(h.store.join(store_io::CHECKED_OUT_FILE).is_file());
+        drop(d);
+        // On a shared daemon, by the name the trust step gave its caller; and who has a ticket is not intent.
+        let shared = Daemon::open_shared(&h.store).unwrap();
+        let digest = crate::remote::intent_digest(&shared.exported());
+        let out = shared.call_for("start_ticket", json!({ "ref": r }), None, Some("ana".into())).unwrap();
+        assert_eq!(out["checked_out"][1]["by"], "ana");
+        assert_eq!(out["others"][0]["by"], json!(this_person()), "and she is told who else has it");
+        assert_eq!(crate::remote::intent_digest(&shared.exported()), digest, "who has a ticket moves no digest");
     }
 
     /// # Test contract

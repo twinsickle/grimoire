@@ -17,16 +17,26 @@ export type AnnotationKind = "contract" | "test" | "decl";
 
 export type BaselineSummary = { date: string, reason: string, count: number, };
 
-export type Board = { tickets: Array<BoardTicket>, unattached: Array<Summary>, closed: Array<BoardTicket>, };
+export type Board = { tickets: Array<BoardTicket>, unattached: Array<BoardTicket>, closed: Array<BoardTicket>, };
 
 export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, 
 /**
  * The tickets whose proposals would change this ticket's references:
  * what it touches and relies on here is the truth's, and an edit waits.
  */
-drafts?: Array<Ref>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
+drafts?: Array<Ref>, checked_out?: Array<CheckedOut>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
-export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, filed?: Written, };
+export type CheckedOut = { 
+/**
+ * The name of the token that took it on a team; the person or machine on a store of its own.
+ */
+by: string, 
+/**
+ * When, as RFC 3339 text in UTC.
+ */
+since: string, };
+
+export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, filed?: Written, others?: Array<Holder>, };
 
 export type Configured = { config: StoreConfig, new: number, };
 
@@ -85,6 +95,8 @@ export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
 export type FindingKey = { rule: Rule, check: string, ref: Ref, edge?: FindingEdge, };
 
+export type Holder = { by: string | null, since: string | null, warning: string, };
+
 export type Ingredient = { recipe: string, id: string, says: string, };
 
 export type Judged = { recipe: Ref, judgement: Judgement, due: boolean | null, };
@@ -122,7 +134,7 @@ contract_at: [string, number] | null, };
 
 export type ModuleSummary = { ref: Ref, purpose: string | null, };
 
-export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, };
+export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, checked_out?: Array<CheckedOut>, };
 
 export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient | DecisionNode);
 
@@ -187,7 +199,7 @@ export type SourceAnswer = { file: Ref, language: string, text: string, focus: n
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
-export type Started = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, };
+export type Started = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, checked_out: Array<CheckedOut>, others: Array<Holder>, };
 
 export type Status = "open" | "active" | "landing" | "closed";
 

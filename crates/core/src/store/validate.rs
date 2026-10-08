@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes and the config, every violated field rule reported.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
+//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes, who has the tickets checked out and the config, every violated field rule reported.","criteria":[{"id":"checked-out-rules","statement":"Who has the tickets checked out is valid when each ticket is named by a slug and each holder once, by a non-empty name of one line, with a non-empty time."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
 //! ```
 
 use serde::Serialize;
@@ -266,6 +266,28 @@ pub fn validate_judgements(j: &Judgements) -> Vec<FieldError> {
     e
 }
 
+/// Who has each ticket checked out: each ticket by slug, each holder named once, by a non-empty name of one
+/// line, since a non-empty time (req:ticket-checked-out).
+pub fn validate_checked_out(all: &std::collections::BTreeMap<String, Vec<CheckedOut>>) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    for (slug, list) in all {
+        check_slug(&mut e, slug, slug);
+        let mut names = std::collections::HashSet::new();
+        for (i, c) in list.iter().enumerate() {
+            if c.by.trim().is_empty() || c.by.contains('\n') {
+                e.push(FieldError::new(&format!("{slug}[{i}].by"), "must be one non-empty line"));
+            }
+            if !names.insert(c.by.as_str()) {
+                e.push(FieldError::new(&format!("{slug}[{i}].by"), format!("`{}` is listed twice", c.by)));
+            }
+            if c.since.trim().is_empty() {
+                e.push(FieldError::new(&format!("{slug}[{i}].since"), "is required and may not be empty"));
+            }
+        }
+    }
+    e
+}
+
 /// The recipes the main line last sent: each an id no other has, a kind, a title of one line, its
 /// ingredients and uses named by slug, and a digest of the form every fingerprint has (req:recipe-main-line-snapshot).
 pub fn validate_main_line_recipes(m: &MainLineRecipes) -> Vec<FieldError> {
@@ -457,6 +479,33 @@ pub fn is_scope_prefix(p: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "who-has-the-tickets-is-checked", "checks": ["crates/core/src/store/validate#checked-out-rules"]}
+    /// ```
+    #[test]
+    fn who_has_the_tickets_is_checked() {
+        let c = |by: &str, since: &str| CheckedOut { by: by.into(), since: since.into() };
+        let good: std::collections::BTreeMap<String, Vec<CheckedOut>> = [("0200".to_string(), vec![c("ana", "2026-10-08T14:10:00Z"), c("ben", "2026-10-08T15:00:00Z")])].into();
+        assert!(validate_checked_out(&good).is_empty());
+        let bad: std::collections::BTreeMap<String, Vec<CheckedOut>> = [(
+            "Not A Slug".to_string(),
+            vec![
+                c("ana", "t"),
+                c("ana", "t"),
+                c(" ", ""),
+                c(
+                    "a
+b", "t",
+                ),
+            ],
+        )]
+        .into();
+        let fields: Vec<String> = validate_checked_out(&bad).into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["Not A Slug", "Not A Slug[1].by", "Not A Slug[2].by", "Not A Slug[2].since", "Not A Slug[3].by"]);
+    }
 
     /// # Test contract
     ///

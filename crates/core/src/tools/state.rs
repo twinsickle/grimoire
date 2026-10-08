@@ -54,6 +54,8 @@ pub struct State {
     server: Option<crate::answer::ServerCopy>,
     /// A store of its own that several checkouts share, each with its own current ticket.
     shares_checkouts: bool,
+    /// Who is calling, and when, for the one call call_by runs (req:ticket-checked-out).
+    pub(super) caller: Option<crate::model::CheckedOut>,
 }
 
 /// Reads a repository file's text for the `source` tool. The core does no
@@ -94,6 +96,7 @@ impl State {
             library: None,
             checkout_tickets: BTreeMap::new(),
             shares_checkouts: false,
+            caller: None,
         }
     }
     /// The store's current ticket, the one last started.
@@ -315,6 +318,16 @@ impl State {
         self.store_mut().main_line_recipes = Some(recipes);
         Some(Changed::MainLineRecipes)
     }
+    /// Hold `list` as who has ticket `slug` checked out, as a server answered it: who called is only the server's
+    /// to say, so a machine's copy takes the server's list (req:ticket-checked-out).
+    pub fn set_checked_out(&mut self, slug: &str, list: Vec<crate::model::CheckedOut>) {
+        if list.is_empty() {
+            self.store_mut().checked_out.remove(slug);
+        } else {
+            self.store_mut().checked_out.insert(slug.to_string(), list);
+        }
+    }
+
     pub(super) fn store_mut(&mut self) -> &mut Store {
         self.graph = None;
         self.view = None;

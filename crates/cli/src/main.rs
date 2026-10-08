@@ -347,7 +347,8 @@ fn run_tool(target: &Target, name: &str, input: Value, held: Option<&store_io::S
             eprintln!("warning: {e}");
         }
     }
-    match grimoire_core::tools::call(&mut loaded.state, name, input, &store_io::today()) {
+    // Run as the person on this machine: a start lists them as having its ticket checked out (req:ticket-checked-out).
+    match grimoire_core::tools::call_by(&mut loaded.state, name, input, &store_io::today(), grimoire_server::daemon::as_this_person(name)) {
         Ok(out) => {
             if let Some(changed) = &out.changed {
                 store_io::persist(store_dir, loaded.state.store(), changed)?;
