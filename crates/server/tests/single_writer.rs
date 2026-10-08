@@ -30,6 +30,7 @@ fn only_the_daemon_and_the_cli_write_the_store() {
     let owners = [
         "server/src/daemon.rs",
         "server/src/daemon/kin.rs",
+        "server/src/daemon/main_line.rs",
         "cli/src/main.rs",
         "cli/src/check.rs",
         "cli/src/init/command.rs",
