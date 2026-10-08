@@ -1141,7 +1141,7 @@ fn bare_repo() -> Project {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
+/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/uninstall#uninstall-store", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn init_then_uninstall_leaves_the_repository_as_it_was() {
@@ -1168,6 +1168,19 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
     assert!(run(&p.repo, &["tool", "brew_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
     assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
     assert!(p.store.join("proposals").join("0001.json").is_file() && p.store.join("current.json").is_file());
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
+    // A store in which a recipe was judged, holding the main line's recipes as a team's server does: both a store's own.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    std::fs::create_dir_all(p.store.join("judgements")).unwrap();
+    std::fs::write(
+        p.store.join("judgements").join("button.json"),
+        r#"{"recipe":"button","judgements":[{"recipe":"button","fingerprint":"00000000000000aa","date":"2026-10-08","ticket":"0001","outcome":"held"}]}"#,
+    )
+    .unwrap();
+    std::fs::write(p.store.join("recipes.json"), r#"{"recipes":[{"id":"button","kind":"component","title":"A button","text":"How to use a button.","ingredients":[{"id":"label","says":"The text shown."}],"uses":[],"digest":"00000000000000aa"}]}"#).unwrap();
     let out = run(&p.repo, &["uninstall", "--delete-store"]);
     assert!(out.status.success(), "{}", text(&out));
     assert!(!p.store.exists(), "{}", text(&out));

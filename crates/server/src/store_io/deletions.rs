@@ -6,16 +6,17 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{project_at, read_config, StoreIoError, CONFIG_FILE, LOCK_FILE, PROPOSALS_DIR, STARTS_DIR};
+use super::{project_at, read_config, StoreIoError, CONFIG_FILE, JUDGEMENTS_DIR, LOCK_FILE, PROPOSALS_DIR, STARTS_DIR};
 
-/// The folders of a store that hold one file per record.
-pub const RECORD_DIRS: [&str; 5] = ["pages", "requirements", "tickets", STARTS_DIR, PROPOSALS_DIR];
+/// The folders of a store that hold one file per record: a judged recipe's judgements are one file named for the recipe.
+pub const RECORD_DIRS: [&str; 6] = ["pages", "requirements", "tickets", STARTS_DIR, PROPOSALS_DIR, JUDGEMENTS_DIR];
 
 /// The files a store directory may hold beside its record folders. Anything
 /// else, or one of these of the wrong type, means the path is not only a
 /// store, and deleting it would take something else with it.
-pub const STORE_FILES: [&str; 9] = [
+pub const STORE_FILES: [&str; 10] = [
     CONFIG_FILE,
+    super::RECIPES_FILE,
     super::BASELINE_FILE,
     super::SERVE_FILE,
     super::CURRENT_FILE,
@@ -407,6 +408,44 @@ mod tests {
         assert!(!store.exists() && !is_queued(&dir, &store), "deleted, and its record dropped");
         assert!(carry_out(&dir).is_empty());
     }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-store-with-judged-recipes-is-only-a-store", "checks": ["crates/server/src/store_io/deletions#only-a-store", "crates/server/src/store_io/deletions#deletes-under-lock", "crates/server/src/store_io/deletions#carried-out"]}
+    /// ```
+    #[test]
+    fn a_store_with_judged_recipes_is_only_a_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A recipe judged, and the main line's recipes a team's server keeps: both are the store's (req:store-layout).
+        let judged = |store: &Path| {
+            std::fs::create_dir_all(store.join(super::super::JUDGEMENTS_DIR)).unwrap();
+            std::fs::write(store.join(super::super::JUDGEMENTS_DIR).join("button.json"), JUDGED).unwrap();
+            std::fs::write(store.join(super::super::RECIPES_FILE), SENT).unwrap();
+            assert!(super::super::load(store).unwrap().1.is_empty(), "both load as the store's records");
+        };
+        let (store, _, _) = store_for(tmp.path(), "judged");
+        judged(&store);
+        assert_eq!(not_only_a_store(&store).unwrap(), None);
+        // A name no write makes, in the judgements as in any record folder, is still someone else's.
+        std::fs::write(store.join(super::super::JUDGEMENTS_DIR).join("notes.txt"), "mine").unwrap();
+        assert!(not_only_a_store(&store).unwrap().is_some_and(|why| why.contains("judgements/notes.txt")));
+        std::fs::remove_file(store.join(super::super::JUDGEMENTS_DIR).join("notes.txt")).unwrap();
+        // Deleted whole, under its lock.
+        let held = super::super::lock(&store).unwrap();
+        delete(&store, Some(held)).unwrap();
+        assert!(!store.exists());
+        // Queued, it is carried out the same way.
+        let dir = tmp.path().join("deletions");
+        let (queued_store, _, repository) = store_for(tmp.path(), "judged-queued");
+        judged(&queued_store);
+        queue(&dir, &queued_store, &repository).unwrap();
+        assert!(matches!(&carry_out(&dir)[..], [Outcome::Deleted(_)]));
+        assert!(!queued_store.exists());
+    }
+
+    const JUDGED: &str = r#"{"recipe":"button","judgements":[{"recipe":"button","fingerprint":"00000000000000aa","date":"2026-10-08","ticket":"0001","outcome":"held"}]}"#;
+    const SENT: &str = r#"{"recipes":[{"id":"button","kind":"component","title":"A button","text":"How to use a button.","ingredients":[{"id":"label","says":"The text shown."}],"uses":[],"digest":"00000000000000aa"}]}"#;
 
     /// # Test contract
     ///
