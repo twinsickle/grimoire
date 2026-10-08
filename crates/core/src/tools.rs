@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed; a read tool's input is left as given."},{"id":"schema-errors","statement":"An input that does not match a tool's schema is refused as invalid naming the path of the field it is about, in the message and in details, as scenarios[0].title, a missing or unknown field named beneath the path it was met at; and a field the tool does not know is answered with the fields the dispatcher takes beside the tool's own, checkout for every tool and ticket for a read and for a write that takes it."}]}
+//! {"purpose":"Dispatch every tool by name over JSON so the MCP server, the JSON API and the CLI share one implementation and one set of definitions: a read tool to the read side, a write tool to the write side.","criteria":[{"id":"error-codes","statement":"Every error is {error, message, details?} with error one of not_found, invalid, conflict or store_unavailable, and invalid carries the violated fields in details."},{"id":"checkout-ignored","statement":"call takes `checkout` off the input before any tool runs, since it only routes a call to its checkout's daemon, so no tool sees it and a tool that refuses unknown fields accepts it; answers_any_checkout says which tools a daemon answers with none named, status alone."},{"id":"trims-input","statement":"Before a write tool runs, every string in its input, at any depth, has its leading and trailing whitespace taken off, so what it stores is trimmed, but for the passage a body edit replaces and its replacement, `replace`, which are matched and put exactly as given; a read tool's input is left as given."},{"id":"schema-errors","statement":"An input that does not match a tool's schema is refused as invalid naming the path of the field it is about, in the message and in details, as scenarios[0].title, a missing or unknown field named beneath the path it was met at; and a field the tool does not know is answered with the fields the dispatcher takes beside the tool's own, checkout for every tool and ticket for a read and for a write that takes it."}]}
 //! ```
 
 use serde::Deserialize;
@@ -163,8 +163,13 @@ pub fn call(state: &mut State, name: &str, mut input: Value, today: &str) -> Res
         o.remove("checkout");
     }
     let answered = if is_write(name) {
-        // Every string a write stores is trimmed here, once, so no write tool can forget.
+        // Every string a write stores is trimmed here, once, so no write tool can forget; but a body edit's
+        // passage and its replacement, matched against the body as it is, which the whole record's validation then judges.
+        let replace = input.as_object_mut().and_then(|o| o.remove("replace"));
         crate::store::trim_strings(&mut input);
+        if let (Some(replace), Some(o)) = (replace, input.as_object_mut()) {
+            o.insert("replace".to_string(), replace);
+        }
         write::call(state, name, input, today)
     } else {
         read::call(state, name, input)
@@ -312,6 +317,10 @@ mod tests {
         call(&mut s, "put_requirement", req, "2026-09-30").unwrap();
         let r = &s.store().proposals["later-1"].requirements["r"].record;
         assert_eq!((r.statement.as_str(), r.scenarios[0].title.as_str(), r.scenarios[0].given.as_str(), r.scenarios[0].then.as_str()), ("It SHALL hold.", "t", "g", "t"));
+        // But a body edit's passage and its replacement, matched exactly as given: the space after "b" goes with it.
+        call(&mut s, "patch_page", json!({ "ref": "page:aim", "body": "a b c", "ticket": "later-1" }), "2026-09-30").unwrap();
+        call(&mut s, "patch_page", json!({ "ref": "page:aim", "replace": { "old": "b ", "new": "" }, "ticket": "later-1" }), "2026-09-30").unwrap();
+        assert_eq!(s.store().proposals["later-1"].pages["aim"].record.body, "a c");
         // A read's input is as given: a reference with a space is not a reference.
         assert!(call(&mut s, "get", json!({ "ref": " page:aim" }), "2026-09-30").is_err());
     }

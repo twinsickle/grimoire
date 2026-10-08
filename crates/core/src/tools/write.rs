@@ -40,11 +40,14 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 r#ref: Reference,
                 title: Option<String>,
                 body: Option<String>,
+                append: Option<String>,
+                replace: Option<ops::Replace>,
                 add_links: Option<Vec<Reference>>,
                 remove_links: Option<Vec<Reference>>,
             }
             let i: In = parse(input)?;
-            let patch = ops::PagePatch { title: i.title, body: i.body, add_links: i.add_links.unwrap_or_default(), remove_links: i.remove_links.unwrap_or_default() };
+            let edit = ops::BodyEdit { replace: i.replace, append: i.append };
+            let patch = ops::PagePatch { title: i.title, body: i.body, edit, add_links: i.add_links.unwrap_or_default(), remove_links: i.remove_links.unwrap_or_default() };
             let t = ops::target_ticket(state.store(), ticket.as_deref())?;
             let (_, changed) = ops::propose(state.store_mut(), &t, ops::Proposing::Partial, |s| ops::patch_page(s, &i.r#ref, patch))?;
             written(name, state, Some(&t), &i.r#ref, changed)
@@ -158,6 +161,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 touches: Option<Vec<Reference>>,
                 relies_on: Option<Vec<Reference>>,
                 body: Option<String>,
+                append: Option<String>,
+                replace: Option<ops::Replace>,
             }
             let i: In = parse(input)?;
             // Another ticket's references, edited under a change being worked, wait in that change's proposal.
@@ -168,7 +173,8 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value, today: &str)
                 Some(_) => ((i.touches, i.relies_on), (None, None)),
                 None => ((None, None), (i.touches, i.relies_on)),
             };
-            let patch = ops::TicketPatch { title: i.title, priority: i.priority, touches: now.0, relies_on: now.1, body: i.body };
+            let edit = ops::BodyEdit { replace: i.replace, append: i.append };
+            let patch = ops::TicketPatch { title: i.title, priority: i.priority, touches: now.0, relies_on: now.1, body: i.body, edit };
             let held = state.store.tickets.get(&i.r#ref.id).cloned();
             let (_, changed) = ops::update_ticket(state.store_mut(), &i.r#ref, patch)?;
             let mut changes = vec![changed];
@@ -459,6 +465,35 @@ mod tests {
         assert!(board.output["tickets"].as_array().unwrap().iter().any(|t| t["ref"] == "ticket:0001"));
         let e = call(&mut s, "file_ticket", json!({ "slug": "x", "title": "New", "kind": "change", "priority": "high", "body": "x" }), "2026-09-27").unwrap_err();
         assert!(e.to_string().contains("no longer takes a slug"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-body-is-edited-in-part-through-the-tools", "checks": ["crates/core/src/ops#patch-is-partial", "crates/core/src/ops/tickets#update-ticket"]}
+    /// ```
+    #[test]
+    fn a_body_is_edited_in_part_through_the_tools() {
+        let mut s = state();
+        let truth = s.store().pages["git-readiness"].body.clone();
+        // Under a ticket, the edit reads the body as its proposal holds it, and the truth is left alone.
+        call(&mut s, "patch_page", json!({ "ref": "page:git-readiness", "body": "One.\n\nTwo.", "ticket": "later-1" }), "2026-10-08").unwrap();
+        let out = call(&mut s, "patch_page", json!({ "ref": "page:git-readiness", "replace": { "old": "Two.", "new": "Three." }, "append": "Four.", "ticket": "later-1" }), "2026-10-08").unwrap();
+        assert_eq!(out.output["node"]["body"], "One.\n\nThree.\n\nFour.");
+        assert_eq!(s.store().pages["git-readiness"].body, truth);
+        let e = call(&mut s, "patch_page", json!({ "ref": "page:git-readiness", "replace": { "old": "Two.", "new": "x" }, "ticket": "later-1" }), "2026-10-08").unwrap_err();
+        assert_eq!(e.code(), "invalid");
+        assert!(e.to_string().contains("not in the body"));
+        // A ticket's body, at once.
+        let before = s.store().tickets["phase-62"].clone();
+        let out = call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "append": "The options." }), "2026-10-08").unwrap();
+        let body = out.output["node"]["body"].as_str().unwrap_or_default().to_string();
+        assert!(body.ends_with("\n\nThe options.") || (before.body.is_empty() && body == "The options."), "{body}");
+        assert_eq!(s.store().tickets["phase-62"].body, body);
+        assert_eq!(s.store().tickets["phase-62"].touches, before.touches);
+        let e = call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "body": "Whole.", "replace": { "old": "The options.", "new": "x" } }), "2026-10-08").unwrap_err();
+        assert_eq!(e.code(), "invalid");
+        assert_eq!(s.store().tickets["phase-62"].body, body);
     }
 
     /// # Test contract

@@ -1,10 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a closed one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a closed ticket and a gap or question waiting, landing, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a closed one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid; its body is edited in part as BodyEdit does: replace swaps the one passage old for new, refused as invalid when old is empty, absent or present more than once, saying which and how many times, append adds its text after the body's trailing whitespace is dropped and a blank line, or alone on an empty body, the replace applied first, and either given beside a whole body is invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a closed ticket and a gap or question waiting, landing, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 mod decisions;
 mod proposal;
@@ -245,8 +245,64 @@ pub fn put_page(store: &mut Store, page: Page) -> Result<(Page, Changed), ToolEr
 pub struct PagePatch {
     pub title: Option<String>,
     pub body: Option<String>,
+    pub edit: BodyEdit,
     pub add_links: Vec<Reference>,
     pub remove_links: Vec<Reference>,
+}
+
+/// One passage of a body swapped for another: `old` must be in the body exactly once.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Replace {
+    pub old: String,
+    pub new: String,
+}
+
+/// A body edited in part, as patch_page and update_ticket take it (req:ops-patch-is-partial):
+/// one passage replaced, then a paragraph appended.
+#[derive(Debug, Clone, Default)]
+pub struct BodyEdit {
+    pub replace: Option<Replace>,
+    pub append: Option<String>,
+}
+
+impl BodyEdit {
+    pub fn is_empty(&self) -> bool {
+        self.replace.is_none() && self.append.is_none()
+    }
+
+    /// The body after this edit, or after the whole `body` given instead; both at once is invalid,
+    /// since the edit would have no settled body to apply to.
+    pub fn apply_to(self, current: &str, body: Option<String>) -> Result<Option<String>, ToolError> {
+        if self.is_empty() {
+            return Ok(body);
+        }
+        if body.is_some() {
+            let field = if self.replace.is_some() { "replace" } else { "append" };
+            return Err(ToolError::invalid(format!("give a whole body, or edit it in part with {field}, not both"), vec![FieldError::new(field, "not taken beside body")]));
+        }
+        let mut out = current.to_string();
+        if let Some(Replace { old, new }) = self.replace {
+            if old.is_empty() {
+                return Err(ToolError::invalid("replace.old is empty: give the passage to replace", vec![FieldError::new("replace.old", "empty")]));
+            }
+            match out.matches(old.as_str()).count() {
+                1 => out = out.replacen(old.as_str(), &new, 1),
+                0 => return Err(ToolError::invalid("replace.old is not in the body: give the passage exactly as the body has it", vec![FieldError::new("replace.old", "not in the body")])),
+                n => {
+                    return Err(ToolError::invalid(
+                        format!("replace.old is in the body {n} times: give more of the passage, so it matches once"),
+                        vec![FieldError::new("replace.old", format!("in the body {n} times"))],
+                    ))
+                }
+            }
+        }
+        if let Some(text) = self.append {
+            let kept = out.trim_end();
+            out = if kept.is_empty() { text } else { format!("{kept}\n\n{text}") };
+        }
+        Ok(Some(out))
+    }
 }
 
 pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<(Page, Changed), ToolError> {
@@ -258,7 +314,7 @@ pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<
     if let Some(t) = patch.title {
         page.title = t;
     }
-    if let Some(b) = patch.body {
+    if let Some(b) = patch.edit.apply_to(&page.body, patch.body)? {
         page.body = b;
     }
     page.links.retain(|l| !patch.remove_links.contains(l));
@@ -369,6 +425,46 @@ mod tests {
         assert_eq!(e.code(), "invalid");
         assert_eq!(s.pages["git-readiness"].links.len(), 3);
         assert_eq!(patch_page(&mut s, &Reference::page("nope"), PagePatch::default()).unwrap_err().code(), "not_found");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "patch-page-edits-the-body-in-part", "checks": ["crates/core/src/ops#patch-is-partial"]}
+    /// ```
+    #[test]
+    fn patch_page_edits_the_body_in_part() {
+        let mut s = store();
+        let r = Reference::page("git-readiness");
+        s.pages.get_mut("git-readiness").unwrap().body = "The old rule holds.\n\nIt is kept, and it is read.".into();
+        let before = s.pages["git-readiness"].clone();
+        let edit = |replace: Option<(&str, &str)>, append: Option<&str>| PagePatch {
+            edit: BodyEdit { replace: replace.map(|(o, n)| Replace { old: o.into(), new: n.into() }), append: append.map(Into::into) },
+            ..Default::default()
+        };
+        // One passage swapped; the rest, the title and the links as they were.
+        let (p, _) = patch_page(&mut s, &r, edit(Some(("old rule", "new rule")), None)).unwrap();
+        assert_eq!(p.body, "The new rule holds.\n\nIt is kept, and it is read.");
+        assert_eq!((p.title, p.links), (before.title.clone(), before.links.clone()));
+        // Absent, matching twice, or empty: refused, saying which, and nothing changes.
+        let refused = |s: &mut Store, old: &str| match patch_page(s, &r, edit(Some((old, "x")), Some("Never."))) {
+            Err(ToolError::Invalid { message, .. }) => message,
+            other => panic!("expected invalid, got {other:?}"),
+        };
+        assert!(refused(&mut s, "old rule").contains("not in the body"));
+        assert!(refused(&mut s, "is ").contains("2 times"));
+        assert!(refused(&mut s, "").contains("empty"));
+        assert_eq!(s.pages["git-readiness"].body, "The new rule holds.\n\nIt is kept, and it is read.");
+        // Appended as its own paragraph, after a replace in the same call.
+        let (p, _) = patch_page(&mut s, &r, edit(Some(("new rule", "rule")), Some("Second."))).unwrap();
+        assert_eq!(p.body, "The rule holds.\n\nIt is kept, and it is read.\n\nSecond.");
+        // On an empty body, the text alone.
+        s.pages.get_mut("git-readiness").unwrap().body = String::new();
+        assert_eq!(patch_page(&mut s, &r, edit(None, Some("First."))).unwrap().0.body, "First.");
+        // Beside a whole body, either is refused.
+        let both = PagePatch { body: Some("Whole.".into()), ..edit(None, Some("More.")) };
+        assert_eq!(patch_page(&mut s, &r, both).unwrap_err().code(), "invalid");
+        assert_eq!(s.pages["git-readiness"].body, "First.");
     }
 
     /// # Test contract

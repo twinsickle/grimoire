@@ -227,6 +227,11 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     let updated = d.call("update_ticket", json!({ "ref": filed_ref, "priority": "high" })).unwrap();
     assert_eq!((updated["node"]["title"].clone(), updated["node"]["priority"].clone()), (json!("Retitled by a teammate"), json!("high")), "{updated}");
     assert_eq!(d.call("get", json!({ "ref": filed_ref })).unwrap()["node"]["title"], "Retitled by a teammate", "and the copy has followed");
+    // A body edited in part is edited as the server holds it: the teammate's paragraph, not yet fetched here, stays.
+    h.daemon.call("update_ticket", json!({ "ref": filed_ref, "append": "A teammate's note." })).unwrap();
+    let appended = d.call("update_ticket", json!({ "ref": filed_ref, "append": "Mine." })).unwrap();
+    assert_eq!(appended["node"]["body"], "b\n\nA teammate's note.\n\nMine.", "{appended}");
+    assert_eq!(h.daemon.call("get", json!({ "ref": filed_ref })).unwrap()["node"]["body"], "b\n\nA teammate's note.\n\nMine.");
     // Refused by the server: its error is the answer, and nothing changes here.
     let mut refused = page("aim");
     refused["ticket"] = json!("0002");

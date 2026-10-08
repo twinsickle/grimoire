@@ -134,7 +134,10 @@ it created in `warnings`. Every warning is work to do now.
   checkout still carries, and the check names such a ticket beside a
   finding it would mend, the finding still failing.
 - `put_page` and `put_requirement` **replace** the record. To add or remove
-  a page's links, `patch_page`; it touches nothing else. For a requirement,
+  a page's links, `patch_page`; it touches nothing else. To change part of
+  a page's body or a ticket's, `patch_page` or `update_ticket` with `append`
+  (a paragraph at the end) or `replace` (`{old, new}`, `old` matching the
+  body exactly once), not the whole body sent back. For a requirement,
   `get` first and send the whole thing back; existing decisions are kept.
 - Module contracts are a JSON block under `# Module contract` in a file's
   leading doc comment. Renaming or removing a criterion leaves the
@@ -359,7 +362,8 @@ A gap or question closes on the person's decision, never on yours.
    examined again. A question is never edited into a change: the record
    that it was asked, and how it was answered, is what the change rests on.
 5. With no person to ask (an autonomous run), do not resolve. Add the
-   options to the ticket's body with `update_ticket` and leave it open.
+   options to the ticket's body with `update_ticket`, as `append`, and leave
+   it open.
 
 A change that turns out to be a question is closed with a decision saying
 so and the question filed, or deleted if nothing was decided.
