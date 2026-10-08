@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a recipe file: the fixed-format block Grimoire checks, and the prose around it for the people who build with the project.","criteria":[{"id":"format","statement":"A recipe file holds one heading whose text is Recipe, at any level and outside a fenced block opened with backticks or tildes, followed by a fenced json block of exactly id and kind, each a slug, and optionally ingredients of {id, says}, files and uses, each id a slug used once, says non-empty, each file a repository-relative /-separated path used once and each use a slug used once; any other field, a required one missing, no heading, no block, a second Recipe heading or invalid JSON is reported as the file's error with the heading's line and the reason, never as no recipe."},{"id":"prose","statement":"A recipe's title is the text of the first level-one heading outside a fenced block that is not the Recipe heading, or its id when there is none, and its text is the rest of the file without that heading, the Recipe heading and the block, blank lines at its ends trimmed."},{"id":"files-looked-for","statement":"Each path of a recipe's files is looked for under the repository root when the recipe is read, as a file or a folder, and those not found are kept with the recipe as missing, in the order the block gives them; nothing is written."},{"id":"digest","statement":"A recipe's digest is the fingerprint of its own file's text, whatever its path, and of every file its files name, a named file whatever its kind and a named folder's files as the repository's own .gitignore files leave them, a file or folder whose name begins with a dot, a link and a checkout nested below it skipped, never a person's global ignore or .git/info/exclude nor a platform's hidden attribute, each by its repository path and its text, every CRLF read as LF in a file that is UTF-8, in path order, a path not found counted as missing; any change to the recipe's text or to a file it represents, one added, moved or removed among them, changes it, and the same files committed give the same digest whatever the platform, the person or the line endings checked out, but for a .gitignore in a folder above the repository, which the walk reads as the reading of the checkout does."}]}
+//! {"purpose":"Read a recipe file: the fixed-format block Grimoire checks, and the prose around it for the people who build with the project.","criteria":[{"id":"format","statement":"A recipe file holds one heading whose text is Recipe, at any level and outside a fenced block opened with backticks or tildes, followed by a fenced json block of exactly id and kind, each a slug, and optionally ingredients of {id, says}, files and uses, each id a slug used once, says non-empty, each file a repository-relative /-separated path used once and each use a slug used once; any other field, a required one missing, no heading, no block, a second Recipe heading or invalid JSON is reported as the file's error with the heading's line and the reason, never as no recipe."},{"id":"prose","statement":"A recipe's title is the text of the first level-one heading outside a fenced block that is not the Recipe heading, or its id when there is none, and its text is the rest of the file without that heading, the Recipe heading and the block, blank lines at its ends trimmed."},{"id":"files-looked-for","statement":"Each path of a recipe's files is looked for under the repository root when the recipe is read, as a file or a folder, and those not found are kept with the recipe as missing, in the order the block gives them; nothing is written."},{"id":"digest","statement":"A recipe's digest is the fingerprint of its own file's text, whatever its path, and of every file its files name, a named file whatever its kind and a named folder's files as the repository's own .gitignore files leave them, from the repository's root down through the folder, a file or folder whose name begins with a dot, a link and a checkout nested below it skipped, never a .gitignore in a folder above the repository, a person's global ignore or .git/info/exclude nor a platform's hidden attribute, each by its repository path and its text, every CRLF read as LF in a file that is UTF-8, in path order, a path not found counted as missing; any change to the recipe's text or to a file it represents, one added, moved or removed among them, changes it, and the same files committed give the same digest whatever the platform, the person, the folder the repository sits in or the line endings checked out."}]}
 //! ```
 
 use std::path::Path;
@@ -203,15 +203,19 @@ pub fn digest(root: &Path, text: &str, files: &[String]) -> String {
         } else if at.is_dir() {
             parts.push(format!("{named}/"));
             // Only what every checkout of one commit shares: the repository's own .gitignore files, a dot
-            // name, never a person's global ignore, .git/info/exclude or a platform's hidden attribute.
-            let walker = ignore::WalkBuilder::new(&at)
+            // name, never a person's global ignore, .git/info/exclude or a platform's hidden attribute. The walk
+            // starts at the root and descends only the folders on the way to the named one, so the .gitignore
+            // files of that chain apply as git applies them, and nothing above the root is read.
+            let named_dir = at.clone();
+            let walker = super::own_ignores(root)
                 .hidden(false)
-                .git_ignore(true)
-                .git_exclude(false)
-                .git_global(false)
-                .ignore(false)
-                .require_git(false)
-                .filter_entry(|e| e.depth() == 0 || !(e.file_name().to_string_lossy().starts_with('.') || (e.file_type().is_some_and(|t| t.is_dir()) && super::is_checkout(e.path()))))
+                .filter_entry(move |e| {
+                    let path = e.path();
+                    if named_dir.starts_with(path) {
+                        return true;
+                    }
+                    path.starts_with(&named_dir) && !(e.file_name().to_string_lossy().starts_with('.') || (e.file_type().is_some_and(|t| t.is_dir()) && super::is_checkout(path)))
+                })
                 .build();
             let mut found: Vec<(String, std::path::PathBuf)> =
                 walker.flatten().filter(|e| e.file_type().is_some_and(|t| t.is_file())).filter_map(|e| super::relative(root, e.path()).map(|rel| (rel, e.into_path()))).collect();
@@ -408,5 +412,51 @@ not a heading, inside a fence
         // A path not found counts as missing: its appearing changes the digest.
         write("gone", "here\n");
         assert_ne!(digest(), second);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-digest-reads-the-repositorys-own-gitignore-files-alone", "checks": ["crates/extract/src/recipe#digest", "req:recipe-due"]}
+    /// ```
+    #[test]
+    fn the_digest_reads_the_repositorys_own_gitignore_files_alone() {
+        let above = tempfile::Builder::new().prefix("grimoire-recipe-").tempdir().unwrap();
+        let root = above.path().join("repo");
+        let write = |at: &Path, rel: &str, text: &str| {
+            let p = at.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        write(&root, "src/button/button.ts", "export {};\n");
+        write(&root, "src/button/built.js", "built\n");
+        let text = "# Button\n\n## Recipe\n\n```json\n{\"id\":\"button\",\"kind\":\"k\",\"files\":[\"src/button\"]}\n```\n";
+        let files = vec!["src/button".to_string()];
+        let first = digest(&root, text, &files);
+        // A .gitignore in the folder the repository sits in, as a home folder's may be, is not the repository's.
+        write(above.path(), ".gitignore", "*.ts\nsrc/\n");
+        assert_eq!(digest(&root, text, &files), first, "a .gitignore above the repository does not apply");
+        // The repository's own, at its root and on the way down to the named folder, do, whether or not .git exists.
+        write(&root, ".gitignore", "*.js\n");
+        let own = digest(&root, text, &files);
+        assert_ne!(own, first, "the root's .gitignore applies to a folder below it");
+        write(&root, "src/button/built.js", "built again\n");
+        assert_eq!(digest(&root, text, &files), own, "what it ignores is not read");
+        write(&root, "src/.gitignore", "!built.js\n");
+        assert_ne!(digest(&root, text, &files), own, "a nearer .gitignore on the way re-includes, as in git");
+        std::fs::remove_file(root.join("src").join(".gitignore")).unwrap();
+        // A named folder inside a folder the repository ignores is ignored with it, as git would not track it.
+        write(&root, "build/out/x.ts", "export {};\n");
+        let build = vec!["build/out".to_string()];
+        let read = digest(&root, text, &build);
+        write(&root, ".gitignore", "*.js\nbuild/\n");
+        let ignored = digest(&root, text, &build);
+        assert_ne!(ignored, read, "the folder above it ignored, its files are not read");
+        write(&root, "build/out/x.ts", "export const changed = 1;\n");
+        assert_eq!(digest(&root, text, &build), ignored, "a file under an ignored folder changes nothing");
+        write(&root, ".gitignore", "*.js\n");
+        std::fs::create_dir_all(root.join(".git").join("info")).unwrap();
+        std::fs::write(root.join(".git").join("info").join("exclude"), "*.ts\n").unwrap();
+        assert_eq!(digest(&root, text, &files), own, "with .git, the same: its info/exclude is not read");
     }
 }

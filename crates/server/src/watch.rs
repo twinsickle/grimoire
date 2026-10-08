@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, or that .git/info/exclude ignores, and anything under .git, never reach the daemon; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles, a recipe file among them, marks a nested checkout's boundary, or is a path a held recipe names, lies under one or is a folder holding one, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, and anything under .git, never reach the daemon, and no other ignore keeps one out, .git/info/exclude and a .gitignore above the root among them, as the reading of the checkout reads none; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles, a recipe file among them, marks a nested checkout's boundary, or is a path a held recipe names, lies under one or is a folder holding one, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
 //! ```
 
 use std::collections::HashMap;
@@ -17,21 +17,19 @@ use crate::daemon::Daemon;
 
 /// Whether the repository ignores a path, as git would: anything under
 /// `.git`; then each directory's `.gitignore` from the path's up to the root,
-/// the nearest that matches deciding, a `!` pattern re-including; then
-/// `.git/info/exclude`. Each directory's matcher is read once and kept until
-/// `forget` is told its `.gitignore` changed.
+/// the nearest that matches deciding, a `!` pattern re-including. Nothing else:
+/// not `.git/info/exclude`, a person's global excludes nor a `.gitignore` above
+/// the root, which the reading of the checkout does not read either, so an edit
+/// to any file it reads arrives. Each directory's matcher is read once and kept
+/// until `forget` is told its `.gitignore` changed.
 pub struct Ignorer {
     root: PathBuf,
-    exclude: Gitignore,
     dirs: Mutex<HashMap<PathBuf, Arc<Gitignore>>>,
 }
 
 impl Ignorer {
     pub fn new(root: &Path) -> Ignorer {
-        let mut b = GitignoreBuilder::new(root);
-        b.add(root.join(".git").join("info").join("exclude"));
-        let exclude = b.build().unwrap_or_else(|_| Gitignore::empty());
-        Ignorer { root: root.to_path_buf(), exclude, dirs: Mutex::new(HashMap::new()) }
+        Ignorer { root: root.to_path_buf(), dirs: Mutex::new(HashMap::new()) }
     }
 
     pub fn ignores(&self, path: &Path) -> bool {
@@ -52,8 +50,7 @@ impl Ignorer {
 
     /// Whether `path` itself is ignored (`Some(true)`), re-included
     /// (`Some(false)`) or matched by nothing: each `.gitignore` from the
-    /// path's directory up to the root, the nearest that matches deciding,
-    /// then `.git/info/exclude`.
+    /// path's directory up to the root, the nearest that matches deciding.
     fn decide(&self, path: &Path, is_dir: bool) -> Option<bool> {
         let mut dir = path.parent();
         while let Some(d) = dir.filter(|d| d.starts_with(&self.root)) {
@@ -64,8 +61,7 @@ impl Ignorer {
             }
             dir = d.parent();
         }
-        let m = self.exclude.matched(path, is_dir);
-        (!m.is_none()).then(|| m.is_ignore())
+        None
     }
 
     /// Drop what was read of the `.gitignore` at `path`, when it changed.
@@ -218,7 +214,15 @@ mod tests {
     #[test]
     fn ignored_paths_never_reach_the_daemon() {
         let tmp = tempfile::Builder::new().prefix("grimoire-watch-").tempdir().unwrap();
-        let dir = tmp.path().to_path_buf();
+        // The repository sits in a folder whose .gitignore, as a home folder's may, would leave its source out.
+        std::fs::write(
+            tmp.path().join(".gitignore"),
+            "src/
+*.rs
+",
+        )
+        .unwrap();
+        let dir = tmp.path().join("repo");
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("web")).unwrap();
         std::fs::create_dir_all(dir.join(".git").join("info")).unwrap();
@@ -229,12 +233,12 @@ mod tests {
         let i = Ignorer::new(&dir);
         assert!(i.ignores(&dir.join(".git").join("index")), "anything under .git");
         assert!(i.ignores(&dir.join("target").join("debug").join("x.rs")), "what the root .gitignore ignores");
-        assert!(!i.ignores(&dir.join("src").join("lib.rs")));
+        assert!(!i.ignores(&dir.join("src").join("lib.rs")), "a .gitignore above the repository keeps nothing out");
         assert!(i.ignores(&dir.join("web").join("dist").join("x.js")), "a nested .gitignore applies below it");
         assert!(!i.ignores(&dir.join("web").join("src").join("a.ts")));
         assert!(!i.ignores(&dir.join("src").join("keep.gen.rs")), "the nearest file re-includes");
         assert!(i.ignores(&dir.join("src").join("other.gen.rs")), "the root's pattern still holds for the rest");
-        assert!(i.ignores(&dir.join("scratch.rs")), ".git/info/exclude");
+        assert!(!i.ignores(&dir.join("scratch.rs")), ".git/info/exclude is a clone's own, read no more than the walk reads it");
         // Nothing re-includes a file under an ignored directory, as in git.
         std::fs::create_dir_all(dir.join("target")).unwrap();
         std::fs::write(dir.join("target").join(".gitignore"), "!keep.rs\n").unwrap();

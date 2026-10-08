@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever its .gitignore files ignore, so build output is never parsed."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"recipes-read","statement":"Every file whose name ends .recipe.md is read as a recipe whatever languages the extractor is built for, by the same walk and under the same ignore, hidden and nested-checkout rules as source, handles and reads answering for it as for source; extract_text gives any handled file's record from text already read."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."},{"id":"tiers","statement":"Every supported language is read at one tier, the highest the build has: an adapter's own, 2 for one that resolves imports and 1 for one that reads declarations alone, else 0 for a language in the comment-syntax table; a language with an adapter is never read by the table, and the supported languages are exactly those with a tier."}]}
+//! {"purpose":"Read a repository's source and produce its files, declarations, imports and module contracts as values.","criteria":[{"id":"read-only","statement":"The extractor reads the paths it is given and writes nothing anywhere."},{"id":"per-file","statement":"Extraction is per file, so one changed file is re-extracted without touching the others."},{"id":"gitignore-respected","statement":"Walking a repository skips whatever the repository's own .gitignore files ignore, its root's and any beneath, whether or not .git exists, so build output is never parsed, and reads no other ignore: never a .gitignore in a folder above the root, a person's global excludes, .git/info/exclude or an .ignore file."},{"id":"nested-checkouts-skipped","statement":"Walking a repository stops at a folder below its root that is a checkout of its own, one holding a .git file or folder or a .grimoire.toml, and skips hidden files and folders; reads answers the same for one repository path, true only for a file an adapter handles that is in no hidden folder, is not hidden itself and lies in no such nested checkout, so a single re-extraction reads a file only when the walk would; is_boundary is true for a .git or a .grimoire.toml in a folder below the root, the marker of a nested checkout, and for nothing inside a .git folder."},{"id":"digest","statement":"Each file's text is fingerprinted as it is read, so a change to any byte changes the file's fingerprint and its module's."},{"id":"recipes-read","statement":"Every file whose name ends .recipe.md is read as a recipe whatever languages the extractor is built for, by the same walk and under the same ignore, hidden and nested-checkout rules as source, handles and reads answering for it as for source; extract_text gives any handled file's record from text already read."},{"id":"line-count","statement":"Each file's lines are counted as it is read, only a line feed ending a line, beside the lines of it its adapter tells are test code."},{"id":"tiers","statement":"Every supported language is read at one tier, the highest the build has: an adapter's own, 2 for one that resolves imports and 1 for one that reads declarations alone, else 0 for a language in the comment-syntax table; a language with an adapter is never read by the table, and the supported languages are exactly those with a tier."}]}
 //! ```
 
 pub mod comments;
@@ -297,14 +297,7 @@ impl Extractor {
     pub fn walk(&self) -> Result<Vec<String>, ExtractError> {
         let mut out = Vec::new();
         // A folder below the root that is a checkout of its own is that checkout's code, not this one's.
-        let walker = ignore::WalkBuilder::new(&self.root)
-            .hidden(true)
-            .git_ignore(true)
-            .git_exclude(true)
-            .git_global(true)
-            .require_git(false)
-            .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && is_checkout(e.path())))
-            .build();
+        let walker = own_ignores(&self.root).hidden(true).filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && is_checkout(e.path()))).build();
         for entry in walker {
             let entry = entry.map_err(|e| ExtractError::Walk(self.root.clone(), e))?;
             if !entry.file_type().is_some_and(|t| t.is_file()) {
@@ -344,6 +337,17 @@ impl Extractor {
         }
         Ok((files, errors))
     }
+}
+
+/// A walk from `root` that ignores what the repository's own `.gitignore` files ignore and nothing else: the root's and
+/// any beneath, whether or not `.git` exists, never one in a folder above the root, a person's global excludes,
+/// `.git/info/exclude` or an `.ignore` file, so every checkout of one commit is read the same on every machine.
+/// `.gitignore` is named as a custom ignore file rather than read as git's: with git's ignores on, the library opens
+/// every ancestor's `.gitignore` even with parents off, and one it cannot parse would fail the walk.
+pub(crate) fn own_ignores(root: &Path) -> ignore::WalkBuilder {
+    let mut walk = ignore::WalkBuilder::new(root);
+    walk.parents(false).git_ignore(false).git_exclude(false).git_global(false).ignore(false).require_git(false).add_custom_ignore_filename(".gitignore");
+    walk
 }
 
 /// Whether a folder is a checkout of its own: a git repository, a worktree or a submodule, or a
@@ -508,6 +512,34 @@ export class Box {
         let dir = tmp.path();
         let x = Extractor::for_languages(dir, &["rust".to_string()]);
         assert_eq!(x.walk().unwrap(), vec!["src/lib.rs".to_string()], "build output is never parsed, with or without git");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-walk-reads-the-repositorys-own-gitignore-files-alone", "checks": ["crates/extract/src#gitignore-respected", "req:extract-gitignore-respected"]}
+    /// ```
+    #[test]
+    fn the_walk_reads_the_repositorys_own_gitignore_files_alone() {
+        // A folder above the repository whose .gitignore would leave out all its source, as a home folder's may, with
+        // a line the ignore library cannot parse, which must not fail the walk either.
+        let above = temp_repo(&[
+            (".gitignore", b"src/\n*.rs\n{\n"),
+            ("repo/src/lib.rs", b"pub fn a() {}\n"),
+            ("repo/src/scratch.rs", b"pub fn s() {}\n"),
+            ("repo/src/tool.rs", b"pub fn t() {}\n"),
+            ("repo/src/gen/out.rs", b"pub fn g() {}\n"),
+            ("repo/src/.gitignore", b"gen/\n"),
+            ("repo/.ignore", b"src/tool.rs\n"),
+        ]);
+        let root = above.path().join("repo");
+        let x = Extractor::for_languages(&root, &["rust".to_string()]);
+        let all = ["src/lib.rs", "src/scratch.rs", "src/tool.rs"];
+        assert_eq!(x.walk().unwrap(), all, "without .git: the folder above is not read, nor an .ignore file; a .gitignore beneath the root is");
+        // With .git: its info/exclude is the clone's own, read no more than the folder above.
+        std::fs::create_dir_all(root.join(".git").join("info")).unwrap();
+        std::fs::write(root.join(".git").join("info").join("exclude"), "src/scratch.rs\n").unwrap();
+        assert_eq!(x.walk().unwrap(), all, "with .git, the same");
     }
 
     /// # Test contract
