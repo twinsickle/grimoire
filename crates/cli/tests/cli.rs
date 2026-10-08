@@ -838,7 +838,7 @@ fn store_io_project_file() -> &'static str {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live#checkout-registered", "req:machine-checkouts"]}
+/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-registered", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_teams_worktree_inside_its_checkout_is_its_own() {
@@ -889,7 +889,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src/init/command#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live/routing#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src/init/command#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
