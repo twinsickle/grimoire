@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Draw a node's graph on its page, centred on it: what rests on it to the left and what it rests on to the right, as boxes that link to each node's page over lines between them, long groups folded into counts that unfold.","criteria":[{"id":"centred","statement":"A node's page draws the node in the middle, what it rests on to its right as the layout of its rests_on walk from web/src/graph, and what rests on it to its left: the nodes whose edges lead to it, but not its own criteria or files, a module's also the requirements its criteria's coverage names, and of tickets only those the board lists as being worked or waited on; read through a ticket's proposal when the page is, its walk and coverage asked through that ticket; each node a link to its page showing its kind and title and naming how it connects, what it hangs under or what it rests on, a reference the page names as no longer existing drawn dimmed and linking nowhere; on the right a walk larger than 40 is folded as graph's folding says, and on the left a group of one kind larger than six is a folded count that unfolds, while any count is unfolded a button folding them all again; with nothing on either side no graph is drawn."}]}
+ * {"purpose":"Draw a node's graph on its page, centred on it: what rests on it to the left and what it rests on to the right, as boxes that link to each node's page over lines between them, long groups folded into counts that unfold.","criteria":[{"id":"centred","statement":"A node's page draws the node in the middle, what it rests on to its right as the layout of its rests_on walk from web/src/graph, and what rests on it to its left: the nodes whose edges lead to it, but not its own criteria or files, a module's also the requirements its criteria's coverage names, and of tickets only those the board lists as being worked or waited on; read through a ticket's proposal when the page is, its walk and coverage asked through that ticket; each node a link to its page showing its kind and title and naming how it connects, what it hangs under or what it rests on, a reference the page names as no longer existing drawn dimmed and linking nowhere; on the right a walk larger than 40 is folded as graph's folding says, and on the left a group of one kind larger than six is a folded count that unfolds, while any count is unfolded a button folding them all again; with nothing on either side no graph is drawn."},{"id":"marked","statement":"Each box of a node, the centre's among them, carries a MarkDot from web/src/views/Marks for each kind of mark marksOf gives its node from the lint answer, gravest first, at the box's top right corner, each saying the reasons of its kind's marks when pointed at; its border is markBorder of its kinds, the centre's keeping its accent when it has none; and its accessible name ends by naming its marks. While the graph is drawn, the Legend is shown above it; a box of a node no longer existing and a folded count carry no marks."}]}
  * ```
  */
 
@@ -11,6 +11,8 @@ import { Link } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { KindTag } from "../components";
 import { foldKey, layout, type GraphItem } from "../graph";
+import { kindsOf, markBorder, marksOf, MARK_NAME, type Mark, type Marks } from "../marks";
+import { Legend, MarkDot } from "./Marks";
 import { idOf, kindOf, nodePath, type Kind, type Ref } from "../types";
 
 const COL = 224;
@@ -82,6 +84,9 @@ export function NodeGraph({
   const [unfolded, setUnfolded] = useState<Set<string>>(new Set());
   const down = useQuery(() => api.restsOn(node, undefined, ticket), [node, ticket]);
   const up = useDependents(node, incoming, ticket);
+  // Trouble on each box, from the same answer the header counts; until it comes, the boxes are drawn unmarked.
+  const lint = useQuery(() => api.lint(), []);
+  const marks: Marks = lint.data ? marksOf(lint.data) : new Map();
   if (!down.data || !up) return null;
   if (down.data.nodes.length === 0 && up.length === 0) return null;
 
@@ -141,8 +146,11 @@ export function NodeGraph({
           {down.data.nodes.length > 0 && `rests on ${down.data.nodes.length}`}
           {right.folded && ", deeper branches folded"}
         </span>
+        <span className="ml-auto">
+          <Legend />
+        </span>
         {anyUnfolded && (
-          <button className="ml-auto" onClick={() => setUnfolded(new Set())}>
+          <button onClick={() => setUnfolded(new Set())}>
             Fold all
           </button>
         )}
@@ -161,6 +169,7 @@ export function NodeGraph({
               item={i}
               centre={i.type === "node" && i.ref === node}
               gone={i.type === "node" && gone.has(i.ref)}
+              marks={i.type === "node" ? (marks.get(i.ref) ?? []) : []}
               onUnfold={unfold}
             />
           ))}
@@ -170,8 +179,28 @@ export function NodeGraph({
   );
 }
 
-function Box({ item, centre, gone, onUnfold }: { item: Placed; centre: boolean; gone: boolean; onUnfold: (key: string) => void }) {
+/** A box's marks at its top right corner, one per kind, gravest first. */
+function Corner({ marks }: { marks: Mark[] }) {
+  const kinds = kindsOf(marks);
+  if (kinds.length === 0) return null;
+  return (
+    <span className="absolute -top-[5px] right-1.5 flex gap-[3px] px-[3px] rounded-full bg-bg-1">
+      {kinds.map((k) => (
+        <MarkDot key={k} kind={k} reasons={marks.filter((m) => m.kind === k).map((m) => m.reason)} />
+      ))}
+    </span>
+  );
+}
+
+/** The marks read out, after what the box names. */
+function spoken(marks: Mark[]): string {
+  const kinds = kindsOf(marks);
+  return kinds.length ? `, marked ${kinds.map((k) => MARK_NAME[k]).join(", ")}` : "";
+}
+
+function Box({ item, centre, gone, marks, onUnfold }: { item: Placed; centre: boolean; gone: boolean; marks: Mark[]; onUnfold: (key: string) => void }) {
   const style = { left: item.x, top: item.y, width: BOX, height: BOX_H };
+  const kinds = kindsOf(marks);
   if (item.type === "fold") {
     const what = `${item.count} ${item.count === 1 ? item.kind : PLURAL[item.kind]}`;
     return (
@@ -207,11 +236,19 @@ function Box({ item, centre, gone, onUnfold }: { item: Placed; centre: boolean; 
   }
   if (centre) {
     return (
-      <span style={style} title={item.title} data-graph-node={item.ref} className="absolute flex items-center gap-2 px-2 border border-accent rounded-md bg-bg-3">
+      <span
+        style={style}
+        title={item.title}
+        aria-label={`${kindOf(item.ref)} ${item.title}${spoken(marks)}`}
+        data-graph-node={item.ref}
+        data-marks={kinds.join(" ") || undefined}
+        className={`absolute flex items-center gap-2 px-2 border rounded-md bg-bg-3 ${kinds.length ? markBorder(kinds) : "border-accent"}`}
+      >
         <span className="shrink-0">
           <KindTag ref={item.ref} />
         </span>
         <span className="text-fg text-[12.5px] font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</span>
+        <Corner marks={marks} />
       </span>
     );
   }
@@ -220,14 +257,16 @@ function Box({ item, centre, gone, onUnfold }: { item: Placed; centre: boolean; 
       to={nodePath(item.ref)}
       style={style}
       title={item.title}
-      aria-label={`${kindOf(item.ref)} ${item.title}${connection(item)}`}
+      aria-label={`${kindOf(item.ref)} ${item.title}${connection(item)}${spoken(marks)}`}
       data-graph-node={item.ref}
-      className="absolute flex items-center gap-2 px-2 border border-line rounded-md bg-bg-2 no-underline hover:border-accent-dim"
+      data-marks={kinds.join(" ") || undefined}
+      className={`absolute flex items-center gap-2 px-2 border rounded-md bg-bg-2 no-underline ${kinds.length ? markBorder(kinds) : "border-line hover:border-accent-dim"}`}
     >
       <span className="shrink-0">
         <KindTag ref={item.ref} />
       </span>
       <span className="text-fg text-[12.5px] overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</span>
+      <Corner marks={marks} />
     </Link>
   );
 }

@@ -31,7 +31,7 @@ export async function open(page: Page, route: Route): Promise<void> {
   await page.locator(route.content).first().waitFor();
   if (route.press) {
     await page.locator(route.press).click();
-    await page.getByRole("dialog").waitFor();
+    await (route.pressed ? page.locator(route.pressed).first() : page.getByRole("dialog")).waitFor();
   }
   await expectQuiet(() => inFlight === 0 && Date.now() - last >= 300);
   // Fonts and layout settle.

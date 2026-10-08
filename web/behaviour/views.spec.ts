@@ -65,6 +65,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
     ["/g/repo/unplaced", rail],
     ["/g/repo/cauldron", "section[id^='band-']"],
     ["/g/repo/n/req%3Aready-needs-commit", "h1"],
+    ["/g/repo/findings", "[data-group='new']"],
   ] as const) {
     await page.goto(path);
     await expect(page.locator(marker).first(), path).toBeVisible();
@@ -424,6 +425,10 @@ test("exactly one tab is lit, following the section a node was reached from", as
   // Opened cold, a requirement lights Grimoire.
   await page.goto("/g/repo/n/req%3Aready-needs-commit");
   await expect(lit()).toContainText("Grimoire");
+  // The findings are the grimoire's, wherever they were opened from.
+  await page.goto("/g/repo/cauldron");
+  await page.goto("/g/repo/findings");
+  await expect(lit()).toContainText("Grimoire");
 });
 
 /**
@@ -450,6 +455,15 @@ test("the header shows new findings as a warning and inherited ones dimmed", asy
   const old = panel.getByText(`${inherited} inherited`, { exact: true });
   await expect(old).toBeVisible();
   await expect(old).not.toHaveClass(/text-bad/);
+  // Each count opens the one view of them all, and the panel closes behind it.
+  for (const name of [`${lint.new} new`, `${inherited} inherited`, /may conflict$/]) {
+    await page.goto("/g/repo/cauldron");
+    await pill.click();
+    await panel.getByRole("link", { name }).click();
+    await expect(page).toHaveURL(/\/g\/repo\/findings$/);
+    await expect(panel).toHaveCount(0);
+    await expect(page.locator("[data-group='new']")).toBeVisible();
+  }
 });
 /**
  * # Test contract
@@ -477,16 +491,152 @@ test("the header shows what other work may conflict apart from the findings, not
  * {"test": "a-node-shows-other-work-on-it", "checks": ["web/src/views/Node#advisories-shown"]}
  * ```
  */
-test("a node's page lists the other work that may conflict with it, naming the ticket", async ({ page }) => {
+test("a node's page says under its title the other work that may conflict with it, naming the ticket", async ({ page }) => {
   type Advisory = { from: { kind: string; ticket?: string }; finding: { ref: string } };
   const lint = await tool<{ advisories: Advisory[] }>(page, "lint");
   const on = lint.advisories.find((a) => a.finding.ref === "req:ready-writes-nothing" && a.from.kind === "ticket");
   expect(on, "the landing ticket's repointed requirement").toBeTruthy();
   await page.goto("/g/repo/n/req%3Aready-writes-nothing");
-  await expect(page.getByRole("heading", { name: "Other work may conflict" })).toBeVisible();
-  const item = page.locator("li", { hasText: "criterion:src/ready#not-written-yet" });
+  const item = page.locator("[aria-label='Trouble here'] [data-mark-line='conflict']", { hasText: "criterion:src/ready#not-written-yet" });
+  await expect(item).toContainText("may conflict");
   await expect(item.locator(`a[href$="/n/${encodeURIComponent(`ticket:${on!.from.ticket}`)}"]`)).toBeVisible();
   await expect(item).not.toHaveClass(/text-bad/);
+  // Said once, under the title: no list of it further down.
+  await expect(page.getByRole("heading", { name: "Other work may conflict" })).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-node-says-its-trouble-under-its-title", "checks": ["web/src/views/Node#findings-shown", "web/src/views/Marks#words", "req:web-findings-in-words"]}
+ * ```
+ */
+test("a node's page says its own findings under its title, new as a warning and inherited never", async ({ page }) => {
+  await page.goto("/g/repo/n/req%3Aready-names-its-errors");
+  const lines = page.locator("[aria-label='Trouble here'] li");
+  await expect(lines).toHaveCount(1);
+  const fresh = lines.first();
+  await expect(fresh).toHaveAttribute("data-mark-line", "new");
+  await expect(fresh).toContainText("dangling-edge");
+  await expect(fresh).toContainText("criterion:src/ready#names-errors");
+  await expect(fresh.getByText("new", { exact: true })).toHaveClass(/text-bad/);
+  // Under the title, before the statement and the graph.
+  await expect(page.locator("section[aria-label='Graph']")).toBeVisible();
+  const order = await page.locator("main h1, main [aria-label='Trouble here'], main section[aria-label='Graph']").evaluateAll((els) => els.map((e) => e.tagName));
+  expect(order).toEqual(["H1", "UL", "SECTION"]);
+  await expect(page.getByRole("heading", { name: "Lint findings" })).toHaveCount(0);
+  // A module with two inherited findings says both, neither as a warning.
+  await page.goto(`/g/repo/n/${encodeURIComponent("module:src/loose")}`);
+  const old = page.locator("[aria-label='Trouble here'] li");
+  await expect(old).toHaveCount(2);
+  for (const l of await old.all()) {
+    await expect(l).toHaveAttribute("data-mark-line", "inherited");
+    await expect(l.locator(".text-bad")).toHaveCount(0);
+  }
+  // A node with no trouble says nothing.
+  await page.goto("/g/repo/n/req%3Aready-needs-commit");
+  await expect(page.locator("section[aria-label='Graph']")).toBeVisible();
+  await expect(page.locator("[aria-label='Trouble here']")).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-graph-marks-where-trouble-sits", "checks": ["web/src/views/NodeGraph#marked", "web/src/views/Marks#mark-shapes", "web/src/views/Marks#legend", "req:web-findings-on-graph"]}
+ * ```
+ */
+test("the graph marks each box with its node's trouble, its border in the gravest mark's colour, under a legend", async ({ page }) => {
+  await page.goto("/g/repo/n/req%3Aready-names-its-errors");
+  const graph = page.getByRole("region", { name: "Graph" });
+  await expect(graph.getByLabel("Marks")).toHaveText(/new.*inherited.*recipe due.*may conflict.*omen/);
+  const centre = graph.locator("[data-graph-node='req:ready-names-its-errors']");
+  await expect(centre).toHaveAttribute("data-marks", "new");
+  await expect(centre).toHaveClass(/border-bad/);
+  await expect(centre.locator("[data-mark='new']")).toHaveAttribute("title", /^new\n.*names-errors, which do/s);
+  await expect(centre.locator("[data-mark='new']")).toHaveClass(/bg-bad/);
+  // A box with no trouble carries no mark and keeps its plain border.
+  const quiet = graph.locator("[data-graph-node='page:readiness']");
+  await expect(quiet).toBeVisible();
+  await expect(quiet).not.toHaveAttribute("data-marks", /./);
+  await expect(quiet.locator("[data-mark]")).toHaveCount(0);
+  // Other work: a dashed ring, and a dashed border in the accent colour; the box's name reads its marks out.
+  await page.goto("/g/repo/n/req%3Aready-writes-nothing");
+  const other = page.getByRole("region", { name: "Graph" }).locator("[data-graph-node='req:ready-writes-nothing']");
+  await expect(other).toHaveAttribute("data-marks", "conflict");
+  await expect(other).toHaveClass(/border-accent/);
+  await expect(other).toHaveClass(/border-dashed/);
+  await expect(other).toHaveAttribute("aria-label", /marked may conflict$/);
+  await expect(other.locator("[data-mark='conflict']")).toHaveClass(/border-dashed/);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-findings-list", "checks": ["web/src/views/Findings#list", "req:web-findings-view"]}
+ * ```
+ */
+test("the findings view lists what fails the check first, then recipes due and other work, with the inherited and omens folded", async ({ page }) => {
+  type F = { ref: string; baselined: boolean; check: string };
+  const lint = await tool<{ findings: F[]; advisories: unknown[]; omens: unknown[]; new: number }>(page, "lint");
+  await page.goto("/g/repo/findings");
+  await expect(page.getByRole("group", { name: "Read as" }).getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  const fresh = page.locator("[data-group='new'] li");
+  await expect(fresh).toHaveCount(lint.new);
+  for (const f of lint.findings.filter((x) => !x.baselined)) {
+    await expect(page.locator(`[data-group='new'] a[href='/g/repo/n/${encodeURIComponent(f.ref)}']`, { hasText: f.check })).toBeVisible();
+  }
+  await expect(page.locator("[data-group='due']")).toContainText("No recipe is due to be judged.");
+  const other = page.locator("[data-group='conflict'] li");
+  await expect(other).toHaveCount(lint.advisories.length);
+  await expect(other.first()).toContainText("ticket 0011");
+  // The inherited and the omens are folded, each with its count.
+  const inherited = page.locator("details[data-group='inherited']");
+  await expect(inherited.locator("summary")).toHaveText(`${lint.findings.length - lint.new} inherited`);
+  await expect(inherited).not.toHaveAttribute("open");
+  await expect(page.locator("details[data-group='omen'] summary")).toHaveText(`${lint.omens.length} ${lint.omens.length === 1 ? "omen" : "omens"}`);
+  // A row opens its node's page.
+  await page.locator("[data-group='new'] a", { hasText: "dangling-edge" }).click();
+  await expect(page).toHaveURL(/\/n\/req%3Aready-names-its-errors$/);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-findings-tree-remembered", "checks": ["web/src/views/Findings#tree", "web/src/views/Findings#switch-remembered", "web/src/marks#trouble-only", "req:web-findings-view"]}
+ * ```
+ */
+test("the findings view reads as the marked tree, cut to where trouble is, and the browser remembers the choice", async ({ page }) => {
+  await page.goto("/g/repo/findings");
+  await page.getByRole("group", { name: "Read as" }).getByRole("button", { name: "Tree" }).click();
+  const tree = page.getByRole("navigation", { name: "Marked outline" });
+  const marked = tree.locator("[data-tree-node='req:ready-names-its-errors']").first();
+  await expect(marked).toHaveAttribute("data-marks", "new");
+  await expect(tree.locator("[data-tree-node='page:readiness']").first()).toBeVisible();
+  // Only where there is trouble: a requirement with none is not drawn until everything is asked for.
+  await expect(tree.locator("[data-tree-node='req:ready-needs-commit']")).toHaveCount(0);
+  await page.getByRole("button", { name: "Only where there is trouble" }).click();
+  await expect(tree.locator("[data-tree-node='req:ready-needs-commit']").first()).toBeVisible();
+  // What the outline does not hold is listed after it.
+  await expect(page.getByRole("list", { name: "Not in the outline" }).locator("[data-tree-node='file:src/ready.rs']")).toHaveAttribute("data-marks", "omen");
+  // A node chosen is shown beside the tree, with its trouble in words and the way to its page.
+  const beside = page.getByRole("complementary", { name: "Selected" });
+  await expect(beside).toContainText("Choose a node");
+  await marked.click();
+  await expect(page).toHaveURL(/\?at=req%3Aready-names-its-errors$/);
+  await expect(beside.locator("[data-mark-line='new']")).toContainText("dangling-edge");
+  await expect(beside.getByRole("link", { name: "Open its page" })).toHaveAttribute("href", "/g/repo/n/req%3Aready-names-its-errors");
+  // Opened again, it reads as the tree; storage gone, as the list.
+  await page.goto("/g/repo/findings");
+  await expect(page.getByRole("button", { name: "Tree" })).toHaveAttribute("aria-pressed", "true");
+  await expect(tree).toBeVisible();
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(page.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-group='new']")).toBeVisible();
 });
 
 /**
@@ -1636,20 +1786,22 @@ test("a node's page is what it is, then its graph centred on it, then the rest i
  */
 test("a file past the large-file limit is shown as an omen, dimmed and apart from the findings", async ({ page }) => {
   // The fixture's limit is ten lines: src/ready.rs is ten, with its tests aside.
+  const omen = "[aria-label='Trouble here'] [data-mark-line='omen']";
   await page.goto(`/g/repo/n/${encodeURIComponent("file:src/ready.rs")}`);
-  const omens = page.locator("#omens li");
+  const omens = page.locator(omen);
   await expect(omens).toHaveCount(1);
   await expect(omens).toContainText("large-file");
   await expect(omens).toContainText("10 lines, 32 with its tests");
   await expect(omens).toHaveClass(/text-fg-dim/);
-  await expect(page.getByRole("heading", { name: "Omens" })).toBeVisible();
-  // Its module's page lists it too, naming the file.
+  await expect(omens.locator(".text-bad")).toHaveCount(0);
+  // Its module's page says it too, naming the file.
   await page.goto(`/g/repo/n/${encodeURIComponent("module:src/ready")}`);
-  await expect(page.locator("#omens li")).toHaveCount(1);
-  await expect(page.locator("#omens a[href='/g/repo/n/file%3Asrc%2Fready.rs']")).toBeVisible();
-  // A module whose files are not omens shows none.
+  await expect(page.locator(omen)).toHaveCount(1);
+  await expect(page.locator(`${omen} a[href='/g/repo/n/file%3Asrc%2Fready.rs']`)).toBeVisible();
+  // A module whose files are not omens says none.
   await page.goto(`/g/repo/n/${encodeURIComponent("module:src")}`);
-  await expect(page.locator("#omens")).toHaveCount(0);
+  await expect(page.locator("section[aria-label='Graph']")).toBeVisible();
+  await expect(page.locator(omen)).toHaveCount(0);
   // The rail counts it on each page above the module, dimmed, never as a warning.
   await page.goto("/g/repo/");
   const rail = page.locator("nav[aria-label='Pages'] a[href='/g/repo/n/page%3Areadiness'] [data-omens]");

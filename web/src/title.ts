@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Name the browser tab after what a view shows, then Grimoire.","criteria":[{"id":"tab-title","statement":"tabTitle names what is open followed by ` · Grimoire`, and gives `Grimoire` alone when nothing is named; nodeName is a node's title when its kind has one and its id otherwise; useTabTitle sets the document's title to tabTitle of what the view shows, and each view calls it: the root with nothing, the unplaced modules with `Unplaced`, the Library with `Library`, a page with its title as the ticket it is read through would leave it, any other node with nodeName, the cauldron with `Cauldron`."}]}
+ * {"purpose":"Name the browser tab after what a view shows, then Grimoire.","criteria":[{"id":"tab-title","statement":"tabTitle names what is open followed by ` · Grimoire`, and gives `Grimoire` alone when nothing is named; nodeName is a node's title when its kind has one and its id otherwise; useTabTitle sets the document's title to tabTitle of what the view shows, and each view calls it: the root with nothing, the unplaced modules with `Unplaced`, the Library with `Library`, a page with its title as the ticket it is read through would leave it, any other node with nodeName, the cauldron with `Cauldron`, the findings view with `Findings`."}]}
  * ```
  */
 

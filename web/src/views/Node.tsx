@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"A node page for every kind but a page: what the node is, then one graph centred on it, then the rest of what it holds and its findings, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, decision, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe, a decision's requirement, id, date, text and the decisions it supersedes; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files; then its findings, omens and advisories. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. The pages of a module, criterion, declaration and test link to their line in the file's annotated source. A file's page is its annotated source from web/src/views/Source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its id, d<n>, or, read through a ticket, as waiting for its ticket to land, and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming by id the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"omens-shown","statement":"A node's page lists, under Omens, each omen of the lint answer on that node, and a module's page each omen on one of its files, with its reason, dimmed and never as a warning, apart from its findings; with none, nothing is shown."},{"id":"advisories-shown","statement":"A node's page lists, under Other work may conflict, each advisory of the lint answer on that node or naming it as an edge's end, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, apart from its findings and not as a warning; with none, nothing is shown."}]}
+ * {"purpose":"A node page for every kind but a page: its own trouble in words, what the node is, then one graph centred on it, then the rest of what it holds, and a ticket's next step to hand to an agent.","criteria":[{"id":"every-kind","statement":"Every node kind but a page has a rendering: requirement, decision, ticket, module, criterion, file (as its annotated source), declaration, test, recipe and ingredient; a page is rendered by the grimoire view, which is its node page."},{"id":"content-then-graph","statement":"A node's page shows, under its title, its own trouble in words (findings-shown), then what the node is: a requirement's statement with its retired or described mark, a ticket's priority, kind and status, a criterion's statement and where it is written, a module's contract and where it is, a recipe's kind, where it is written and the paths of its files not found, an ingredient's recipe, a decision's requirement, id, date, text and the decisions it supersedes; then its graph from web/src/views/NodeGraph; then the rest of what it holds: a requirement's scenarios and decisions, a ticket's body, decision, next step and proposal, a module's criteria each by its id and statement, a recipe's text as Markdown, its ingredients each by its id, linking to its page, and what it says, and its files. It shows no panel of what it rests on or what rests on it, and no list of its edges: the graph shows them. The pages of a module, criterion, declaration and test link to their line in the file's annotated source. A file's page is its annotated source from web/src/views/Source and draws no graph."},{"id":"ticket-actions","statement":"A ticket's page offers no way to start or close it: an open, active or landing ticket shows, under Next step, the line handoff gives with a Copy button that puts it on the clipboard and says Copied, and a gap or question waiting, landing, for the change that applies its answer shows no line and says it closes when that change lands; a landing ticket's decision is shown as written and waiting for its change to land."},{"id":"decisions-in-force","statement":"A requirement's page lists its decisions in force newest first, each with its id, d<n>, or, read through a ticket, as waiting for its ticket to land, and, when it was recorded as an adoption, marked so, and folds the superseded ones beneath, each naming by id the decision that superseded it; a retired requirement is marked retired, and one that is described, its decisions in force all adoptions, is marked described, not decided."},{"id":"draft-shown","statement":"An active or landing ticket's page shows its proposal as a Proposed section: each proposed page and requirement that would change the truth, and each ticket whose references it would change, with whether it is new or which fields differ, each linking to the node read as proposed (the node page with ?ticket=), and each deletion as a mark, a record equal to the truth's not listed; a node page opened with ?ticket= reads the node through that ticket's proposal and says so, and a requirement's or ticket's page without one names each active or landing ticket whose proposal would change it."},{"id":"stale-reference-marked","statement":"A closed ticket's page hands its graph the references of the ticket's whose node the graph no longer holds, so they are drawn marked as no longer existing and link nowhere; the references of a ticket that is not closed are drawn as links as before, since the check reports those."},{"id":"findings-shown","statement":"A node's page says under its title, through web/src/views/Marks's MarkWords, the marks marksOf gives it from the lint answer, gravest first: each finding on the node or naming it as an edge's end, new or inherited, and each recipe due; it draws no list of findings, omens or advisories further down; with none, nothing is said."},{"id":"omens-shown","statement":"Among those lines a node's page says each omen of the lint answer on that node, and a module's page each omen on one of its files, naming the file, with its reason, dimmed and never as a warning."},{"id":"advisories-shown","statement":"Among those lines a node's page says each advisory of the lint answer on that node or naming it as an edge's end as may conflict, with the work it comes from, landed since this branch's base or a ticket linked by id, and its reason, not as a warning."}]}
  * ```
  */
 
@@ -11,6 +11,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import type { Draft, ProposalView } from "../generated/tools";
 import { NodeGraph } from "./NodeGraph";
+import { MarkWords } from "./Marks";
+import { gravestFirst, marksOf } from "../marks";
 import { FileSource } from "./Source";
 import { decisionsInForce, isDescribed, saidId } from "../decisions";
 import {
@@ -30,7 +32,6 @@ import {
   errorBox,
   item,
   list,
-  rel,
 } from "../components";
 import { nodeName, useTabTitle } from "../title";
 import {
@@ -82,6 +83,8 @@ export function NodeView() {
           <h1>{titleOf(node)}</h1>
           <DraftNotice ref={ref} ticket={ticket} drafts={data.drafts} />
         </div>
+        {/* Its own trouble first, in words; the graph marks where the rest sits. */}
+        <Trouble ref={ref} files={kind === "module" ? (node as ModuleNode).files.map((f) => `file:${f}`) : []} />
         {/* What the node is comes first, then its graph, then the rest of what it holds. */}
         {kind === "req" && !decision && <Req n={node as ReqNode} part="lead" />}
         {decision && <DecisionView n={node as DecisionNode} />}
@@ -98,7 +101,6 @@ export function NodeView() {
         {kind === "file" && <FileSource n={node as FileNode} />}
         {kind === "decl" && <Decl n={node as DeclNode} />}
         {kind === "test" && <TestView n={node as TestNode} />}
-        <Findings ref={ref} files={kind === "module" ? (node as ModuleNode).files.map((f) => `file:${f}`) : []} />
       </div>
     </div>
   );
@@ -427,69 +429,11 @@ function TestView({ n }: { n: TestNode }) {
   );
 }
 
-function Findings({ ref, files }: { ref: Ref; files: Ref[] }) {
+/** The node's own findings, omens and advisories, and for a module the omens on its files (req:lint-omens), said in words. */
+function Trouble({ ref, files }: { ref: Ref; files: Ref[] }) {
   const { data } = useQuery(() => api.lint(), []);
-  const about = (f: { ref: Ref; edge?: { to: Ref } }) => f.ref === ref || f.edge?.to === ref;
-  const mine = data?.findings.filter(about) ?? [];
-  // Signs, never failures: on the node, or for a module on one of its files (req:lint-omens).
-  const omens = (data?.omens ?? []).filter((o) => o.ref === ref || files.includes(o.ref));
-  // Other work's, shown apart and never as a warning (req:check-own-work).
-  const others = data?.advisories.filter((a) => about(a.finding)) ?? [];
-  if (mine.length === 0 && omens.length === 0 && others.length === 0) return null;
-  return (
-    <>
-      {mine.length > 0 && <FindingList findings={mine} />}
-      {omens.length > 0 && (
-        <>
-          <h2>Omens</h2>
-          <ul className={list} id="omens">
-            {omens.map((o) => (
-              <li key={`${o.ref} ${o.check}`} className={`${item} text-fg-dim`}>
-                <span className={rel}>{o.check}</span>
-                {o.ref !== ref && <RefLink ref={o.ref} />}
-                {o.reason}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {others.length > 0 && (
-        <>
-          <h2>Other work may conflict</h2>
-          <ul className={list}>
-            {others.map((a, i) => (
-              <li key={i} className="text-fg-dim">
-                <div className="text-xs text-fg-faint">
-                  {a.from.kind === "ticket" ? (
-                    <>
-                      <RefLink ref={`ticket:${a.from.ticket}`} title={a.from.title} /> would bring this when it lands
-                    </>
-                  ) : (
-                    "Landed on the main line since this branch's base: merge the main line"
-                  )}
-                </div>
-                {a.finding.reason}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </>
-  );
-}
-
-function FindingList({ findings: mine }: { findings: { rule: string; reason: string }[] }) {
-  return (
-    <>
-      <h2>Lint findings</h2>
-      <ul className={list}>
-        {mine.map((f, i) => (
-          <li key={i} className={`${item} ${f.rule === "dangling" ? "text-bad" : "text-warn"}`}>
-            <span className={rel}>{f.rule}</span>
-            {f.reason}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+  if (!data) return null;
+  const marks = marksOf(data);
+  const fileOmens = files.flatMap((f) => (marks.get(f) ?? []).filter((m) => m.kind === "omen"));
+  return <MarkWords on={ref} marks={gravestFirst([...(marks.get(ref) ?? []), ...fileOmens])} />;
 }
