@@ -1477,7 +1477,7 @@ test("going from one page to another never shows the first under the second", as
  * # Test contract
  *
  * ```json
- * {"test": "marks-new-inherited-and-untested", "checks": ["web/src/views/Home#marks"]}
+ * {"test": "marks-new-inherited-and-untested", "checks": ["web/src/views/Home#marks", "web/src/components#badge-tone", "req:web-badge-tone"]}
  * ```
  */
 test("pages mark new findings apart from inherited ones, and criteria and requirements by what holds them", async ({ page }) => {
@@ -1488,6 +1488,8 @@ test("pages mark new findings apart from inherited ones, and criteria and requir
   expect(area.findings - area.baselined, "the requirement added after adopting").toBe(1);
   const inRail = page.locator(rail).locator("a[href='/g/repo/n/page%3Areadiness']");
   await expect(inRail).toContainText("1 new");
+  // The count's badge is drawn in the bad colour, not the dim foreground its base once set beside it (req:web-badge-tone).
+  await expect(inRail.getByText("1 new", { exact: true })).toHaveCSS("color", "rgb(224, 108, 117)");
   await expect(inRail).toContainText(String(area.baselined));
   const chip = (id: string) => page.locator(`#modules a[href='/g/repo/n/criterion%3Asrc%2Fready%23${id}']`);
   await expect(chip("reads-only")).toContainText("untested");
@@ -2150,7 +2152,7 @@ test("a ticket another proposes to edit is named on its page and in the cauldron
  * # Test contract
  *
  * ```json
- * {"test": "a-page-names-its-draft-and-reads-as-proposed", "checks": ["web/src/views/Home#draft-line"]}
+ * {"test": "a-page-names-its-draft-and-reads-as-proposed", "checks": ["web/src/views/Home#draft-line", "web/src/components#badge-tone", "req:web-badge-tone"]}
  * ```
  */
 test("a page names the ticket that would change it, and reads as proposed on request", async ({ page }) => {
@@ -2163,6 +2165,9 @@ test("a page names the ticket that would change it, and reads as proposed on req
   await expect(page).toHaveURL(/ticket=0001/);
   await expect(proposed).toBeVisible();
   await expect(main.getByText("draft", { exact: true })).toBeVisible();
+  // Drawn in the warn colour, not only classed so: the theme's --color-warn, never the dim foreground beside it.
+  await expect(main.getByText("draft", { exact: true })).toHaveCSS("color", "rgb(224, 168, 74)");
+  await expect(main.getByText("draft", { exact: true })).toHaveCSS("border-top-color", "rgb(224, 168, 74)");
   await expect(page.locator(rail)).toBeVisible();
   // A page no ticket proposes to change carries no line.
   await page.goto("/g/repo/n/page%3Agoal");

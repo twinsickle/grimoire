@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, call, grimoireBase, Unreachable } from "./api";
 import { decisionsInForce, isDescribed, saidId } from "./decisions";
 import main from "./main.tsx?raw";
+import components from "./components.tsx?raw";
 import css from "./styles.css?raw";
 import { handoff } from "./handoff";
 import { checkedOutWords, checkoutsOf, folderOf, goneOf, idOf, kindOf, libraryStacks, localId, missingRoot, serverAway, serverState, type AnyNode } from "./types";
@@ -581,4 +582,21 @@ test("who has a ticket, in words", () => {
   expect(checkedOutWords([{ by: "alex", since: at(14, 10, 7) }, { by: "ben", since: at(9, 5) }], now)).toBe("checked out by alex · since 2026-10-07 14:10 and ben · since 09:05");
   expect(checkedOutWords([{ by: "alex", since: "soon" }], now)).toBe("checked out by alex · since soon");
   expect(checkedOutWords([], now)).toBe("checked out by someone unknown");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-badge-carries-one-colour", "checks": ["web/src/components#badge-tone", "req:web-badge-tone"]}
+ * ```
+ */
+test("a badge carries one colour: each tone its own, the plain one dim, and the base none", () => {
+  // Two colour classes on one badge draw whichever the stylesheet emits last, not the one written last.
+  const tones = components.match(/const BADGE_TONE = \{([^}]*)\}/)?.[1] ?? "";
+  const tone = Object.fromEntries([...tones.matchAll(/(\w+): "([^"]*)"/g)].map((m) => [m[1], m[2].split(" ")]));
+  expect(tone).toEqual({ plain: ["text-fg-dim", "border-line"], ok: ["text-ok", "border-ok"], warn: ["text-warn", "border-warn"], bad: ["text-bad", "border-bad"] });
+  const base = components.match(/export function Badge[\s\S]*?className=\{`([^$`]*)\$\{BADGE_TONE\[tone\]\}`\}/)?.[1] ?? "";
+  expect(base, "the base classes are read").toContain("rounded");
+  expect(base.split(/\s+/).filter((c) => /^(text|border)-(?!\[)/.test(c) && !/^border$/.test(c)), "no colour in the base").toEqual([]);
 });
