@@ -24,6 +24,8 @@ import { useEffect } from "react";
 
 **The JSON.** Strict: an unknown field, a missing purpose, an empty `criteria` or an id used twice makes the contract malformed, and the check reports the module. Keep it on one line.
 
+**One behaviour each.** A criterion states one thing a test could check. One that says what each of several cases does is split into a criterion for each, so a test names exactly the criteria it checks and a behaviour no test checks is reported as untested.
+
 **When not to.** A rule about how the parts are arranged is a constraint, a requirement held by a test, not one module's criterion.
 
 To say which criteria a spec checks, even one whose tests are generated in a loop, see the test contract recipe.
@@ -31,5 +33,5 @@ To say which criteria a spec checks, even one whose tests are generated in a loo
 ## Recipe
 
 ```json
-{"id":"module-contract-typescript","kind":"format","ingredients":[{"id":"heading","says":"`# Module contract` in the leading /** */ block or run of // lines, before any import, followed by a fenced json block."},{"id":"purpose","says":"One sentence: what the module is for, not what it contains."},{"id":"criteria","says":"At least one; each an id, a slug unique in the module, and a statement, one checkable sentence in the present tense."},{"id":"module-id","says":"The path from the repository root without its extension; index folds into its folder."},{"id":"coverage","says":"Every TypeScript file, and JavaScript file when javascript is named, under a package's src/, but tests, specs, declaration files and __tests__/."}],"files":["crates/extract/src/typescript.rs","crates/extract/src/contract.rs",".claude/skills/grimoire/references/contracts.md"],"uses":["test-contract"]}
+{"id":"module-contract-typescript","kind":"format","ingredients":[{"id":"heading","says":"`# Module contract` in the leading /** */ block or run of // lines, before any import, followed by a fenced json block."},{"id":"purpose","says":"One sentence: what the module is for, not what it contains."},{"id":"criteria","says":"At least one; each an id, a slug unique in the module, and a statement, one checkable sentence in the present tense stating one behaviour."},{"id":"module-id","says":"The path from the repository root without its extension; index folds into its folder."},{"id":"coverage","says":"Every TypeScript file, and JavaScript file when javascript is named, under a package's src/, but tests, specs, declaration files and __tests__/."}],"files":["crates/extract/src/typescript.rs","crates/extract/src/contract.rs",".claude/skills/grimoire/references/contracts.md"],"uses":["test-contract"]}
 ```

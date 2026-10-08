@@ -71,10 +71,13 @@ it created in `warnings`. Every warning is work to do now.
   tool checks it, conventions included; a rule the code carries goes
   under the grimoire. A page that only informs goes with its subject.
   `status` names both.
-- A **requirement**: a normative `statement` (SHALL / MUST), at least one
-  scenario (given, when, then; without one it is `unspecified`),
-  `covered_by` criteria, dated append-only **decisions** of one paragraph
-  each: what was chosen and why. A decision that overturns earlier ones
+- A **requirement**: a `statement`, one line with SHALL or MUST naming
+  what the requirement is about, the heading its scenarios are grouped
+  under; its **scenarios** (given, when, then; without one it is
+  `unspecified`), one for each rule it makes, since the scenarios are the
+  requirement and a rule no scenario states is not held; `covered_by`
+  criteria; and dated append-only **decisions** of one paragraph each: what
+  was chosen and why, the paper trail of the truth, never a rule of it. A decision that overturns earlier ones
   names them in `record_decision`'s `supersedes`, by id: `d1`, `d2` and
   so on, each given as the decision is bottled and never given twice, and
   referenced as `req:<slug>#d<n>`; they stay, no longer in force, and
@@ -244,7 +247,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
 
 1. For each node in the ticket's `touches`: `get` it. For a page,
    `put_page` with the new intent and links. For a requirement,
-   `put_requirement` with the new statement, scenarios and `covered_by`. For a
+   `put_requirement` with the new statement, a one-line heading, a
+   scenario for each rule it makes, and `covered_by`. For a
    new requirement, also `patch_page` the page that covers its area with
    `add_links`, or it is `uncovered`.
 2. For every choice made while writing, `record_decision` on the requirement
@@ -428,10 +432,11 @@ what the batch covered is something missed.
    module's dependencies are contracted before it. About ten per batch.
 3. For each module, `get` it for its files and declarations and read the
    code. Draft a contract in the format `references/contracts.md` gives for
-   its language: a one-sentence purpose, and criteria that each state what
-   holds, as something a test could check. For each criterion draft a
-   requirement: a SHALL statement, at least one scenario (given, when,
-   then) read off the code, `covered_by` the criterion. Describe what the
+   its language: a one-sentence purpose, and criteria that each state one
+   behaviour, as something a test could check. For each criterion draft a
+   requirement: a one-line SHALL statement naming what it is about, and a
+   scenario (given, when, then) for each rule read off the code,
+   `covered_by` the criterion. Describe what the
    code does now, not what it should do.
 4. Show the batch: each module's contract and requirements together. Say
    plainly that they were read off the code and describe it as it is,

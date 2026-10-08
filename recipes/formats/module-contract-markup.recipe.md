@@ -23,6 +23,8 @@ How do I give an HTML template, an HTL component, an XML file or a stylesheet a 
 
 **The JSON.** Strict, as in every language: an unknown field, a missing purpose, an empty `criteria` or an id used twice makes the contract malformed. Keep it on one line.
 
+**One behaviour each.** A criterion states one thing a test could check. One that says what each of several cases does is split into a criterion for each, so a test names exactly the criteria it checks and a behaviour no test checks is reported as untested.
+
 ## Recipe
 
 ```json

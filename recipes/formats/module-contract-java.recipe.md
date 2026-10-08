@@ -27,6 +27,8 @@ public class Greeter { /* ... */ }
 
 **The JSON.** Strict: an unknown field, a missing purpose, an empty `criteria` or an id used twice makes the contract malformed, and the check reports the module. Keep it on one line.
 
+**One behaviour each.** A criterion states one thing a test could check. One that says what each of several cases does is split into a criterion for each, so a test names exactly the criteria it checks and a behaviour no test checks is reported as untested.
+
 **When not to.** A rule about how the parts are arranged is a constraint, a requirement held by a test, not one class's criterion.
 
 To say which criteria a JUnit test checks, see the test contract recipe.
@@ -34,5 +36,5 @@ To say which criteria a JUnit test checks, see the test contract recipe.
 ## Recipe
 
 ```json
-{"id":"module-contract-java","kind":"format","ingredients":[{"id":"heading","says":"`# Module contract` in the first top-level Javadoc holding it, followed by a fenced json block."},{"id":"purpose","says":"One sentence: what the class or package is for, not what it contains."},{"id":"criteria","says":"At least one; each an id, a slug unique in the module, and a statement, one checkable sentence in the present tense."},{"id":"module-id","says":"The path from the repository root without .java; package-info.java stands for its package's folder."},{"id":"coverage","says":"Every .java under a src/main/java folder, but package-info.java and module-info.java, which may carry one."}],"files":["crates/extract/src/java.rs","crates/extract/src/contract.rs",".claude/skills/grimoire/references/contracts.md"],"uses":["test-contract"]}
+{"id":"module-contract-java","kind":"format","ingredients":[{"id":"heading","says":"`# Module contract` in the first top-level Javadoc holding it, followed by a fenced json block."},{"id":"purpose","says":"One sentence: what the class or package is for, not what it contains."},{"id":"criteria","says":"At least one; each an id, a slug unique in the module, and a statement, one checkable sentence in the present tense stating one behaviour."},{"id":"module-id","says":"The path from the repository root without .java; package-info.java stands for its package's folder."},{"id":"coverage","says":"Every .java under a src/main/java folder, but package-info.java and module-info.java, which may carry one."}],"files":["crates/extract/src/java.rs","crates/extract/src/contract.rs",".claude/skills/grimoire/references/contracts.md"],"uses":["test-contract"]}
 ```

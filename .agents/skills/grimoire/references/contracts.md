@@ -19,9 +19,12 @@ contract` followed by a fenced `json` block holding one object:
 - `purpose`: one sentence, non-empty.
 - `criteria`: a list of at least one; a contract promises something. Each
   `id` is a slug (`^[a-z0-9]+(-[a-z0-9]+)*$`), unique within the module.
-  Each `statement` is one sentence stating something someone could check
-  against the code: a guarantee, a boundary, a rule. Not a description of
-  what the code does line by line.
+  Each `statement` is one sentence stating one behaviour someone could
+  check against the code: a guarantee, a boundary, a rule. Not a
+  description of what the code does line by line, and not several
+  behaviours in one: a statement that says what each of several tools or
+  cases does is one criterion for each, so a test names exactly what it
+  checks and a behaviour no test checks shows as untested.
 - The block is strict JSON: unknown fields, a missing `purpose`, an empty
   `criteria` or a duplicate id make the contract malformed, and the module
   is reported. A module with nothing of its own to promise (a pure
