@@ -36,6 +36,8 @@ export const ROUTES: Route[] = [
   // A landing ticket: its decision written, its change yet to land.
   { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='Graph']" },
   { name: "node-module", path: node("module:src/ready"), content: "h1" },
+  // A module the scope leaves out, with no contract: said quietly, never as an error.
+  { name: "node-module-outside-scope", path: node("module:src/generated"), content: "[data-contract-scope='outside']" },
   { name: "node-criterion", path: node("criterion:src/ready#needs-commit"), content: "h1" },
   { name: "node-file", path: node("file:src/ready.rs"), content: "[aria-label='Source of src/ready.rs'] table" },
   { name: "node-decl", path: node("decl:src/ready.rs#ready"), content: "h1" },

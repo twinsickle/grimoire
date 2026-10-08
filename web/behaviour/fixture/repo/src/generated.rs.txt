@@ -1,0 +1,2 @@
+// Generated: written by a tool, never by hand, so the scope leaves it out and no contract is asked of it.
+pub fn generated() {}

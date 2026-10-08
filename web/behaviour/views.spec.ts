@@ -1861,6 +1861,29 @@ test("a ticket that rests on nothing, and that nothing rests on, draws no graph"
  * # Test contract
  *
  * ```json
+ * {"test": "a-module-outside-the-scope-reads-as-such", "checks": ["web/src/views/Node#out-of-scope-quiet"]}
+ * ```
+ */
+test("a module outside the contract scope reads as such on its page, never as a contract error", async ({ page }) => {
+  // src/generated.rs is excluded from the scope and carries no contract; the answer still names why none was found.
+  const answer = await tool<{ node: { expects_contract: boolean } }>(page, "get", { ref: "module:src/generated" });
+  expect(answer.node.expects_contract).toBe(false);
+  await page.goto("/g/repo/n/module%3Asrc%2Fgenerated");
+  const main = page.locator("main");
+  await expect(main.locator("[data-contract-scope='outside']")).toHaveText("Outside the contract scope: no contract expected.");
+  await expect(main.getByText(/^Contract:/)).toHaveCount(0);
+  await expect(main.getByText("no `# Module contract` block found")).toHaveCount(0);
+
+  // A module in the scope with no contract still shows its error.
+  await page.goto("/g/repo/n/module%3Asrc%2Floose");
+  await expect(page.locator("main").getByText("Contract: no `# Module contract` block found", { exact: true })).toBeVisible();
+  await expect(page.locator("main [data-contract-scope]")).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "a-node-page-is-what-it-is-then-its-graph", "checks": ["web/src/views/Node#content-then-graph", "web/src/views/NodeGraph#centred", "web/src/views/Node#draft-shown"]}
  * ```
  */

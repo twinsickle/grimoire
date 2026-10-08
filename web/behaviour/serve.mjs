@@ -91,6 +91,8 @@ under("Seed the pages and requirements", () => {
   tool("configure", { roots: records.roots, recipe_kinds: records.recipe_kinds });
   // A large-file limit low enough that src/ready.rs, ten lines with its tests aside, is an omen for the views to show.
   tool("configure", { large_file: 10 });
+  // src/generated.rs is left out of the contract scope, so the views have a module no contract is asked of.
+  tool("configure", { scope: { exclude: ["src/generated.rs"] } });
   for (const req of records.requirements) tool("put_requirement", req);
   // One recipe judged against its files, the other left due, so the views have both.
   tool("judge_recipe", { ref: "recipe:ready-check", outcome: "held" });
