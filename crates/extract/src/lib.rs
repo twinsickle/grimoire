@@ -22,6 +22,9 @@ pub struct Parsed {
     pub decls: Vec<Decl>,
     /// Each import as candidate module ids, most specific first.
     pub imports: Vec<Vec<String>>,
+    /// The names the file's module passes on from others, for an import
+    /// through it to be followed to the module that declares the name.
+    pub reexports: Vec<grimoire_core::extraction::Reexport>,
     /// Every comment in the file, markers stripped, with the 1-based line it
     /// starts on; where test blocks are looked for.
     pub comments: Vec<(String, u32)>,
@@ -143,6 +146,7 @@ pub fn extract_source(adapter: &dyn Adapter, rel_path: &str, source: &str) -> Fi
         module,
         decls: parsed.decls.into_iter().map(|d| Decl { file: rel_path.to_string(), ..d }).collect(),
         imports: parsed.imports,
+        reexports: parsed.reexports,
         expects_contract: adapter.expects_contract(rel_path),
         digest: grimoire_core::fingerprint::of_text(source),
         tests,

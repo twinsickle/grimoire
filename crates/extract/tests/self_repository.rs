@@ -44,6 +44,25 @@ fn extracts_this_repository() {
     assert!(file.decls.iter().any(|d| d.path == "Reference::split_hash" && d.kind == "method"));
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "reexports-reach-the-declaring-module", "checks": ["crates/extract/src/rust#reexports-recorded", "crates/core/src/extraction#imports-follow-reexports"]}
+/// ```
+#[test]
+fn reexports_reach_the_declaring_module() {
+    let x = Extractor::for_languages(repo_root(), &["rust".to_string()]);
+    let (extracted, errors) = x.extract_all().unwrap();
+    assert!(errors.is_empty(), "{errors:?}");
+    let joined = Extraction::from_files(&extracted);
+    // `use grimoire_core::Decl;` passes through the crate root's `pub use model::*;` and model's
+    // `pub use derived::*;` to the module that declares it, so the Java adapter does not seem to
+    // depend on everything the crate root declares.
+    let java = &joined.modules["crates/extract/src/java"];
+    assert!(java.imports.contains(&"crates/core/src/model/derived".to_string()), "{:?}", java.imports);
+    assert!(!java.imports.contains(&"crates/core/src".to_string()), "{:?}", java.imports);
+}
+
 #[test]
 fn extracts_the_web_ui() {
     let x = Extractor::for_languages(repo_root(), &["typescript".to_string()]);

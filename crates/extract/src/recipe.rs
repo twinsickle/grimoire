@@ -237,6 +237,7 @@ pub fn extract(root: &Path, rel_path: &str, text: &str) -> FileExtraction {
         module: String::new(),
         decls: Vec::new(),
         imports: Vec::new(),
+        reexports: Vec::new(),
         expects_contract: false,
         digest: grimoire_core::fingerprint::of_text(text),
         tests: Vec::new(),

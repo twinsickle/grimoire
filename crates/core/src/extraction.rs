@@ -1,10 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join per-file extraction results into modules with their criteria and resolved imports, without reading anything.","criteria":[{"id":"per-file-input","statement":"The input is one record per source file, so a caller can replace one file's record and re-join without re-extracting the rest."},{"id":"imports-resolve-to-known","statement":"An import resolves to the first candidate that names an existing module other than the importing one; anything else is dropped and counted."},{"id":"recipes-joined","statement":"A recipe file's record joins as its recipe, or as the reason it could not be read, in the order of the files' paths, and never as a module or a file."}]}
+//! {"purpose":"Join per-file extraction results into modules with their criteria and resolved imports, without reading anything.","criteria":[{"id":"per-file-input","statement":"The input is one record per source file, so a caller can replace one file's record and re-join without re-extracting the rest."},{"id":"imports-resolve-to-known","statement":"An import resolves to the first candidate that names an existing module other than the importing one; anything else is dropped and counted."},{"id":"imports-follow-reexports","statement":"An import whose first existing candidate is the parent of the name it imports, in a module whose files record re-exports, follows them, explicit and glob, chained to a bound, to the module that declares the name; a name nothing places resolves to the module first reached, and one traced back to the importing module makes no edge and is not counted."},{"id":"recipes-joined","statement":"A recipe file's record joins as its recipe, or as the reason it could not be read, in the order of the files' paths, and never as a module or a file."}]}
 //! ```
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,11 @@ pub struct FileExtraction {
     /// specific first. Resolution happens at join time against the set of
     /// modules that exist.
     pub imports: Vec<Vec<String>>,
+    /// The names the file's module passes on from other modules, for an
+    /// import that reaches the module to be followed to the one declaring
+    /// the name.
+    #[serde(default)]
+    pub reexports: Vec<Reexport>,
     pub expects_contract: bool,
     /// The fingerprint of the file's text as read.
     #[serde(default)]
@@ -47,6 +52,75 @@ pub struct FileExtraction {
     /// `None` for a source file.
     #[serde(default)]
     pub recipe: Option<Result<Recipe, RecipeError>>,
+}
+
+/// A name a module passes on from another (`pub use graph::Graph;`), or
+/// every name of another module (`pub use model::*;`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reexport {
+    /// The name exported, its alias where it has one; `None` for a glob.
+    pub name: Option<String>,
+    /// What it re-exports, as candidate module ids most specific first, as
+    /// for an import.
+    pub candidates: Vec<String>,
+}
+
+/// How far a chain of re-exports is followed before the import stops where it is.
+const REEXPORT_DEPTH: usize = 16;
+
+/// Resolves imports against the modules that exist, following re-exports.
+struct Resolver<'a> {
+    ids: BTreeSet<&'a str>,
+    /// Each module's top-level declared names.
+    names: BTreeMap<&'a str, BTreeSet<&'a str>>,
+    reexports: BTreeMap<&'a str, Vec<&'a Reexport>>,
+}
+
+impl Resolver<'_> {
+    /// The module an import's candidates name, seen from `from`: the first
+    /// existing candidate other than `from`, followed through that module's
+    /// re-exports when it is only the parent of the name imported.
+    fn resolve(&self, candidates: &[String], from: &str, depth: usize, seen: &mut BTreeSet<(String, String)>) -> Option<String> {
+        let i = candidates.iter().position(|c| c != from && self.ids.contains(c.as_str()))?;
+        let hit = &candidates[i];
+        if i > 0 && self.reexports.contains_key(hit.as_str()) {
+            let name = candidates[i - 1].strip_prefix(hit.as_str()).and_then(|r| r.strip_prefix('/')).and_then(|r| r.split('/').next());
+            if let Some(placed) = name.and_then(|n| self.place(hit, n, depth, seen)) {
+                return Some(placed);
+            }
+        }
+        Some(hit.clone())
+    }
+
+    /// The module that declares `name` as `module` exports it: `module`
+    /// itself, a child module of that name, or where its re-exports lead.
+    /// `seen` and the depth bound end a cycle of re-exports.
+    fn place(&self, module: &str, name: &str, depth: usize, seen: &mut BTreeSet<(String, String)>) -> Option<String> {
+        if depth > REEXPORT_DEPTH || !seen.insert((module.to_string(), name.to_string())) {
+            return None;
+        }
+        let child = format!("{module}/{name}");
+        if self.ids.contains(child.as_str()) {
+            return Some(child);
+        }
+        if self.names.get(module).is_some_and(|n| n.contains(name)) {
+            return Some(module.to_string());
+        }
+        let reexports = self.reexports.get(module).map(Vec::as_slice).unwrap_or_default();
+        for r in reexports.iter().filter(|r| r.name.as_deref() == Some(name)) {
+            if let Some(target) = self.resolve(&r.candidates, module, depth + 1, seen) {
+                return Some(target);
+            }
+        }
+        for r in reexports.iter().filter(|r| r.name.is_none()) {
+            if let Some(target) = self.resolve(&r.candidates, module, depth + 1, seen) {
+                if let Some(placed) = self.place(&target, name, depth + 1, seen) {
+                    return Some(placed);
+                }
+            }
+        }
+        None
+    }
 }
 
 /// The joined view: every module and file the repository declares.
@@ -139,20 +213,34 @@ impl Extraction {
         }
 
         let mut unresolved = 0usize;
-        let ids: Vec<String> = modules.keys().cloned().collect();
-        for (module, imports) in raw_imports {
-            let mut resolved: Vec<String> = Vec::new();
-            for candidates in imports {
-                match candidates.iter().find(|c| *c != &module && ids.binary_search(c).is_ok()) {
-                    Some(hit) => {
-                        if !resolved.contains(hit) {
-                            resolved.push(hit.clone());
-                        }
-                    }
-                    None => unresolved += 1,
+        let mut joined: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        {
+            let mut resolver = Resolver { ids: modules.keys().map(String::as_str).collect(), names: BTreeMap::new(), reexports: BTreeMap::new() };
+            for f in files.iter().filter(|f| f.recipe.is_none()) {
+                resolver.names.entry(f.module.as_str()).or_default().extend(f.decls.iter().map(|d| d.path.as_str()).filter(|p| !p.contains("::")));
+                if !f.reexports.is_empty() {
+                    resolver.reexports.entry(f.module.as_str()).or_default().extend(f.reexports.iter());
                 }
             }
-            resolved.sort();
+            for (module, imports) in &raw_imports {
+                let mut resolved: Vec<String> = Vec::new();
+                for candidates in imports {
+                    match resolver.resolve(candidates, module, 0, &mut BTreeSet::new()) {
+                        // Traced back through a re-export to the importer itself: no import.
+                        Some(hit) if &hit == module => {}
+                        Some(hit) => {
+                            if !resolved.contains(&hit) {
+                                resolved.push(hit);
+                            }
+                        }
+                        None => unresolved += 1,
+                    }
+                }
+                resolved.sort();
+                joined.insert(module.clone(), resolved);
+            }
+        }
+        for (module, resolved) in joined {
             modules.get_mut(&module).expect("module exists").imports = resolved;
         }
 
@@ -181,6 +269,7 @@ pub(crate) mod fixtures {
             module: module.into(),
             decls: vec![Decl { path: "run".into(), kind: "function".into(), line: 10, file: path.into() }],
             imports: imports.iter().map(|c| c.iter().map(|s| s.to_string()).collect()).collect(),
+            reexports: Vec::new(),
             expects_contract: true,
             digest: crate::fingerprint::of_text(path),
             tests: Vec::new(),
@@ -214,6 +303,7 @@ pub(crate) mod fixtures {
             module: String::new(),
             decls: vec![],
             imports: vec![],
+            reexports: vec![],
             expects_contract: false,
             digest: crate::fingerprint::of_text(path),
             tests: vec![],
@@ -289,6 +379,49 @@ mod tests {
         let unrelated = &x.modules["src/b/unrelated"];
         assert!(unrelated.purpose.is_none());
         assert!(unrelated.contract_error.is_some());
+    }
+
+    /// A file of `module` declaring `names`, importing `imports` and re-exporting `reexports` (`None` a glob).
+    fn rs(module: &str, names: &[&str], imports: &[&[&str]], reexports: &[(Option<&str>, &[&str])]) -> crate::FileExtraction {
+        let mut f = file(&format!("{module}.rs"), module, imports, None);
+        f.decls = names.iter().map(|n| crate::model::Decl { path: n.to_string(), kind: "type".into(), line: 1, file: f.path.clone() }).collect();
+        f.reexports = reexports.iter().map(|(name, c)| super::Reexport { name: name.map(str::to_string), candidates: c.iter().map(|s| s.to_string()).collect() }).collect();
+        f
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "imports-follow-reexports", "checks": ["crates/core/src/extraction#imports-follow-reexports"]}
+    /// ```
+    #[test]
+    fn imports_follow_reexports() {
+        let files = vec![
+            // The crate root passes on model's names by a glob, and query's rests_on.
+            rs("c/src", &["Root"], &[], &[(None, &["c/src/model", "c/src"]), (Some("rests_on"), &["c/src/query/rests_on", "c/src/query", "c/src"])]),
+            // model passes on derived's names in turn.
+            rs("c/src/model", &["Page"], &[], &[(None, &["c/src/model/derived", "c/src/model"])]),
+            rs("c/src/model/derived", &["Decl"], &[&["c/src/Decl", "c/src"]], &[]),
+            rs("c/src/query", &[], &[], &[(Some("rests_on"), &["c/src/query/walks/rests_on", "c/src/query/walks", "c/src/query"])]),
+            rs("c/src/query/walks", &["rests_on"], &[], &[]),
+            // Two modules re-exporting each other, neither declaring Nothing.
+            rs("c/src/a", &[], &[], &[(None, &["c/src/b", "c/src"])]),
+            rs("c/src/b", &[], &[], &[(None, &["c/src/a", "c/src"])]),
+            rs(
+                "x/src",
+                &[],
+                &[&["c/src/Decl", "c/src"], &["c/src/Page", "c/src"], &["c/src/rests_on", "c/src"], &["c/src/a/Nothing", "c/src/a", "c/src"], &["c/src/Unknown", "c/src"], &["c/src/Root", "c/src"]],
+                &[],
+            ),
+        ];
+        let x = Extraction::from_files(&files);
+        assert_eq!(
+            x.modules["x/src"].imports,
+            ["c/src", "c/src/a", "c/src/model", "c/src/model/derived", "c/src/query/walks"],
+            "Decl through two globs to derived, Page to model, rests_on through two explicit re-exports to walks; the cycle and the unplaced name stay where they reached, as does a name the root declares itself"
+        );
+        assert!(x.modules["c/src/model/derived"].imports.is_empty(), "a name traced back to the importer is no import");
+        assert_eq!(x.unresolved_imports, 0, "nor is it counted unresolved");
     }
 
     /// # Test contract

@@ -1,11 +1,12 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"reexports-recorded","statement":"A use declaration with a visibility is also recorded as re-exports of the file's module: each path with the candidates its import has in the scope it sits in and the name it exports, its last segment or its alias, or as a glob for a path ending in *; one with no candidates, of an external crate, is not recorded."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
 //! ```
 
 use std::path::Path;
 
+use grimoire_core::extraction::Reexport;
 use grimoire_core::Decl;
 use tree_sitter::{Node, Parser};
 
@@ -338,11 +339,22 @@ impl<'a> Walker<'a> {
                 }
                 "use_declaration" => {
                     if let Some(arg) = c.child_by_field_name("argument") {
+                        let (module, declared) = self.scopes.last().cloned().expect("the file's scope");
                         for path in self.flatten(arg) {
-                            let (module, declared) = self.scopes.last().expect("the file's scope");
-                            let cands = self.adapter.candidates(&path, module, declared);
+                            let cands = self.adapter.candidates(&path, &module, &declared);
                             if !cands.is_empty() {
                                 self.out.imports.push(cands);
+                            }
+                        }
+                        // `pub use` (any visibility) passes names on: recorded so an
+                        // import reaching this module can be followed to their source.
+                        let mut cursor = c.walk();
+                        if c.children(&mut cursor).any(|k| k.kind() == "visibility_modifier") {
+                            for (name, path) in self.exported(arg) {
+                                let candidates = self.adapter.candidates(&path, &module, &declared);
+                                if !candidates.is_empty() {
+                                    self.out.reexports.push(Reexport { name, candidates });
+                                }
                             }
                         }
                     }
@@ -354,6 +366,36 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
+        }
+    }
+
+    /// Expand a use tree into the names it exports, each with its full
+    /// path: the last segment, or the alias, or `None` for a glob.
+    fn exported(&self, n: Node) -> Vec<(Option<String>, Vec<String>)> {
+        match n.kind() {
+            "scoped_use_list" => {
+                let prefixes = n.child_by_field_name("path").map(|p| self.flatten(p)).unwrap_or_else(|| vec![vec![]]);
+                let list = n.child_by_field_name("list").map(|l| self.exported(l)).unwrap_or_default();
+                let mut out = Vec::new();
+                for p in &prefixes {
+                    for (name, item) in &list {
+                        let mut full = p.clone();
+                        full.extend(item.iter().cloned());
+                        out.push((exported_name(name.clone(), &full), full));
+                    }
+                }
+                out
+            }
+            "use_list" => {
+                let mut cursor = n.walk();
+                n.named_children(&mut cursor).flat_map(|c| self.exported(c)).collect()
+            }
+            "use_as_clause" => {
+                let alias = n.child_by_field_name("alias").map(|a| self.text(a));
+                n.child_by_field_name("path").map(|p| self.flatten(p)).unwrap_or_default().into_iter().map(|p| (alias.clone(), p)).collect()
+            }
+            "use_wildcard" => self.flatten(n).into_iter().map(|p| (None, p)).collect(),
+            _ => self.flatten(n).into_iter().map(|p| (p.last().cloned(), p)).collect(),
         }
     }
 
@@ -404,6 +446,14 @@ impl<'a> Walker<'a> {
             }
             _ => Vec::new(),
         }
+    }
+}
+
+/// The name a re-exported path is known by: `a::b::{self}` exports `b`.
+fn exported_name(name: Option<String>, path: &[String]) -> Option<String> {
+    match name.as_deref() {
+        Some("self") => path.iter().rev().find(|s| *s != "self").cloned(),
+        _ => name,
     }
 }
 
@@ -582,6 +632,30 @@ mod tests { use crate::nope; fn t() {} }
         assert_eq!(adapter().parse(one_row, "m").test_lines, 1);
         let x = crate::extract_source(&adapter(), "crates/x/src/lib.rs", one_row);
         assert!(x.test_lines <= x.lines, "{} of {}", x.test_lines, x.lines);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "pub-use-is-recorded-as-reexports", "checks": ["crates/extract/src/rust#reexports-recorded"]}
+    /// ```
+    #[test]
+    fn pub_use_is_recorded_as_reexports() {
+        let src = "mod model;\nmod graph;\nmod ops;\npub use model::*;\npub use graph::{Graph as G};\npub(crate) use self::ops::{tickets::{self, File}, Run};\nuse model::Private;\nuse std::fs;\npub use serde_json;\n";
+        let p = adapter().parse(src, "crates/core/src");
+        let r: Vec<(Option<&str>, Vec<&str>)> = p.reexports.iter().map(|r| (r.name.as_deref(), r.candidates.iter().map(String::as_str).collect())).collect();
+        assert_eq!(
+            r,
+            vec![
+                (None, vec!["crates/core/src/model", "crates/core/src"]),
+                (Some("G"), vec!["crates/core/src/graph/Graph", "crates/core/src/graph", "crates/core/src"]),
+                (Some("tickets"), vec!["crates/core/src/ops/tickets", "crates/core/src/ops", "crates/core/src"]),
+                (Some("File"), vec!["crates/core/src/ops/tickets/File", "crates/core/src/ops/tickets", "crates/core/src/ops", "crates/core/src"]),
+                (Some("Run"), vec!["crates/core/src/ops/Run", "crates/core/src/ops", "crates/core/src"]),
+            ],
+            "the private use and the external crate are not re-exports"
+        );
+        assert!(p.imports.contains(&vec!["crates/core/src/model/Private".to_string(), "crates/core/src/model".to_string(), "crates/core/src".to_string()]), "a pub use is still an import");
     }
 
     #[test]
