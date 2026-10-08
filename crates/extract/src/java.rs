@@ -1,10 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations and imports resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path; methods, constructors and annotation elements are of kind method, and fields and interface constants of kind field, one per declarator; each has the line it starts on, and nothing inside a method, constructor or initializer body is reported."},{"id":"imports-as-candidates","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares, outside any nested checkout, and whose next name is a type file of that package, yields candidates in each directory holding that file, the named member or nested type first, then each enclosing name down to the type, the importing file's own directory first among equals; an on-demand import of such a package itself yields one import per type file of it and one for its package-info; any other import yields none."}]}
+//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations, and of imports and same-package class uses resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path; methods, constructors and annotation elements are of kind method, and fields and interface constants of kind field, one per declarator; each has the line it starts on, and nothing inside a method, constructor or initializer body is reported."},{"id":"imports-as-candidates","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares, outside any nested checkout, and whose next name is a type file of that package, yields candidates in each directory holding that file, the named member or nested type first, then each enclosing name down to the type, the importing file's own directory first among equals; an on-demand import of such a package itself yields one import per type file of it and one for its package-info; any other import yields none."},{"id":"same-package-references","statement":"Every type name a file uses, every capitalised name qualifying a method call, field access or method reference, and every annotation's name, outside its import and package lines, that is a type file of the file's own package yields once the candidates a single-type import of it from that package would, unless it is the file's own name or a single-type import brings that name in; any other name yields none."}]}
 //! ```
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use grimoire_core::Decl;
@@ -164,6 +164,61 @@ impl JavaAdapter {
         }
         vec![cands]
     }
+
+    /// The classes of the file's own package it uses without an import, each
+    /// once, as the candidates a single-type import of it would give. Read
+    /// off the parse: type names, capitalised qualifiers and annotation names.
+    fn same_package(&self, root: Node, src: &[u8], module_id: &str, from_dir: &str, imported: &BTreeSet<String>) -> Vec<Vec<String>> {
+        let Some(package) = package_name(root, src) else { return Vec::new() };
+        let Some(dirs) = self.packages.get(&package) else { return Vec::new() };
+        // A file's mention of its own class is no edge.
+        let own = file_name(module_id);
+        let names = referenced_names(root, src);
+        let mut out = Vec::new();
+        for name in &names {
+            let is_type = dirs.iter().any(|d| d.types.iter().any(|t| file_name(t) == name));
+            if !is_type || name == own || imported.contains(name) {
+                continue;
+            }
+            let qualified: Vec<&str> = package.split('.').chain([name.as_str()]).collect();
+            out.extend(self.imports(&qualified, false, from_dir));
+        }
+        out
+    }
+}
+
+/// The names a file uses that may name a class, each once: every type
+/// identifier, every capitalised identifier qualifying a call, a field access
+/// or a method reference, and every annotation's name. Import and package
+/// lines are skipped.
+fn referenced_names(root: Node, src: &[u8]) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    // Iterative, so a deeply nested expression cannot exhaust the stack.
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        let named = match n.kind() {
+            "import_declaration" | "package_declaration" => continue,
+            "type_identifier" => true,
+            "identifier" => {
+                n.parent().is_some_and(|p| {
+                    let is = |o: Option<Node>| o.is_some_and(|o| o.id() == n.id());
+                    match p.kind() {
+                        "method_invocation" | "field_access" => is(p.child_by_field_name("object")),
+                        "method_reference" => is(p.named_child(0)),
+                        "marker_annotation" | "annotation" => is(p.child_by_field_name("name")),
+                        _ => false,
+                    }
+                }) && n.utf8_text(src).is_ok_and(|t| t.starts_with(|c: char| c.is_ascii_uppercase()))
+            }
+            _ => false,
+        };
+        if named {
+            names.extend(n.utf8_text(src).ok().map(str::to_string));
+        }
+        let mut cursor = n.walk();
+        stack.extend(n.children(&mut cursor));
+    }
+    names
 }
 
 /// The module id of a repository-relative `.java` path.
@@ -226,18 +281,26 @@ impl Adapter for JavaAdapter {
         // one of its package's; any other file's is its parent.
         let own = package_name(root, src).and_then(|p| self.packages.get(&p)).is_some_and(|dirs| dirs.iter().any(|d| d.dir == module_id && d.has_info));
         let from_dir = if own { module_id } else { parent(module_id) }.to_string();
+        // The simple names single-type imports bring in: Java's import shadows a same-package class.
+        let mut imported: BTreeSet<String> = BTreeSet::new();
         let mut cursor = root.walk();
         for c in root.children(&mut cursor) {
             if c.kind() == "import_declaration" {
                 let mut cur = c.walk();
                 let on_demand = c.children(&mut cur).any(|n| n.kind() == "asterisk");
                 let mut cur = c.walk();
+                let is_static = c.children(&mut cur).any(|n| n.kind() == "static");
+                let mut cur = c.walk();
                 let Some(name) = c.named_children(&mut cur).find(|n| matches!(n.kind(), "identifier" | "scoped_identifier")) else { continue };
                 let text: String = name.utf8_text(src).unwrap_or_default().chars().filter(|ch| !ch.is_whitespace()).collect();
                 let names: Vec<&str> = text.split('.').collect();
+                if !on_demand && !is_static {
+                    imported.extend(names.last().map(|n| n.to_string()));
+                }
                 out.imports.extend(self.imports(&names, on_demand, &from_dir));
             }
         }
+        out.imports.extend(self.same_package(root, src, module_id, &from_dir, &imported));
         let mut w = Walker { src, out };
         w.members(root, &mut Vec::new());
         w.out.comments = crate::slash_comments(root, src, |k| k == "line_comment" || k == "block_comment");
@@ -546,5 +609,54 @@ import p.T;
         // An on-demand import of a package with a package-info stands for it too.
         let on_demand = a.parse("package x;\nimport com.example.core.*;\nclass A {}\n", "src/main/java/x/A");
         assert!(on_demand.imports.contains(&vec![MAIN.to_string()]) && on_demand.imports.contains(&vec![format!("{MAIN}/Greeter")]), "{:?}", on_demand.imports);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "same-package-classes-are-used-without-imports", "checks": ["crates/extract/src/java#same-package-references"]}
+    /// ```
+    #[test]
+    fn same_package_classes_are_used_without_imports() {
+        let a = JavaAdapter::with_files(vec![
+            ("p".into(), "src/main/java/p/A.java".into()),
+            ("p".into(), "src/main/java/p/B.java".into()),
+            ("p".into(), "src/main/java/p/C.java".into()),
+            ("p".into(), "src/main/java/p/D.java".into()),
+            ("p".into(), "src/main/java/p/E.java".into()),
+            ("p".into(), "src/main/java/p/Marker.java".into()),
+            ("p".into(), "src/main/java/p/T.java".into()),
+            ("p".into(), "src/main/java/p/Shadowed.java".into()),
+            ("p".into(), "src/main/java/p/Unused.java".into()),
+            ("p".into(), "src/test/java/p/ATest.java".into()),
+            ("q".into(), "src/main/java/q/Shadowed.java".into()),
+        ]);
+        let src = r#"package p;
+import q.Shadowed;
+import java.util.List;
+@Marker
+public class A<T> extends B {
+    private List<C> cs;
+    private Shadowed s;
+    A self() { return new A<T>(); }
+    <U> U id(U u) { return u; }
+    String go(T t, String x) {
+        D.run();
+        Runnable r = E::work;
+        b.go();
+        return x + D.NAME;
+    }
+}
+"#;
+        let p = a.parse(src, "src/main/java/p/A");
+        let pkg = |n: &str| vec![format!("src/main/java/p/{n}")];
+        // T is a type parameter here, but a class of the package bears the name: the over-count the parse accepts.
+        assert_eq!(p.imports, vec![vec!["src/main/java/q/Shadowed".to_string()], pkg("B"), pkg("C"), pkg("D"), pkg("E"), pkg("Marker"), pkg("T")], "{:?}", p.imports);
+        // A test in the same package under another source root uses the class it tests.
+        let t = a.parse("package p;\nclass ATest {\n    void t() { new A().self(); }\n}\n", "src/test/java/p/ATest");
+        assert_eq!(t.imports, vec![pkg("A")]);
+        // The unnamed package and a package of no repository file make no same-package edge.
+        assert!(a.parse("class X { B b; }\n", "X").imports.is_empty());
+        assert!(a.parse("package z;\nclass X { B b; }\n", "src/main/java/z/X").imports.is_empty());
     }
 }

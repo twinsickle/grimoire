@@ -13,4 +13,8 @@ public final class Strings {
     public static String shout(String text) {
         return text.toUpperCase();
     }
+
+    public static String indent(String text, int width) {
+        return " ".repeat(Numbers.clamp(width, 0, 8)) + text;
+    }
 }

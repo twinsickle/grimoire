@@ -16,7 +16,7 @@ const CORE: &str = "core/src/main/java/com/example/core";
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-maven-build-joins", "checks": ["crates/extract/src/java#identity", "crates/extract/src/java#coverage", "crates/extract/src/java#imports-as-candidates", "crates/extract/src/java#leading-javadoc"]}
+/// {"test": "a-maven-build-joins", "checks": ["crates/extract/src/java#identity", "crates/extract/src/java#coverage", "crates/extract/src/java#imports-as-candidates", "crates/extract/src/java#same-package-references", "crates/extract/src/java#leading-javadoc"]}
 /// ```
 #[test]
 fn a_maven_build_joins() {
@@ -42,8 +42,10 @@ fn a_maven_build_joins() {
 
     // Imports: a single-type and a static one resolve to their classes; the JDK, OSGi and JUnit to nothing.
     assert_eq!(greeter.imports, vec![format!("{util}/Numbers"), format!("{util}/Strings")]);
-    // The test's on-demand import stands for both types of the package. Greeter, in the test's own package, needs no import and makes no edge.
-    assert_eq!(joined.modules[test].imports, vec![format!("{util}/Numbers"), format!("{util}/Strings")]);
+    // The test's on-demand import stands for both types of the package; Greeter, in the test's own package, needs no import and is an edge all the same.
+    assert_eq!(joined.modules[test].imports, vec![format!("{CORE}/Greeter"), format!("{util}/Numbers"), format!("{util}/Strings")]);
+    // A class qualifying a call in its own package, with no import.
+    assert_eq!(joined.modules[&format!("{util}/Strings")].imports, vec![format!("{util}/Numbers")]);
     assert_eq!(joined.unresolved_imports, 0, "nothing external is counted as unresolved");
 
     // The test blocks on JUnit methods, a Javadoc and a run of line comments.

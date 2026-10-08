@@ -23,7 +23,7 @@ public class Greeter { /* ... */ }
 
 **Which files need one.** Every `.java` file under a `src/main/java` folder, at any depth. Not `package-info.java` or `module-info.java`, though either may carry one, not anything under `src/test`, and not files elsewhere.
 
-**What the module is called.** Its path from the repository root without `.java`: `core/src/main/java/com/example/core/Greeter.java` is `core/src/main/java/com/example/core/Greeter`. A `package-info.java` stands for its folder, the package. Imports are resolved through the packages your own files declare, so the graph shows which classes a class rests on.
+**What the module is called.** Its path from the repository root without `.java`: `core/src/main/java/com/example/core/Greeter.java` is `core/src/main/java/com/example/core/Greeter`. A `package-info.java` stands for its folder, the package. Imports are resolved through the packages your own files declare, and a class of its own package that a class names needs no import to count, so the graph shows which classes a class rests on.
 
 **The JSON.** Strict: an unknown field, a missing purpose, an empty `criteria` or an id used twice makes the contract malformed, and the check reports the module. Keep it on one line.
 
