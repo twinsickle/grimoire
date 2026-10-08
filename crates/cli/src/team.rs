@@ -173,6 +173,12 @@ pub fn run_tool(team: &Team, name: &str, input: Value) -> anyhow::Result<Result<
         if opened.lock.is_none() {
             bail!("another process holds this checkout's copy at {}; run the command again once it has finished", team.copy.display());
         }
+        // A close names only this ticket's own work, told from the base's code (req:tool-untouched).
+        if matches!(name, "close_ticket" | "land_ticket") {
+            if let Err(e) = grimoire_server::base::give(&mut opened.loaded.state, &opened.loaded.repo) {
+                eprintln!("warning: {e}");
+            }
+        }
         remote::write_through(&server, &team.copy, &mut opened.loaded.state, name, input, &today).map(|(output, _)| output)
     } else {
         // A lint is the check's answer, judged by this checkout's own work (req:check-own-work).

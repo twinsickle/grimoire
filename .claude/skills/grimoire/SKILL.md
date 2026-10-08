@@ -175,10 +175,15 @@ edges.
 ## Sequence: start a ticket
 
 1. `start_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
-   `active` and returns the ticket, `rests_on` (everything below it, nearest
-   first, with the decisions behind each requirement), `related` (open gaps
-   and questions touching what it touches) and `recipes` (the recipes resting
-   on what it touches, each saying whether it is `due`: what the project
+   `active` and returns the ticket, `rests_on` (the assumptions to
+   challenge, nearest first: what it names directly, every requirement below
+   it with the decisions behind each, and every closed ticket it relies on),
+   `reaches` (the rest of what is below it, the modules its imports lead to
+   and the like, as a count and references; `rests_on` the tool gives the
+   whole walk with each path), `related` (open gaps
+   and questions touching what it touches) and `recipes` (the recipes over
+   what it touches, its own modules' and those of the modules importing them,
+   each saying whether it is `due`: what the project
    promises the people who build with it, which this work may break). If
    it answers `waiting`, this checkout still carries a ticket that has not
    landed: say so, and land that one first or move this work to a new
@@ -198,7 +203,8 @@ edges.
    nothing pushes it later. The walk is bounded: a ticket relied on appears
    with its decision and is not expanded, and a page appears with its
    requirements and modules but not its child pages. Module imports are
-   followed all the way down, since that is the blast radius.
+   followed all the way down, since that is the blast radius; what they
+   reach comes under `reaches` by reference, to `get` where it matters.
 3. Read `related`. A gap or question that touches the same nodes is context
    for this work and may be closed by it; say which.
 4. For each module in `touches`, `rests_on_me` shows the blast radius: the
@@ -277,8 +283,11 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    `due` lists the recipes the work reached that no judgement holds of as
    they are now: judge each (step 4), since each is a finding.
    `baselined` counts the inherited ones there; they are not this ticket's.
-   `unnamed` lists what changed since the ticket started that `touches`
-   never named, each with what it says and the requirements resting on it:
+   `unnamed` lists what this ticket's own work changed that `touches`
+   never named, its proposal's pages and requirements and the modules its
+   code changed since its branch's base (or, with none, since the start),
+   never what other tickets landed, each with what it says and the
+   requirements resting on it:
    read them as you read `rests_on` at the start, since the work reached
    them; one that belonged to the ticket goes into `touches` next time, and
    one whose intent the work broke is a gap to file.

@@ -336,6 +336,10 @@ impl Daemon {
         if matches!(name, "close_ticket" | "land_ticket" | "judge_recipe") {
             self.catch_up()?;
         }
+        // A close names only this ticket's own work, its code told from the base's (req:tool-untouched).
+        if matches!(name, "close_ticket" | "land_ticket") {
+            self.refresh_base();
+        }
         // On a project that names a server, a write goes to the server.
         if let Some(server) = self.server.as_ref().filter(|_| tools::is_write(name)) {
             return match token {

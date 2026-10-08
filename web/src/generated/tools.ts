@@ -142,6 +142,8 @@ export type Priority = "next" | "high" | "later";
 
 export type ProposalView = { pages: Array<Draft>, requirements: Array<Draft>, deleted: Array<Ref>, tickets: Array<Draft>, };
 
+export type Reaches = { count: number, refs: Array<Ref>, };
+
 export type Recipe = { id: string, kind: string, title: string, text: string, ingredients: Array<Ingredient>, files: Array<string>, uses: Array<string>, file: string, line: number, missing: Array<string>, digest: string, };
 
 export type RecipeKind = { uses: Array<string>, };
@@ -185,7 +187,7 @@ export type SourceAnswer = { file: Ref, language: string, text: string, focus: n
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
-export type Started = { node: NodeView, rests_on: Array<RestsOn>, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, };
+export type Started = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, };
 
 export type Status = "open" | "active" | "landing" | "closed";
 

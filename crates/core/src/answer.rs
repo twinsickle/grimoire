@@ -213,12 +213,23 @@ pub struct Written {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Started {
     pub node: NodeView,
+    // The assumptions to challenge, in full: what the ticket names directly, every requirement reached and every node carrying a decision.
     pub rests_on: Vec<RestsOn>,
+    // The rest of what it rests on, by reference alone; the rests_on tool answers the whole walk (req:tool-start-ticket).
+    pub reaches: Reaches,
     pub related: Vec<Summary>,
     // The recipes resting on what the ticket touches, each with whether it is due (req:recipe-in-tickets).
     pub recipes: Vec<RecipeState>,
     // The changes this checkout closed `when: landed` that have not landed: a warning each, never a refusal (req:tool-start-ticket).
     pub waiting: Vec<WaitingHere>,
+}
+
+/// The rest of a ticket's walk, nearest first: how many nodes, and their references.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Reaches {
+    pub count: usize,
+    pub refs: Vec<Reference>,
 }
 
 /// A change this checkout closed `when: landed` that has not landed yet, with the warning a start here gives.

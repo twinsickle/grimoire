@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, a recipe from its record as read, missing paths included, an ingredient from what it says, and a module from its files' fingerprints together."},{"id":"unnamed","statement":"unnamed gives, in reference order, every page, requirement and module whose fingerprint differs between the start and now, one present at only one end among them, that the given touches do not list; a page or requirement renamed since the start is named by its new slug alone, since a rename moves the start's entry with it."}]}
+//! {"purpose":"Fingerprint every node that can change, so a ticket's close can tell which of the nodes it touched never did.","criteria":[{"id":"stable","statement":"A fingerprint is a 64-bit FNV-1a hash written as hex, the same for the same content in every build and on every platform."},{"id":"covers","statement":"Stored records are fingerprinted from their JSON, criteria from their statement, files from their text as read, tests from their block, a recipe from its record as read, missing paths included, an ingredient from what it says, and a module from its files' fingerprints together."},{"id":"unnamed","statement":"unnamed gives, each once and in reference order, what a ticket's own work changed that the given touches do not list: every page and requirement among the records given as proposed, and every module whose fingerprint differs between the code before the work and now, one present at only one end among them, and no module when no code before the work is given."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -79,15 +79,26 @@ pub fn untouched(touches: &[Reference], start: &BTreeMap<String, String>, now: &
     touches.iter().filter(|r| matches!((start.get(&r.to_string()), now.get(*r)), (Some(a), Some(b)) if a == b)).cloned().collect()
 }
 
-/// The pages, requirements and modules whose fingerprint differs now from
-/// the start, created and removed ones among them, that `touches` does not
-/// list: what a ticket's work reached without naming it.
-pub fn unnamed(touches: &[Reference], start: &BTreeMap<String, String>, now: &BTreeMap<Reference, String>) -> Vec<Reference> {
-    let at_start: BTreeMap<Reference, &String> = start.iter().filter_map(|(k, v)| k.parse::<Reference>().ok().map(|r| (r, v))).collect();
-    let mut all: Vec<&Reference> = at_start.keys().chain(now.keys()).collect();
+/// What a ticket's own work changed that `touches` does not list: the pages
+/// and requirements its proposal holds, given as `proposed`, and the modules
+/// whose fingerprint differs between `before`, the code before the work, and
+/// now, created and removed ones among them; with no `before`, as for a gap
+/// or question, which carries no code, no module. Each once, in reference order.
+pub fn unnamed(touches: &[Reference], proposed: &[Reference], before: Option<&BTreeMap<Reference, String>>, now: &BTreeMap<Reference, String>) -> Vec<Reference> {
+    let mut all: Vec<Reference> = proposed.iter().filter(|r| matches!(r.kind, Kind::Page | Kind::Req)).cloned().collect();
+    if let Some(before) = before {
+        let modules = before.keys().chain(now.keys()).filter(|r| r.kind == Kind::Module);
+        all.extend(modules.filter(|r| before.get(*r) != now.get(*r)).cloned());
+    }
     all.sort();
     all.dedup();
-    all.into_iter().filter(|r| matches!(r.kind, Kind::Page | Kind::Req | Kind::Module)).filter(|r| !touches.contains(r)).filter(|r| at_start.get(*r).copied() != now.get(*r)).cloned().collect()
+    all.retain(|r| !touches.contains(r));
+    all
+}
+
+/// The start's fingerprints read back as references, those that no longer parse left out.
+pub fn of_start(start: &BTreeMap<String, String>) -> BTreeMap<Reference, String> {
+    start.iter().filter_map(|(k, v)| k.parse::<Reference>().ok().map(|r| (r, v.clone()))).collect()
 }
 
 #[cfg(test)]

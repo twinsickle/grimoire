@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the tools of a ticket's life, start_ticket, close_ticket, land_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what changed that it never touched, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as closed and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"files-its-change","statement":"close_ticket given change on a gap or question files that change as file_ticket files one, open, relying on the gap or question before the references given, and keeping pace, then writes the decision, followed by a sentence naming that change as what applies it, as close_ticket with when: landed writes it, in one write: when either part is refused nothing of it is kept, the filed change removed, and the change is persisted first, an open change of that title already relying on the gap or question being taken as the one filed, so a call stopped between its records is completed by running it again; it answers with the gap or question as when: landed answers and with the change in filed as file_ticket answers it, and what changed names the change before the decision; change given on a change, or with when: now, is invalid before anything changes, and a close without change answers no filed."},{"id":"start-warns","statement":"start_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it lands, to land it first or start this ticket on a new branch; the start goes ahead whatever waits."}]}
+//! {"purpose":"Answer the tools of a ticket's life, start_ticket, close_ticket, land_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what fingerprint::unnamed gives of its own work, the pages and requirements its proposal held and, for a change, the modules whose code differs from the state's base_fingerprints when a base is set and from the start otherwise, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as closed and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"files-its-change","statement":"close_ticket given change on a gap or question files that change as file_ticket files one, open, relying on the gap or question before the references given, and keeping pace, then writes the decision, followed by a sentence naming that change as what applies it, as close_ticket with when: landed writes it, in one write: when either part is refused nothing of it is kept, the filed change removed, and the change is persisted first, an open change of that title already relying on the gap or question being taken as the one filed, so a call stopped between its records is completed by running it again; it answers with the gap or question as when: landed answers and with the change in filed as file_ticket answers it, and what changed names the change before the decision; change given on a change, or with when: now, is invalid before anything changes, and a close without change answers no filed."},{"id":"start-answers","statement":"start_ticket answers the ticket's rests_on walk, as its own proposal leaves the graph, parted by query::assumptions: as rests_on the nodes kept in full, and as reaches the count and references of the rest, nearest first, with the related gaps and questions and the recipes resting on what it touches."},{"id":"start-warns","statement":"start_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it lands, to land it first or start this ticket on a new branch; the start goes ahead whatever waits."}]}
 //! ```
 
 use serde::Deserialize;
@@ -47,7 +47,9 @@ pub(super) fn start(state: &mut State, name: &str, input: Value) -> Result<Outco
     // As the ticket's own proposal leaves the graph: one taken up already carries its spec.
     let g = state.graph_for(Some(&i.r#ref.id))?;
     let node = query::view(g, &i.r#ref).expect("just written");
-    let rests_on = query::rests_on(g, &i.r#ref, None);
+    // The assumptions to challenge in full; the rest of the blast radius by reference (req:tool-start-ticket).
+    let (rests_on, rest) = query::assumptions(query::rests_on(g, &i.r#ref, None));
+    let reaches = Reaches { count: rest.len(), refs: rest };
     let (related, recipes) = match g.get(&i.r#ref) {
         Some(crate::graph::Node::Ticket(t)) => (query::related_tickets(g, t), query::recipes_resting(g, &t.touches)),
         _ => (vec![], vec![]),
@@ -64,7 +66,7 @@ pub(super) fn start(state: &mut State, name: &str, input: Value) -> Result<Outco
             ),
         })
         .collect();
-    answer(name, Started { node, rests_on, related, recipes, waiting }, Some(changed))
+    answer(name, Started { node, rests_on, reaches, related, recipes, waiting }, Some(changed))
 }
 
 /// close_ticket: closed at once, its proposal applied, or with when: landed its decision written to wait for the landing.
@@ -247,6 +249,18 @@ fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<
         .get(&r.id)
         .map(|p| p.tickets.keys().filter_map(|s| state.store.tickets.get(s)).filter(|t| t.status != Status::Closed).map(|t| (t.slug.clone(), t.relies_on.clone(), t.priority)).collect())
         .unwrap_or_default();
+    // This ticket's own work, before its proposal is applied: the pages and requirements it proposes, and
+    // for a change the code before it, the base's when the checkout has one, else the start's (req:tool-untouched).
+    let proposed: Vec<Reference> = state
+        .store
+        .proposals
+        .get(&r.id)
+        .map(|p| {
+            let written = p.pages.keys().map(|s| Reference::page(s)).chain(p.requirements.keys().chain(p.decisions.keys()).map(|s| Reference::req(s)));
+            written.chain(p.deleted.keys().filter_map(|k| k.parse::<Reference>().ok())).collect()
+        })
+        .unwrap_or_default();
+    let change = state.store.tickets.get(&r.id).is_some_and(|t| t.kind == TicketKind::Change);
     let applied = ops::apply_proposal(state.store_mut(), &r.id);
     // Compared before the close, which changes the ticket's own record,
     // and after the proposal landed, so a proposed change counts as one.
@@ -256,8 +270,9 @@ fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<
         None
     } else {
         state.store.starts.get(&r.id).cloned().map(|start| {
+            let before = change.then(|| state.base_fingerprints().unwrap_or_else(|| crate::fingerprint::of_start(&start.fingerprints)));
             let now = crate::fingerprint::all(state.graph());
-            (crate::fingerprint::untouched(&touched, &start.fingerprints, &now), crate::fingerprint::unnamed(&touched, &start.fingerprints, &now))
+            (crate::fingerprint::untouched(&touched, &start.fingerprints, &now), crate::fingerprint::unnamed(&touched, &proposed, before.as_ref(), &now))
         })
     };
     let start = state.store.starts.get(&r.id).cloned();
@@ -512,6 +527,68 @@ mod tests {
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-10-04").unwrap();
         let refs: Vec<String> = out.output["unnamed"].as_array().unwrap().iter().map(|x| x["ref"].as_str().unwrap().to_string()).collect();
         assert_eq!(refs, vec!["page:adopted".to_string()]);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "unnamed-is-only-this-tickets-own-work", "checks": ["crates/core/src/fingerprint#unnamed", "crates/core/src/tools/write/tickets#untouched", "crates/core/src/tools/state#advisories"]}
+    /// ```
+    #[test]
+    fn unnamed_is_only_this_tickets_own_work() {
+        let edited = |modules: &[&str]| {
+            let mut files = crate::extraction::fixtures::extraction_files();
+            for f in files.iter_mut().filter(|f| modules.contains(&f.module.as_str())) {
+                f.digest = format!("{} edited", f.digest);
+            }
+            Extraction::from_files(&files)
+        };
+        let close = |s: &mut State, slug: &str| -> Vec<String> {
+            let out = call(s, "close_ticket", json!({ "ref": format!("ticket:{slug}"), "decision": { "text": "Done." } }), "2026-10-08").unwrap().output;
+            out["unnamed"].as_array().expect("a list").iter().map(|x| x["ref"].as_str().unwrap().to_string()).collect()
+        };
+        // A change on a branch: another ticket lands a page meanwhile, and the main line's change to layout is merged in.
+        let mut s = state();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-08").unwrap();
+        call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "touches": [] }), "2026-10-08").unwrap();
+        s.store_mut().pages.get_mut("orphan").expect("fixture").body = "Another ticket's landing.".into();
+        s.set_base(Some(edited(&["src/a/layout"])));
+        s.set_extraction(edited(&["src/a/layout", "src/a/ready"]));
+        assert_eq!(close(&mut s, "phase-62"), ["module:src/a/ready", "req:ready-only-with-commit"], "its own module, with the requirement on it; not the page, nor layout as the base has it");
+        // With no base, the code before the work is the start's: layout's change counts, the page still does not.
+        let mut s = state();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-08").unwrap();
+        call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "touches": [] }), "2026-10-08").unwrap();
+        s.store_mut().pages.get_mut("orphan").expect("fixture").body = "Another ticket's landing.".into();
+        s.set_extraction(edited(&["src/a/layout"]));
+        assert_eq!(close(&mut s, "phase-62"), ["module:src/a/layout"]);
+        // A gap carries no code: what changed in the checkout is not its own work.
+        let mut s = state();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:gap-1" }), "2026-10-08").unwrap();
+        s.set_extraction(edited(&["src/a/ready"]));
+        assert!(close(&mut s, "gap-1").is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-start-answers-the-assumptions-and-reaches-the-rest", "checks": ["crates/core/src/tools/write/tickets#start-answers", "req:tool-start-ticket"]}
+    /// ```
+    #[test]
+    fn a_start_answers_the_assumptions_and_reaches_the_rest() {
+        let mut s = state();
+        let out = call(&mut s, "start_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-08").unwrap().output;
+        let full: Vec<&str> = out["rests_on"].as_array().unwrap().iter().map(|x| x["ref"].as_str().unwrap()).collect();
+        assert!(full.contains(&"module:src/a/ready") && full.contains(&"req:ready-only-with-commit"), "{full:?}");
+        assert!(!full.contains(&"module:src/a/layout"), "an import further away is not in full: {full:?}");
+        let refs = out["reaches"]["refs"].as_array().unwrap();
+        assert!(refs.contains(&json!("module:src/a/layout")), "{out}");
+        assert_eq!(out["reaches"]["count"], refs.len());
+        // The rests_on tool still answers the whole walk, with the path.
+        let walk = call(&mut s, "rests_on", json!({ "ref": "ticket:phase-62" }), "2026-10-08").unwrap().output;
+        let layout = walk["nodes"].as_array().unwrap().iter().find(|x| x["ref"] == "module:src/a/layout").expect("the whole walk").clone();
+        assert_eq!(layout["via"].as_array().unwrap().last(), Some(&json!("module:src/a/ready")));
+        assert_eq!(walk["nodes"].as_array().unwrap().len(), full.len() + refs.len());
     }
 
     #[test]

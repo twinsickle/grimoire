@@ -338,8 +338,9 @@ fn run_tool(target: &Target, name: &str, input: Value, held: Option<&store_io::S
     // `held` is a lock the caller took for a longer run, as init does.
     let _lock = if grimoire_core::tools::is_write(name) && held.is_none() { Some(store_io::lock(store_dir)?) } else { None };
     let mut loaded = grimoire_server::load_for(store_dir, view.as_deref())?;
-    // A lint is the check's answer, judged by this checkout's own work (req:check-own-work).
-    if name == "lint" {
+    // A lint is the check's answer, judged by this checkout's own work (req:check-own-work), and a close
+    // names only this ticket's own work (req:tool-untouched): both tell it from the base's code.
+    if matches!(name, "lint" | "close_ticket" | "land_ticket") {
         if let Err(e) = grimoire_server::base::give(&mut loaded.state, &loaded.repo) {
             eprintln!("warning: {e}");
         }
