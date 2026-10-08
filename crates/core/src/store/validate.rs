@@ -881,7 +881,7 @@ b", "t",
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-judgement-is-checked-whole", "checks": ["crates/core/src/store/validate#judgement-rules", "crates/core/src/model#judgement-record", "req:store-judgement-record"]}
+    /// {"test": "a-judgement-is-checked-whole", "checks": ["crates/core/src/store/validate#judgement-rules", "crates/core/src/model/recipes#judgement-record", "req:store-judgement-record"]}
     /// ```
     #[test]
     fn a_judgement_is_checked_whole() {
@@ -906,7 +906,7 @@ b", "t",
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-main-lines-recipes-are-checked-whole", "checks": ["crates/core/src/store/validate#main-line-recipes-rules", "crates/core/src/model#main-line-recipes-record"]}
+    /// {"test": "the-main-lines-recipes-are-checked-whole", "checks": ["crates/core/src/store/validate#main-line-recipes-rules", "crates/core/src/model/recipes#main-line-recipes-record"]}
     /// ```
     #[test]
     fn the_main_lines_recipes_are_checked_whole() {

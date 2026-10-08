@@ -575,7 +575,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-hash-in-a-file-name-misplaces-nothing", "checks": ["crates/core/src/model#kinds", "crates/core/src/query/source#module-source"]}
+    /// {"test": "a-hash-in-a-file-name-misplaces-nothing", "checks": ["crates/core/src/model/reference#kinds", "crates/core/src/query/source#module-source"]}
     /// ```
     #[test]
     fn a_hash_in_a_file_name_misplaces_nothing() {
@@ -603,7 +603,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-recipe-is-a-node-with-its-ingredients", "checks": ["crates/core/src/graph#recipes", "crates/core/src/model#kinds"]}
+    /// {"test": "a-recipe-is-a-node-with-its-ingredients", "checks": ["crates/core/src/graph#recipes", "crates/core/src/model/reference#kinds"]}
     /// ```
     #[test]
     fn a_recipe_is_a_node_with_its_ingredients() {

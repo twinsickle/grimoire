@@ -24,8 +24,10 @@ fn extracts_this_repository() {
 
     let model = &joined.modules["crates/core/src/model"];
     assert!(model.purpose.is_some(), "{:?}", model.contract_error);
-    assert!(model.criteria.iter().any(|c| c.id == "reference-form"));
+    assert!(model.criteria.iter().any(|c| c.id == "strict-records"));
     assert_eq!(model.contract_at.as_ref().unwrap().0, "crates/core/src/model.rs");
+    // A module beneath it, in a folder named for it, is a module of its own.
+    assert!(joined.modules["crates/core/src/model/reference"].criteria.iter().any(|c| c.id == "reference-form"));
 
     let graph = &joined.modules["crates/core/src/graph"];
     assert!(graph.imports.contains(&"crates/core/src/model".to_string()), "{:?}", graph.imports);
@@ -39,7 +41,7 @@ fn extracts_this_repository() {
     let extract_lib = &joined.modules["crates/extract/src"];
     assert!(extract_lib.imports.iter().any(|i| i.starts_with("crates/core/src")), "{:?}", extract_lib.imports);
 
-    let file = &joined.files["crates/core/src/model.rs"];
+    let file = &joined.files["crates/core/src/model/reference.rs"];
     assert!(file.decls.iter().any(|d| d.path == "Reference" && d.kind == "type"));
     assert!(file.decls.iter().any(|d| d.path == "Reference::split_hash" && d.kind == "method"));
 }

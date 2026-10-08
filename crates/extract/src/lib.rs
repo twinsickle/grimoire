@@ -399,7 +399,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-private-declaration-in-a-hash-file-keeps-its-file", "checks": ["crates/core/src/model#kinds", "crates/core/src/query/source#module-source"]}
+    /// {"test": "a-private-declaration-in-a-hash-file-keeps-its-file", "checks": ["crates/core/src/model/reference#kinds", "crates/core/src/query/source#module-source"]}
     /// ```
     #[test]
     fn a_private_declaration_in_a_hash_file_keeps_its_file() {
