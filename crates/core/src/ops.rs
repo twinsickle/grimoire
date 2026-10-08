@@ -93,6 +93,8 @@ pub enum Changed {
     Current,
     /// A recipe's judgements changed: written as they now are, by recipe id.
     Judged(String),
+    /// The recipes the main line last sent were replaced: written whole.
+    MainLineRecipes,
     /// Several changes from one write, persisted in this order.
     Many(Vec<Changed>),
 }

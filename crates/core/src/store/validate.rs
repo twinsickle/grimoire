@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements and the config, every violated field rule reported.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."}]}
+//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes and the config, every violated field rule reported.","criteria":[{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
 //! ```
 
 use serde::Serialize;
@@ -261,6 +261,41 @@ pub fn validate_judgements(j: &Judgements) -> Vec<FieldError> {
         }
         if !is_fingerprint(&x.fingerprint) {
             e.push(FieldError::new(&format!("judgements[{i}].fingerprint"), "must be sixteen lowercase hexadecimal digits, as every fingerprint is"));
+        }
+    }
+    e
+}
+
+/// The recipes the main line last sent: each an id no other has, a kind, a title of one line, its
+/// ingredients and uses named by slug, and a digest of the form every fingerprint has (req:recipe-main-line-snapshot).
+pub fn validate_main_line_recipes(m: &MainLineRecipes) -> Vec<FieldError> {
+    let mut e = Vec::new();
+    let mut ids = std::collections::HashSet::new();
+    for (i, r) in m.recipes.iter().enumerate() {
+        let at = |field: &str| format!("recipes[{i}].{field}");
+        check_slug(&mut e, &at("id"), &r.id);
+        if !ids.insert(r.id.as_str()) {
+            e.push(FieldError::new(&at("id"), format!("`{}` is sent twice", r.id)));
+        }
+        check_slug(&mut e, &at("kind"), &r.kind);
+        if r.title.trim().is_empty() || r.title.contains('\n') {
+            e.push(FieldError::new(&at("title"), "must be one non-empty line"));
+        }
+        let mut named = std::collections::HashSet::new();
+        for (j, x) in r.ingredients.iter().enumerate() {
+            check_slug(&mut e, &at(&format!("ingredients[{j}].id")), &x.id);
+            if !named.insert(x.id.as_str()) {
+                e.push(FieldError::new(&at(&format!("ingredients[{j}].id")), format!("`{}` is named twice", x.id)));
+            }
+            if x.says.trim().is_empty() {
+                e.push(FieldError::new(&at(&format!("ingredients[{j}].says")), "is required and may not be empty"));
+            }
+        }
+        for (j, u) in r.uses.iter().enumerate() {
+            check_slug(&mut e, &at(&format!("uses[{j}]")), u);
+        }
+        if !is_fingerprint(&r.digest) {
+            e.push(FieldError::new(&at("digest"), "must be sixteen lowercase hexadecimal digits, as every fingerprint is"));
         }
     }
     e
@@ -817,5 +852,57 @@ mod tests {
         let mut other = json;
         other["outcome"] = "maybe".into();
         assert!(serde_json::from_value::<Judgement>(other).is_err());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-main-lines-recipes-are-checked-whole", "checks": ["crates/core/src/store/validate#main-line-recipes-rules", "crates/core/src/model#main-line-recipes-record"]}
+    /// ```
+    #[test]
+    fn the_main_lines_recipes_are_checked_whole() {
+        let read = Recipe {
+            id: "button".into(),
+            kind: "component".into(),
+            title: "Button".into(),
+            text: "  How to use it.".into(),
+            ingredients: vec![Ingredient { recipe: "button".into(), id: "label".into(), says: "The text.".into() }],
+            files: vec!["src/button".into()],
+            uses: vec!["icon".into()],
+            file: "ui/button.recipe.md".into(),
+            line: 3,
+            missing: vec!["src/gone".into()],
+            digest: "0123456789abcdef".into(),
+        };
+        // Made from a recipe read from the repository: nothing of its files, its file or its line.
+        let sent = SentRecipe::from(&read);
+        let json = serde_json::to_value(&sent).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "id": "button", "kind": "component", "title": "Button", "text": "  How to use it.", "ingredients": [{ "id": "label", "says": "The text." }], "uses": ["icon"], "digest": "0123456789abcdef" })
+        );
+        let mut extra = json.clone();
+        extra["files"] = serde_json::json!(["src/button"]);
+        assert!(serde_json::from_value::<SentRecipe>(extra).is_err(), "a field the record lacks is refused");
+        // Read back as the recipe it was, with no files, file or line.
+        assert_eq!(sent.as_recipe(), Recipe { files: vec![], file: String::new(), line: 0, missing: vec![], ..read.clone() });
+        let good = MainLineRecipes { recipes: vec![sent.clone(), SentRecipe { id: "icon".into(), uses: vec![], ingredients: vec![], ..sent.clone() }] };
+        assert!(validate_main_line_recipes(&good).is_empty(), "{:?}", validate_main_line_recipes(&good));
+        assert!(validate_main_line_recipes(&MainLineRecipes::default()).is_empty(), "none sent is a record too");
+        let bad = SentRecipe {
+            id: "button".into(),
+            kind: "Not A Slug".into(),
+            title: "two\nlines".into(),
+            ingredients: vec![SentIngredient { id: "label".into(), says: " ".into() }, SentIngredient { id: "label".into(), says: "again".into() }],
+            uses: vec!["Icon".into()],
+            digest: "XYZ".into(),
+            ..sent.clone()
+        };
+        let fields: Vec<String> = validate_main_line_recipes(&MainLineRecipes { recipes: vec![sent, bad] }).into_iter().map(|e| e.field).collect();
+        assert_eq!(
+            fields,
+            ["recipes[1].id", "recipes[1].kind", "recipes[1].title", "recipes[1].ingredients[0].says", "recipes[1].ingredients[1].id", "recipes[1].uses[0]", "recipes[1].digest"],
+            "every violation, in one pass"
+        );
     }
 }

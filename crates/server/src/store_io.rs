@@ -1,14 +1,16 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current or judgements file that does not parse or is named for another recipe, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, judgements, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a judgements file named for another recipe, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed, but for the text of the main line's recipes, kept as the recipe file reads."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, judgements, main line's recipes, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use grimoire_core::model::*;
 use grimoire_core::ops::Changed;
-use grimoire_core::store::{validate_baseline, validate_config, validate_judgements, validate_page, validate_proposal, validate_requirement, validate_start, validate_ticket};
+use grimoire_core::store::{
+    validate_baseline, validate_config, validate_judgements, validate_main_line_recipes, validate_page, validate_proposal, validate_requirement, validate_start, validate_ticket,
+};
 use grimoire_core::{Malformed, Store};
 
 pub mod checkouts;
@@ -56,6 +58,7 @@ pub const STARTS_DIR: &str = "starts";
 pub const PROPOSALS_DIR: &str = "proposals";
 pub const CURRENT_FILE: &str = "current.json";
 pub const JUDGEMENTS_DIR: &str = "judgements";
+pub const RECIPES_FILE: &str = "recipes.json";
 
 /// `serve.json`: which daemon serves this store. A hint, never trusted
 /// without asking the daemon itself (see `client::serving`).
@@ -279,6 +282,18 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
             Err(reason) => malformed.push(Malformed { path: BASELINE_FILE.to_string(), reason }),
         }
     }
+    // The recipes the main line last sent a server that holds no code (req:recipe-main-line-snapshot).
+    let recipes_path = store_dir.join(RECIPES_FILE);
+    if recipes_path.is_file() {
+        let result = read_record::<MainLineRecipes>(&recipes_path, trim).and_then(|m| match validate_main_line_recipes(&m).as_slice() {
+            [] => Ok(m),
+            errors => Err(errors.iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ")),
+        });
+        match result {
+            Ok(m) => store.main_line_recipes = Some(m),
+            Err(reason) => malformed.push(Malformed { path: RECIPES_FILE.to_string(), reason }),
+        }
+    }
     // A proposal written before decisions left the record is read as this build keeps it (req:ticket-proposal).
     store.settle_proposals();
     Ok((store, malformed))
@@ -419,6 +434,10 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             Some(all) => write_atomic(&store_dir.join(JUDGEMENTS_DIR).join(format!("{recipe}.json")), &to_pretty(&Judgements { recipe: recipe.clone(), judgements: all.clone() })),
             None => remove_if_present(&store_dir.join(JUDGEMENTS_DIR).join(format!("{recipe}.json"))),
         },
+        Changed::MainLineRecipes => match &store.main_line_recipes {
+            Some(m) => write_atomic(&store_dir.join(RECIPES_FILE), &to_pretty(m)),
+            None => remove_if_present(&store_dir.join(RECIPES_FILE)),
+        },
         Changed::Deleted(r) => {
             // A deleted ticket's start and proposal go with its record.
             if r.kind == Kind::Ticket {
@@ -490,6 +509,9 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     for (recipe, all) in &store.judgements {
         invalid(format!("judgements {recipe}"), validate_judgements(&Judgements { recipe: recipe.clone(), judgements: all.clone() }))?;
     }
+    if let Some(m) = &store.main_line_recipes {
+        invalid(RECIPES_FILE.into(), validate_main_line_recipes(m))?;
+    }
     let config_path = store_dir.join(CONFIG_FILE);
     if config_path.exists() {
         if !replace {
@@ -503,6 +525,7 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
             }
         }
         remove_if_present(&store_dir.join(BASELINE_FILE))?;
+        remove_if_present(&store_dir.join(RECIPES_FILE))?;
         remove_if_present(&store_dir.join(CURRENT_FILE))?;
         // The other checkouts and their current tickets were the old store's.
         remove_if_present(&store_dir.join(checkouts::CHECKOUTS_FILE))?;
@@ -535,6 +558,9 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     }
     if store.baseline.is_some() {
         persist(store_dir, store, &Changed::Baseline)?;
+    }
+    if store.main_line_recipes.is_some() {
+        persist(store_dir, store, &Changed::MainLineRecipes)?;
     }
     Ok(())
 }
@@ -975,6 +1001,46 @@ mod tests {
         let text = std::fs::read_to_string(&cfg).unwrap();
         std::fs::write(&cfg, format!("\u{feff}{text}")).unwrap();
         assert!(load(dir).is_ok());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-main-lines-recipes-are-one-file-replaced-whole", "checks": ["crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#whole-store-valid", "req:recipe-main-line-snapshot"]}
+    /// ```
+    #[test]
+    fn the_main_lines_recipes_are_one_file_replaced_whole() {
+        let tmp = temp();
+        let dir = tmp.path();
+        let mut store = Store::new(StoreConfig { repository: "C:/repo".into(), roots: vec!["overview".into()].into(), ..Default::default() });
+        let sent =
+            |id: &str| SentRecipe { id: id.into(), kind: "component".into(), title: id.to_uppercase(), text: "  Use it.".into(), ingredients: vec![], uses: vec![], digest: "0123456789abcdef".into() };
+        write_all(dir, &store, false).unwrap();
+        assert!(!dir.join(RECIPES_FILE).exists(), "none sent, no file");
+        store.main_line_recipes = Some(MainLineRecipes { recipes: vec![sent("button"), sent("icon")] });
+        persist(dir, &store, &Changed::MainLineRecipes).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
+        assert!(malformed.is_empty(), "{malformed:?}");
+        assert_eq!(loaded.main_line_recipes, store.main_line_recipes, "as sent, the text untrimmed");
+        // Replaced whole.
+        store.main_line_recipes = Some(MainLineRecipes { recipes: vec![sent("button")] });
+        persist(dir, &store, &Changed::MainLineRecipes).unwrap();
+        assert_eq!(load(dir).unwrap().0.main_line_recipes, store.main_line_recipes);
+        // One that does not validate: malformed, the rest loads.
+        let file = dir.join(RECIPES_FILE);
+        std::fs::write(&file, std::fs::read_to_string(&file).unwrap().replace("0123456789abcdef", "xyz")).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
+        assert!(loaded.main_line_recipes.is_none());
+        assert!(malformed.iter().any(|m| m.path == RECIPES_FILE && m.reason.contains("digest")), "{malformed:?}");
+        // write_all refuses one that would not load back, and writes and replaces it as the rest.
+        let mut bad = store.clone();
+        bad.main_line_recipes.as_mut().unwrap().recipes[0].digest = "nope".into();
+        assert!(matches!(write_all(dir, &bad, true), Err(StoreIoError::Invalid(what, _)) if what == RECIPES_FILE));
+        write_all(dir, &store, true).unwrap();
+        assert_eq!(load(dir).unwrap().0.main_line_recipes, store.main_line_recipes);
+        store.main_line_recipes = None;
+        write_all(dir, &store, true).unwrap();
+        assert!(!file.exists(), "replacing a store takes its record with it");
     }
 
     /// # Test contract

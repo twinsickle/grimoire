@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's grimoire root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."},{"id":"recipes","statement":"site lists every recipe the graph holds as the catalog, ordered by kind, then title, then id, each with its id, title, kind, the first paragraph of its text that is not a heading, and whether it is due, and gives with the page shown the recipes it links that exist, an ingredient's link placing its recipe, each once, in link order; recipe gives one recipe in full by its id, none for an id no recipe has: its id, title, kind and text, its ingredients each by id and what it says, the recipes it uses that exist in the order it names them and those that use it ordered by title, its last judgement's date and outcome when it has one, and whether it is due, and nothing of its files, file or line."}]}
+//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's grimoire root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."},{"id":"recipes","statement":"site and recipe read the recipes the graph holds, or, given the main line's recipes, those alone, each as a recipe read with no files; site lists every recipe as the catalog, ordered by kind, then title, then id, each with its id, title, kind, the first paragraph of its text that is not a heading, and whether it is due, and gives with the page shown the recipes it links that exist, an ingredient's link placing its recipe, each once, in link order; recipe gives one recipe in full by its id, none for an id no recipe has: its id, title, kind and text, its ingredients each by id and what it says, the recipes it uses that exist in the order it names them and those that use it ordered by title, its last judgement's date and outcome when it has one, and whether it is due, and nothing of its files, file or line."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -96,8 +96,10 @@ fn page<'g>(g: &'g Graph, slug: &str) -> Option<&'g Page> {
 }
 
 /// The site the config's `site` setting names, read from the graph, with the page `show` names in full,
-/// or the first page when it names none; a page that is not in the site is shown as none.
-pub fn site(g: &Graph, config: &StoreConfig, show: Option<&str>) -> Site {
+/// or the first page when it names none; a page that is not in the site is shown as none. Its recipes are
+/// the graph's, or `sent`'s alone when given: the main line's, for a daemon that holds no code.
+pub fn site(g: &Graph, config: &StoreConfig, show: Option<&str>, sent: Option<&MainLineRecipes>) -> Site {
+    let catalog = Catalog::of(g, sent);
     // Named pages in the order the roots link them, then the rest as named.
     let mut by_root: Vec<&String> = Vec::new();
     for root in config.roots.list() {
@@ -151,27 +153,36 @@ pub fn site(g: &Graph, config: &StoreConfig, show: Option<&str>) -> Site {
                     ids.push(id);
                 }
             }
-            ids.into_iter().filter_map(|id| recipe_node(g, id)).map(|r| entry(g, r)).collect()
+            ids.into_iter().filter_map(|id| catalog.get(id)).map(|r| entry(g, r)).collect()
         },
     });
     let name = config.roots.grimoire.as_ref().and_then(|r| page(g, r)).map(|p| p.title.clone());
-    let mut recipes: Vec<SiteRecipeEntry> = all_recipes(g).map(|r| entry(g, r)).collect();
+    let mut recipes: Vec<SiteRecipeEntry> = catalog.0.iter().map(|r| entry(g, r)).collect();
     recipes.sort_by(|a, b| (&a.kind, &a.title, &a.id).cmp(&(&b.kind, &b.title, &b.id)));
     Site { name, pages, recipes, shown }
 }
 
-fn recipe_node<'g>(g: &'g Graph, id: &str) -> Option<&'g Recipe> {
-    match g.get(&Reference::recipe(id)) {
-        Some(Node::Recipe(r)) => Some(r),
-        _ => None,
-    }
-}
+/// The recipes a site shows: the graph's, read from code, or the main line's as it sent them, each by a distinct id.
+struct Catalog(Vec<Recipe>);
 
-fn all_recipes(g: &Graph) -> impl Iterator<Item = &Recipe> {
-    g.nodes.values().filter_map(|n| match n {
-        Node::Recipe(r) => Some(r),
-        _ => None,
-    })
+impl Catalog {
+    fn of(g: &Graph, sent: Option<&MainLineRecipes>) -> Catalog {
+        Catalog(match sent {
+            Some(m) => m.recipes.iter().map(SentRecipe::as_recipe).collect(),
+            None => g
+                .nodes
+                .values()
+                .filter_map(|n| match n {
+                    Node::Recipe(r) => Some(r.clone()),
+                    _ => None,
+                })
+                .collect(),
+        })
+    }
+
+    fn get(&self, id: &str) -> Option<&Recipe> {
+        self.0.iter().find(|r| r.id == id)
+    }
 }
 
 /// The first paragraph of a recipe's prose, outside a heading or a fenced block: what the catalog says of it.
@@ -206,9 +217,11 @@ fn entry(g: &Graph, r: &Recipe) -> SiteRecipeEntry {
 }
 
 /// One recipe in full, by its id: what it says, its ingredients, how it is connected to other recipes and when it was last judged; never its files.
-pub fn recipe(g: &Graph, id: &str) -> Option<SiteRecipe> {
-    let r = recipe_node(g, id)?;
-    let mut used_by: Vec<SiteRecipeEntry> = all_recipes(g).filter(|o| o.uses.iter().any(|u| u == id)).map(|o| entry(g, o)).collect();
+/// Read from the graph, or from `sent` alone when given, as `site` reads them.
+pub fn recipe(g: &Graph, id: &str, sent: Option<&MainLineRecipes>) -> Option<SiteRecipe> {
+    let catalog = Catalog::of(g, sent);
+    let r = catalog.get(id)?;
+    let mut used_by: Vec<SiteRecipeEntry> = catalog.0.iter().filter(|o| o.uses.iter().any(|u| u == id)).map(|o| entry(g, o)).collect();
     used_by.sort_by(|a, b| (&a.title, &a.id).cmp(&(&b.title, &b.id)));
     Some(SiteRecipe {
         id: r.id.clone(),
@@ -216,7 +229,7 @@ pub fn recipe(g: &Graph, id: &str) -> Option<SiteRecipe> {
         kind: r.kind.clone(),
         text: r.text.clone(),
         ingredients: r.ingredients.iter().map(|i| SiteIngredient { id: i.id.clone(), says: i.says.clone() }).collect(),
-        uses: r.uses.iter().filter_map(|u| recipe_node(g, u)).map(|u| entry(g, u)).collect(),
+        uses: r.uses.iter().filter_map(|u| catalog.get(u)).map(|u| entry(g, u)).collect(),
         used_by,
         judged: g.judgements.get(id).and_then(|all| all.last()).map(|j| SiteJudged { date: j.date.clone(), outcome: j.outcome }),
         due: g.is_due(r),
@@ -243,7 +256,7 @@ mod tests {
         // Named out of order, with one missing: the roots' order first, then the rest as named; a missing page left out.
         let mut config = s.config.clone();
         config.site = vec!["extra".into(), "nope".into(), "git-readiness".into()];
-        let site = site(&g, &config, None);
+        let site = site(&g, &config, None, None);
         // Named by the grimoire root's title, and nothing else of it.
         assert_eq!(
             site.name.as_deref(),
@@ -269,29 +282,29 @@ mod tests {
         let json = serde_json::to_string(&site).unwrap();
         assert!(!json.contains("Why.") && !json.contains("module:") && !json.contains("decisions"), "{json}");
         // One page in full, the one asked for; a page outside the site is none.
-        assert_eq!(super::site(&g, &config, Some("extra")).shown.map(|p| p.body), Some("extra body".to_string()));
-        assert_eq!(super::site(&g, &config, Some("overview")).shown, None, "overview exists, but is not in the site");
+        assert_eq!(super::site(&g, &config, Some("extra"), None).shown.map(|p| p.body), Some("extra body".to_string()));
+        assert_eq!(super::site(&g, &config, Some("overview"), None).shown, None, "overview exists, but is not in the site");
         // Beneath a named page, its pages, deeper, in link order.
         config.site = vec!["overview".into()];
-        let site = super::site(&g, &config, None);
+        let site = super::site(&g, &config, None, None);
         assert_eq!(site.pages.iter().map(|p| (p.slug.as_str(), p.depth)).collect::<Vec<_>>()[..2], [("overview", 0), ("git-readiness", 1)]);
         // A chain of pages deeper than a call stack holds is walked.
         for i in 0..100_000 {
             s.pages.insert(format!("deep-{i}"), page(&format!("deep-{i}"), &[&format!("page:deep-{}", i + 1)]));
         }
         let deep = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
-        assert_eq!(super::site(&deep, &StoreConfig { site: vec!["deep-0".into()], ..s.config.clone() }, Some("deep-0")).pages.len(), 100_000);
+        assert_eq!(super::site(&deep, &StoreConfig { site: vec!["deep-0".into()], ..s.config.clone() }, Some("deep-0"), None).pages.len(), 100_000);
         // A retired requirement is not shown.
         s.requirements.get_mut("ready-only-with-commit").unwrap().retired = true;
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         config.site = vec!["git-readiness".into()];
-        assert!(!super::site(&g, &config, None).shown.unwrap().requirements.iter().any(|r| r.slug == "ready-only-with-commit"));
+        assert!(!super::site(&g, &config, None, None).shown.unwrap().requirements.iter().any(|r| r.slug == "ready-only-with-commit"));
         // Nothing named, nothing shown, the name still given.
-        let none = super::site(&g, &s.config, None);
+        let none = super::site(&g, &s.config, None, None);
         assert!(none.pages.is_empty() && none.shown.is_none() && none.name.is_some());
-        assert_eq!(super::site(&g, &StoreConfig { roots: vec![].into(), ..s.config.clone() }, None).name, None, "no root, no name");
+        assert_eq!(super::site(&g, &StoreConfig { roots: vec![].into(), ..s.config.clone() }, None, None).name, None, "no root, no name");
         assert_eq!(
-            super::site(&g, &StoreConfig { roots: vec!["missing".into(), s.config.roots.grimoire.clone().unwrap()].into(), ..s.config.clone() }, None).name,
+            super::site(&g, &StoreConfig { roots: vec!["missing".into(), s.config.roots.grimoire.clone().unwrap()].into(), ..s.config.clone() }, None, None).name,
             None,
             "a grimoire root that names no page gives no name, not the rites' title"
         );
@@ -334,7 +347,7 @@ mod tests {
         let g = Graph::build(&s, &Extraction::from_files(&files), &[]);
         let mut config = s.config.clone();
         config.site = vec!["git-readiness".into()];
-        let site = site(&g, &config, None);
+        let site = site(&g, &config, None, None);
         // Every recipe, by kind, then title, whether a page places it or not.
         let listed: Vec<(&str, &str, bool)> = site.recipes.iter().map(|r| (r.kind.as_str(), r.id.as_str(), r.due)).collect();
         assert_eq!(
@@ -347,18 +360,38 @@ mod tests {
         // The page shown lists the recipes it links that exist.
         assert_eq!(site.shown.unwrap().recipes.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["icon"], "an ingredient's link places its recipe, once");
         // One recipe in full: what it says, how it is connected, when last judged.
-        let button = recipe(&g, "button").expect("button");
+        let button = recipe(&g, "button", None).expect("button");
         assert_eq!((button.title.as_str(), button.kind.as_str(), button.text.as_str()), ("BUTTON", "component", "How to use button."));
         assert_eq!(button.ingredients, [SiteIngredient { id: "label".into(), says: "The text shown.".into() }]);
         assert_eq!(button.uses.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["quest", "icon"], "in the order named, a use leading nowhere left out");
         assert_eq!(button.used_by.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["quest", "aaa"], "by title: QUEST before ZED");
         assert_eq!(button.judged, Some(SiteJudged { date: "2026-10-07".into(), outcome: JudgementOutcome::Held }), "the last judgement");
         assert!(!button.due);
-        let icon = recipe(&g, "icon").expect("icon");
+        let icon = recipe(&g, "icon", None).expect("icon");
         assert!(icon.judged.is_none() && icon.due && icon.used_by.iter().any(|r| r.id == "button"));
-        assert_eq!(recipe(&g, "gone"), None);
+        assert_eq!(recipe(&g, "gone", None), None);
         // Nothing of its files reaches the answer.
         let json = serde_json::to_string(&button).unwrap();
         assert!(!json.contains("src/a") && !json.contains("ui/button.recipe.md") && !json.contains("\"line\""), "{json}");
+        // Given the main line's recipes, those alone, over a graph that holds no code: due from the digest sent.
+        let read = |id: &str| match g.get(&Reference::recipe(id)) {
+            Some(Node::Recipe(r)) => SentRecipe::from(r),
+            _ => panic!("{id} is read"),
+        };
+        let mut moved = read("icon");
+        moved.uses = vec!["button".into()];
+        let sent = MainLineRecipes { recipes: vec![read("button"), moved] };
+        let plain = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        assert!(super::site(&plain, &config, None, None).recipes.is_empty(), "no code, no recipe of its own");
+        let listed: Vec<(String, bool)> = super::site(&plain, &config, None, Some(&sent)).recipes.into_iter().map(|r| (r.id, r.due)).collect();
+        assert_eq!(listed, [("button".to_string(), false), ("icon".to_string(), true)], "judged at the digest sent, so not due");
+        let button = recipe(&plain, "button", Some(&sent)).expect("button, as sent");
+        assert_eq!(button.judged, Some(SiteJudged { date: "2026-10-07".into(), outcome: JudgementOutcome::Held }));
+        assert_eq!(button.used_by.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["icon"], "connected as the main line's recipes are");
+        assert_eq!(super::site(&plain, &config, None, Some(&sent)).shown.unwrap().recipes.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["icon"]);
+        // Given them, the graph's own are not read.
+        let only = MainLineRecipes { recipes: vec![read("button")] };
+        assert_eq!(super::site(&g, &config, None, Some(&only)).recipes.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["button"]);
+        assert_eq!(recipe(&g, "icon", Some(&only)), None);
     }
 }

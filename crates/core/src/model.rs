@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against; the store config and the records the extraction derives each have a module beneath.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of id, date, text, the ids of earlier decisions each supersedes and whether it was recorded as an adoption, in the order they landed, and whether it is retired; a decision's id is written only where it differs from its position, 1 for the oldest, read as that position where absent, and null for one not yet landed; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket was closed when: landed, the checkout it was closed in, by repository path, absent otherwise."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists, and for each requirement the decisions it adds, with no id, and the supersessions it links, by id, apart from any record it holds; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against; the store config and the records the extraction derives each have a module beneath.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of id, date, text, the ids of earlier decisions each supersedes and whether it was recorded as an adoption, in the order they landed, and whether it is retired; a decision's id is written only where it differs from its position, 1 for the oldest, read as that position where absent, and null for one not yet landed; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket was closed when: landed, the checkout it was closed in, by repository path, absent otherwise."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists, and for each requirement the decisions it adds, with no id, and the supersessions it links, by id, apart from any record it holds; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"main-line-recipes-record","statement":"The main line's recipes are exactly a list of recipes, each an id, kind, title, text, its ingredients each an id and what it says, the ids of the recipes it uses and its digest, and nothing of its files, its file or its line; one is made from a recipe read from the repository, and read back as that recipe with no files, no file and no line."}]}
 //! ```
 
 use std::fmt;
@@ -492,6 +492,69 @@ pub struct Judgement {
 pub struct Judgements {
     pub recipe: String,
     pub judgements: Vec<Judgement>,
+}
+
+/// `recipes.json`: the recipes the main line last sent a team's server, which holds no code to read
+/// them, so its site can show them (req:recipe-main-line-snapshot). A published snapshot, replaced whole
+/// by each send: never the source of truth, and nothing of the recipes' files.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MainLineRecipes {
+    pub recipes: Vec<SentRecipe>,
+}
+
+/// One recipe as the main line sends it: what a reader of the site is shown, and the digest a judgement is matched against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SentRecipe {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub text: String,
+    pub ingredients: Vec<SentIngredient>,
+    pub uses: Vec<String>,
+    pub digest: String,
+}
+
+/// An ingredient of a sent recipe: its id and what it says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SentIngredient {
+    pub id: String,
+    pub says: String,
+}
+
+impl From<&Recipe> for SentRecipe {
+    fn from(r: &Recipe) -> Self {
+        SentRecipe {
+            id: r.id.clone(),
+            kind: r.kind.clone(),
+            title: r.title.clone(),
+            text: r.text.clone(),
+            ingredients: r.ingredients.iter().map(|i| SentIngredient { id: i.id.clone(), says: i.says.clone() }).collect(),
+            uses: r.uses.clone(),
+            digest: r.digest.clone(),
+        }
+    }
+}
+
+impl SentRecipe {
+    /// The recipe as one read from the repository would be, but with nothing of its files, which were never sent.
+    pub fn as_recipe(&self) -> Recipe {
+        Recipe {
+            id: self.id.clone(),
+            kind: self.kind.clone(),
+            title: self.title.clone(),
+            text: self.text.clone(),
+            ingredients: self.ingredients.iter().map(|i| Ingredient { recipe: self.id.clone(), id: i.id.clone(), says: i.says.clone() }).collect(),
+            files: Vec::new(),
+            uses: self.uses.clone(),
+            file: String::new(),
+            line: 0,
+            missing: Vec::new(),
+            digest: self.digest.clone(),
+        }
+    }
 }
 
 impl Decision {

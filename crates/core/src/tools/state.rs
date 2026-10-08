@@ -300,6 +300,15 @@ impl State {
         self.store_mut().baseline = Some(pruned);
         Some((Changed::Baseline, went))
     }
+    /// Replace whole the recipes the main line last sent, as a store that holds no code is told
+    /// them (req:recipe-main-line-snapshot). Returns what changed, none when they are as held.
+    pub fn set_main_line_recipes(&mut self, recipes: crate::model::MainLineRecipes) -> Option<Changed> {
+        if self.store.main_line_recipes.as_ref() == Some(&recipes) {
+            return None;
+        }
+        self.store_mut().main_line_recipes = Some(recipes);
+        Some(Changed::MainLineRecipes)
+    }
     pub(super) fn store_mut(&mut self) -> &mut Store {
         self.graph = None;
         self.view = None;

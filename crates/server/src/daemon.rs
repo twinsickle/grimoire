@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket, land_ticket or judge_recipe, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held source file whose text's digest matches, extracts each that differs or appeared and every recipe file whatever its digest, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close, landing or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
+//! {"purpose":"Own the live state of one store, a project's own or a machine's copy of a server's, and of the one repository beside it unless it is shared: load them, apply tool calls, persist writes, re-extract changed files and tell listeners what changed.","criteria":[{"id":"reconfigure","statement":"On a daemon that holds code, a configure that changes the languages rebuilds the extractor for them and re-extracts the whole repository before answering."},{"id":"shared","statement":"open_shared opens a store with no repository beside it: it reads and extracts no code whatever path the store records, marks its state as holding none, so lint says without_code, status says shared and the baseline is never pruned, a configure that changes the languages extracts nothing, and what the store arrived with of one checkout's own, its current ticket and its starts, is dropped, in the store too."},{"id":"baseline-pruned","statement":"On a daemon that holds code, after every write, every re-extraction and on opening, the baseline is pruned of findings no longer produced and the smaller baseline persisted; a shared daemon never prunes it, nor does one whose intent is a server's, nor one serving another checkout of a store of its own than its main one, whose code is a branch's."},{"id":"prune-from-main-line","statement":"prune_to on a shared daemon, given the digest of the intent the findings were judged against, refuses as a conflict when its intent no longer gives that digest, comparing under the lock every write takes; otherwise it drops from the baseline every entry that neither the given findings nor its own lint, which sees what intent alone shows, a store file that did not load among it, produces, adding none, persists the smaller baseline and announces it, and answers how many entries went and how many are left; a daemon that holds code refuses it as a conflict, since it prunes its own baseline."},{"id":"main-line-recipes","statement":"take_main_line_recipes on a shared daemon validates the recipes the main line sent and replaces the store's record of them whole, persists it and announces it, unless it holds them already, and answers how many it holds; an invalid record is refused as invalid and changes nothing, and a daemon that holds code refuses it as a conflict, since it reads its own; site and site_recipe on a shared daemon read the recipes from that record, none until there is one, and on a daemon that holds code from its code, whatever record its store holds."},{"id":"serving-marker","statement":"While serving, the store holds serve.json naming this daemon's process and the port it is really listening on, with the address when a command on this machine does not reach it at 127.0.0.1, and for a grimoire served in a library the path it is served at, /g/<name>; it is removed on a clean shutdown."},{"id":"persist-after-write","statement":"A write to a store of the daemon's own is persisted to the store directory before its result is returned, and a failed persist reloads the store from disk so memory never drifts from it."},{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket, land_ticket or judge_recipe, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held source file whose text's digest matches, extracts each that differs or appeared and every recipe file whatever its digest, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close, landing or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."},{"id":"events","statement":"Every store write and every graph rebuild is announced to listeners with what changed."},{"id":"refused-reads-nothing","statement":"A daemon whose intent is a server's, once that server has refused its token, answers status and refuses every other tool as store_unavailable, saying to sign in again, until the server takes its token; it asks the server again on each call meanwhile, status among them, so a person who has signed in again is answered with no restart."},{"id":"as-the-caller","statement":"On a project that names a server, call_as sends a write to the server with the token its caller gave, in place of the daemon's own; with none, and on any other daemon, it is call."}]}
 //! ```
 
 mod kin;
@@ -83,6 +83,7 @@ pub(crate) fn describe(changed: &grimoire_core::ops::Changed) -> Vec<String> {
         Changed::Baseline => vec!["baseline".to_string()],
         Changed::Config => vec!["config".to_string()],
         Changed::Judged(recipe) => vec![format!("recipe:{recipe}")],
+        Changed::MainLineRecipes => vec!["recipes".to_string()],
         Changed::Many(cs) => cs.iter().flat_map(describe).collect(),
     }
 }
@@ -235,6 +236,30 @@ impl Daemon {
         Ok(serde_json::json!({ "pruned": went, "left": left }))
     }
 
+    /// Keep the recipes the main line sent, for a shared daemon's site, which holds no code to read them
+    /// (req:recipe-main-line-snapshot): replaced whole, persisted and announced. Answers how many it holds.
+    pub fn take_main_line_recipes(&self, recipes: grimoire_core::model::MainLineRecipes) -> Result<Value, ToolError> {
+        if !self.shared {
+            return Err(ToolError::conflict("only a shared daemon takes the main line's recipes: this one holds code and reads its own"));
+        }
+        let errors = grimoire_core::store::validate_main_line_recipes(&recipes);
+        if !errors.is_empty() {
+            return Err(ToolError::invalid("the main line's recipes do not validate", errors));
+        }
+        let held = recipes.recipes.len();
+        let mut state = self.state.lock().expect("state lock");
+        if let Some(changed) = state.set_main_line_recipes(recipes) {
+            if let Err(e) = store_io::persist(&self.store_dir, state.store(), &changed) {
+                if let Ok((store, malformed)) = store_io::load(&self.store_dir) {
+                    state.set_store(store, malformed);
+                }
+                return Err(ToolError::unavailable(format!("the main line's recipes could not be written: {e}")));
+            }
+            let _ = self.events.send(Event::Store { tool: "recipes".to_string(), changed: describe(&changed) });
+        }
+        Ok(serde_json::json!({ "recipes": held }))
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.events.subscribe()
     }
@@ -247,16 +272,24 @@ impl Daemon {
     /// The project's site as the truth now has it: the pages its setting names and what is beneath them, the one `show` names in full, or the first.
     pub fn site(&self, show: Option<&str>) -> grimoire_core::query::Site {
         let mut state = self.state.lock().expect("state lock");
-        let config = state.store().config.clone();
-        grimoire_core::query::site(state.graph(), &config, show)
+        let (config, sent) = self.site_reads(&state);
+        grimoire_core::query::site(state.graph(), &config, show, sent.as_ref())
     }
 
     /// The site, its list of pages and its catalog, with the recipe `id` names in full, read under one lock.
     pub fn site_recipe(&self, id: &str) -> (grimoire_core::query::Site, Option<grimoire_core::query::SiteRecipe>) {
         let mut state = self.state.lock().expect("state lock");
-        let config = state.store().config.clone();
+        let (config, sent) = self.site_reads(&state);
         // An empty slug names no page, so only the list, the catalog and the name are gathered.
-        (grimoire_core::query::site(state.graph(), &config, Some("")), grimoire_core::query::recipe(state.graph(), id))
+        (grimoire_core::query::site(state.graph(), &config, Some(""), sent.as_ref()), grimoire_core::query::recipe(state.graph(), id, sent.as_ref()))
+    }
+
+    /// What the site reads beside the graph: the config, and on a shared daemon, which holds no code, the
+    /// recipes the main line last sent, an empty record until it has sent any; one holding code reads its own.
+    fn site_reads(&self, state: &State) -> (grimoire_core::model::StoreConfig, Option<grimoire_core::model::MainLineRecipes>) {
+        let store = state.store();
+        let sent = self.shared.then(|| store.main_line_recipes.clone().unwrap_or_default());
+        (store.config.clone(), sent)
     }
 
     /// Run one tool, persisting any write.
@@ -1014,8 +1047,24 @@ mod tests {
         let _ = events.try_recv();
         assert_eq!(shared.prune_to(seen.clone(), &read).unwrap_err().code(), "conflict");
         assert_eq!(store_io::load(&h.store).unwrap().0.baseline.unwrap(), adopted);
-        // Judged against the intent as it is: taken.
+        // The main line's recipes are not intent: sending them moves no digest, so a prune read before them is taken.
         let now = crate::remote::intent_digest(&shared.exported());
+        let recipe = grimoire_core::model::SentRecipe {
+            id: "button".into(),
+            kind: "component".into(),
+            title: "Button".into(),
+            text: "Use it.".into(),
+            ingredients: vec![],
+            uses: vec![],
+            digest: "0123456789abcdef".into(),
+        };
+        shared.take_main_line_recipes(grimoire_core::model::MainLineRecipes { recipes: vec![recipe] }).unwrap();
+        let _ = events.try_recv();
+        assert_eq!(crate::remote::intent_digest(&shared.exported()), now);
+        let mut older = serde_json::to_value(shared.exported()).unwrap();
+        older.as_object_mut().unwrap().remove("main_line_recipes");
+        assert_eq!(crate::remote::intent_digest(&serde_json::from_value(older).unwrap()), now, "as a machine older than the record reads it");
+        // Judged against the intent as it is: taken.
         let answer = shared.prune_to(seen.clone(), &now).unwrap();
         assert_eq!(answer, json!({ "pruned": 1, "left": adopted.findings.len() - 1 }));
         let stored = store_io::load(&h.store).unwrap().0.baseline.unwrap();
@@ -1045,5 +1094,61 @@ mod tests {
         let own: std::collections::HashSet<_> = lint::lint(shared.state.lock().unwrap().graph(), &lint::Rule::ALL).iter().map(lint::Finding::key).collect();
         let left = store_io::load(&h.store).unwrap().0.baseline.unwrap().findings;
         assert!(left.contains(&broken) && left.iter().all(|k| own.contains(k)), "told of nothing, all goes but what it sees itself: {left:?}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-shared-daemon-keeps-the-main-lines-recipes", "checks": ["crates/server/src/daemon#main-line-recipes", "req:recipe-main-line-snapshot"]}
+    /// ```
+    #[test]
+    fn a_shared_daemon_keeps_the_main_lines_recipes() {
+        use grimoire_core::model::{MainLineRecipes, SentRecipe};
+        let h = Harness::new();
+        std::fs::write(h.repo.join("icon.recipe.md"), "# Icon\n\n## Recipe\n\n```json\n{\"id\":\"icon\",\"kind\":\"component\",\"files\":[\"src/a.rs\"]}\n```\n").unwrap();
+        let sent = |ids: &[&str]| MainLineRecipes {
+            recipes: ids
+                .iter()
+                .map(|id| SentRecipe {
+                    id: id.to_string(),
+                    kind: "component".into(),
+                    title: id.to_uppercase(),
+                    text: "Use it.".into(),
+                    ingredients: vec![],
+                    uses: vec![],
+                    digest: "0123456789abcdef".into(),
+                })
+                .collect(),
+        };
+        // A daemon that holds code reads its own, and refuses to be told.
+        let local = Daemon::open(&h.store).unwrap().0;
+        assert_eq!(local.take_main_line_recipes(sent(&["button"])).unwrap_err().code(), "conflict");
+        drop(local);
+        let shared = Daemon::open_shared(&h.store).unwrap();
+        let mut events = shared.subscribe();
+        assert!(shared.site(None).recipes.is_empty(), "nothing sent yet, so no catalog");
+        // Taken whole, persisted and announced; the site reads it, due against the judgements held.
+        assert_eq!(shared.take_main_line_recipes(sent(&["button", "quest"])).unwrap(), json!({ "recipes": 2 }));
+        assert!(matches!(events.try_recv(), Ok(Event::Store { tool, changed }) if tool == "recipes" && changed == vec!["recipes".to_string()]));
+        assert_eq!(store_io::load(&h.store).unwrap().0.main_line_recipes, Some(sent(&["button", "quest"])));
+        let listed: Vec<(String, bool)> = shared.site(None).recipes.into_iter().map(|r| (r.id, r.due)).collect();
+        assert_eq!(listed, [("button".to_string(), true), ("quest".to_string(), true)]);
+        assert_eq!(shared.site_recipe("quest").1.map(|r| r.title), Some("QUEST".to_string()));
+        // Replaced whole; the same again changes and announces nothing.
+        shared.take_main_line_recipes(sent(&["button"])).unwrap();
+        let _ = events.try_recv();
+        assert_eq!(shared.site_recipe("quest").1, None, "gone from the main line, gone from the site");
+        shared.take_main_line_recipes(sent(&["button"])).unwrap();
+        assert!(events.try_recv().is_err());
+        // One that does not validate is refused, and nothing changes.
+        let mut bad = sent(&["icon"]);
+        bad.recipes[0].digest = "nope".into();
+        assert_eq!(shared.take_main_line_recipes(bad).unwrap_err().code(), "invalid");
+        assert_eq!(store_io::load(&h.store).unwrap().0.main_line_recipes, Some(sent(&["button"])));
+        drop(shared);
+        // A daemon that holds code reads its code, whatever record its store holds.
+        let local = Daemon::open(&h.store).unwrap().0;
+        assert_eq!(local.site(None).recipes.into_iter().map(|r| r.id).collect::<Vec<_>>(), ["icon"]);
+        assert!(local.site_recipe("button").1.is_none());
     }
 }

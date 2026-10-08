@@ -31,6 +31,8 @@ pub struct Store {
     pub current: Option<String>,
     /// Each judged recipe's judgements, oldest first, by recipe id (req:store-judgement-record).
     pub judgements: BTreeMap<String, Vec<Judgement>>,
+    /// The recipes the main line last sent a team's server, for its site; none until it first sends them (req:recipe-main-line-snapshot).
+    pub main_line_recipes: Option<MainLineRecipes>,
 }
 
 impl Store {

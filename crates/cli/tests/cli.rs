@@ -2159,6 +2159,90 @@ fn the_main_line_prunes_a_teams_baseline() {
     assert!(!away.status.success() && text(&away).contains("cannot be reached"), "{}", text(&away));
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line", "crates/cli/src/check#land", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
+/// ```
+#[test]
+fn the_main_line_sends_its_recipes_to_a_teams_site() {
+    let t = team_fixture(None);
+    let repo = &t.checkout.repo;
+    let (home, ci) = (t.checkout.dir.join("home"), t.checkout.dir.join("pipeline-home"));
+    let recipe = |id: &str, title: &str| format!("# {title}\n\nHow to use {id}.\n\n## Recipe\n\n```json\n{{\"id\":\"{id}\",\"kind\":\"component\",\"files\":[\"src/a.rs\"]}}\n```\n");
+    std::fs::create_dir_all(repo.join("ui")).unwrap();
+    std::fs::write(repo.join("ui").join("button.recipe.md"), recipe("button", "Button")).unwrap();
+    std::fs::write(repo.join("ui").join("icon.recipe.md"), recipe("icon", "Icon")).unwrap();
+    let held = || -> serde_json::Value { std::fs::read_to_string(t.origin.store.join("recipes.json")).map(|s| serde_json::from_str(&s).unwrap()).unwrap_or_default() };
+    // A branch sends nothing.
+    team(repo, &home, Some(&t.writer), &["check"]);
+    assert!(!t.origin.store.join("recipes.json").exists(), "a branch's check sends no recipe");
+    // The main line, with a token that may only read: said, and the check is not failed by it.
+    let refused = team(repo, &ci, Some(&t.reader), &["check", "--main-line"]);
+    assert!(text(&refused).contains("did not take the main line's recipes") && text(&refused).contains("may only read"), "{}", text(&refused));
+    assert!(!t.origin.store.join("recipes.json").exists());
+    // With a write token: sent, without their files, and said on standard error under --json.
+    let sent = team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--json"]);
+    assert!(String::from_utf8_lossy(&sent.stderr).contains("it holds 2") && serde_json::from_slice::<serde_json::Value>(&sent.stdout).is_ok(), "{}", text(&sent));
+    let record = held();
+    let ids: Vec<&str> = record["recipes"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["button", "icon"]);
+    assert_eq!(record["recipes"][0]["title"], "Button");
+    assert!(!record.to_string().contains("src/a.rs") && !record.to_string().contains("button.recipe.md"), "{record}");
+    // A send the server does not take, here a body past what the route reads, is said and fails nothing: the ticket lands, the prune is taken.
+    std::fs::remove_file(repo.join("ui").join("icon.recipe.md")).unwrap();
+    std::fs::write(repo.join("ui").join("big.recipe.md"), format!("# Big\n\n{}\n\n## Recipe\n\n```json\n{{\"id\":\"big\",\"kind\":\"component\"}}\n```\n", "word ".repeat(1 << 20))).unwrap();
+    let tool = |name: &str, input: &str| team(repo, &home, Some(&t.writer), &["tool", name, input]);
+    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("file_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
+    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)).status.success());
+    let landed = team(repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
+    assert!(landed.status.success() && text(&landed).contains("pruned") && text(&landed).contains("recipes were not sent"), "{}", text(&landed));
+    assert_eq!(held()["recipes"].as_array().unwrap().len(), 2, "the record the server last took stays");
+    // The next main-line check sends them again, replaced whole.
+    std::fs::remove_file(repo.join("ui").join("big.recipe.md")).unwrap();
+    let again = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert!(text(&again).contains("it holds 1"), "{}", text(&again));
+    assert_eq!(held()["recipes"].as_array().unwrap().len(), 1);
+    // The export carries it to a machine's copy.
+    let bearer = |token: &str| format!("Host: 127.0.0.1\r\nAuthorization: Bearer {token}\r\n");
+    let (_, export) = http(t.port, &format!("GET /api/export HTTP/1.0\r\n{}\r\n", bearer(&t.reader)));
+    assert!(export.contains("\"main_line_recipes\"") && export.contains("How to use button."), "{export}");
+    // The route itself: a writer, a JSON body that is the record and validates, and not offered to an agent.
+    let one = r#"{"recipes":[{"id":"quest","kind":"content","title":"Quest","text":"Go.","ingredients":[],"uses":[],"digest":"0123456789abcdef"}]}"#;
+    assert_eq!(status_of(t.port, "POST", "/api/recipes", &bearer(&t.reader), one), 403);
+    assert_eq!(status_of(t.port, "POST", "/api/recipes", &bearer(&t.writer), r#"{"recipes":[],"more":1}"#), 400);
+    assert_eq!(status_of(t.port, "POST", "/api/recipes", &bearer(&t.writer), &one.replace("0123456789abcdef", "nope")), 400, "a record that does not validate");
+    let (status, _) = http(t.port, &format!("POST /api/recipes HTTP/1.0\r\n{}Content-Type: text/plain\r\nContent-Length: 2\r\n\r\n{{}}", bearer(&t.writer)));
+    assert_eq!(status, 415);
+    assert_eq!(held()["recipes"][0]["id"], "button", "nothing refused changed it");
+    // Past the 2 MiB a body is otherwise held to, and within 4 MiB, the record is taken.
+    let long = one.replace("Go.", &"word ".repeat(700_000));
+    assert!(long.len() > 3 << 20);
+    assert_eq!(status_of(t.port, "POST", "/api/recipes", &bearer(&t.writer), &long), 200);
+    assert_eq!(held()["recipes"][0]["id"], "quest");
+    team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
+    assert_eq!(held()["recipes"][0]["id"], "button", "the main line's again");
+    let (_, tools) = http(t.port, &format!("GET /api/tools HTTP/1.0\r\n{}\r\n", bearer(&t.reader)));
+    assert!(!tools.contains("\"recipes\""), "{tools}");
+    let (own, _) = project();
+    let (_daemon, local) = serve(&own);
+    assert_eq!(status_of(local, "POST", "/api/recipes", "Host: 127.0.0.1\r\n", one), 409, "a daemon that holds code reads its own");
+    drop(_daemon);
+    // The team's site, served by the server that holds no code, shows the catalog the main line sent, and none of its files.
+    let store = t.origin.store.to_string_lossy().to_string();
+    drop(t._server);
+    let site = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let host = t.origin.dir.join("host");
+    let _server = Serving(grimoire().args(["serve", "--shared", "--store", &store, "--listen", "127.0.0.1:0", "--site", &format!("127.0.0.1:{site}")]).current_dir(&host).spawn().unwrap());
+    eventually("the site answers", || std::net::TcpStream::connect(("127.0.0.1", site)).is_ok());
+    let get = |path: &str| http(site, &format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1:{site}\r\n\r\n"));
+    let (code, catalog) = get("/recipes/");
+    assert!(code == 200 && catalog.contains("/recipes/button") && !catalog.contains("/recipes/icon"), "{catalog}");
+    let (code, button) = get("/recipes/button");
+    assert!(code == 200 && button.contains("How to use button.") && !button.contains("src/a.rs"), "{button}");
+}
+
 /// One raw HTTP exchange with a daemon: the status and the body.
 fn http(port: u16, request: &str) -> (u16, String) {
     use std::io::{Read, Write};

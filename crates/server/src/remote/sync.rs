@@ -123,6 +123,7 @@ fn mend(malformed: &[grimoire_core::Malformed], new: &Store) -> Vec<Changed> {
         out.push(match (dir, slug) {
             ("", file) if file == store_io::CURRENT_FILE => Changed::Current,
             ("", file) if file == store_io::BASELINE_FILE => Changed::Baseline,
+            ("", file) if file == store_io::RECIPES_FILE => Changed::MainLineRecipes,
             ("pages", s) if new.pages.contains_key(s) => Changed::Page(s.to_string()),
             ("pages", s) => Changed::Deleted(Reference::page(s)),
             ("requirements", s) if new.requirements.contains_key(s) => Changed::Requirement(s.to_string()),

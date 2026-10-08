@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Judge a checkout's code against its grimoire for a hook or a pipeline, and land the ticket a change carried: check and land, which share how a store is judged and its baseline pruned.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; beside each finding it prints every change still waiting to land from this checkout that the lint answer's mended says would mend it, the finding still failing; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither active nor landing, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then prints the findings of the intent and code that prune judged, as check does, and says how many entries went, on standard error under --json; it exits non-zero when there are new findings or the prune failed; on a store of the project's own it does what check does."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"check-omens","statement":"check prints each omen after the findings and before the advisories, then a line counting them and saying they do not fail the check, exits non-zero for none of them, and under --json answers them as omens."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, or on a project that names a server and with no ticket given that a ticket lands on the main line, names the tickets still landing; on a project that names a server, once a ticket it named has landed, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went; it exits non-zero when a landing was refused, when a landing taken on a team could not then prune, saying the ticket landed, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."}]}
+//! {"purpose":"Judge a checkout's code against its grimoire for a hook or a pipeline, and land the ticket a change carried: check and land, which share how a store is judged and its baseline pruned.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; beside each finding it prints every change still waiting to land from this checkout that the lint answer's mended says would mend it, the finding still failing; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither active nor landing, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then sends the server the recipes that code reads with send_recipes, and prints the findings of the intent and code that prune judged, as check does, says how many entries went and how many recipes the server holds, on standard error under --json, or as a warning on standard error why the recipes were not taken; it exits non-zero when there are new findings or the prune failed, never because the recipes were not taken; on a store of the project's own it does what check does."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"check-omens","statement":"check prints each omen after the findings and before the advisories, then a line counting them and saying they do not fail the check, exits non-zero for none of them, and under --json answers them as omens."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, or on a project that names a server and with no ticket given that a ticket lands on the main line, names the tickets still landing; on a project that names a server, once a ticket it named has landed, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went, then sends the server the recipes that code reads with send_recipes, whatever the prune came to, saying how many the server holds or, as a warning on standard error, why they were not taken; it exits non-zero when a landing was refused, when a landing taken on a team could not then prune, saying the ticket landed, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."}]}
 //! ```
 
 use anyhow::{bail, Context};
@@ -14,16 +14,20 @@ use crate::{checkout_view, run_tool, team, Target};
 /// Run the lints for a hook or a pipeline and print what they found; exits 1 when the check fails.
 pub(crate) fn check(target: Target, rules: Vec<String>, json: bool, ticket: Option<String>, main_line: bool) -> anyhow::Result<()> {
     let store_dir = target.store_dir.clone();
-    // On a team, what the main line's prune came to.
+    // On a team, what the main line's prune came to, and its sending of the recipes.
     let mut pruned = None;
+    let mut sent = None;
     let mut loaded = match &target.team {
         // The main line reads the server's intent into memory, never the copy a daemon beside it may not have
         // synced, prunes from it, and reports on that same intent, the one the prune was judged against.
         Some(team) if main_line => {
-            let line = team::prune_from_main_line(team, &team.server()?)?;
+            let server = team.server()?;
+            let mut line = team::prune_from_main_line(team, &server)?;
             for e in &line.loaded.extract_errors {
                 eprintln!("warning: {e}");
             }
+            // Whatever the prune came to: the recipes are read whatever the languages, and the digest the prune names leaves them out.
+            sent = Some(team::send_recipes(team, &server, &mut line.loaded));
             pruned = Some(line.pruned);
             line.loaded
         }
@@ -123,10 +127,23 @@ pub(crate) fn check(target: Target, rules: Vec<String>, json: bool, ticket: Opti
             }
         }
     }
+    if let Some(sent) = sent {
+        say_sent(sent, json);
+    }
     if failed {
         std::process::exit(1)
     }
     Ok(())
+}
+
+/// What sending the main line's recipes came to: said, never failing, since the site's catalog is a
+/// published snapshot the next landing or main-line check sends again (req:recipe-main-line-snapshot).
+fn say_sent(sent: anyhow::Result<u64>, json: bool) {
+    match sent {
+        Ok(held) if json => eprintln!("sent the server the main line's recipes: it holds {held}"),
+        Ok(held) => println!("sent the server the main line's recipes: it holds {held}"),
+        Err(e) => eprintln!("warning: {e}; the team's site shows the recipes it last took"),
+    }
 }
 
 /// Signs that something may be wrong, after the findings: never failing (req:lint-omens).
@@ -200,13 +217,28 @@ pub(crate) fn land(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> 
                 // On a team a ticket lands by name on the main line, which then tells the server what is fixed,
                 // against the truth with the ticket applied. A store of the project's own was pruned by the write.
                 if let Some(team) = &target.team {
-                    let pruned = team.server().and_then(|server| team::prune_from_main_line(team, &server)).and_then(|line| line.pruned);
-                    match pruned {
-                        Ok(went) => println!("pruned {went} baselined finding(s) the main line no longer produces"),
+                    let (server, mut line) = match team.server().and_then(|server| team::prune_from_main_line(team, &server).map(|line| (server, line))) {
+                        Ok(read) => read,
                         Err(e) => {
                             eprintln!("the ticket landed, but {e}");
                             std::process::exit(1)
                         }
+                    };
+                    // After the prune, whatever it came to: the recipes are read whatever the languages.
+                    let sent = team::send_recipes(team, &server, &mut line.loaded);
+                    let failed = match line.pruned {
+                        Ok(went) => {
+                            println!("pruned {went} baselined finding(s) the main line no longer produces");
+                            false
+                        }
+                        Err(e) => {
+                            eprintln!("the ticket landed, but {e}");
+                            true
+                        }
+                    };
+                    say_sent(sent, false);
+                    if failed {
+                        std::process::exit(1)
                     }
                 }
             } else {
