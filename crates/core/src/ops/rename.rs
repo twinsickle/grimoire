@@ -7,7 +7,7 @@
 use super::*;
 
 /// Rename a page or requirement to `to`, keeping every field and decision,
-/// and rewrite the references the store holds. Closed tickets keep the old
+/// and rewrite the references the store holds. Bottled tickets keep the old
 /// reference as history. The changes come back in the order they must be
 /// persisted: the new record, what refers to it, and the old record last, so
 /// a failure part way leaves both rather than a dangling link.
