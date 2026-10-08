@@ -1,7 +1,7 @@
 ---
 name: grimoire
-description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "start ticket", "finish ticket", "close the ticket", "write the spec", "file a ticket", "resolve", "answer the question", "what does this rest on", "adopt", "write contracts for the existing code", or asks what the project is meant to do. It wraps the Grimoire tools into the sequences that keep the grimoire honest: start a ticket, write its spec, finish it, file one, resolve a gap or question with the person, and adopt code that predates its contracts or tests.
-argument-hint: start|spec|finish|file|resolve|adopt <ticket-slug, title or area>
+description: This skill should be used when working on a project that Grimoire manages (it has a `.grimoire.toml`), whenever the user says "brew ticket", "start ticket", "finish ticket", "close the ticket", "bottle the ticket", "write the spec", "inscribe a ticket", "file a ticket", "resolve", "answer the question", "what does this rest on", "adopt", "write contracts for the existing code", or asks what the project is meant to do. It wraps the Grimoire tools into the sequences that keep the grimoire honest: brew a ticket, write its spec, finish it, inscribe one, resolve a gap or question with the person, and adopt code that predates its contracts or tests.
+argument-hint: brew|spec|finish|inscribe|resolve|adopt <ticket-slug, title or area>
 ---
 
 # Grimoire
@@ -9,7 +9,7 @@ argument-hint: start|spec|finish|file|resolve|adopt <ticket-slug, title or area>
 Grimoire holds a project's **grimoire** (pages of intent, requirements with
 scenarios and dated decisions, the module contracts in the code, the code)
 and its **tickets** (changes, gaps, questions) as one graph. The grimoire and
-the code record what the project does; a ticket never does. Landing a ticket
+the code record what the project does; a ticket never does. Bottling a ticket
 updates the grimoire in the same piece of work. This skill is a thin client of
 the tools.
 
@@ -76,23 +76,23 @@ it created in `warnings`. Every warning is work to do now.
   `covered_by` criteria, dated append-only **decisions** of one paragraph
   each: what was chosen and why. A decision that overturns earlier ones
   names them in `record_decision`'s `supersedes`, by id: `d1`, `d2` and
-  so on, each given as the decision lands and never given twice, and
+  so on, each given as the decision is bottled and never given twice, and
   referenced as `req:<slug>#d<n>`; they stay, no longer in force, and
   `rests_on` shows only what is. A decision recorded under a ticket has
-  no id until the ticket lands, so the ticket cannot supersede it. A requirement that no longer holds is retired with `retire_node`,
-  never deleted: `delete_node` refuses one with decisions, and a closed
+  no id until the ticket is bottled, so the ticket cannot supersede it. A requirement that no longer holds is retired with `retire_node`,
+  never deleted: `delete_node` refuses one with decisions, and a bottled
   ticket.
-- **A write that changes intent lands in a ticket's proposal**, not in the
+- **A write that changes intent goes into a ticket's proposal**, not in the
   truth: `put_page`, `patch_page`, `put_requirement`, `record_decision`,
   `supersede`, `retire_node` and `delete_node` of a page or requirement take
-  `ticket` (a slug or `ticket:` reference); absent, they land in the store's
-  current ticket, the one last started (on a team, last started in this
+  `ticket` (a slug or `ticket:` reference); absent, they go into the store's
+  current ticket, the one last brewed (on a team, last brewed in this
   checkout); with neither they are refused.
-  The truth changes when the ticket closes. A patch, retirement or
+  The truth changes when the ticket is bottled. A patch, retirement or
   deletion builds on the proposal's copy of the record; when the truth
   moved under it, the write is refused as a `conflict`: `get` the record
   and put it whole again under the ticket. A decision or supersession
-  builds on no copy: it waits in the proposal and lands after whatever
+  builds on no copy: it waits in the proposal and is added after whatever
   decisions the truth holds then, so putting a requirement again never
   loses one.
   When the truth moves under a record your ticket already proposes, your
@@ -107,30 +107,31 @@ it created in `warnings`. Every warning is work to do now.
 - **A ticket's references are proposal state.** Its own `touches` and
   `relies_on` are kept on it and readable everywhere, but the check judges
   them only where the ticket is current, and on the main line when it
-  lands; `file_ticket` and an edit to a ticket's own references apply at
+  is bottled; `inscribe_ticket` and an edit to a ticket's own references apply at
   once. An edit `update_ticket` makes to *another* ticket's `touches` or
   `relies_on` under a change being worked (named in `ticket`, else the
   current one) waits in that change's proposal, shown on the other ticket
-  as a draft, and reaches it when the change lands; under a gap, a question
+  as a draft, and reaches it when the change is bottled; under a gap, a question
   or no ticket it applies at once. Title, priority and body always apply at
   once.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes
   and leaves alone), a Markdown body under 4,000 characters that is
   discarded on close. Kinds `change`, `gap`, `question`; priorities `next`,
-  `high`, `later`; statuses `open`, `active`, `landing` (its decision
-  written, its change yet to land) and `closed`.
-- **A branch holds one ticket** until that ticket lands, where the project
-  is worked in git: landed with `grimoire land`, which on a team is once
+  `high`, `later`; statuses `inscribed` (filed, nobody on it), `brewing`
+  (being worked), `simmering` (its decision written, waiting for its change
+  to reach the main line) and `bottled` (done, its decision kept).
+- **A branch holds one ticket** until that ticket is bottled, where the project
+  is worked in git: bottled with `grimoire bottle`, which on a team is once
   the branch has merged to the main line.
   The check judges a checkout's code against its current ticket's proposal
-  alone, so a second ticket started beside one still waiting to land splits
-  the branch's intent, and its check fails on the first one's code. Start
-  the next ticket on a new branch, or wait for the landing. Work too big
+  alone, so a second ticket brewed beside one still simmering splits
+  the branch's intent, and its check fails on the first one's code. Brew
+  the next ticket on a new branch, or wait for the bottling. Work too big
   for one checkout is split into branches of the ticket's branch: each
-  helper takes the same ticket up there with `start_ticket`, shares its one
-  proposal and merges back into the ticket's branch, which alone lands.
-  Work found along the way is filed as a ticket of its own. Nothing refuses
-  a second ticket: `start_ticket` answers in `waiting` each ticket this
+  helper takes the same ticket up there with `brew_ticket`, shares its one
+  proposal and merges back into the ticket's branch, which alone is bottled.
+  Work found along the way is inscribed as a ticket of its own. Nothing refuses
+  a second ticket: `brew_ticket` answers in `waiting` each ticket this
   checkout still carries, and the check names such a ticket beside a
   finding it would mend, the finding still failing.
 - `put_page` and `put_requirement` **replace** the record. To add or remove
@@ -172,35 +173,35 @@ answer "who calls this"; that is grep or the language server, by design.
 `find` locates a node by any text. `get` shows a node with its `in` and `out`
 edges.
 
-## Sequence: start a ticket
+## Sequence: brew a ticket
 
-1. `start_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
-   `active` and returns the ticket, `rests_on` (the assumptions to
+1. `brew_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
+   `brewing` and returns the ticket, `rests_on` (the assumptions to
    challenge, nearest first: what it names directly, every requirement below
-   it with the decisions behind each, and every closed ticket it relies on),
+   it with the decisions behind each, and every bottled ticket it relies on),
    `reaches` (the rest of what is below it, the modules its imports lead to
    and the like, as a count and references; `rests_on` the tool gives the
-   whole walk with each path), `related` (open gaps
-   and questions touching what it touches) and `recipes` (the recipes over
+   whole walk with each path), `related` (the gaps
+   and questions not yet bottled touching what it touches) and `recipes` (the recipes over
    what it touches, its own modules' and those of the modules importing them,
    each saying whether it is `due`: what the project
    promises the people who build with it, which this work may break). If
    it answers `waiting`, this checkout still carries a ticket that has not
-   landed: say so, and land that one first or move this work to a new
+   been bottled: say so, and bottle that one first or move this work to a new
    branch (see "A branch holds one ticket" above). If the ticket is already
-   active,
+   brewing,
    use `get`, `rests_on` and `related_tickets` instead; on a team,
-   `start_ticket` on a ticket already active takes it up in this checkout:
+   `brew_ticket` on a ticket already brewing takes it up in this checkout:
    it becomes the current ticket here and nothing of it changes. The answer's
    `checked_out` is who has the ticket now and since when, you among them;
    if `others` names someone, they have it too: say so before you both work
-   it. Nothing refuses the start.
+   it. Nothing refuses the brew.
 2. Read `rests_on` as a list of assumptions. Each node the ticket names
    itself carries `says`, its text (a page's body, a requirement's statement
    and scenarios, a module's contract, an answer waiting for this change):
    that is what the ticket rests on, so read it there rather than from
    memory. For each requirement with
-   decisions, and each closed ticket listed, ask whether the decision still
+   decisions, and each bottled ticket listed, ask whether the decision still
    holds given what this ticket changes. Name the ones you would challenge,
    with why, before planning. This is the moment the question is asked;
    nothing pushes it later. The walk is bounded: a ticket relied on appears
@@ -209,9 +210,9 @@ edges.
    followed all the way down, since that is the blast radius; what they
    reach comes under `reaches` by reference, to `get` where it matters.
 3. Read `related`. A gap or question that touches the same nodes is context
-   for this work and may be closed by it; say which.
+   for this work and may be bottled by it; say which.
 4. For each module in `touches`, `rests_on_me` shows the blast radius: the
-   requirements, recipes and pages above it and the other open tickets
+   requirements, recipes and pages above it and the other tickets not yet bottled
    reaching it.
    Then `get` the module for its files and declarations before opening any
    of them.
@@ -222,7 +223,7 @@ edges.
 
 The spec is not a document; it is the grimoire after the change, written before
 the code, as the ticket's proposal: every write below names the ticket, or
-lands in it as the current one, and the truth is untouched until the close.
+goes into it as the current one, and the truth is untouched until the close.
 Read the spec back with `ticket` on the reads, or they show the truth.
 
 1. For each node in the ticket's `touches`: `get` it. For a page,
@@ -235,8 +236,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    today.
 3. A criterion the code will need to satisfy goes into the module contract in
    the source, and the requirement's `covered_by` names it. Until the code
-   lands the reference dangles; that is allowed and expected. Say so. If
-   the behaviour lands in a module the ticket does not list, `update_ticket`
+   is written the reference dangles; that is allowed and expected. Say so. If
+   the behaviour goes into a module the ticket does not list, `update_ticket`
    to add it to `touches` first; `touches` is a claim about what changed and
    has to stay true.
 4. `lint`. Fix every finding this work created. Findings that predate it are
@@ -257,7 +258,7 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    changed but whose body did not is the failure this step exists to catch.
    Fix it, or remove the reference from `touches` with `update_ticket` and
    say why it did not need changing.
-4. Judge the recipes. Each recipe the start named as `due`, and any the
+4. Judge the recipes. Each recipe the brew named as `due`, and any the
    `lint` reports `due-recipe`, is judged now against what it represents: read the recipe
    and its `files` as they are after this work. If it still says truly how
    to use what it represents, `judge_recipe { "ref": "recipe:<id>", "outcome":
@@ -288,65 +289,66 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    `baselined` counts the inherited ones there; they are not this ticket's.
    `unnamed` lists what this ticket's own work changed that `touches`
    never named, its proposal's pages and requirements and the modules its
-   code changed since its branch's base (or, with none, since the start),
-   never what other tickets landed, each with what it says and the
+   code changed since its branch's base (or, with none, since the brew),
+   never what other tickets brought, each with what it says and the
    requirements resting on it:
-   read them as you read `rests_on` at the start, since the work reached
+   read them as you read `rests_on` at the brew, since the work reached
    them; one that belonged to the ticket goes into `touches` next time, and
-   one whose intent the work broke is a gap to file.
+   one whose intent the work broke is a gap to inscribe.
    `untouched` lists the nodes in `touches` that never changed since the
-   ticket started. For each, the change was missed (make it, in a new
-   ticket, since this one is closed) or the node did not need changing
+   ticket was brewed. For each, the change was missed (make it, in a new
+   ticket, since this one is bottled) or the node did not need changing
    (say so in the decision, and next time remove it from `touches` before
-   closing). `null` means it cannot be said: the ticket was started before
+   closing). `null` means it cannot be said: the ticket was brewed before
    snapshots existed, or the daemon that answered holds no code.
 
-   When the change has code that has still to land, add `"when": "landed"`.
-   The decision is written and the ticket becomes `landing`: nothing reaches
+   When the change has code that has still to reach the main line, add
+   `"when": "bottled"`.
+   The decision is written and the ticket becomes `simmering`: nothing reaches
    the truth yet, the ticket keeps its proposal and stays the current one,
    and the check still judges the code against that proposal. Its answer
    carries the findings as the proposal leaves them and no `untouched`. The
-   landing then closes it with that decision: `grimoire land`. The
+   bottling then bottles it with that decision: `grimoire bottle`. The
    post-commit hook runs it after every commit where `init` installed one
    (it leaves a hook of the project's own alone and installs none outside
-   git, and says so), and a pipeline runs it as `grimoire land <ticket>`
+   git, and says so), and a pipeline runs it as `grimoire bottle <ticket>`
    when the change reaches its main line. Where neither does, run it
-   yourself once the change has landed. On a team a commit on a machine
-   lands nothing, and `grimoire land` with no ticket says so: the ticket
-   lands by name on the main line, run by the pipeline (which checks the
+   yourself once the change is on the main line. On a team a commit on a machine
+   bottles nothing, and `grimoire bottle` with no ticket says so: the ticket
+   is bottled by name on the main line, run by the pipeline (which checks the
    change first with `grimoire check --ticket <ticket>`, and prunes the
    team's baseline on the main line with `grimoire check --main-line`;
    never run either of the latter from a branch) or by a person once
    the change has merged. So the truth moves when the code
-   lands, and a commit the check refuses lands nothing. If the truth moved meanwhile, the landing
-   is refused and the ticket stays `landing`, reported as `landing-moved`:
+   reaches the main line, and a commit the check refuses bottles nothing. If the truth moved meanwhile, the bottling
+   is refused and the ticket stays `simmering`, reported as `simmering-moved`:
    write the moved records again under the ticket and run
-   `grimoire land <ticket>`. A change with nothing to land, and a gap or
+   `grimoire bottle <ticket>`. A change with nothing to bottle, and a gap or
    question whose answer needs no work, close at once, without `when`. A
-   gap or question whose answer needs work takes `when: landed` and closes
-   when the changes relying on it land (see the resolve sequence).
+   gap or question whose answer needs work takes `when: bottled` and is bottled
+   when the changes relying on it are (see the resolve sequence).
 
    A change reconsidered and no longer to be made, before or after its
-   decision was written, a landing the truth moved under among them, is
-   not closed but withdrawn: `withdraw_ticket { "ref", "decision" }`, the
-   decision saying why. Nothing of its proposal is applied; it closes
+   decision was written, a bottling the truth moved under among them, is
+   not bottled but withdrawn: `withdraw_ticket { "ref", "decision" }`, the
+   decision saying why. Nothing of its proposal is applied; it is bottled
    marked withdrawn, and an answer it was to apply reopens unless another
    change applied it. Withdrawing is the person's call, laid out like any
    question; never withdraw a change to make a check pass.
 7. Commit the code only when the user has asked for a commit. The store is
    outside the repository; the commit is the code and its contracts. For a
-   `landing` ticket the commit closes it where the post-commit hook is
+   `simmering` ticket the commit bottles it where the post-commit hook is
    installed and the store is the project's own (on a team the main line
-   lands it), and the hook prints what landed and any ticket still waiting;
-   if nothing says it landed, run `grimoire land`.
+   bottles it), and the hook prints what was bottled and any ticket still
+   simmering; if nothing says it was bottled, run `grimoire bottle`.
 
-## Sequence: file a ticket
+## Sequence: inscribe a ticket
 
 1. `find` the nodes it touches and relies on; resolve every reference.
-2. `file_ticket` with a title, kind, priority, `touches`, `relies_on`, and
+2. `inscribe_ticket` with a title, kind, priority, `touches`, `relies_on`, and
    a body of a few paragraphs: the problem, the direction, the decision if
    one was already taken (it is recorded on the requirement later, when the
-   work lands). The id is generated; do not send a slug. Refer to the
+   work is bottled). The id is generated; do not send a slug. Refer to the
    ticket afterwards by the `ref` the response returns, with its title
    beside it in prose.
 3. Any `warnings` in the response are new dangling references. Fix them
@@ -354,13 +356,13 @@ Read the spec back with `ticket` on the reads, or they show the truth.
 
 ## Sequence: resolve a gap or question
 
-A gap or question closes on the person's decision, never on yours.
+A gap or question is closed on the person's decision, never on yours.
 
-1. `start_ticket`; read what it rests on and the related tickets, as for
-   any ticket. On a gap or question it claims it: active, with you listed as
+1. `brew_ticket`; read what it rests on and the related tickets, as for
+   any ticket. On a gap or question it claims it: brewing, with you listed as
    having it checked out, but never the current ticket, so the change your
    branch works on stays current. If `others` names someone, they are
-   answering it too: say so. Closing one needs no start.
+   answering it too: say so. Closing one needs no brew.
 2. Lay out two to four resolutions for the person: what each costs, what
    each rules out, and which you would pick and why. Write nothing yet.
 3. The person chooses, amends or adds one. Their choice, in their terms, is
@@ -369,13 +371,13 @@ A gap or question closes on the person's decision, never on yours.
    "Decided by the user". If it implies work, `close_ticket` the gap or
    question with the decision and `change`, the change that applies it:
    `title`, `touches`, `priority`, a `body` carrying what the person said
-   (scope, what to avoid), and any further `relies_on`. One call files that
+   (scope, what to avoid), and any further `relies_on`. One call inscribes that
    change relying on the gap or question, writes the decision ending
    "Applied by <id>." and answers the change in `filed`; refused, it
    changes nothing. Fix any `warnings` in `filed` with `update_ticket`. A
-   change already filed, relying on it, needs no `change`: close with
-   `when: landed`. Either way the answer waits, `landing`, and closes when
-   every change relying on it has landed; the change counts it as answered
+   change already inscribed, relying on it, needs no `change`: close with
+   `when: bottled`. Either way the answer waits, `simmering`, and is bottled when
+   every change relying on it has been; the change counts it as answered
    and is ready.
    Nothing closes a waiting answer by hand: if its last change is deleted or
    stops relying on it, it reopens with the answer in its body, to be
@@ -383,10 +385,10 @@ A gap or question closes on the person's decision, never on yours.
    that it was asked, and how it was answered, is what the change rests on.
 5. With no person to ask (an autonomous run), do not resolve. Add the
    options to the ticket's body with `update_ticket`, as `append`, and leave
-   it open.
+   it unanswered.
 
 A change that turns out to be a question is closed with a decision saying
-so and the question filed, or deleted if nothing was decided.
+so and the question inscribed, or deleted if nothing was decided.
 
 ## Sequence: adopt existing code
 
@@ -466,7 +468,7 @@ For an area whose contracts are in, its criteria that no test checks.
   close; a page, requirement or decision does not.
 - Do not infer call edges or dependencies the graph does not show. Blast
   radius is at module level, from imports; say so when it matters.
-- Do not reopen a closed ticket. File a new one that `relies_on` it.
+- Do not reopen a bottled ticket. Inscribe a new one that `relies_on` it.
 - Do not decide a gap or question yourself. Lay out the options; the person
   chooses, and their choice is the decision.
 - Do not call `adopt` to make a finding go away. It turns every present

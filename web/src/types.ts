@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing, and localId gives what follows the last # of a criterion, test or ingredient reference, which never holds one; nothing recovers a declaration's file from its reference."},{"id":"gone-references","statement":"goneOf names a closed ticket's references whose edge get gave no title, the nodes the graph no longer holds, and names none for a ticket that is not closed or a node of any other kind."},{"id":"server-away","statement":"serverAway gives the header's warning for a machine whose intent is a copy of a server that did not answer, with when the copy was fetched when that is known, or that refused the machine's token, saying to sign in; and nothing when there is no server or it answered."},{"id":"checked-out-words","statement":"checkedOutWords says who has a ticket checked out as `checked out by alex · since 14:10`, each holder in turn joined by and, the time local and only the hour and minute when it is today, the date before it otherwise, and the text as given when it is not a time; with nobody listed, `checked out by someone unknown`."},{"id":"missing-root","statement":"missingRoot says, of a root the config names, that it has no page yet and that a page of that slug makes it; with no root named, that configure names one."}]}
+ * {"purpose":"The TypeScript shapes of every node, summary and tool answer, generated from the Rust answer types, with the node aliases the views use and the reference helpers.","criteria":[{"id":"mirrors-tools","statement":"Every tool answer, node and error shape the UI uses comes from web/src/generated/tools.ts, generated from the Rust answer types; nothing here restates one by hand."},{"id":"reference-helpers","statement":"kindOf and idOf split a kind:id reference without any other parsing, and localId gives what follows the last # of a criterion, test or ingredient reference, which never holds one; nothing recovers a declaration's file from its reference."},{"id":"gone-references","statement":"goneOf names a bottled ticket's references whose edge get gave no title, the nodes the graph no longer holds, and names none for a ticket that is not bottled or a node of any other kind."},{"id":"server-away","statement":"serverAway gives the header's warning for a machine whose intent is a copy of a server that did not answer, with when the copy was fetched when that is known, or that refused the machine's token, saying to sign in; and nothing when there is no server or it answered."},{"id":"checked-out-words","statement":"checkedOutWords says who has a ticket checked out as `checked out by alex · since 14:10`, each holder in turn joined by and, the time local and only the hour and minute when it is today, the date before it otherwise, and the text as given when it is not a time; with nobody listed, `checked out by someone unknown`."},{"id":"missing-root","statement":"missingRoot says, of a root the config names, that it has no page yet and that a page of that slug makes it; with no root named, that configure names one."}]}
  * ```
  */
 
@@ -144,14 +144,14 @@ export function nodePath(ref: G.Ref): string {
 }
 
 /**
- * A closed ticket's references that lead nowhere: get gives an edge no title
+ * A bottled ticket's references that lead nowhere: get gives an edge no title
  * when the graph no longer holds its other end. The check leaves these alone,
  * so where the ticket is read is where a reader is told. Those of a ticket
- * that is not closed are dangling findings, and may be nodes its work has yet
+ * that is not bottled are dangling findings, and may be nodes its work has yet
  * to create.
  */
 export function goneOf(node: AnyNode): Set<G.Ref> {
-  if (!("status" in node) || node.status !== "closed") return new Set();
+  if (!("status" in node) || node.status !== "bottled") return new Set();
   return new Set(node.out.filter((e) => e.title === null).map((e) => e.ref));
 }
 

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join a machine with a team's server: call the server with the person's token, and send a write there and answer it from the machine's own graph; keeping the machine's copy of the server's intent and following the server each have a module beneath.","criteria":[{"id":"checkout-stays","statement":"A call sent to the server never carries `checkout`: the caller's checkout chose a checkout on this machine and names nothing on the server, so a server older than the field is not refused it."},{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, the address of a grimoire a server's library holds being its own `/g/<name>` one, so a token kept for one grimoire is never sent to another of the same server, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, a close or a landing naming its ticket being sent only once the daemon has synced the copy and extracted any languages that brings, so it is judged as the server's intent now reads the code, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start, or a close with when: landed, the server took is kept in the copy as the machine ran it, its current ticket, its start and the checkout a change was closed in being nowhere else; who has a started ticket checked out, and a start's or a close's others, are answered as the server answered them, since only the server knows who called; adopt is sent with the findings the machine sees, and judge_recipe naming no fingerprint with the digest the machine's code gives the recipe, refused on the machine as not_found, sending nothing, when its code holds no such recipe."},{"id":"current-is-the-checkouts","statement":"A write that changes intent, or an update_ticket giving touches or relies_on of a ticket other than the current one, that names no ticket is sent naming the checkout's current ticket, so such an edit waits in that change's proposal on the server, and an update_ticket of anything else is sent as it was given; land_ticket naming none is answered on the machine and never sent, and start_ticket on a ticket the server already has being worked is sent, so the server lists who took it, and taken up on the machine, on the machine alone, nothing listed, when the server refuses it as a conflict as one older than who has a ticket does, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket active or landing, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes, but for the recipes the main line last sent, which are a snapshot of code and not intent, and for who has the tickets checked out, which is who is working and not intent, both of which a machine older than them does not read, so its digest still matches the server's."}]}
+//! {"purpose":"Join a machine with a team's server: call the server with the person's token, and send a write there and answer it from the machine's own graph; keeping the machine's copy of the server's intent and following the server each have a module beneath.","criteria":[{"id":"checkout-stays","statement":"A call sent to the server never carries `checkout`: the caller's checkout chose a checkout on this machine and names nothing on the server, so a server older than the field is not refused it."},{"id":"token-for-the-server","statement":"A call to a server carries GRIMOIRE_TOKEN when it is set and not blank, else the token kept for that server's address in the person's credentials file, as a bearer token, the address of a grimoire a server's library holds being its own `/g/<name>` one, so a token kept for one grimoire is never sent to another of the same server, and no token when there is neither; a server signed in from the credentials file reads it on every call, so a token kept by a later login is used without a restart; as_token gives the same server called with another token, for a write a caller sends through a daemon with a token of its own, and how the server answers that token is never taken for how it answers the machine's; keep_token stores a token under the address, in a file only its owner reads where the platform has such a thing, and forget_token removes it, saying whether there was one."},{"id":"writes-through","statement":"A write on a machine is sent to the server as the same tool call; refused there, the server's error is the answer and the copy is unchanged; taken, the copy is synced before the answer is given, a close or a bottling naming its ticket being sent only once the daemon has synced the copy and extracted any languages that brings, so it is judged as the server's intent now reads the code, and the answer is the tool's over the machine's own graph when the write left the machine holding exactly what the server holds, and the server's otherwise, the machine's copy having been behind; when the server took the write and the copy could not then be synced, the write is still answered, with the server's answer, the machine's state is read again from its copy so that memory never holds what the copy does not, and the copy follows at the next sync, but that a start, or a close with when: bottled, the server took is kept in the copy as the machine ran it, its current ticket, its start and the checkout a change was bottled in being nowhere else; who has a started ticket checked out, and a start's or a close's others, are answered as the server answered them, since only the server knows who called; adopt is sent with the findings the machine sees, and judge_recipe naming no fingerprint with the digest the machine's code gives the recipe, refused on the machine as not_found, sending nothing, when its code holds no such recipe."},{"id":"current-is-the-checkouts","statement":"A write that changes intent, or an update_ticket giving touches or relies_on of a ticket other than the current one, that names no ticket is sent naming the checkout's current ticket, so such an edit waits in that change's proposal on the server, and an update_ticket of anything else is sent as it was given; bottle_ticket naming none is answered on the machine and never sent, and brew_ticket on a ticket the server already has being worked is sent, so the server lists who took it, and taken up on the machine, on the machine alone, nothing listed, when the server refuses it as a conflict as one older than who has a ticket does, and when the copy cannot be written the machine's state is read again from the copy; the current ticket and the starts are kept in the copy by the machine, survive a sync while the server has their ticket brewing or simmering, and are never sent to the server."},{"id":"intent-digest","statement":"intent_digest names a state of a server's intent: the same for the intent the server holds and for that intent as a machine fetched it, and different once any of it changes, but for the recipes the main line last sent, which are a snapshot of code and not intent, and for who has the tickets checked out, which is who is working and not intent, both of which a machine older than them does not read, so its digest still matches the server's."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -304,9 +304,9 @@ pub fn write_through(server: &Server, copy_dir: &Path, state: &mut State, name: 
 }
 
 /// Whether a write is compared with this checkout's start over its code, and so is sent only once the copy
-/// is brought up to date: a close, and a landing that names its ticket.
+/// is brought up to date: a close, and a bottling that names its ticket.
 pub(crate) fn synced_first(name: &str, input: &Value) -> bool {
-    name == "close_ticket" || (name == "land_ticket" && input.get("ref").is_some_and(|r| !r.is_null()))
+    name == "close_ticket" || (name == "bottle_ticket" && input.get("ref").is_some_and(|r| !r.is_null()))
 }
 
 /// Why a write could not reach the server.
@@ -319,24 +319,24 @@ pub(crate) fn unavailable(e: RemoteError) -> ToolError {
 }
 
 /// `write_through`, told whether its caller has just synced the copy, as a daemon does before a close or a
-/// landing so that languages the sync brings are extracted before the write is judged (req:remote-writes-through-the-server).
+/// bottling so that languages the sync brings are extracted before the write is judged (req:remote-writes-through-the-server).
 pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut State, name: &str, mut input: Value, today: &str, synced: bool) -> Result<(Value, Vec<Changed>), ToolError> {
     // Whether a ticket is already being worked is the server's to say: asked first, so a start is not sent twice.
     // And a token the server refused is asked about again: the person may have signed in since, and until
     // the server takes it nothing is read or written here.
-    // A close and a landing are compared with this checkout's start over its code: brought up to date first, so
+    // A close and a bottling are compared with this checkout's start over its code: brought up to date first, so
     // what others changed since the start is in the comparison.
-    // A landing that names no ticket lands nothing on a team and is answered here, server or not.
+    // A bottling that names no ticket bottles nothing on a team and is answered here, server or not.
     // Synced by the caller just now, with the token the write carries: not again, which would bring what it has not extracted.
-    if !synced && (name == "start_ticket" || synced_first(name, &input) || state.server().is_some_and(|s| s.refused)) {
+    if !synced && (name == "brew_ticket" || synced_first(name, &input) || state.server().is_some_and(|s| s.refused)) {
         sync_state(server, copy_dir, state).map_err(unavailable)?;
     }
-    // What is each checkout's own is answered here and never sent: a landing that names no ticket, which lands
+    // What is each checkout's own is answered here and never sent: a bottling that names no ticket, which is bottled
     // nothing on a team. Taking up a ticket already being worked is sent, so the server lists who took it.
-    let own = name == "land_ticket" && input.get("ref").is_none_or(Value::is_null);
+    let own = name == "bottle_ticket" && input.get("ref").is_none_or(Value::is_null);
     // A server older than who has a ticket refuses to start one already being worked: then the take-up is the
     // machine's alone, as it was before, and nobody new is listed (req:remote-current-ticket).
-    let worked = name == "start_ticket" && ticket_of(&input).is_some_and(|slug| state.store().tickets.get(slug).is_some_and(grimoire_core::model::Ticket::is_worked));
+    let worked = name == "brew_ticket" && ticket_of(&input).is_some_and(|slug| state.store().tickets.get(slug).is_some_and(grimoire_core::model::Ticket::is_worked));
     if own {
         let out = tools::call(state, name, input, today)?;
         let changed: Vec<Changed> = out.changed.into_iter().collect();
@@ -397,12 +397,12 @@ pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut
     };
     // The same tool over the machine's own graph: the write as the server made it, with what only code can add.
     let slug = ticket_of(&input).map(str::to_string);
-    let landed = input.get("when").and_then(Value::as_str) == Some("landed") || input.get("change").is_some_and(|c| !c.is_null());
+    let bottled = input.get("when").and_then(Value::as_str) == Some("bottled") || input.get("change").is_some_and(|c| !c.is_null());
     let mut here = tools::call(state, name, input, today);
     // Who called is the server's to say, by the token it took: who has a started ticket checked out is as the server
     // answered, so the machine holds what the server does, and a start's or a close's others are the server's.
     if let (Ok(out), Some(slug)) = (here.as_mut(), slug.as_deref()) {
-        if name == "start_ticket" {
+        if name == "brew_ticket" {
             if let Some(list) = taken.get("checked_out").and_then(|v| serde_json::from_value::<Vec<grimoire_core::model::CheckedOut>>(v.clone()).ok()) {
                 state.set_checked_out(slug, list.clone());
                 out.output["checked_out"] = serde_json::to_value(&list).unwrap_or_default();
@@ -412,12 +412,12 @@ pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut
                 });
             }
         }
-        if matches!(name, "start_ticket" | "close_ticket") {
+        if matches!(name, "brew_ticket" | "close_ticket") {
             if let Some(fields) = out.output.as_object_mut() {
                 // A start always answers others; a close only when it names someone.
                 match (taken.get("others"), name) {
                     (Some(others), _) => fields.insert("others".to_string(), others.clone()),
-                    (None, "start_ticket") => fields.insert("others".to_string(), Value::Array(vec![])),
+                    (None, "brew_ticket") => fields.insert("others".to_string(), Value::Array(vec![])),
                     (None, _) => fields.remove("others"),
                 };
             }
@@ -431,7 +431,7 @@ pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut
             Ok(out) if !followed.behind => Ok((out.output, followed.changed)),
             // Behind: the server's answer is the true one, but the comparison with the start, and which recipes
             // are due, are only this checkout's to say, over its code, so its own are kept in it.
-            Ok(out) if matches!(name, "close_ticket" | "land_ticket" | "judge_recipe") => {
+            Ok(out) if matches!(name, "close_ticket" | "bottle_ticket" | "judge_recipe") => {
                 let mut taken = taken;
                 let mine: &[&str] = if name == "judge_recipe" { &["due"] } else { &["untouched", "unnamed", "due"] };
                 for key in mine.iter().copied() {
@@ -449,10 +449,10 @@ pub(crate) fn write_through_synced(server: &Server, copy_dir: &Path, state: &mut
         Err(e) => {
             tracing::warn!("{name} was taken by the server, but this checkout's copy could not be synced after it: {e}");
             // But a start or a close: what it leaves here, this checkout's current ticket and its start, and the checkout
-            // a change was closed in, is held nowhere else and no later sync could bring it back. The machine's run of
+            // a change was bottled in, is held nowhere else and no later sync could bring it back. The machine's run of
             // it is kept in the copy, the ticket as the server answered it, started or closed (req:remote-writes-through-the-server).
             let kept = match &here {
-                Ok(out) if name == "start_ticket" || (name == "close_ticket" && landed) => out.changed.clone().filter(|changed| store_io::persist(copy_dir, state.store(), changed).is_ok()),
+                Ok(out) if name == "brew_ticket" || (name == "close_ticket" && bottled) => out.changed.clone().filter(|changed| store_io::persist(copy_dir, state.store(), changed).is_ok()),
                 _ => None,
             };
             match kept {
@@ -470,7 +470,7 @@ impl Daemon {
     /// A write on a daemon whose intent is a server's.
     pub(crate) fn call_through(&self, server: &Server, name: &str, input: Value) -> Result<Value, ToolError> {
         let today = store_io::today();
-        // A close or a landing is judged over this checkout's code as the server's intent reads it: the copy is
+        // A close or a bottling is judged over this checkout's code as the server's intent reads it: the copy is
         // synced here, outside the state's lock, so that languages the sync brings are extracted before the
         // write is judged, and the write then sends with no second sync (req:remote-writes-through-the-server).
         // Synced with the server the write goes to, so with the caller's token when it gave one.
@@ -564,7 +564,7 @@ mod tests {
             text.find('{').zip(text.rfind('}')).map(|(a, b)| text[a..=b].to_string()).unwrap_or_default()
         });
         let server = Server::new(&format!("http://127.0.0.1:{port}"), Some("t".into()));
-        server.call("land_ticket", &serde_json::json!({ "ref": "ticket:0001", "checkout": "C:/a/worktree" })).unwrap().unwrap();
+        server.call("bottle_ticket", &serde_json::json!({ "ref": "ticket:0001", "checkout": "C:/a/worktree" })).unwrap().unwrap();
         let body: Value = serde_json::from_str(&seen.join().unwrap()).unwrap();
         assert_eq!(body, serde_json::json!({ "ref": "ticket:0001" }), "the rest of the input goes as it came");
     }

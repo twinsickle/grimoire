@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep the other checkouts a store of its own serves beside the one it was made for: list them, add one whose project file names the store, and give each its own current ticket, in a file of their own, so a store with one checkout reads as it always did.","criteria":[{"id":"checkouts","statement":"checkouts.json lists, by repository as its canonical path, every checkout of a store of its own but the main one grimoire.json names, each with its own current ticket; a store without it has the main checkout alone. view makes a loaded store the view of one listed checkout, its repository that checkout and its current ticket that checkout's, one naming a ticket neither active nor landing reported malformed and left none; register adds a checkout whose project file names this very store, answering whether it was new, the main one and one already listed being no change, and refuses one whose project file names no store or another, one holding the store and one inside it; set_current writes one checkout's current ticket, leaving the others'; a file that does not load is said as malformed, and the other checkouts are then none."}]}
+//! {"purpose":"Keep the other checkouts a store of its own serves beside the one it was made for: list them, add one whose project file names the store, and give each its own current ticket, in a file of their own, so a store with one checkout reads as it always did.","criteria":[{"id":"checkouts","statement":"checkouts.json lists, by repository as its canonical path, every checkout of a store of its own but the main one grimoire.json names, each with its own current ticket; a store without it has the main checkout alone. view makes a loaded store the view of one listed checkout, its repository that checkout and its current ticket that checkout's, one naming a ticket neither brewing nor simmering reported malformed and left none; register adds a checkout whose project file names this very store, answering whether it was new, the main one and one already listed being no change, and refuses one whose project file names no store or another, one holding the store and one inside it; set_current writes one checkout's current ticket, leaving the others'; a file that does not load is said as malformed, and the other checkouts are then none."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -22,7 +22,7 @@ pub struct Checkouts {
     pub checkouts: BTreeMap<String, Entry>,
 }
 
-/// One checkout's own: the ticket a write from it lands in when it names none.
+/// One checkout's own: the ticket a write from it goes into when it names none.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -64,9 +64,9 @@ pub fn view(store: &mut Store, store_dir: &Path, checkout: &str, malformed: &mut
     };
     store.config.repository = checkout.to_string();
     store.current = match &entry.current {
-        Some(t) if super::active(store, t) => Some(t.clone()),
+        Some(t) if super::worked(store, t) => Some(t.clone()),
         Some(t) => {
-            malformed.push(Malformed { path: CHECKOUTS_FILE.to_string(), reason: format!("{checkout}'s current ticket `{t}` is neither active nor landing") });
+            malformed.push(Malformed { path: CHECKOUTS_FILE.to_string(), reason: format!("{checkout}'s current ticket `{t}` is neither brewing nor simmering") });
             None
         }
         None => None,
@@ -167,7 +167,7 @@ mod tests {
                 title: "T".into(),
                 kind: grimoire_core::model::TicketKind::Change,
                 priority: grimoire_core::model::Priority::Later,
-                status: grimoire_core::model::Status::Active,
+                status: grimoire_core::model::Status::Brewing,
                 touches: vec![],
                 relies_on: vec![],
                 body: "b".into(),

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes, who has the tickets checked out and the config, every violated field rule reported.","criteria":[{"id":"checked-out-rules","statement":"Who has the tickets checked out is valid when each ticket is named by a slug and each holder once, by a non-empty name of one line, with a non-empty time."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a closed change; on a requirement's decision, or on a gap's, a question's or a ticket that is not closed, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is landing or closed, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
+//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes, who has the tickets checked out and the config, every violated field rule reported.","criteria":[{"id":"checked-out-rules","statement":"Who has the tickets checked out is valid when each ticket is named by a slug and each holder once, by a non-empty name of one line, with a non-empty time."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a bottled change; on a requirement's decision, or on a gap's, a question's or a ticket that is not bottled, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-rules","statement":"Titles are one non-empty line, required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key, a date is ISO YYYY-MM-DD naming a day the calendar has, leap years included, a ticket body is at most 4000 characters and empty once closed, a decision supersedes each earlier one once, and a ticket's decision is present exactly when its status is simmering or bottled, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
 //! ```
 
 use serde::Serialize;
@@ -164,20 +164,20 @@ pub fn validate_requirement(r: &Requirement) -> Vec<FieldError> {
         check_required(&mut e, &format!("scenarios[{i}].then"), &s.then);
     }
     check_refs(&mut e, "covered_by", &r.covered_by, Some(&[Kind::Criterion, Kind::Recipe]));
-    // Ids rise in the order the decisions landed; one not yet landed, read through a proposal, comes after them all.
+    // Ids rise in the order the decisions were bottled; one not yet bottled, read through a proposal, comes after them all.
     let mut last = 0u32;
     let mut waiting = false;
     for (i, d) in r.decisions.iter().enumerate() {
         if d.withdrawn {
-            e.push(FieldError::new(&format!("decisions[{i}].withdrawn"), "only a closed change's decision is withdrawn"));
+            e.push(FieldError::new(&format!("decisions[{i}].withdrawn"), "only a bottled change's decision is withdrawn"));
         }
         check_decision(&mut e, &format!("decisions[{i}]"), d);
         match d.id {
-            Some(id) if id <= last || waiting => e.push(FieldError::new(&format!("decisions[{i}].id"), "ids rise in the order decisions landed, from 1, each given once")),
+            Some(id) if id <= last || waiting => e.push(FieldError::new(&format!("decisions[{i}].id"), "ids rise in the order decisions were bottled, from 1, each given once")),
             Some(id) => last = id,
             None => waiting = true,
         }
-        // A decision supersedes only earlier ones, by id: below its own, or, not yet landed, below the next to be given.
+        // A decision supersedes only earlier ones, by id: below its own, or, not yet bottled, below the next to be given.
         let own = d.id.unwrap_or(last + 1);
         if d.supersedes.iter().any(|&p| p == 0 || p >= own) {
             e.push(FieldError::new(&format!("decisions[{i}].supersedes"), "may name only earlier decisions, by id"));
@@ -199,14 +199,14 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
         e.push(FieldError::new("body", format!("at most {TICKET_BODY_MAX} characters")));
     }
     match (t.status, &t.decision) {
-        (Status::Landing | Status::Closed, None) => e.push(FieldError::new("decision", format!("required when status is {}", t.status.name()))),
-        (Status::Landing | Status::Closed, Some(d)) => {
+        (Status::Simmering | Status::Bottled, None) => e.push(FieldError::new("decision", format!("required when status is {}", t.status.name()))),
+        (Status::Simmering | Status::Bottled, Some(d)) => {
             check_decision(&mut e, "decision", d);
-            // A landing ticket keeps its body until its change lands.
-            if t.status == Status::Landing {
+            // A simmering ticket keeps its body until its change is bottled.
+            if t.status == Status::Simmering {
                 check_required(&mut e, "body", &t.body);
             } else if !t.body.is_empty() {
-                e.push(FieldError::new("body", "must be empty once the ticket is closed, since closing discards it"));
+                e.push(FieldError::new("body", "must be empty once the ticket is bottled, since closing discards it"));
             }
             // A ticket's decision is not a requirement's: it takes no id.
             if d.id.is_some() {
@@ -216,12 +216,12 @@ pub fn validate_ticket(t: &Ticket) -> Vec<FieldError> {
             if !d.supersedes.is_empty() {
                 e.push(FieldError::new("decision.supersedes", "a ticket's one decision supersedes nothing"));
             }
-            // Withdrawn is how a change closes with nothing applied: only a closed change's (req:tool-withdraw-ticket).
-            if d.withdrawn && (t.status != Status::Closed || t.kind != TicketKind::Change) {
-                e.push(FieldError::new("decision.withdrawn", "only a closed change is withdrawn"));
+            // Withdrawn is how a change closes with nothing applied: only a bottled change's (req:tool-withdraw-ticket).
+            if d.withdrawn && (t.status != Status::Bottled || t.kind != TicketKind::Change) {
+                e.push(FieldError::new("decision.withdrawn", "only a bottled change is withdrawn"));
             }
         }
-        (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is landing or closed")),
+        (_, Some(_)) => e.push(FieldError::new("decision", "must be null unless status is simmering or bottled")),
         (_, None) => {
             check_required(&mut e, "body", &t.body);
         }
@@ -349,10 +349,10 @@ pub fn validate_proposal(p: &Proposal) -> Vec<FieldError> {
             let field = format!("decisions[{key}].added[{i}]");
             check_decision(&mut e, &field, d);
             if d.id.is_some() {
-                e.push(FieldError::new(&format!("{field}.id"), "a decision not yet landed has no id"));
+                e.push(FieldError::new(&format!("{field}.id"), "a decision not yet bottled has no id"));
             }
             if d.withdrawn {
-                e.push(FieldError::new(&format!("{field}.withdrawn"), "only a closed change's decision is withdrawn"));
+                e.push(FieldError::new(&format!("{field}.withdrawn"), "only a bottled change's decision is withdrawn"));
             }
             if d.supersedes.contains(&0) {
                 e.push(FieldError::new(&format!("{field}.supersedes"), "names decisions by id, from 1"));
@@ -510,7 +510,7 @@ b", "t",
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "only-a-closed-change-is-withdrawn", "checks": ["crates/core/src/store/validate#withdrawn-decision"]}
+    /// {"test": "only-a-bottled-change-is-withdrawn", "checks": ["crates/core/src/store/validate#withdrawn-decision"]}
     /// ```
     #[test]
     fn only_a_closed_change_is_withdrawn() {
@@ -519,9 +519,9 @@ b", "t",
             t.decision.as_mut().unwrap().withdrawn = true;
             validate_ticket(&t).iter().any(|e| e.field == "decision.withdrawn")
         };
-        assert!(!withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Closed, &[], &[])));
-        assert!(withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Landing, &[], &[])));
-        assert!(withdrawn(ticket("g", TicketKind::Gap, Priority::Later, Status::Closed, &[], &[])));
+        assert!(!withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Bottled, &[], &[])));
+        assert!(withdrawn(ticket("c", TicketKind::Change, Priority::Later, Status::Simmering, &[], &[])));
+        assert!(withdrawn(ticket("g", TicketKind::Gap, Priority::Later, Status::Bottled, &[], &[])));
         let mut r = crate::graph::fixtures::store().requirements.values().next().unwrap().clone();
         r.decisions = vec![Decision { withdrawn: true, ..Decision::new("2026-10-06", "No.") }];
         assert!(validate_requirement(&r).iter().any(|e| e.field.ends_with(".withdrawn")));
@@ -562,14 +562,14 @@ b", "t",
         let e = validate_requirement(&req(vec![Reference::module("m")], &[]));
         assert_eq!(e[0].field, "covered_by", "covered_by names only criteria, recipes and ingredients");
         assert!(validate_requirement(&req(vec![Reference::recipe("button"), Reference::ingredient("button", "label")], &[])).is_empty(), "a recipe or an ingredient may carry it");
-        // The order is the order they landed, whatever their dates; ids rise with it, each given once.
-        assert!(validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"])).is_empty(), "a decision dated earlier may land later");
+        // The order is the order they were bottled, whatever their dates; ids rise with it, each given once.
+        assert!(validate_requirement(&req(vec![], &["2026-02-01", "2026-01-01"])).is_empty(), "a decision dated earlier may be bottled later");
         let mut r = req(vec![], &["2026-01-01", "2026-02-01", "2026-03-01"]);
         r.decisions[2].id = Some(2);
         assert_eq!(validate_requirement(&r)[0].field, "decisions[2].id");
         r.decisions[2].id = Some(9);
         assert!(validate_requirement(&r).is_empty(), "an id need not be its position");
-        // One not yet landed, read through a proposal, comes after every landed one.
+        // One not yet bottled, read through a proposal, comes after every bottled one.
         r.decisions[1].id = None;
         assert_eq!(validate_requirement(&r)[0].field, "decisions[2].id");
         r.decisions.swap(1, 2);
@@ -585,7 +585,7 @@ b", "t",
         r.decisions[1] = Decision { supersedes: vec![1], ..Decision::new("2026-02-01", "waiting") };
         assert!(validate_requirement(&r).is_empty());
         r.decisions[1].supersedes = vec![2];
-        assert_eq!(validate_requirement(&r)[0].field, "decisions[1].supersedes", "one waiting supersedes only landed decisions");
+        assert_eq!(validate_requirement(&r)[0].field, "decisions[1].supersedes", "one waiting supersedes only bottled decisions");
         // Empty and false are left out of the record.
         let json = serde_json::to_value(req(vec![], &["2026-01-01"])).expect("serialisable");
         assert!(json.get("retired").is_none() && json["decisions"][0].get("supersedes").is_none(), "{json}");
@@ -716,7 +716,7 @@ b", "t",
             title: "T".into(),
             kind: TicketKind::Change,
             priority: Priority::Next,
-            status: Status::Open,
+            status: Status::Inscribed,
             touches: vec![],
             relies_on: vec![],
             body,
@@ -773,14 +773,14 @@ b", "t",
             title: "T".into(),
             kind: TicketKind::Change,
             priority: Priority::Next,
-            status: Status::Open,
+            status: Status::Inscribed,
             touches: vec![],
             relies_on: vec![],
             body: "b".into(),
             decision: None,
         };
         assert!(validate_ticket(&t).is_empty());
-        t.status = Status::Closed;
+        t.status = Status::Bottled;
         assert_eq!(validate_ticket(&t).len(), 1);
         t.decision = Some(Decision::new("2026-01-01", "done"));
         t.body.clear();
@@ -791,22 +791,22 @@ b", "t",
         t.decision = Some(Decision { id: Some(1), ..Decision::new("2026-01-01", "done") });
         assert_eq!(validate_ticket(&t)[0].field, "decision.id", "a ticket's decision has no id");
         t.decision = Some(Decision::new("2026-01-01", "done"));
-        // Closing discards the body, so a closed ticket holding one was not closed by the tools.
+        // Closing discards the body, so a bottled ticket holding one was not bottled by the tools.
         t.body = " ".into();
         assert_eq!(validate_ticket(&t)[0].field, "body");
         t.body.clear();
-        t.status = Status::Open;
+        t.status = Status::Inscribed;
         assert_eq!(validate_ticket(&t)[0].field, "decision");
-        // A landing ticket carries its decision and keeps its body until its change lands.
-        t.status = Status::Landing;
+        // A simmering ticket carries its decision and keeps its body until its change is bottled.
+        t.status = Status::Simmering;
         assert_eq!(validate_ticket(&t)[0].field, "body");
         t.body = "b".into();
         assert!(validate_ticket(&t).is_empty());
         t.decision = None;
-        assert_eq!(validate_ticket(&t)[0].reason, "required when status is landing");
-        t.status = Status::Active;
+        assert_eq!(validate_ticket(&t)[0].reason, "required when status is simmering");
+        t.status = Status::Brewing;
         t.decision = Some(Decision::new("2026-01-01", "done"));
-        assert_eq!(validate_ticket(&t)[0].reason, "must be null unless status is landing or closed");
+        assert_eq!(validate_ticket(&t)[0].reason, "must be null unless status is simmering or bottled");
     }
 
     /// # Test contract
@@ -838,11 +838,11 @@ b", "t",
         let baseline: Baseline =
             serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-contract ", "ref": "module:src/a"}]})).unwrap();
         assert_eq!(validate_baseline(&baseline)[0].field, "findings[0].check");
-        let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into(), closed_in: None };
+        let start = |key: &str, print: &str| Start { ticket: "0001".into(), fingerprints: [(key.to_string(), print.to_string())].into(), simmering_in: None };
         assert!(validate_start(&start("page:goal", "f1")).is_empty());
         assert!(!validate_start(&start("page:goal ", "f1")).is_empty(), "a key that is not a reference");
         assert!(!validate_start(&start("page:goal", " f1")).is_empty(), "an untrimmed fingerprint");
-        assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default(), closed_in: None }).is_empty());
+        assert!(!validate_start(&Start { ticket: "Not A Slug".into(), fingerprints: Default::default(), simmering_in: None }).is_empty());
         // A decision supersedes each earlier one once.
         let mut req = Requirement {
             slug: "r".into(),

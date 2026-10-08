@@ -72,10 +72,10 @@ export function MarkWords({ marks, on }: { marks: Mark[]; on: Ref }) {
                 {" "}
                 {m.from.kind === "ticket" ? (
                   <>
-                    · <RefLink ref={`ticket:${m.from.ticket}`} title={m.from.title} /> would bring this when it lands
+                    · <RefLink ref={`ticket:${m.from.ticket}`} title={m.from.title} /> would bring this when it is bottled
                   </>
                 ) : (
-                  "· landed on the main line since this branch's base: merge the main line"
+                  "· reached the main line since this branch's base: merge the main line"
                 )}
               </span>
             )}

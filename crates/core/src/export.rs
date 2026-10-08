@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the recipes the main line last sent when it has sent any, the baseline, who has each ticket being worked checked out, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements, the recipes the main line last sent and who has each ticket checked out among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, active or a change waiting to land; a proposal whose ticket is not being worked is left out, so a gap or question waiting, landing, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the recipes the main line last sent when it has sent any, the baseline, who has each ticket being worked checked out, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements, the recipes the main line last sent and who has each ticket checked out among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, brewing or a change simmering; a proposal whose ticket is not being worked is left out, so a gap or question waiting, simmering, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -84,7 +84,7 @@ fn for_older_builds(store: &Store, p: &Proposal) -> Proposal {
     let slugs: std::collections::BTreeSet<&String> = p.requirements.keys().chain(p.decisions.keys()).collect();
     for slug in slugs {
         let truth = store.requirements.get(slug);
-        let Some(record) = crate::store::with_decisions(truth, p, slug, crate::store::Landing::Landed) else { continue };
+        let Some(record) = crate::store::with_decisions(truth, p, slug, crate::store::Bottling::Bottled) else { continue };
         let base = match (p.requirements.get(slug).map(|q| q.base.clone()), truth) {
             (Some(Some(b)), Some(t)) if b == crate::ops::requirement_base(t) => Some(crate::fingerprint::of_record(t)),
             (Some(base), _) => base,
@@ -99,7 +99,7 @@ impl Exported {
     /// The store a machine keeps: this intent, `repository` as the checkout
     /// it is joined with, and what is the machine's own in `own`, its current
     /// ticket and its starts, as far as the server still has those tickets
-    /// active or landing.
+    /// brewing or simmering.
     pub fn joined(self, own: &Store, repository: &str) -> Result<Store, String> {
         if self.version > StoreConfig::CURRENT_VERSION {
             return Err(format!("the server's store is version {}, and this build writes version {}: update grimoire on this machine", self.version, StoreConfig::CURRENT_VERSION));
@@ -171,7 +171,7 @@ pub fn difference(old: &Store, new: &Store) -> Vec<Changed> {
             continue;
         }
         // Written with its ticket's record, or removed beside it.
-        out.push(if new.starts.contains_key(slug) { Changed::Started(slug.clone()) } else { Changed::Closed(slug.clone()) });
+        out.push(if new.starts.contains_key(slug) { Changed::Started(slug.clone()) } else { Changed::Bottled(slug.clone()) });
     }
     if old.current != new.current && new.current.is_some() {
         out.push(Changed::Current);
@@ -251,7 +251,7 @@ mod tests {
     fn an_export_holds_the_intent_and_nothing_of_a_machine() {
         let mut s = store();
         s.current = Some("later-1".into());
-        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default(), closed_in: None });
+        s.starts.insert("later-1".into(), Start { ticket: "later-1".into(), fingerprints: Default::default(), simmering_in: None });
         s.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         s.config.site = vec!["overview".into()];
         s.config.large_file = Some(600);
@@ -326,9 +326,9 @@ mod tests {
         server.config.site = vec!["overview".into()];
         server.config.plain_file = Some(3_000);
         server.config.recipe_kinds.insert("quest".into(), RecipeKind { uses: vec!["quest".into()] });
-        let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has an active ticket");
+        let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has a brewing ticket");
         let other: String = server.tickets.values().find(|t| !t.status.is_live()).map(|t| t.slug.clone()).expect("and one that is not");
-        let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default(), closed_in: None };
+        let start = |slug: &str| Start { ticket: slug.to_string(), fingerprints: Default::default(), simmering_in: None };
         let mut own = Store { current: Some(live.clone()), ..Default::default() };
         own.starts.insert(live.clone(), start(&live));
         own.starts.insert(other.clone(), start(&other));
@@ -353,10 +353,10 @@ mod tests {
         assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
         own.current = Some("never-filed".into());
         assert_eq!(exported(&server).joined(&own, "C:/checkout").unwrap().current, None);
-        // An answer waiting, landing, for the change that applies it is no one's current ticket, and keeps no start.
+        // An answer waiting, simmering, for the change that applies it is no one's current ticket, and keeps no start.
         let mut answered = server.clone();
         let gap = answered.tickets.values_mut().find(|t| t.kind != TicketKind::Change).expect("the fixture has a gap");
-        (gap.status, gap.decision) = (Status::Landing, Some(Decision::new("2026-10-04", "Fix it.")));
+        (gap.status, gap.decision) = (Status::Simmering, Some(Decision::new("2026-10-04", "Fix it.")));
         let gap = gap.slug.clone();
         own.current = Some(gap.clone());
         own.starts.insert(gap.clone(), start(&gap));
@@ -384,7 +384,7 @@ mod tests {
         new.requirements.remove(&gone);
         let live: String = new.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).unwrap();
         new.current = Some(live.clone());
-        new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default(), closed_in: None });
+        new.starts.insert(live.clone(), Start { ticket: live.clone(), fingerprints: Default::default(), simmering_in: None });
         new.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         new.config.roots.rites = Some("extra".into());
         new.judgements.insert("button".into(), vec![judgement("button")]);
@@ -406,24 +406,24 @@ mod tests {
         assert!(difference(&new, &old).contains(&Changed::MainLineRecipes), "and gone");
         assert!(difference(&new, &old).contains(&Changed::Judged("button".into())), "judgements gone are named too");
         // Back again: the start goes beside its ticket, and a deleted ticket takes its own with it.
-        assert!(difference(&new, &old).contains(&Changed::Closed(live.clone())));
+        assert!(difference(&new, &old).contains(&Changed::Bottled(live.clone())));
         let mut without = new.clone();
         without.tickets.remove(&live);
         without.starts.remove(&live);
         without.proposals.remove(&live);
         without.current = None;
         let d = difference(&new, &without);
-        assert!(d.contains(&Changed::Deleted(Reference::ticket(&live))) && !d.iter().any(|c| matches!(c, Changed::Closed(_) | Changed::Proposed(_))), "{d:?}");
+        assert!(d.contains(&Changed::Deleted(Reference::ticket(&live))) && !d.iter().any(|c| matches!(c, Changed::Bottled(_) | Changed::Proposed(_))), "{d:?}");
         // A ticket closed elsewhere: it stops being current and loses its proposal before its record says closed,
         // so a writer stopped anywhere between leaves a store that loads.
         let mut worked = new.clone();
         worked.proposals.insert(live.clone(), Proposal::new(&live));
         let mut closed = worked.clone();
-        closed.tickets.get_mut(&live).unwrap().status = Status::Closed;
+        closed.tickets.get_mut(&live).unwrap().status = Status::Bottled;
         closed.proposals.remove(&live);
         closed.starts.remove(&live);
         closed.current = None;
-        assert_eq!(difference(&worked, &closed), vec![Changed::Current, Changed::Proposed(live.clone()), Changed::Ticket(live.clone()), Changed::Closed(live.clone())]);
+        assert_eq!(difference(&worked, &closed), vec![Changed::Current, Changed::Proposed(live.clone()), Changed::Ticket(live.clone()), Changed::Bottled(live.clone())]);
         // And taken up again: the record first, then what names it.
         assert_eq!(difference(&closed, &worked), vec![Changed::Ticket(live.clone()), Changed::Proposed(live.clone()), Changed::Started(live.clone()), Changed::Current]);
     }

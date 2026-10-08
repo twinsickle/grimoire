@@ -67,19 +67,19 @@ test("a reference splits at the first colon and nowhere else", () => {
  * # Test contract
  *
  * ```json
- * {"test": "only-a-closed-tickets-references-are-gone", "checks": ["web/src/types#gone-references"]}
+ * {"test": "only-a-bottled-tickets-references-are-gone", "checks": ["web/src/types#gone-references"]}
  * ```
  */
-test("a closed ticket's untitled references are gone; an open ticket's and another node's are not", () => {
+test("a bottled ticket's untitled references are gone; an unbottled ticket's and another node's are not", () => {
   const out = [
     { ref: "module:src/ready", relation: "touches", title: "Decide whether a workspace is ready." },
     { ref: "req:ready-old-name", relation: "touches", title: null },
   ];
   const ticket = (status: string) => ({ ref: "ticket:0004", status, in: [], out }) as unknown as AnyNode;
-  expect([...goneOf(ticket("closed"))]).toEqual(["req:ready-old-name"]);
-  expect(goneOf(ticket("open")).size).toBe(0);
-  expect(goneOf(ticket("active")).size).toBe(0);
-  expect(goneOf(ticket("landing")).size).toBe(0);
+  expect([...goneOf(ticket("bottled"))]).toEqual(["req:ready-old-name"]);
+  expect(goneOf(ticket("inscribed")).size).toBe(0);
+  expect(goneOf(ticket("brewing")).size).toBe(0);
+  expect(goneOf(ticket("simmering")).size).toBe(0);
   // A page linking a requirement that does not exist is a dangling finding, not history.
   expect(goneOf({ ref: "page:readiness", in: [], out } as unknown as AnyNode).size).toBe(0);
 });
@@ -475,7 +475,7 @@ test("decisions sort into those in force, newest first, and those superseded, wi
   const waiting = decisionsInForce([d("one"), { ...d("ours", [1]), id: null }]);
   expect(waiting.inForce.map((x) => [x.id, x.d.text])).toEqual([[null, "ours"]]);
   expect(waiting.superseded.map((x) => [x.id, x.by])).toEqual([[1, null]]);
-  expect([saidId(3), saidId(null)]).toEqual(["d3", "waiting for its ticket to land"]);
+  expect([saidId(3), saidId(null)]).toEqual(["d3", "waiting for its ticket to be bottled"]);
   expect(decisionsInForce([]).inForce).toEqual([]);
 });
 
@@ -503,16 +503,16 @@ test("a requirement is described while its decisions in force are all adoptions"
  * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/handoff#handoff"]}
  * ```
  */
-test("a ticket's next step is a line for the agent, and an answer waiting or a closed ticket has none", () => {
-  const t = (kind: "change" | "gap" | "question", status: "open" | "active" | "landing" | "closed") => handoff({ ref: "ticket:0137", title: "Fix uninstall", kind, status });
-  expect(t("change", "open")).toBe('Start ticket 0137 ("Fix uninstall") with the grimoire skill.');
-  expect(t("change", "active")).toBe('Continue ticket 0137 ("Fix uninstall") with the grimoire skill.');
-  expect(t("change", "landing")).toBe('Ticket 0137 ("Fix uninstall") is waiting to land: land it with the grimoire skill once its change is on the main line.');
-  expect(t("question", "open")).toBe('Resolve the question 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
-  expect(t("gap", "active")).toBe('Resolve the gap 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
-  for (const kind of ["change", "gap", "question"] as const) expect(t(kind, "closed")).toBeNull();
-  expect(t("question", "landing")).toBeNull();
-  expect(t("gap", "landing")).toBeNull();
+test("a ticket's next step is a line for the agent, and an answer waiting or a bottled ticket has none", () => {
+  const t = (kind: "change" | "gap" | "question", status: "inscribed" | "brewing" | "simmering" | "bottled") => handoff({ ref: "ticket:0137", title: "Fix uninstall", kind, status });
+  expect(t("change", "inscribed")).toBe('Brew ticket 0137 ("Fix uninstall") with the grimoire skill.');
+  expect(t("change", "brewing")).toBe('Continue ticket 0137 ("Fix uninstall") with the grimoire skill.');
+  expect(t("change", "simmering")).toBe('Ticket 0137 ("Fix uninstall") is simmering: bottle it with the grimoire skill once its change is on the main line.');
+  expect(t("question", "inscribed")).toBe('Resolve the question 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
+  expect(t("gap", "brewing")).toBe('Resolve the gap 0137 ("Fix uninstall") with the grimoire skill: lay out the options for me to choose from.');
+  for (const kind of ["change", "gap", "question"] as const) expect(t(kind, "bottled")).toBeNull();
+  expect(t("question", "simmering")).toBeNull();
+  expect(t("gap", "simmering")).toBeNull();
 });
 
 /**

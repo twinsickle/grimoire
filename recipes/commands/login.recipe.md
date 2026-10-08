@@ -17,7 +17,7 @@ On each person's machine, in the project:
 grimoire login            # paste the token; it is read from standard input
 ```
 
-**`token`.** `add` makes a token, prints it once and keeps only its digest; `--read-only` makes one that may read and not write. `revoke` refuses it from then on, with no restart. `list` prints each name and what it may do. Tokens are kept beside the store under a lock of their own, so they change while the server runs. A pipeline that prunes the baseline, with `grimoire land` or `grimoire check --main-line`, needs a token that may write.
+**`token`.** `add` makes a token, prints it once and keeps only its digest; `--read-only` makes one that may read and not write. `revoke` refuses it from then on, with no restart. `list` prints each name and what it may do. Tokens are kept beside the store under a lock of their own, so they change while the server runs. A pipeline that prunes the baseline, with `grimoire bottle` or `grimoire check --main-line`, needs a token that may write.
 
 **`login`.** Takes the token from `--token` or standard input, for the grimoire address the project's `.grimoire.toml` names or the one `--server` gives, asks the server with it before keeping it, and keeps it outside any repository, in the person's credentials file, under that address. A token kept for one grimoire is never sent to another of the same server. A token refused, a server that does not answer or an empty token keeps nothing and fails. `grimoire logout` forgets it.
 

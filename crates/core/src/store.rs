@@ -23,11 +23,11 @@ pub struct Store {
     pub tickets: BTreeMap<String, Ticket>,
     /// The findings accepted as inherited at adoption; none until `adopt`.
     pub baseline: Option<Baseline>,
-    /// The snapshot taken when each active or landing ticket started, by slug.
+    /// The snapshot taken when each brewing or simmering ticket started, by slug.
     pub starts: BTreeMap<String, Start>,
-    /// Each active or landing ticket's proposed change to the truth, by slug.
+    /// Each brewing or simmering ticket's proposed change to the truth, by slug.
     pub proposals: BTreeMap<String, Proposal>,
-    /// The ticket a write lands in when it names none: the one last started.
+    /// The ticket a write goes into when it names none: the one last started.
     pub current: Option<String>,
     /// Each judged recipe's judgements, oldest first, by recipe id (req:store-judgement-record).
     pub judgements: BTreeMap<String, Vec<Judgement>>,
@@ -48,7 +48,7 @@ impl Store {
                 s.pages.insert(slug.clone(), q.record.clone());
             }
             for slug in p.requirements.keys().chain(p.decisions.keys()) {
-                if let Some(q) = with_decisions(self.requirements.get(slug), p, slug, Landing::Waiting) {
+                if let Some(q) = with_decisions(self.requirements.get(slug), p, slug, Bottling::Waiting) {
                     s.requirements.insert(slug.clone(), q);
                 }
             }
@@ -67,7 +67,7 @@ impl Store {
             }
             // Its edits to other tickets' references, on the tickets they edit; one since closed or gone takes none.
             for (slug, q) in &p.tickets {
-                if let Some(t) = s.tickets.get_mut(slug).filter(|t| t.status != Status::Closed) {
+                if let Some(t) = s.tickets.get_mut(slug).filter(|t| t.status != Status::Bottled) {
                     t.touches = q.record.touches.clone();
                     t.relies_on = q.record.relies_on.clone();
                 }
@@ -89,7 +89,7 @@ impl Store {
         let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for p in self.proposals.values() {
             for (slug, q) in &p.tickets {
-                if self.tickets.get(slug).is_some_and(|t| t.status != Status::Closed && TicketReferences::of(t) != q.record) {
+                if self.tickets.get(slug).is_some_and(|t| t.status != Status::Bottled && TicketReferences::of(t) != q.record) {
                     out.entry(slug.clone()).or_default().push(p.ticket.clone());
                 }
             }
@@ -125,19 +125,19 @@ pub struct Malformed {
 }
 
 /// Whether a requirement read with its decisions is taken as it waits in a proposal, the
-/// decisions it adds with no id, or as it lands, each taking the next id.
+/// decisions it adds with no id, or as it is bottled, each taking the next id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Landing {
+pub enum Bottling {
     Waiting,
-    Landed,
+    Bottled,
 }
 
 /// Requirement `slug` as proposal `p` leaves it over `truth`, the truth's record now: the
 /// record it proposes, or the truth's, with the truth's decisions, the supersessions it links
-/// added to them, and after them the decisions it adds (req:close-applies-proposal). Landed, each
+/// added to them, and after them the decisions it adds (req:close-applies-proposal). Bottled, each
 /// added decision takes the next id, and a retirement's, the last, supersedes every decision
 /// before it. `None` when there is no record to hold them.
-pub fn with_decisions(truth: Option<&Requirement>, p: &Proposal, slug: &str, landing: Landing) -> Option<Requirement> {
+pub fn with_decisions(truth: Option<&Requirement>, p: &Proposal, slug: &str, bottling: Bottling) -> Option<Requirement> {
     let mut q = match (p.requirements.get(slug), truth) {
         (Some(proposed), _) => proposed.record.clone(),
         (None, Some(t)) => t.clone(),
@@ -156,10 +156,10 @@ pub fn with_decisions(truth: Option<&Requirement>, p: &Proposal, slug: &str, lan
         }
     }
     for d in &adds.added {
-        let id = (landing == Landing::Landed).then(|| q.next_id());
+        let id = (bottling == Bottling::Bottled).then(|| q.next_id());
         q.decisions.push(Decision { id, ..d.clone() });
     }
-    // A retirement supersedes every decision before it: as it lands, and read through the ticket, every one landed by then.
+    // A retirement supersedes every decision before it: as it is bottled, and read through the ticket, every one bottled by then.
     let retiring = q.retired && !truth.is_some_and(|t| t.retired);
     if retiring && !adds.added.is_empty() {
         let earlier: Vec<u32> = q.decisions[..q.decisions.len() - 1].iter().filter_map(|d| d.id).collect();

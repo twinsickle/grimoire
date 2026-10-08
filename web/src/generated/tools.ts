@@ -17,7 +17,7 @@ export type AnnotationKind = "contract" | "test" | "decl";
 
 export type BaselineSummary = { date: string, reason: string, count: number, };
 
-export type Board = { tickets: Array<BoardTicket>, unattached: Array<BoardTicket>, closed: Array<BoardTicket>, };
+export type Board = { tickets: Array<BoardTicket>, unattached: Array<BoardTicket>, bottled: Array<BoardTicket>, };
 
 export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summary>, 
 /**
@@ -25,6 +25,10 @@ export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summa
  * what it touches and relies on here is the truth's, and an edit waits.
  */
 drafts?: Array<Ref>, checked_out?: Array<CheckedOut>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
+
+export type Bottled = { bottled: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, waiting: Array<Summary>, note?: string, };
+
+export type Brewed = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, checked_out: Array<CheckedOut>, others: Array<Holder>, };
 
 export type CheckedOut = { 
 /**
@@ -104,8 +108,6 @@ export type Judged = { recipe: Ref, judgement: Judgement, due: boolean | null, }
 export type Judgement = { recipe: string, fingerprint: string, date: string, ticket: string, outcome: JudgementOutcome, };
 
 export type JudgementOutcome = "held" | "updated";
-
-export type Landed = { landed: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, waiting: Array<Summary>, note?: string, };
 
 export type LanguageTier = { language: string, tier: number | null, };
 
@@ -199,9 +201,7 @@ export type SourceAnswer = { file: Ref, language: string, text: string, focus: n
 
 export type SourceLocation = { file: string, line: number, contract_line?: number, };
 
-export type Started = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, checked_out: Array<CheckedOut>, others: Array<Holder>, };
-
-export type Status = "open" | "active" | "landing" | "closed";
+export type Status = "inscribed" | "brewing" | "simmering" | "bottled";
 
 export type StatusAnswer = { repository: string, roots: Roots, languages: Array<string>, version: string, supported_languages: Array<string>, tiers: Array<LanguageTier>, nodes: { [key in string]: number }, edges: number, unresolved_imports: number, malformed: number, scope: Scope, baseline: BaselineSummary | null, shared: boolean, server: ServerCopy | null, current: CurrentTicket | null, grimoire: string | null, library: Array<LibraryEntry>, };
 
@@ -267,12 +267,12 @@ export type ToolAnswers = {
   put_page: Written;
   patch_page: Written;
   put_requirement: Written;
-  file_ticket: Written;
+  inscribe_ticket: Written;
   update_ticket: Written;
   retire_node: Written;
-  start_ticket: Started;
+  brew_ticket: Brewed;
   close_ticket: Closed;
-  land_ticket: Landed;
+  bottle_ticket: Bottled;
   rename_node: Renamed;
   reorder: Reordered;
   configure: Configured;

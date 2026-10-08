@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, which it shows as advisories naming the work that may conflict with it, and which a change still waiting to land from it would mend.","criteria":[{"id":"own-work","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base; every other finding stays, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is active or landing, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."},{"id":"mended","statement":"mended gives, for each change ops::waiting_here names for this checkout other than the current ticket, each finding that is not baselined and that the truth with that change's proposal laid beneath the current ticket's does not produce against this checkout's code, naming the change; it takes nothing out of the findings, which still fail."}]}
+//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, which it shows as advisories naming the work that may conflict with it, and which a change still waiting to be bottled from it would mend.","criteria":[{"id":"own-work","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base; every other finding stays, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is brewing or simmering, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."},{"id":"mended","statement":"mended gives, for each change ops::waiting_here names for this checkout other than the current ticket, each finding that is not baselined and that the truth with that change's proposal laid beneath the current ticket's does not produce against this checkout's code, naming the change; it takes nothing out of the findings, which still fail."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -17,9 +17,9 @@ use crate::store::Store;
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OtherWork {
-    /// Intent that landed on the main line since this checkout's base: merging the main line mends it.
+    /// Intent that bottled on the main line since this checkout's base: merging the main line mends it.
     SinceBase,
-    /// A ticket active or landing elsewhere: what its proposal would bring here when it lands.
+    /// A ticket brewing or simmering elsewhere: what its proposal would bring here when it is bottled.
     Ticket { ticket: String, title: String },
 }
 
@@ -63,7 +63,7 @@ pub fn own(findings: Vec<Finding>, base: Option<&[Finding]>, store: &Store, tick
     (kept, advised)
 }
 
-/// What each other ticket active or landing would bring to this checkout's code when it lands:
+/// What each other ticket brewing or simmering would bring to this checkout's code when it is bottled:
 /// the findings `judge` gives for the truth with that ticket's proposal, less those the truth
 /// alone gives (`truth`) and those already among the checkout's own (`mine`).
 pub fn others(store: &Store, ticket: Option<&str>, truth: &[Finding], mine: &[Finding], mut judge: impl FnMut(&str) -> Vec<Finding>) -> Vec<Advisory> {
@@ -79,8 +79,8 @@ pub fn others(store: &Store, ticket: Option<&str>, truth: &[Finding], mine: &[Fi
     out
 }
 
-/// A finding the check fails on that a change this checkout closed `when: landed`, and that has not
-/// landed, would mend: named beside it, the finding still failing (req:one-ticket-per-branch).
+/// A finding the check fails on that a change this checkout closed `when: bottled`, and that has not
+/// bottled, would mend: named beside it, the finding still failing (req:one-ticket-per-branch).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Mended {
@@ -89,9 +89,9 @@ pub struct Mended {
     pub finding: FindingKey,
 }
 
-/// For each change waiting to land from this checkout but `ticket`, the new findings among
+/// For each change still simmering from this checkout but `ticket`, the new findings among
 /// `findings` that `judge` does not give for it: the truth with that change's proposal laid
-/// beneath `ticket`'s, as the main line will hold it once that change lands.
+/// beneath `ticket`'s, as the main line will hold it once that change is bottled.
 pub fn mended(store: &Store, ticket: Option<&str>, findings: &[Finding], mut judge: impl FnMut(&str) -> Vec<Finding>) -> Vec<Mended> {
     let failing: Vec<&Finding> = findings.iter().filter(|f| !f.baselined).collect();
     if failing.is_empty() {
@@ -127,10 +127,10 @@ mod tests {
     fn a_check_fails_only_on_its_own_work() {
         let ext = crate::extraction::fixtures::extraction();
         let mut s = crate::graph::fixtures::store();
-        // Landed since the base: the truth names a criterion neither this code nor the base's declares.
-        s.requirements.get_mut("ready-only-with-commit").unwrap().covered_by.push("criterion:src/a/ready#landed".parse().unwrap());
+        // Bottled since the base: the truth names a criterion neither this code nor the base's declares.
+        s.requirements.get_mut("ready-only-with-commit").unwrap().covered_by.push("criterion:src/a/ready#bottled".parse().unwrap());
         // The branch's own proposal names one no code declares yet.
-        s.tickets.get_mut("later-1").unwrap().status = Status::Active;
+        s.tickets.get_mut("later-1").unwrap().status = Status::Brewing;
         let mut proposed_req = s.requirements["ready-only-with-commit"].clone();
         proposed_req.slug = "mine".into();
         proposed_req.covered_by = vec!["criterion:src/a/ready#not-yet".parse().unwrap()];
@@ -144,8 +144,8 @@ mod tests {
         assert_eq!(checks(&kept), vec!["req:mine criterion:src/a/ready#not-yet"], "the branch's own proposal still fails");
         assert_eq!(
             checks(&advised.iter().map(|a| a.finding.clone()).collect::<Vec<_>>()),
-            vec!["req:ready-only-with-commit criterion:src/a/ready#landed", "req:stale criterion:src/a/ready#gone"],
-            "landed since the base, or already so at the base"
+            vec!["req:ready-only-with-commit criterion:src/a/ready#bottled", "req:stale criterion:src/a/ready#gone"],
+            "bottled since the base, or already so at the base"
         );
         assert!(advised.iter().all(|a| a.from == OtherWork::SinceBase));
         // A finding the base's code does not show is the branch's own: here, its code lost a criterion.
@@ -165,9 +165,9 @@ mod tests {
     fn a_waiting_change_is_named_beside_what_it_would_mend() {
         let ext = crate::extraction::fixtures::extraction();
         let mut s = crate::graph::fixtures::store();
-        // phase-62 waits to land from this checkout, its proposal mending req:stale; later-1 is current.
-        s.tickets.get_mut("phase-62").unwrap().status = Status::Landing;
-        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), closed_in: Some(s.config.repository.clone()) });
+        // phase-62 waits to be bottled from this checkout, its proposal mending req:stale; later-1 is current.
+        s.tickets.get_mut("phase-62").unwrap().status = Status::Simmering;
+        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), simmering_in: Some(s.config.repository.clone()) });
         let mut mended_req = s.requirements["stale"].clone();
         mended_req.covered_by = vec!["criterion:src/a/ready#guarantee".parse().unwrap()];
         let mut p = Proposal::new("phase-62");
@@ -189,7 +189,7 @@ mod tests {
             })
             .collect();
         assert!(mended(&s, Some("later-1"), &baselined, |t| lint(&Graph::with_proposal(&s.applied(t), "later-1", &ext, &[]), &rules)).is_empty());
-        s.starts.get_mut("phase-62").unwrap().closed_in = Some("C:/elsewhere".into());
+        s.starts.get_mut("phase-62").unwrap().simmering_in = Some("C:/elsewhere".into());
         assert!(mended(&s, Some("later-1"), &findings, |t| lint(&Graph::with_proposal(&s.applied(t), "later-1", &ext, &[]), &rules)).is_empty());
     }
 
@@ -203,7 +203,7 @@ mod tests {
         let ext = crate::extraction::fixtures::extraction();
         let mut s = crate::graph::fixtures::store();
         for slug in ["later-1", "phase-62"] {
-            s.tickets.get_mut(slug).unwrap().status = Status::Active;
+            s.tickets.get_mut(slug).unwrap().status = Status::Brewing;
         }
         // phase-62's proposal repoints a requirement at a criterion this checkout's code lacks.
         let mut repointed = s.requirements["ready-only-with-commit"].clone();

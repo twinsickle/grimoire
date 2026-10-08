@@ -147,7 +147,7 @@ function Rows({ rows }: { rows: Mark[] }) {
             <span className={rel}>{m.check}</span>
             <span className={m.kind === "omen" ? "italic" : ""}>
               {m.reason}
-              {m.from && <span className="text-fg-faint text-[12.5px]"> · {m.from.kind === "ticket" ? `ticket ${m.from.ticket}, ${m.from.title}, would bring this when it lands` : "landed on the main line since this branch's base: merge the main line"}</span>}
+              {m.from && <span className="text-fg-faint text-[12.5px]"> · {m.from.kind === "ticket" ? `ticket ${m.from.ticket}, ${m.from.title}, would bring this when it is bottled` : "reached the main line since this branch's base: merge the main line"}</span>}
             </span>
           </Link>
         </li>

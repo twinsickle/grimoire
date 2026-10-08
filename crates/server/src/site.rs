@@ -503,7 +503,7 @@ mod tests {
                 title: "Work".into(),
                 kind: grimoire_core::model::TicketKind::Change,
                 priority: grimoire_core::model::Priority::Later,
-                status: grimoire_core::model::Status::Active,
+                status: grimoire_core::model::Status::Brewing,
                 touches: vec![],
                 relies_on: vec![],
                 body: "b".into(),

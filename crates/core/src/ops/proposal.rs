@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a write that changes intent in its ticket's proposal, leaving the truth alone, and apply the proposal to the truth when the ticket closes or lands, refusing what moved under it.","criteria":[{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named active or landing ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on, a deletion as a mark and a ticket whose references it changed as that ticket's touches and relies_on with the fingerprint of the truth's two lists, so the truth is untouched; a ticket that is neither, or a gap or question that is landing, is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a retirement, a deletion, one of a ticket's two lists) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed. A requirement's decisions are never part of the record it keeps, whose fingerprint leaves them out: a decision the write appends is kept apart as one the proposal adds, with no id, and a supersession it links on a landed decision as a link by id, neither resting on any record nor ever refused as moved."},{"id":"close-applies-proposal","statement":"moved names every proposed record, and every ticket whose references the proposal edits, whose truth fingerprint differs from the base it was written against, a requirement's matched with or without its decisions, or that was proposed as new and now exists, a record or edit equal to the truth's, a requirement's decisions aside, and an edit to a ticket since closed or gone, never among them; apply_proposal writes the proposed records that differ from the truth's, each requirement with the truth's decisions as they are then, the links it adds added to them and the decisions it adds after them, each taking the next id and a retirement's superseding every one before it, removes the deleted ones, a deleted page leaving the pages the site shows, and gives each edited ticket that is not closed the references its edit holds, in one pass, and drops the proposal."}]}
+//! {"purpose":"Keep a write that changes intent in its ticket's proposal, leaving the truth alone, and apply the proposal to the truth when the ticket closes or is bottled, refusing what moved under it.","criteria":[{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named brewing or simmering ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on, a deletion as a mark and a ticket whose references it changed as that ticket's touches and relies_on with the fingerprint of the truth's two lists, so the truth is untouched; a ticket that is neither, or a gap or question that is simmering, is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a retirement, a deletion, one of a ticket's two lists) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed. A requirement's decisions are never part of the record it keeps, whose fingerprint leaves them out: a decision the write appends is kept apart as one the proposal adds, with no id, and a supersession it links on a bottled decision as a link by id, neither resting on any record nor ever refused as moved."},{"id":"close-applies-proposal","statement":"moved names every proposed record, and every ticket whose references the proposal edits, whose truth fingerprint differs from the base it was written against, a requirement's matched with or without its decisions, or that was proposed as new and now exists, a record or edit equal to the truth's, a requirement's decisions aside, and an edit to a ticket since closed or gone, never among them; apply_proposal writes the proposed records that differ from the truth's, each requirement with the truth's decisions as they are then, the links it adds added to them and the decisions it adds after them, each taking the next id and a retirement's superseding every one before it, removes the deleted ones, a deleted page leaving the pages the site shows, and gives each edited ticket that is not bottled the references its edit holds, in one pass, and drops the proposal."}]}
 //! ```
 
 use super::*;
@@ -21,16 +21,16 @@ pub enum Proposing {
 /// Run `op`, a write that changes intent, as `ticket`'s proposal: it runs on
 /// the store as the proposal would leave it, and what it changed is kept in
 /// the proposal, each record with the fingerprint of the truth's record it
-/// rests on. The truth is untouched. The ticket must be active or landing, and a
+/// rests on. The truth is untouched. The ticket must be brewing or simmering, and a
 /// partial write on a record whose truth moved since it was proposed is a
 /// conflict naming the record.
 pub fn propose<T>(store: &mut Store, ticket: &str, how: Proposing, op: impl FnOnce(&mut Store) -> Result<(T, Changed), ToolError>) -> Result<(T, Changed), ToolError> {
     match store.tickets.get(ticket) {
         None => return Err(ToolError::not_found(&Reference::ticket(ticket))),
-        Some(t) if t.kind != TicketKind::Change && t.status == Status::Landing => {
+        Some(t) if t.kind != TicketKind::Change && t.status == Status::Simmering => {
             return Err(ToolError::conflict(format!("ticket:{ticket} is an answer waiting for the change that applies it: its spec belongs in that change")))
         }
-        Some(t) if !t.status.is_live() => return Err(ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: a change belongs to a ticket being worked", t.status.name()))),
+        Some(t) if !t.status.is_live() => return Err(ToolError::conflict(format!("ticket:{ticket} is {}, neither brewing nor simmering: a change belongs to a ticket being worked", t.status.name()))),
         _ => {}
     }
     let mut work = store.applied(ticket);
@@ -91,7 +91,7 @@ fn rests_on_requirement(base: Option<&str>, now: Option<&Requirement>) -> bool {
 }
 
 /// What a write did to one requirement's decisions, seen from the record before it and after: each
-/// decision appended becomes one the proposal adds, with no id, and each id a landed decision came
+/// decision appended becomes one the proposal adds, with no id, and each id a bottled decision came
 /// to supersede a link (req:ticket-proposal).
 fn absorb_decisions(p: &mut Proposal, slug: &str, before: Option<&Requirement>, after: &Requirement) {
     let was: &[Decision] = before.map(|q| q.decisions.as_slice()).unwrap_or(&[]);
@@ -186,7 +186,7 @@ fn absorb(p: &mut Proposal, work: &Store, before: &std::collections::BTreeMap<St
 fn record_moved(truth: &Store, p: &Proposal, r: &Reference) -> bool {
     if r.kind == Kind::Ticket {
         // An edit to a ticket since closed or gone is dropped at the close, so it cannot have moved.
-        let (Some(q), Some(t)) = (p.tickets.get(&r.id), truth.tickets.get(&r.id).filter(|t| t.status != Status::Closed)) else { return false };
+        let (Some(q), Some(t)) = (p.tickets.get(&r.id), truth.tickets.get(&r.id).filter(|t| t.status != Status::Bottled)) else { return false };
         let now = TicketReferences::of(t);
         return now != q.record && q.base.as_deref() != Some(crate::fingerprint::of_record(&now).as_str());
     }
@@ -224,13 +224,13 @@ pub fn moved(store: &Store, ticket: &str) -> Vec<FieldError> {
     refs.filter(|r| record_moved(store, p, r)).map(|r| FieldError::new(&r.to_string(), "changed in the truth since it was proposed; read it again and propose again")).collect()
 }
 
-/// Every landing ticket whose proposal rests on a truth that has since
-/// moved, with the records that moved: its landing would be refused.
-pub fn landing_moved(store: &Store) -> std::collections::BTreeMap<String, Vec<String>> {
+/// Every simmering ticket whose proposal rests on a truth that has since
+/// moved, with the records that moved: its bottling would be refused.
+pub fn simmering_moved(store: &Store) -> std::collections::BTreeMap<String, Vec<String>> {
     store
         .tickets
         .values()
-        .filter(|t| t.status == Status::Landing)
+        .filter(|t| t.status == Status::Simmering)
         .filter_map(|t| {
             let refs: Vec<String> = moved(store, &t.slug).into_iter().map(|e| e.field).collect();
             (!refs.is_empty()).then(|| (t.slug.clone(), refs))
@@ -252,7 +252,7 @@ pub fn apply_proposal(store: &mut Store, ticket: &str) -> Changed {
         // Each with the truth's decisions as they are now, and after them those the ticket adds, taking their ids.
         let slugs: std::collections::BTreeSet<&String> = p.requirements.keys().chain(p.decisions.keys()).collect();
         for slug in slugs {
-            if let Some(q) = crate::store::with_decisions(store.requirements.get(slug), &p, slug, crate::store::Landing::Landed) {
+            if let Some(q) = crate::store::with_decisions(store.requirements.get(slug), &p, slug, crate::store::Bottling::Bottled) {
                 if store.requirements.get(slug) != Some(&q) {
                     store.requirements.insert(slug.clone(), q);
                     changes.push(Changed::Requirement(slug.clone()));
@@ -279,7 +279,7 @@ pub fn apply_proposal(store: &mut Store, ticket: &str) -> Changed {
         }
         // Edits to other tickets' references reach them now; one since closed or gone takes none.
         for (slug, q) in p.tickets {
-            if let Some(t) = store.tickets.get_mut(&slug).filter(|t| t.status != Status::Closed) {
+            if let Some(t) = store.tickets.get_mut(&slug).filter(|t| t.status != Status::Bottled) {
                 if TicketReferences::of(t) != q.record {
                     t.touches = q.record.touches;
                     t.relies_on = q.record.relies_on;
@@ -307,7 +307,7 @@ mod tests {
         let mut s = store();
         let before = s.pages["orphan"].clone();
         let orphan = |body: &str| Page { body: body.into(), ..before.clone() };
-        // later-1 is active in the fixture: the write runs, and the truth does not move.
+        // later-1 is brewing in the fixture: the write runs, and the truth does not move.
         let (p, changed) = propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("proposed"))).unwrap();
         assert_eq!(p.body, "proposed");
         assert!(matches!(changed, Changed::Proposed(ref t) if t == "later-1"));
@@ -333,14 +333,14 @@ mod tests {
         propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("proposed again"))).unwrap();
         assert_eq!(s.proposals["later-1"].pages["orphan"].base, Some(crate::fingerprint::of_record(&s.pages["orphan"])));
         assert!(moved(&s, "later-1").is_empty(), "rebased");
-        // An open ticket is a conflict, a missing one not found.
+        // An inscribed ticket is a conflict, a missing one not found.
         assert_eq!(propose(&mut s, "phase-62", Proposing::Whole, |w| put_page(w, orphan("x"))).unwrap_err().code(), "conflict");
         assert_eq!(propose(&mut s, "nope", Proposing::Whole, |w| put_page(w, orphan("x"))).unwrap_err().code(), "not_found");
         // The current ticket: a start sets it, the target falls back to it, a close of it clears it.
         assert_eq!(target_ticket(&s, Some("ticket:phase-62")).unwrap(), "phase-62");
         assert_eq!(target_ticket(&s, Some("phase-62")).unwrap(), "phase-62");
         assert_eq!(target_ticket(&s, None).unwrap_err().code(), "invalid");
-        start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
+        brew_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
         assert_eq!(s.current.as_deref(), Some("phase-62"));
         assert_eq!(target_ticket(&s, None).unwrap(), "phase-62");
         close_ticket(&mut s, &Reference::ticket("later-1"), Decision { id: None, date: "2026-10-02".into(), text: "Done.".into(), supersedes: vec![], adopted: false, withdrawn: false }).unwrap();
@@ -428,22 +428,22 @@ mod tests {
         // The truth's lists moving under the edit is a move; the ticket closing drops the edit, which can no longer move.
         update_ticket(&mut s, &Reference::ticket("gap-1"), edit(vec![r("page:overview")])).unwrap();
         assert_eq!(moved(&s, "later-1").into_iter().map(|e| e.field).collect::<Vec<_>>(), vec!["ticket:gap-1"]);
-        s.tickets.get_mut("gap-1").unwrap().status = Status::Closed;
+        s.tickets.get_mut("gap-1").unwrap().status = Status::Bottled;
         s.tickets.get_mut("gap-1").unwrap().decision = Some(Decision::new("2026-10-05", "Closed."));
         assert!(moved(&s, "later-1").is_empty());
         let Changed::Many(cs) = apply_proposal(&mut s, "later-1") else { panic!("one pass") };
         assert_eq!(s.tickets["phase-62"].touches, vec![r("page:orphan"), r("req:ready")]);
-        assert_eq!(s.tickets["gap-1"].touches, vec![r("page:overview")], "a closed ticket takes no edit");
+        assert_eq!(s.tickets["gap-1"].touches, vec![r("page:overview")], "a bottled ticket takes no edit");
         assert_eq!(cs, vec![Changed::Ticket("phase-62".into()), Changed::Proposed("later-1".into())]);
     }
 
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "decisions-wait-apart-and-land-after-the-truths", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/decisions#decisions-append-only", "crates/core/src/ops/decisions#retire"]}
+    /// {"test": "decisions-wait-apart-and-are-bottled-after-the-truths", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/decisions#decisions-append-only", "crates/core/src/ops/decisions#retire"]}
     /// ```
     #[test]
-    fn decisions_wait_apart_and_land_after_the_truths() {
+    fn decisions_wait_apart_and_are_bottled_after_the_truths() {
         let mut s = store();
         let x = Reference::req("ready-only-with-commit");
         let truth = s.requirements["ready-only-with-commit"].clone();
@@ -471,16 +471,16 @@ mod tests {
         let now = s.requirements["ready-only-with-commit"].clone();
         propose(&mut s, "later-1", Proposing::Whole, |w| put_requirement(w, Requirement { statement: "It SHALL hold, restated.".into(), ..now.clone() })).unwrap();
         assert_eq!(s.proposals["later-1"].decisions["ready-only-with-commit"].added.len(), 1);
-        // Landed: the truth's decisions, the link added, and the ticket's own after them with the next id, keeping its date.
+        // Bottled: the truth's decisions, the link added, and the ticket's own after them with the next id, keeping its date.
         let Changed::Many(cs) = apply_proposal(&mut s, "later-1") else { panic!("one pass") };
         assert!(cs.contains(&Changed::Requirement("ready-only-with-commit".into())));
-        let landed = &s.requirements["ready-only-with-commit"];
-        assert_eq!(landed.statement, "It SHALL hold, restated.");
-        let ids = landed.decisions.iter().map(|d| (d.id, d.text.as_str(), d.date.as_str(), d.supersedes.clone())).collect::<Vec<_>>();
+        let bottled = &s.requirements["ready-only-with-commit"];
+        assert_eq!(bottled.statement, "It SHALL hold, restated.");
+        let ids = bottled.decisions.iter().map(|d| (d.id, d.text.as_str(), d.date.as_str(), d.supersedes.clone())).collect::<Vec<_>>();
         assert_eq!(ids, vec![(Some(1), "Identity is required rather than invented.", "2026-09-12", vec![]), (Some(2), "Theirs.", "2026-10-06", vec![1]), (Some(3), "Ours.", "2026-10-05", vec![1])]);
-        assert!(crate::store::validate_requirement(landed).is_empty());
-        // A retirement under a ticket supersedes, as it lands, every decision the truth holds then.
-        s.tickets.get_mut("later-1").unwrap().status = Status::Active;
+        assert!(crate::store::validate_requirement(bottled).is_empty());
+        // A retirement under a ticket supersedes, as it is bottled, every decision the truth holds then.
+        s.tickets.get_mut("later-1").unwrap().status = Status::Brewing;
         propose(&mut s, "later-1", Proposing::Partial, |w| retire_node(w, &x, "Gone.".into(), "2026-10-07".into())).unwrap();
         record_decision(&mut s, &x, "Meanwhile.".into(), "2026-10-07".into(), vec![], false).unwrap();
         assert_eq!(moved(&s, "later-1").len(), 0);
@@ -521,7 +521,7 @@ mod tests {
         s.settle_proposals();
         assert_eq!(s, once);
         apply_proposal(&mut s, "later-1");
-        let landed = &s.requirements["ready-only-with-commit"];
-        assert_eq!((landed.statement.as_str(), landed.decisions.len(), landed.decisions[2].id, landed.decisions[2].supersedes.clone()), ("Restated.", 3, Some(3), vec![1]));
+        let bottled = &s.requirements["ready-only-with-commit"];
+        assert_eq!((bottled.statement.as_str(), bottled.decisions.len(), bottled.decisions[2].id, bottled.decisions[2].supersedes.clone()), ("Restated.", 3, Some(3), vec![1]));
     }
 }

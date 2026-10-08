@@ -15,13 +15,13 @@ export function decisionId(d: Decision, position: number): number | null {
 
 /** How a decision's id is said: d3; a decision waiting in a ticket has none yet. */
 export function saidId(id: number | null): string {
-  return id === null ? "waiting for its ticket to land" : `d${id}`;
+  return id === null ? "waiting for its ticket to be bottled" : `d${id}`;
 }
 
 /** A requirement's decisions by id: those in force newest first, and those a later one superseded, each with the id of what superseded it. */
 export function decisionsInForce(decisions: Decision[]): { inForce: { id: number | null; d: Decision }[]; superseded: { id: number; d: Decision; by: number | null }[] } {
   const numbered = decisions.map((d, i) => ({ id: decisionId(d, i + 1), d }));
-  // The latest decision naming each id, in the order they landed.
+  // The latest decision naming each id, in the order they were bottled.
   const by = new Map<number, number | null>();
   for (const { id, d } of numbered) for (const s of d.supersedes ?? []) by.set(s, id);
   const newest = [...numbered].reverse();

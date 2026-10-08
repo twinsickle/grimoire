@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against; the store config and the records the extraction derives each have a module beneath.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date; since when someone has a ticket checked out is state kept only while the ticket is worked, not a record of intent."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of id, date, text, the ids of earlier decisions each supersedes and whether it was recorded as an adoption, in the order they landed, and whether it is retired; a decision's id is written only where it differs from its position, 1 for the oldest, read as that position where absent, and null for one not yet landed; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket was closed when: landed, the checkout it was closed in, by repository path, absent otherwise."},{"id":"checked-out-record","statement":"Who has a ticket checked out is exactly a name and when they took it, a non-empty time, written as RFC 3339 text, both required; it is kept by ticket slug apart from the ticket's record, so a ticket stays bounded."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists, and for each requirement the decisions it adds, with no id, and the supersessions it links, by id, apart from any record it holds; the current record is the slug of the ticket a write lands in when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"main-line-recipes-record","statement":"The main line's recipes are exactly a list of recipes, each an id, kind, title, text, its ingredients each an id and what it says, the ids of the recipes it uses and its digest, and nothing of its files, its file or its line; one is made from a recipe read from the repository, and read back as that recipe with no files, no file and no line."}]}
+//! {"purpose":"Define the node kinds, references and store records that every other part of core is written against; the store config and the records the extraction derives each have a module beneath.","criteria":[{"id":"baseline-record","statement":"A baseline is a date, a required reason and a list of finding identities (rule, check, ref and optional edge, never the reason text); a store without one behaves as one with an empty list."},{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"strict-records","statement":"Store records reject unknown fields when deserialised so a misspelled field is an error, not silently dropped."},{"id":"status-names","statement":"A ticket's status is one of inscribed, brewing, simmering and bottled, and is written by that name and read by it or by its name before ticket 0168, open, active, landing or closed, as a start's simmering_in is read as closed_in too, so a store written before the rename loads unchanged."},{"id":"ticket-bounded","statement":"A ticket has exactly a slug, title, kind, priority, status, touches, relies_on, body and decision, and no field for plans, notes, assignees or history."},{"id":"decisions-only-dates","statement":"Pages, requirements and tickets carry no created, modified or closed timestamps, and a store record carries no date but a person's choice: a decision's date, a baseline's date of adoption and a judgement's date; since when someone has a ticket checked out is state kept only while the ticket is worked, not a record of intent."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."},{"id":"page-record","statement":"A page is slug, title, body (Markdown) and links, which may name only pages, requirements, modules and recipes, in display order without duplicates."},{"id":"requirement-record","statement":"A requirement is slug, title, a normative statement, scenarios of title/given/when/then, covered_by naming only criteria, recipes and ingredients, decisions of id, date, text, the ids of earlier decisions each supersedes and whether it was recorded as an adoption, in the order they were bottled, and whether it is retired; a decision's id is written only where it differs from its position, 1 for the oldest, read as that position where absent, and null for one not yet bottled; a decision is in force unless a later one supersedes it, and a requirement is described when it has decisions in force and every one of them is an adoption."},{"id":"start-record","statement":"A start is a ticket's slug and a map from each node's reference to its fingerprint, with no date, and, once the ticket is simmering, the checkout it was closed when: bottled in, by repository path, absent otherwise, read under its former name closed_in too."},{"id":"checked-out-record","statement":"Who has a ticket checked out is exactly a name and when they took it, a non-empty time, written as RFC 3339 text, both required; it is kept by ticket slug apart from the ticket's record, so a ticket stays bounded."},{"id":"proposal-record","statement":"A proposal is a ticket's slug, the pages and requirements it proposes, each a record with the fingerprint of the truth's record it was written against or none for a new one, the pages and requirements it deletes by reference with that fingerprint, the other tickets whose references it edits, each as its touches and relies_on with the fingerprint of the truth's two lists, and for each requirement the decisions it adds, with no id, and the supersessions it links, by id, apart from any record it holds; the current record is the slug of the ticket a write goes into when it names none."},{"id":"judgement-record","statement":"A judgement is exactly a recipe's id, the fingerprint it was judged at, an ISO date, the ticket it was judged in and its outcome, held or updated; a recipe read from the repository carries its digest, the fingerprint a judgement is matched against."},{"id":"main-line-recipes-record","statement":"The main line's recipes are exactly a list of recipes, each an id, kind, title, text, its ingredients each an id and what it says, the ids of the recipes it uses and its digest, and nothing of its files, its file or its line; one is made from a recipe read from the repository, and read back as that recipe with no files, no file and no line."}]}
 //! ```
 
 use std::fmt;
@@ -314,18 +314,18 @@ impl Requirement {
         self.decisions.iter().flat_map(|d| d.supersedes.iter().copied()).collect()
     }
 
-    /// The decisions in force, oldest first: those no decision supersedes, one not yet landed among them.
+    /// The decisions in force, oldest first: those no decision supersedes, one not yet bottled among them.
     pub fn in_force(&self) -> Vec<&Decision> {
         let superseded = self.superseded();
         self.decisions.iter().filter(|d| !d.id.is_some_and(|id| superseded.contains(&id))).collect()
     }
 
-    /// The landed decision whose id is `id`.
+    /// The bottled decision whose id is `id`.
     pub fn decision(&self, id: u32) -> Option<&Decision> {
         self.decisions.iter().find(|d| d.id == Some(id))
     }
 
-    /// The id the next decision to land takes: above every id it holds, so none is given twice.
+    /// The id the next decision to bottle takes: above every id it holds, so none is given twice.
     pub fn next_id(&self) -> u32 {
         self.decisions.iter().filter_map(|d| d.id).max().unwrap_or(0) + 1
     }
@@ -345,7 +345,7 @@ impl Requirement {
 }
 
 /// A requirement's decisions as they are written: each one's `id` only where it differs from its
-/// position, 1 for the oldest, and null for one not yet landed, as a read through a proposal shows it.
+/// position, 1 for the oldest, and null for one not yet bottled, as a read through a proposal shows it.
 fn write_decisions<S: Serializer>(decisions: &[Decision], s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::{SerializeMap, SerializeSeq};
     struct Written<'a>(usize, &'a Decision);
@@ -379,7 +379,7 @@ fn write_decisions<S: Serializer>(decisions: &[Decision], s: S) -> Result<S::Ok,
 }
 
 /// A requirement's decisions as they are read: one with no `id` takes its position, as every
-/// decision written before ids, and one whose `id` is null has not landed.
+/// decision written before ids, and one whose `id` is null has not been bottled.
 fn read_decisions<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Decision>, D::Error> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -420,9 +420,9 @@ pub struct Scenario {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Decision {
-    // A requirement's decision's id, said `d<n>`, given when it lands and never given twice; none on
+    // A requirement's decision's id, said `d<n>`, given when it is bottled and never given twice; none on
     // a ticket's decision and on one waiting in a proposal. Among a requirement's decisions, absent
-    // means the decision's position, 1 for the oldest, and null one not yet landed.
+    // means the decision's position, 1 for the oldest, and null one not yet bottled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(as = "Option<Option<u32>>", optional))]
     pub id: Option<u32>,
@@ -439,13 +439,13 @@ pub struct Decision {
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub adopted: bool,
     // A change's decision to withdraw it: closed with nothing of it applied, since it is no
-    // longer to be made (req:tool-withdraw-ticket). Only on a closed change's decision.
+    // longer to be made (req:tool-withdraw-ticket). Only on a bottled change's decision.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub withdrawn: bool,
 }
 
-/// A requirement's landed decision as a node of the graph, `req:<slug>#d<id>`: derived from its
+/// A requirement's bottled decision as a node of the graph, `req:<slug>#d<id>`: derived from its
 /// requirement on every read, never stored apart from it (req:decision-references).
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -585,25 +585,32 @@ pub enum Priority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
-    Open,
-    Active,
-    /// Its decision is written and its change has yet to land: active in
-    /// every other respect, and closed by the landing.
-    Landing,
-    Closed,
+    /// Filed, and nobody is working it. Read as `open` too, its name before ticket 0168.
+    #[serde(alias = "open")]
+    Inscribed,
+    /// Being worked. Read as `active` too.
+    #[serde(alias = "active")]
+    Brewing,
+    /// Its decision is written and it waits for its change to reach the main
+    /// line: brewing in every other respect, and bottled then. Read as `landing` too.
+    #[serde(alias = "landing")]
+    Simmering,
+    /// Done, its decision kept. Read as `closed` too.
+    #[serde(alias = "closed")]
+    Bottled,
 }
 
 impl Status {
-    /// Whether a ticket in this status holds a proposal and a start: it is being worked or waits to land.
+    /// Whether a ticket in this status holds a proposal and a start: it is brewing or simmering.
     pub fn is_live(self) -> bool {
-        matches!(self, Status::Active | Status::Landing)
+        matches!(self, Status::Brewing | Status::Simmering)
     }
     pub fn name(self) -> &'static str {
         match self {
-            Status::Open => "open",
-            Status::Active => "active",
-            Status::Landing => "landing",
-            Status::Closed => "closed",
+            Status::Inscribed => "inscribed",
+            Status::Brewing => "brewing",
+            Status::Simmering => "simmering",
+            Status::Bottled => "bottled",
         }
     }
 }
@@ -625,12 +632,12 @@ pub struct Ticket {
 }
 
 impl Ticket {
-    /// Whether the ticket is being worked: active, or a change waiting to
-    /// land. Only such a ticket holds a proposal, a start and the current
-    /// pointer; a gap or question waiting, landing, for the change that
+    /// Whether the ticket is being worked: brewing, or a change simmering.
+    /// Only such a ticket holds a proposal, a start and the current
+    /// pointer; a gap or question waiting, simmering, for the change that
     /// applies its answer is not worked itself.
     pub fn is_worked(&self) -> bool {
-        self.status == Status::Active || (self.status == Status::Landing && self.kind == TicketKind::Change)
+        self.status == Status::Brewing || (self.status == Status::Simmering && self.kind == TicketKind::Change)
     }
 }
 
@@ -704,11 +711,12 @@ pub struct Baseline {
 pub struct Start {
     pub ticket: String,
     pub fingerprints: std::collections::BTreeMap<String, String>,
-    /// The checkout, by its repository path, where the ticket was closed `when: landed`: it is
-    /// that checkout's to land before the checkout takes another (req:one-ticket-per-branch).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// The checkout, by its repository path, where the ticket was closed `when: bottled` and set
+    /// simmering: it is that checkout's to bottle before the checkout takes another
+    /// (req:one-ticket-per-branch). Read as `closed_in` too, its name before ticket 0168.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "closed_in")]
     #[cfg_attr(feature = "ts", ts(optional))]
-    pub closed_in: Option<String>,
+    pub simmering_in: Option<String>,
 }
 
 /// One who has a ticket checked out, and since when: kept in `checked_out.json` by ticket slug, apart
@@ -725,7 +733,7 @@ pub struct CheckedOut {
 }
 
 /// `proposals/<ticket>.json`: a ticket's proposed change to the truth. The
-/// pages and requirements as they will be once the ticket lands, each with
+/// pages and requirements as they will be once the ticket is bottled, each with
 /// the fingerprint of the truth's record it was written against (none for a
 /// record the truth does not have), and the records it deletes as marks
 /// carrying that fingerprint. Applied to the truth when the ticket closes.
@@ -743,11 +751,11 @@ pub struct Proposal {
     pub deleted: std::collections::BTreeMap<String, String>,
     /// Other tickets' references as this ticket's edits leave them, by slug,
     /// each with the fingerprint of the truth's two lists it was written
-    /// against: they reach the ticket when this one lands.
+    /// against: they reach the ticket when this one is bottled.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub tickets: std::collections::BTreeMap<String, Proposed<TicketReferences>>,
     /// The decisions this ticket adds to requirements, by slug, kept apart from any record it
-    /// holds: appended after the truth's when it lands, each taking its id then.
+    /// holds: appended after the truth's when it is bottled, each taking its id then.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub decisions: std::collections::BTreeMap<String, ProposedDecisions>,
 }
@@ -803,7 +811,7 @@ pub struct Proposed<T> {
     pub base: Option<String>,
 }
 
-/// `current.json`: the ticket a write lands in when it names none, the one
+/// `current.json`: the ticket a write goes into when it names none, the one
 /// last started on this store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -855,6 +863,29 @@ mod tests {
         assert_eq!(Reference::recipe("button").split_hash(), None);
         assert_eq!(Reference::ingredient("button", "label").to_string(), "recipe:button#label");
         assert_eq!("recipe:button#label".parse::<Reference>().unwrap().split_hash(), Some(("button", "label")));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-status-is-written-new-and-read-under-either-name", "checks": ["crates/core/src/model#status-names"]}
+    /// ```
+    #[test]
+    fn a_status_is_written_new_and_read_under_either_name() {
+        let ticket = |status: &str| format!(r#"{{"slug":"t","title":"T","kind":"change","priority":"next","status":"{status}","touches":[],"relies_on":[],"body":"b","decision":null}}"#);
+        for (former, now, status) in
+            [("open", "inscribed", Status::Inscribed), ("active", "brewing", Status::Brewing), ("landing", "simmering", Status::Simmering), ("closed", "bottled", Status::Bottled)]
+        {
+            for name in [former, now] {
+                let t: Ticket = serde_json::from_str(&ticket(name)).unwrap();
+                assert_eq!(t.status, status, "{name} is read");
+                assert_eq!(serde_json::to_value(&t).unwrap()["status"], now, "and written as {now}");
+            }
+            assert_eq!(status.name(), now);
+        }
+        let start: Start = serde_json::from_str(r#"{"ticket":"t","fingerprints":{},"closed_in":"C:/repo"}"#).unwrap();
+        assert_eq!(start.simmering_in.as_deref(), Some("C:/repo"));
+        assert_eq!(serde_json::to_value(&start).unwrap()["simmering_in"], "C:/repo");
     }
 
     /// # Test contract
@@ -967,7 +998,7 @@ mod tests {
         let q: Requirement = serde_json::from_str(&gap).unwrap();
         assert_eq!((q.decisions[1].id, q.next_id(), q.decision(2).is_none()), (Some(3), 4, true));
         assert_eq!(serde_json::to_string(&q).unwrap(), gap);
-        // One not yet landed, as a read through a proposal shows it: null, read back as none.
+        // One not yet bottled, as a read through a proposal shows it: null, read back as none.
         let waiting = record(r#"[{"date":"2026-01-01","text":"a"},{"id":null,"date":"2026-01-04","text":"w","adopted":true}]"#);
         let q: Requirement = serde_json::from_str(&waiting).unwrap();
         assert_eq!((q.decisions[1].id, q.in_force().len(), q.next_id()), (None, 2, 2));

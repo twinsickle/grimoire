@@ -2,7 +2,7 @@
 // (the sources are kept as .rs.txt so Grimoire's own extraction never reads
 // them), initialise a store there, fill it from store.json through the tools
 // under tickets of its own (its pages under two roots), adopt what it finds as
-// the baseline, add the new work, leave one ticket landing and one active with a proposal,
+// the baseline, add the new work, leave one ticket simmering and one brewing with a proposal,
 // and serve it with the built UI until Playwright stops it.
 //
 // Served two ways, as Grimoire is used. BEHAVIOUR_SETUP=solo (the default):
@@ -75,17 +75,17 @@ grimoire("init", "--store", store, "--empty");
 const records = JSON.parse(readFileSync(join(here, "fixture", "store.json"), "utf8"));
 const tool = (name, input) => JSON.parse(grimoire("tool", name, JSON.stringify(input)));
 
-// A write that changes intent lands in a ticket's proposal and reaches the
+// A write that changes intent goes into a ticket's proposal and reaches the
 // truth when the ticket closes, so the fixture is seeded under tickets of its
-// own, filed after the ten the specs name by id and closed before them, with
-// earlier dates, so the board's recently closed stay the fixture's.
+// own, inscribed after the ten the specs name by id and bottled before them, with
+// earlier dates, so the board's recently bottled stay the fixture's.
 function under(title, write) {
-  const ref = tool("file_ticket", { title, kind: "change", priority: "later", touches: [], body: "Seeds the fixture." }).node.ref;
-  tool("start_ticket", { ref });
+  const ref = tool("inscribe_ticket", { title, kind: "change", priority: "later", touches: [], body: "Seeds the fixture." }).node.ref;
+  tool("brew_ticket", { ref });
   write();
   tool("close_ticket", { ref, decision: { text: "Seeded.", date: "2026-01-10" } });
 }
-const tickets = records.tickets.map(({ close, land, ...ticket }) => ({ close, land, ref: tool("file_ticket", ticket).node.ref }));
+const tickets = records.tickets.map(({ close, bottle, ...ticket }) => ({ close, bottle, ref: tool("inscribe_ticket", ticket).node.ref }));
 under("Seed the pages and requirements", () => {
   for (const page of records.pages) tool("put_page", page);
   // More than one root, so the views show every root and not only the first; and the kinds of the fixture's recipes.
@@ -100,7 +100,7 @@ under("Seed the pages and requirements", () => {
 });
 for (const { close, ref } of tickets) {
   if (close) {
-    tool("start_ticket", { ref });
+    tool("brew_ticket", { ref });
     // A fixed date, so a view showing a decision renders the same on any day.
     tool("close_ticket", { ref, decision: { text: close, date: "2026-01-15" } });
   }
@@ -114,25 +114,25 @@ under("Add the new work", () => {
   for (const [ref, add_links] of Object.entries(records.after_adoption.links)) tool("patch_page", { ref, add_links });
 });
 
-// One ticket is left landing, its decision written and its change yet to
-// land, so the views have one to show. It is started before the draft below,
+// One ticket is left simmering, its decision written and its change yet to
+// be bottled, so the views have one to show. It is started before the draft below,
 // which is the one left current.
-for (const { land, ref } of tickets) {
-  if (land) {
-    tool("start_ticket", { ref });
+for (const { bottle, ref } of tickets) {
+  if (bottle) {
+    tool("brew_ticket", { ref });
     // Its proposal names a criterion the fixture's code lacks: other work that may conflict, once
     // another ticket is current, shown in the header and on the requirement's page.
     const named = tool("get", { ref: "req:ready-writes-nothing" }).node;
     tool("put_requirement", { slug: named.slug, title: named.title, statement: named.statement, scenarios: named.scenarios, covered_by: [...named.covered_by, "criterion:src/ready#not-written-yet"], ticket: ref });
-    tool("close_ticket", { ref, decision: { text: land, date: "2026-01-16" }, when: "landed" });
+    tool("close_ticket", { ref, decision: { text: bottle, date: "2026-01-16" }, when: "bottled" });
   }
 }
 
-// The first ticket stays active with a proposal, so the views have a draft
+// The first ticket stays brewing with a proposal, so the views have a draft
 // to show: a page and a requirement, each read from the truth and changed in
 // one field.
 const draft = tickets[0].ref;
-tool("start_ticket", { ref: draft });
+tool("brew_ticket", { ref: draft });
 const { slug, title, body, links } = tool("get", { ref: "page:readiness" }).node;
 tool("put_page", { slug, title, body: `Proposed: readiness also counts a detached head.
 
@@ -196,7 +196,7 @@ try {
     writeFileSync(join(repo, ".grimoire.toml"), `server = "${origin}"\n`);
     run(["login"], `${token}\n`);
     // The current ticket is a machine's, not the server's: the checkout takes up the draft, as the person working it would.
-    run(["tool", "start_ticket", JSON.stringify({ ref: draft })]);
+    run(["tool", "brew_ticket", JSON.stringify({ ref: draft })]);
   }
   start(["serve", "--port", port, "--ui-dir", join(here, "..", "dist")], repo, "daemon");
 } catch (e) {

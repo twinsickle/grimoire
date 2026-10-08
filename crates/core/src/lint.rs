@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new, and the omens beside them.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not closed, a test or a recipe to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node; a ticket's edges only when the graph names that ticket as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the node it wrote judge a ticket's edges whatever the graph."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"closed-exempt","statement":"A closed ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build reads at no tier, by neither an adapter nor its comments, is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"pruned-to","statement":"pruned_to gives the stored baseline without the entries a given set of present findings lacks, in their stored order, and nothing when none go or there is no baseline; a present finding the baseline does not hold is never added."},{"id":"unheld","statement":"A requirement that names nothing in covered_by, no criterion, recipe or ingredient, and that no test checks by name is uncovered with the check unheld, wherever its page sits, unless it is a rite, held by the work; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not closed whose relies_on leads back to itself through other tickets that are not closed is malformed with the check ticket-cycle, naming the loop, every member of the loop being reported only when the graph names one of them as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the ticket it wrote report its loop whatever the graph."},{"id":"without-code","statement":"On a graph built with no code, an edge to a module, criterion, file, declaration or test is not reported as dangling and no requirement is reported as unheld, since neither can be known there; every finding that intent alone shows is reported as usual."},{"id":"landing-moved","statement":"A ticket whose proposal rests on a truth that has since moved is malformed on the ticket, naming the records that moved, with the check landing-moved when it is landing and proposal-moved when it is active, only on a graph read with that ticket itself, since only its owner can mend it, never on the truth's nor on one read with another ticket, even one whose proposal edits its references; there it is shown as the advisory naming the ticket that its proposal brings."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."},{"id":"rites","statement":"A rite, a requirement under the rites and not under the grimoire, is never reported as unheld, and one that names a criterion in covered_by is malformed with the check rite-names-code, since a rule the code carries belongs under the grimoire."},{"id":"omens","statement":"omens reports, apart from every finding, the signs that something may be wrong rather than that it is, each with its check, the node it is on and a reason, ordered by reference then check; an omen has no rule and no baselined mark and is in no finding list, so it fails nothing and no baseline holds it."},{"id":"large-file","statement":"A file its adapter expects to carry a contract, of a module expected to carry one, whose lines, its test lines aside, number the graph's large-file limit or more is an omen with the check large-file on the file, saying its lines with and without its tests, the limit, and that it is a candidate for splitting along its seams; any other file, a test file folded into its module among them, never is."},{"id":"missing-root","statement":"A root the config does not name, or names as a page the graph does not hold, is malformed on file:grimoire.json with the check missing-grimoire-root or missing-rites-root, so the two are told apart, saying which is missing and how to name it."}]}
+//! {"purpose":"Report dangling edges, uncovered nodes, malformed store files and requirements without a scenario over the joined graph, each marked as baselined or new, and the omens beside them.","criteria":[{"id":"dangling-edge","statement":"An edge from a page, a requirement, a ticket that is not bottled, a test or a recipe to a node the graph does not hold is reported as dangling with the check dangling-edge, on the node that owns the edge, naming the edge and the missing node; a ticket's edges only when the graph names that ticket as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the node it wrote judge a ticket's edges whatever the graph."},{"id":"uncovered-criterion","statement":"A criterion that no requirement in force names in covered_by is uncovered with the check uncovered-criterion, whether or not a test checks it; a retired requirement names nothing."},{"id":"no-contract","statement":"A module expected to carry a contract that carries no usable one, none at all or one that could not be read, is uncovered with the check no-contract, giving the reason; a module outside the contract scope is not."},{"id":"unlinked-page","statement":"A page that no page links and that is not a root is uncovered with the check unlinked-page."},{"id":"unlinked-requirement","statement":"A requirement that no page links is uncovered with the check unlinked-requirement, unless it is retired."},{"id":"stable-order","statement":"Findings are ordered by rule, then reference, then edge, so two runs over the same graph produce identical output."},{"id":"bottled-exempt","statement":"A bottled ticket's edges are never reported as dangling."},{"id":"grimoire-material-only","statement":"A module is reported as unlinked only when it is expected to carry a contract or carries one; test files and build scripts are not part of the grimoire."},{"id":"unspecified","statement":"A requirement with no scenario is reported as unspecified, a fourth rule ordered after malformed."},{"id":"unsupported-language","statement":"A configured language the running build reads at no tier, by neither an adapter nor its comments, is a malformed finding with the check unsupported-language on file:grimoire.json, naming the languages the build supports."},{"id":"untested","statement":"A criterion that no test checks is uncovered with the check untested."},{"id":"malformed-test","statement":"A test block that could not be read is malformed with the check malformed-test, on the file that holds it, with the line and reason."},{"id":"baselined","statement":"Every finding names the check that produced it, and is reported and marked baselined exactly when its rule, check, ref and edge match an entry in the store's baseline; the reason text is not compared."},{"id":"baseline-pruned","statement":"The baseline a store should hold after a rebuild is the stored one minus every entry no longer produced; nothing is added."},{"id":"pruned-to","statement":"pruned_to gives the stored baseline without the entries a given set of present findings lacks, in their stored order, and nothing when none go or there is no baseline; a present finding the baseline does not hold is never added."},{"id":"unheld","statement":"A requirement that names nothing in covered_by, no criterion, recipe or ingredient, and that no test checks by name is uncovered with the check unheld, wherever its page sits, unless it is a rite, held by the work; a retired requirement is not, and one naming a criterion the graph lacks is dangling instead."},{"id":"ticket-cycle","statement":"A ticket that is not bottled whose relies_on leads back to itself through other tickets that are not bottled is malformed with the check ticket-cycle, naming the loop, every member of the loop being reported only when the graph names one of them as judged, a graph read with it or with a ticket whose proposal edits its references, while the findings a write returns on the ticket it wrote report its loop whatever the graph."},{"id":"without-code","statement":"On a graph built with no code, an edge to a module, criterion, file, declaration or test is not reported as dangling and no requirement is reported as unheld, since neither can be known there; every finding that intent alone shows is reported as usual."},{"id":"simmering-moved","statement":"A ticket whose proposal rests on a truth that has since moved is malformed on the ticket, naming the records that moved, with the check simmering-moved when it is simmering and proposal-moved when it is brewing, only on a graph read with that ticket itself, since only its owner can mend it, never on the truth's nor on one read with another ticket, even one whose proposal edits its references; there it is shown as the advisory naming the ticket that its proposal brings."},{"id":"retired-exempt","statement":"A retired requirement is never reported: not as unlinked, unheld or unspecified, and its covered_by makes no edge to dangle; a test that still names it in checks is reported as dangling with the check checks-retired, since what it holds no longer holds."},{"id":"rites","statement":"A rite, a requirement under the rites and not under the grimoire, is never reported as unheld, and one that names a criterion in covered_by is malformed with the check rite-names-code, since a rule the code carries belongs under the grimoire."},{"id":"omens","statement":"omens reports, apart from every finding, the signs that something may be wrong rather than that it is, each with its check, the node it is on and a reason, ordered by reference then check; an omen has no rule and no baselined mark and is in no finding list, so it fails nothing and no baseline holds it."},{"id":"large-file","statement":"A file its adapter expects to carry a contract, of a module expected to carry one, whose lines, its test lines aside, number the graph's large-file limit or more is an omen with the check large-file on the file, saying its lines with and without its tests, the limit, and that it is a candidate for splitting along its seams; any other file, a test file folded into its module among them, never is."},{"id":"missing-root","statement":"A root the config does not name, or names as a page the graph does not hold, is malformed on file:grimoire.json with the check missing-grimoire-root or missing-rites-root, so the two are told apart, saying which is missing and how to name it."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -113,12 +113,12 @@ pub fn lint(g: &Graph, rules: &[Rule]) -> Vec<Finding> {
                 out.push(cycle_finding(&r, &members));
             }
         }
-        // Only the ticket's owner can mend it, re-proposing or withdrawing: judged only where it is read (req:lint-landing-moved).
-        for (ticket, moved) in g.landing_moved.iter().filter(|(t, _)| g.read_with.as_deref() == Some(t.as_str())) {
+        // Only the ticket's owner can mend it, re-proposing or withdrawing: judged only where it is read (req:lint-simmering-moved).
+        for (ticket, moved) in g.simmering_moved.iter().filter(|(t, _)| g.read_with.as_deref() == Some(t.as_str())) {
             let r = Reference::ticket(ticket);
-            let landing = matches!(g.get(&r), Some(Node::Ticket(t)) if t.status == Status::Landing);
-            let (check, reason) = if landing {
-                ("landing-moved", format!("waiting to land, but the truth moved under {}; read each again and propose it again under the ticket, or withdraw it", moved.join(", ")))
+            let bottling = matches!(g.get(&r), Some(Node::Ticket(t)) if t.status == Status::Simmering);
+            let (check, reason) = if bottling {
+                ("simmering-moved", format!("simmering, but the truth moved under {}; read each again and propose it again under the ticket, or withdraw it", moved.join(", ")))
             } else {
                 ("proposal-moved", format!("the truth moved under {} since this ticket proposed it; read each again and propose it again under the ticket, or withdraw it", moved.join(", ")))
             };
@@ -211,11 +211,11 @@ pub fn lint_touching(g: &Graph, refs: &[Reference]) -> Vec<Finding> {
     lint(g, &Rule::ALL).into_iter().filter(|f| touched(&f.r#ref) || f.edge.as_ref().is_some_and(|e| touched(&e.to))).collect()
 }
 
-/// For each ticket that is not closed in a loop of `relies_on` through other
-/// tickets that are not closed, the loop's members in order. Shared by the lint and the
+/// For each ticket that is not bottled in a loop of `relies_on` through other
+/// tickets that are not bottled, the loop's members in order. Shared by the lint and the
 /// board, which breaks a loop by title.
 pub fn ticket_cycles(g: &Graph) -> BTreeMap<Reference, Vec<Reference>> {
-    let live: BTreeMap<Reference, &Ticket> = g.tickets().filter(|t| t.status != Status::Closed).map(|t| (Reference::ticket(&t.slug), t)).collect();
+    let live: BTreeMap<Reference, &Ticket> = g.tickets().filter(|t| t.status != Status::Bottled).map(|t| (Reference::ticket(&t.slug), t)).collect();
     let next = |r: &Reference| -> Vec<Reference> { live.get(r).map(|t| t.relies_on.iter().filter(|x| live.contains_key(*x)).cloned().collect()).unwrap_or_default() };
     let mut out = BTreeMap::new();
     for start in live.keys() {
@@ -278,7 +278,7 @@ fn unspecified(r: &Reference, node: &Node) -> Option<Finding> {
 
 /// Dangling findings for the edges one node owns.
 pub fn dangling_from(g: &Graph, r: &Reference) -> Vec<Finding> {
-    let exempt = matches!(g.get(r), Some(Node::Ticket(t)) if t.status == Status::Closed);
+    let exempt = matches!(g.get(r), Some(Node::Ticket(t)) if t.status == Status::Bottled);
     if exempt {
         return Vec::new();
     }
@@ -308,7 +308,7 @@ fn dangling(g: &Graph, out: &mut Vec<Finding>) {
         }
         // A ticket's references are its proposal state: judged only on a reading with that ticket, or with one whose proposal edits them.
         if let Some(Node::Ticket(t)) = g.get(&e.from) {
-            if t.status == Status::Closed || !g.judged.contains(&t.slug) {
+            if t.status == Status::Bottled || !g.judged.contains(&t.slug) {
                 continue;
             }
         }
@@ -395,7 +395,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "dangling-reports-open-not-closed", "checks": ["crates/core/src/lint#dangling-edge", "crates/core/src/lint#closed-exempt"]}
+    /// {"test": "dangling-reports-unbottled-not-bottled", "checks": ["crates/core/src/lint#dangling-edge", "crates/core/src/lint#bottled-exempt"]}
     /// ```
     #[test]
     fn dangling_reports_open_not_closed() {
@@ -403,7 +403,7 @@ mod tests {
         let f = lint(&g, &[Rule::Dangling]);
         let r = refs(&f);
         assert_eq!(r, vec!["Dangling req:stale".to_string()]);
-        // On the node that owns the edge, naming the edge and the missing node; the closed ticket's edge to a missing node is not there.
+        // On the node that owns the edge, naming the edge and the missing node; the bottled ticket's edge to a missing node is not there.
         let e = f[0].edge.as_ref().expect("a dangling finding carries its edge");
         assert_eq!((f[0].check.as_str(), e.from.to_string().as_str(), e.to.to_string().as_str()), ("dangling-edge", "req:stale", "criterion:src/a/ready#gone"));
         assert!(f[0].reason.contains("does not exist"), "{}", f[0].reason);
@@ -412,7 +412,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-tickets-references-are-judged-where-it-is-read", "checks": ["crates/core/src/lint#dangling-edge", "crates/core/src/lint#closed-exempt", "crates/core/src/graph#with-proposal"]}
+    /// {"test": "a-tickets-references-are-judged-where-it-is-read", "checks": ["crates/core/src/lint#dangling-edge", "crates/core/src/lint#bottled-exempt", "crates/core/src/graph#with-proposal"]}
     /// ```
     #[test]
     fn a_tickets_references_are_judged_where_it_is_read() {
@@ -434,13 +434,13 @@ mod tests {
         let truth = Graph::build(&s, &ext, &[]);
         assert!(tickets_flagged(&truth).is_empty(), "{:?}", tickets_flagged(&truth));
         assert!(truth.judged.is_empty());
-        // Read with later-1: its own references, and those its proposal leaves phase-62 with; never gap-1's or the closed ticket's.
+        // Read with later-1: its own references, and those its proposal leaves phase-62 with; never gap-1's or the bottled ticket's.
         let branch = Graph::with_proposal(&s, "later-1", &ext, &[]);
         assert_eq!(tickets_flagged(&branch), vec!["ticket:later-1 module:src/only/here".to_string(), "ticket:phase-62 module:src/only/there".to_string()]);
         // Read with gap-1, only gap-1's.
         let other = Graph::with_proposal(&s, "gap-1", &ext, &[]);
         assert_eq!(tickets_flagged(&other), vec!["ticket:gap-1 page:not-yet".to_string()]);
-        // A write's own warnings judge the ticket it wrote, whatever the reading; a closed ticket's never.
+        // A write's own warnings judge the ticket it wrote, whatever the reading; a bottled ticket's never.
         assert_eq!(written(&truth, &Reference::ticket("gap-1")).len(), 1);
         assert!(written(&branch, &Reference::ticket("old")).is_empty());
     }
@@ -785,15 +785,15 @@ mod tests {
         let ext = crate::extraction::fixtures::extraction();
         let loop_of = |b_status: Status| {
             let mut s = crate::graph::fixtures::store();
-            s.tickets.insert("a".into(), ticket("a", TicketKind::Change, Priority::High, Status::Open, &["ticket:b"], &["ticket:b"]));
+            s.tickets.insert("a".into(), ticket("a", TicketKind::Change, Priority::High, Status::Inscribed, &["ticket:b"], &["ticket:b"]));
             s.tickets.insert("b".into(), ticket("b", TicketKind::Change, Priority::High, b_status, &["ticket:a"], &["ticket:a"]));
             // touches alone never makes a loop.
-            s.tickets.insert("c".into(), ticket("c", TicketKind::Change, Priority::High, Status::Open, &["ticket:d"], &[]));
-            s.tickets.insert("d".into(), ticket("d", TicketKind::Change, Priority::High, Status::Open, &["ticket:c"], &[]));
+            s.tickets.insert("c".into(), ticket("c", TicketKind::Change, Priority::High, Status::Inscribed, &["ticket:d"], &[]));
+            s.tickets.insert("d".into(), ticket("d", TicketKind::Change, Priority::High, Status::Inscribed, &["ticket:c"], &[]));
             s
         };
         let cycles = |g: &Graph| -> Vec<Finding> { lint(g, &[Rule::Malformed]).into_iter().filter(|f| f.check == "ticket-cycle").collect() };
-        let s = loop_of(Status::Open);
+        let s = loop_of(Status::Inscribed);
         // Read with either member, the whole loop is reported.
         for member in ["a", "b"] {
             let f = cycles(&Graph::with_proposal(&s, member, &ext, &[]));
@@ -805,8 +805,8 @@ mod tests {
         let truth = Graph::build(&s, &ext, &[]);
         assert!(cycles(&truth).is_empty());
         assert!(written(&truth, &Reference::ticket("b")).iter().any(|f| f.check == "ticket-cycle"), "the write that closed the loop hears of it, whatever the graph");
-        let closed = loop_of(Status::Closed);
-        assert!(cycles(&Graph::with_proposal(&closed, "a", &ext, &[])).is_empty(), "a closed ticket's decision is settled");
+        let closed = loop_of(Status::Bottled);
+        assert!(cycles(&Graph::with_proposal(&closed, "a", &ext, &[])).is_empty(), "a bottled ticket's decision is settled");
     }
 
     #[test]
@@ -849,10 +849,10 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-landing-ticket-the-truth-moved-under-is-reported", "checks": ["crates/core/src/lint#landing-moved"]}
+    /// {"test": "a-simmering-ticket-the-truth-moved-under-is-reported", "checks": ["crates/core/src/lint#simmering-moved"]}
     /// ```
     #[test]
-    fn a_landing_ticket_the_truth_moved_under_is_reported() {
+    fn a_simmering_ticket_the_truth_moved_under_is_reported() {
         use crate::model::{Decision, Page, Proposal, Proposed};
         let extraction = crate::extraction::fixtures::extraction();
         let mut s = crate::graph::fixtures::store();
@@ -871,27 +871,28 @@ mod tests {
             },
         );
         // Read with the ticket, as its own checkout and `check --ticket` read it.
-        let found =
-            |s: &crate::store::Store| -> Vec<Finding> { lint(&Graph::with_proposal(s, "later-1", &extraction, &[]), &[Rule::Malformed]).into_iter().filter(|f| f.check == "landing-moved").collect() };
-        // The truth moves; while the ticket is active its own checkout is told at once, as proposal-moved.
+        let found = |s: &crate::store::Store| -> Vec<Finding> {
+            lint(&Graph::with_proposal(s, "later-1", &extraction, &[]), &[Rule::Malformed]).into_iter().filter(|f| f.check == "simmering-moved").collect()
+        };
+        // The truth moves; while the ticket is brewing its own checkout is told at once, as proposal-moved.
         s.pages.get_mut("orphan").unwrap().body = "moved".into();
-        assert!(found(&s).is_empty(), "not as landing-moved while it is active");
+        assert!(found(&s).is_empty(), "not as simmering-moved while it is brewing");
         let active: Vec<Finding> = lint(&Graph::with_proposal(&s, "later-1", &extraction, &[]), &[Rule::Malformed]).into_iter().filter(|f| f.check == "proposal-moved").collect();
         assert_eq!(active.len(), 1, "the owner is told before any close");
         assert!(active[0].reason.contains("page:orphan") && active[0].reason.contains("withdraw"), "{}", active[0].reason);
         assert!(lint(&Graph::build(&s, &extraction, &[]), &[Rule::Malformed]).iter().all(|f| f.check != "proposal-moved"), "nor on the main line");
-        // Landing, it is reported: on the ticket, naming the record.
+        // Bottling, it is reported: on the ticket, naming the record.
         let t = s.tickets.get_mut("later-1").unwrap();
-        t.status = Status::Landing;
+        t.status = Status::Simmering;
         t.decision = Some(Decision::new("2026-10-03", "Done."));
         let f = found(&s);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].r#ref, Reference::ticket("later-1"));
         assert!(f[0].reason.contains("page:orphan"), "{}", f[0].reason);
         // Not on the main line, read as the truth, nor in another ticket's checkout: only its owner can mend it.
-        let moved = |g: &Graph| lint(g, &[Rule::Malformed]).iter().any(|f| f.check == "landing-moved");
+        let moved = |g: &Graph| lint(g, &[Rule::Malformed]).iter().any(|f| f.check == "simmering-moved");
         assert!(!moved(&Graph::build(&s, &extraction, &[])), "the main line is not blocked by it");
-        s.tickets.get_mut("phase-62").unwrap().status = Status::Active;
+        s.tickets.get_mut("phase-62").unwrap().status = Status::Brewing;
         assert!(!moved(&Graph::with_proposal(&s, "phase-62", &extraction, &[])), "nor another ticket's checkout");
         // Not even one whose proposal edits its references, which judges them there.
         let mut edits = Proposal::new("phase-62");
@@ -903,7 +904,7 @@ mod tests {
         let truth = lint(&Graph::build(&s, &extraction, &[]), &[Rule::Malformed]);
         let advised = crate::advisories::others(&s, None, &truth, &[], |t| lint(&Graph::with_proposal(&s, t, &extraction, &[]), &[Rule::Malformed]));
         assert!(
-            advised.iter().any(|a| a.finding.check == "landing-moved" && a.from == crate::advisories::OtherWork::Ticket { ticket: "later-1".into(), title: s.tickets["later-1"].title.clone() }),
+            advised.iter().any(|a| a.finding.check == "simmering-moved" && a.from == crate::advisories::OtherWork::Ticket { ticket: "later-1".into(), title: s.tickets["later-1"].title.clone() }),
             "{advised:?}"
         );
         // With the truth as the proposal was written against, there is nothing to report.

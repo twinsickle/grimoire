@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, start_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"omens","statement":"lint answers the omens of the graph read with the ticket it is given apart from its findings, whatever rules are selected, counting none of them in counts or new."},{"id":"advisories","statement":"lint judges the graph read with the ticket it is given and answers its findings and advisories: those advisories::own moves out against the truth alone judged over the base's code when a base is set, and those advisories::others gives for every other ticket active or landing, judged over this state's code, its counts and new taken from the findings that stay, and as mended what advisories::mended gives over those findings, each waiting change's proposal laid beneath the ticket's and judged over this state's code; set_base sets or clears the base's code, and base_fingerprints answers the fingerprints of the truth over it while it is set."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name, repository and the server it comes from, in name order, each checkout of its own grimoire with its current ticket's id and title, its own as it is now and another's as tell_checkout_tickets last told it, none for another grimoire's; a state told nothing answers with no name and an empty library."}]}
+//! {"purpose":"Hold what the tools operate on: the store, the extraction and the build, with the graph cached between calls and a reader the caller supplies for source.","criteria":[{"id":"graph-current","statement":"A read after a write sees the write; the cached graph is rebuilt whenever the store or the extraction changes."},{"id":"without-code","statement":"A state told it holds no code marks every graph it builds so, the truth's and a proposal's alike, never prunes the baseline, answers lint with without_code and status with shared, and refuses adopt as invalid."},{"id":"no-shared-current","statement":"A state that holds no code keeps nothing that is a checkout's own, no current ticket and no start: those its store arrived with are dropped, brew_ticket sets and records none, and a write that changes intent and names no ticket is refused as invalid."},{"id":"prune-to","statement":"prune_baseline_to drops from the baseline every entry the given findings lack and adds none, answering that the baseline changed and how many entries went, and nothing when none went; a read after it sees the smaller baseline."},{"id":"server-copy","statement":"A state told it is a machine's copy of a server's intent answers status with the server's address, when the intent was fetched, whether the server answered last and whether it refused this machine's token, and never prunes the baseline; any other state answers status with no server."},{"id":"omens","statement":"lint answers the omens of the graph read with the ticket it is given apart from its findings, whatever rules are selected, counting none of them in counts or new."},{"id":"advisories","statement":"lint judges the graph read with the ticket it is given and answers its findings and advisories: those advisories::own moves out against the truth alone judged over the base's code when a base is set, and those advisories::others gives for every other ticket brewing or simmering, judged over this state's code, its counts and new taken from the findings that stay, and as mended what advisories::mended gives over those findings, each waiting change's proposal laid beneath the ticket's and judged over this state's code; set_base sets or clears the base's code, and base_fingerprints answers the fingerprints of the truth over it while it is set."},{"id":"library","statement":"A state told it is served in a library answers status with its name there and every grimoire of that library, name, repository and the server it comes from, in name order, each checkout of its own grimoire with its current ticket's id and title, its own as it is now and another's as tell_checkout_tickets last told it, none for another grimoire's; a state told nothing answers with no name and an empty library."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -125,13 +125,13 @@ impl State {
     }
     /// The graph for a view: the truth when `ticket` is none, else the truth
     /// as that ticket's proposal would leave it. A ticket that is neither
-    /// active nor landing is a conflict, one that does not exist not_found.
+    /// brewing nor simmering is a conflict, one that does not exist not_found.
     pub fn graph_for(&mut self, ticket: Option<&str>) -> Result<&Graph, crate::ops::ToolError> {
         let Some(ticket) = ticket else { return Ok(self.graph()) };
         match self.store.tickets.get(ticket) {
             None => return Err(crate::ops::ToolError::not_found(&crate::model::Reference::ticket(ticket))),
             Some(t) if !t.status.is_live() => {
-                return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, neither active nor landing: only a ticket being worked has a proposal to read", t.status.name())))
+                return Err(crate::ops::ToolError::conflict(format!("ticket:{ticket} is {}, neither brewing nor simmering: only a ticket being worked has a proposal to read", t.status.name())))
             }
             _ => {}
         }
@@ -155,7 +155,7 @@ impl State {
     }
 
     /// The `lint` answer for the graph read with `ticket`: the findings this checkout's work causes,
-    /// and as advisories what other work causes, intent landed since the base and each other ticket
+    /// and as advisories what other work causes, intent that reached the main line since the base and each other ticket
     /// being worked (req:check-own-work).
     pub fn lint(&mut self, ticket: Option<&str>, rules: &[crate::lint::Rule]) -> Result<crate::answer::LintAnswer, crate::ops::ToolError> {
         use crate::{advisories, lint};
@@ -177,7 +177,7 @@ impl State {
             lint::lint(&g, rules)
         });
         advisories.extend(others);
-        // What a change still waiting to land from this checkout would mend, laid beneath this ticket's proposal.
+        // What a change still simmering from this checkout would mend, laid beneath this ticket's proposal.
         let mended = advisories::mended(&self.store, ticket, &findings, |t| {
             let beneath = self.store.applied(t);
             let mut g = match ticket {
@@ -378,7 +378,7 @@ mod tests {
         assert_eq!(lint["advisories"][0]["finding"]["ref"], "req:stale");
         // Another ticket being worked, whose proposal deletes the page req:stale's page links: what it would bring.
         s.set_base(None);
-        s.store_mut().tickets.get_mut("phase-62").unwrap().status = crate::model::Status::Active;
+        s.store_mut().tickets.get_mut("phase-62").unwrap().status = crate::model::Status::Brewing;
         crate::ops::propose(s.store_mut(), "phase-62", crate::ops::Proposing::Partial, |w| crate::ops::delete_node(w, &crate::model::Reference::page("orphan")).map(|c| ((), c))).unwrap();
         s.store_mut().pages.get_mut("git-readiness").unwrap().links.push("page:orphan".parse().unwrap());
         let lint = call(&mut s, "lint", dangling, "2026-10-06").unwrap().output;

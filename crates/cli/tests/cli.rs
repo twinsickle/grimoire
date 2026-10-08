@@ -243,10 +243,10 @@ fn only_init_writes_the_repository() {
         &["check"][..],
         &["tool", "lint"],
         &["tool", "outline"],
-        &["tool", "file_ticket", A_TICKET],
-        &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#],
+        &["tool", "inscribe_ticket", A_TICKET],
+        &["tool", "brew_ticket", r#"{"ref":"ticket:0001"}"#],
         &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#],
-        &["tool", "file_ticket", A_TICKET],
+        &["tool", "inscribe_ticket", A_TICKET],
         &["adopt", "--reason", "again"],
         &["tool", "status"],
         &["scaffold", "--store", &scaffolded.to_string_lossy()],
@@ -338,7 +338,7 @@ fn writes_go_through_a_serving_daemon() {
         assert!(Instant::now() < deadline, "the daemon never marked the store");
         std::thread::sleep(Duration::from_millis(100));
     }
-    let filed = run(&p.repo, &["tool", "file_ticket", r#"{"title":"Through the daemon","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = run(&p.repo, &["tool", "inscribe_ticket", r#"{"title":"Through the daemon","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     // The daemon does not watch the store's files, so it knows the ticket only
     // if the write went through it.
@@ -406,24 +406,24 @@ fn a_branch_is_judged_by_its_own_work() {
     git(&p.repo, &["init", "-q", "-b", "main"]);
     git(&p.repo, &["add", "-A"]);
     git(&p.repo, &["commit", "-q", "-m", "start"]);
-    // A branch is cut; then the main line lands a requirement covered by a criterion only its code declares.
+    // A branch is cut; then the main line brings a requirement covered by a criterion only its code declares.
     git(&p.repo, &["branch", "feature"]);
-    let filed: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "file_ticket", r#"{"title":"b lands","kind":"change","priority":"next","body":"b"}"#]).stdout).unwrap();
+    let filed: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "inscribe_ticket", r#"{"title":"b is bottled","kind":"change","priority":"next","body":"b"}"#]).stdout).unwrap();
     let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
-    assert!(run(&p.repo, &["tool", "start_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).status.success());
+    assert!(run(&p.repo, &["tool", "brew_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).status.success());
     let req = r#"{"slug":"b-exports","title":"b exports b","statement":"The module b SHALL export b.","scenarios":[{"title":"b","given":"b","when":"b","then":"b"}],"covered_by":["criterion:src/b#exports-b"]}"#;
     assert!(run(&p.repo, &["tool", "put_requirement", req]).status.success());
-    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{ticket}","decision":{{"text":"b lands"}}}}"#)]);
+    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{ticket}","decision":{{"text":"b is bottled"}}}}"#)]);
     assert!(close.status.success(), "{}", text(&close));
     std::fs::write(p.repo.join("src").join("b.rs"), CONTRACTED.replace("exports-a", "exports-b")).unwrap();
     std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
     git(&p.repo, &["add", "-A"]);
-    git(&p.repo, &["commit", "-q", "-m", "b lands"]);
-    // On the branch, cut before it: the requirement's missing criterion landed since its base, and is shown, not failed.
+    git(&p.repo, &["commit", "-q", "-m", "b is bottled"]);
+    // On the branch, cut before it: the requirement's missing criterion reached the main line since its base, and is shown, not failed.
     git(&p.repo, &["checkout", "-q", "feature"]);
     let check = run(&p.repo, &["check"]);
     assert!(check.status.success(), "{}", text(&check));
-    assert!(text(&check).contains("landed on the main line since this branch's base") && text(&check).contains("req:b-exports"), "{}", text(&check));
+    assert!(text(&check).contains("reached the main line since this branch's base") && text(&check).contains("req:b-exports"), "{}", text(&check));
     let json: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["check", "--json"]).stdout).unwrap();
     assert_eq!((json["new"].as_u64(), json["advisories"][0]["from"]["kind"].as_str()), (Some(0), Some("since_base")), "{json}");
     let lint: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "lint"]).stdout).unwrap();
@@ -447,25 +447,25 @@ fn a_branch_is_judged_by_its_own_work() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-check-names-a-ticket-still-waiting-to-land-here", "checks": ["crates/cli/src/check#check-own-work"]}
+/// {"test": "the-check-names-a-ticket-still-simmering-here", "checks": ["crates/cli/src/check#check-own-work"]}
 /// ```
 #[test]
-fn the_check_names_a_ticket_still_waiting_to_land_here() {
+fn the_check_names_a_ticket_still_simmering_here() {
     let (p, _) = project();
     let start = |title: &str| {
         let filed: serde_json::Value =
-            serde_json::from_slice(&run(&p.repo, &["tool", "file_ticket", &format!(r#"{{"title":"{title}","kind":"change","priority":"next","body":"b"}}"#)]).stdout).unwrap();
+            serde_json::from_slice(&run(&p.repo, &["tool", "inscribe_ticket", &format!(r#"{{"title":"{title}","kind":"change","priority":"next","body":"b"}}"#)]).stdout).unwrap();
         let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
-        let started: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "start_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).stdout).unwrap();
+        let started: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "brew_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).stdout).unwrap();
         (ticket, started)
     };
-    // The first ticket adds module b with a requirement naming its criterion, and is closed to wait for its landing.
-    let (first, _) = start("b lands");
+    // The first ticket adds module b with a requirement naming its criterion, and is bottled to wait for its bottling.
+    let (first, _) = start("b is bottled");
     let req = r#"{"slug":"b-exports","title":"b exports b","statement":"The module b SHALL export b.","scenarios":[{"title":"b","given":"b","when":"b","then":"b"}],"covered_by":["criterion:src/b#exports-b"]}"#;
     assert!(run(&p.repo, &["tool", "put_requirement", req]).status.success());
     std::fs::write(p.repo.join("src").join("b.rs"), CONTRACTED.replace("exports-a", "exports-b")).unwrap();
     std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
-    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{first}","decision":{{"text":"b lands"}},"when":"landed"}}"#)]);
+    let close = run(&p.repo, &["tool", "close_ticket", &format!(r#"{{"ref":"ticket:{first}","decision":{{"text":"b is bottled"}},"when":"bottled"}}"#)]);
     assert!(close.status.success(), "{}", text(&close));
     // A second ticket started in the same checkout is told the first still waits here.
     let (_, started) = start("more");
@@ -475,7 +475,7 @@ fn the_check_names_a_ticket_still_waiting_to_land_here() {
     assert!(!check.status.success(), "the finding still fails: {}", text(&check));
     let out = text(&check);
     let at = out.find("criterion:src/b#exports-b").unwrap_or_else(|| panic!("{out}"));
-    assert!(out[at..].contains(&format!("ticket:{first} (b lands) would mend this")) && out.contains("still waiting to land from this checkout"), "{out}");
+    assert!(out[at..].contains(&format!("ticket:{first} (b is bottled) would mend this")) && out.contains("still simmering from this checkout"), "{out}");
     let json: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["check", "--json"]).stdout).unwrap();
     assert!(json["mended"].as_array().unwrap().iter().any(|m| m["ticket"] == first.as_str() && m["finding"]["ref"] == "criterion:src/b#exports-b"), "{json}");
 }
@@ -510,7 +510,7 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
     assert_eq!(status["repository"], grimoire_server::store_io::repository_string(&t.checkout.repo).unwrap());
     assert_eq!(status["server"]["reachable"], true, "{status}");
     // A write from the checkout goes through the library to the server.
-    let filed = team(&t.checkout.repo, &home, None, &["tool", "file_ticket", r#"{"title":"From the library","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = team(&t.checkout.repo, &home, None, &["tool", "inscribe_ticket", r#"{"title":"From the library","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     let (_, board) =
         http(t.port, &format!("POST /api/board HTTP/1.0\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{{}}", t.port, t.reader));
@@ -633,18 +633,18 @@ fn a_teams_server_serves_its_library() {
     assert!(team(&p.repo, &home, None, &["login", "--token", &shop]).status.success());
     let check = team(&p.repo, &home, None, &["check"]);
     assert!(check.status.success(), "{}", text(&check));
-    let filed = team(&p.repo, &home, None, &["tool", "file_ticket", r#"{"title":"For shop","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = team(&p.repo, &home, None, &["tool", "inscribe_ticket", r#"{"title":"For shop","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     let board = |path: &str, token: &str| ask(path, token).1;
     assert!(board("/g/shop/api/board", &shop).contains("For shop"));
     assert!(!board("/g/ledger/api/board", &ledger).contains("For shop"), "the write went to shop's grimoire alone");
-    // Landing and the main line's prune go to shop's grimoire through its address too.
+    // Bottling and the main line's prune go to shop's grimoire through its address too.
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    for (tool, input) in [("start_ticket", format!(r#"{{"ref":"{ticket}"}}"#)), ("close_ticket", format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#))] {
+    for (tool, input) in [("brew_ticket", format!(r#"{{"ref":"{ticket}"}}"#)), ("close_ticket", format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#))] {
         assert!(team(&p.repo, &home, None, &["tool", tool, &input]).status.success(), "{tool}");
     }
-    let landed = team(&p.repo, &home, Some(&shop), &["land", ticket.trim_start_matches("ticket:")]);
-    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")), "{}", text(&landed));
+    let bottled = team(&p.repo, &home, Some(&shop), &["bottle", ticket.trim_start_matches("ticket:")]);
+    assert!(bottled.status.success() && text(&bottled).contains(&format!("bottled {ticket}")), "{}", text(&bottled));
     let main_line = team(&p.repo, &home, Some(&shop), &["check", "--main-line"]);
     assert!(text(&main_line).contains("pruned"), "{}", text(&main_line));
     // The checkout's own daemon serves its copy of shop in the machine's library, following the server.
@@ -807,12 +807,12 @@ fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
     let named = mcp(serde_json::json!({ "query": "only_in_the_worktree", "kinds": ["decl"], "checkout": wt.repo.join("src").to_string_lossy() }));
     assert!(named["result"]["isError"] != true && named["result"]["content"][0]["text"].as_str().unwrap().contains("only_in_the_worktree"), "a subfolder of the worktree is the worktree's: {named}");
     // A command run in the worktree names it, and each checkout keeps its own current ticket.
-    let filed = team(&wt.repo, &home, None, &["tool", "file_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = team(&wt.repo, &home, None, &["tool", "inscribe_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    assert!(team(&wt.repo, &home, None, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    assert!(team(&wt.repo, &home, None, &["tool", "brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
     let page = |checkout: &str| ask("/g/repo/api/put_page", serde_json::json!({ "slug": "notes", "title": "Notes", "body": "b", "links": [], "checkout": checkout }));
-    assert_eq!(page(&wt_at).0, 200, "the worktree's write lands in its own current ticket");
+    assert_eq!(page(&wt_at).0, 200, "the worktree's write goes into its own current ticket");
     let (code, refused) = page(&main_at);
     assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("no ticket is current"), "the main checkout has started none: {refused}");
     // A directory no checkout holds is refused.
@@ -916,12 +916,12 @@ fn a_store_of_its_own_serves_every_checkout() {
     let listed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(store.join("checkouts.json")).unwrap()).unwrap();
     assert!(listed["checkouts"].get(at(&wt)).is_some(), "{listed}");
     // Each its own current ticket: a command run in the worktree names it.
-    let filed = run(&wt, &["tool", "file_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = run(&wt, &["tool", "inscribe_ticket", r#"{"title":"In the worktree","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    assert!(run(&wt, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    assert!(run(&wt, &["tool", "brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
     let page = |checkout: &Path| ask("put_page", serde_json::json!({ "slug": "notes", "title": "Notes", "body": "b", "links": [], "checkout": checkout.to_string_lossy() }));
-    assert_eq!(page(&wt).0, 200, "the worktree's write lands in its own ticket");
+    assert_eq!(page(&wt).0, 200, "the worktree's write goes into its own ticket");
     let (code, refused) = page(&p.repo);
     assert!(code == 400 && refused["message"].as_str().unwrap_or_default().contains("no ticket is current"), "the main checkout started none: {refused}");
     // Two checkouts served now: a call naming neither is refused, listing both.
@@ -969,9 +969,9 @@ fn a_worktrees_check_prunes_nothing() {
     std::fs::write(wt.join("src").join("a.rs"), CONTRACTED).unwrap();
     let check = run(&wt, &["check"]);
     assert!(text(&check).contains("baselined"), "{}", text(&check));
-    assert_eq!(baseline_count(&store), adopted, "a branch's fix has not landed");
+    assert_eq!(baseline_count(&store), adopted, "a branch's fix has not reached the main line");
     assert!(std::fs::read_to_string(store.join("checkouts.json")).unwrap().contains("wt"));
-    // The fix landed on the main checkout: its check prunes.
+    // The fix reached the main checkout: its check prunes.
     std::fs::write(p.repo.join("src").join("a.rs"), CONTRACTED).unwrap();
     run(&p.repo, &["check"]);
     assert!(baseline_count(&store) < adopted);
@@ -1112,7 +1112,7 @@ fn one_daemon_serves_the_machines_library() {
         assert_eq!(library, ["ledger", "shop"], "{path}");
     }
     // A command in the second sends its write to the daemon, at the second's path.
-    let filed = run(&ledger.repo, &["tool", "file_ticket", r#"{"title":"Through the library","kind":"change","priority":"later","body":"b"}"#]);
+    let filed = run(&ledger.repo, &["tool", "inscribe_ticket", r#"{"title":"Through the library","kind":"change","priority":"later","body":"b"}"#]);
     assert!(filed.status.success(), "{}", text(&filed));
     let (_, board) = post(port, "/g/ledger/api/board", r#"{"priority":["later"]}"#, "");
     assert!(board.contains("Through the library"), "the daemon holds the write, so it went through it: {board}");
@@ -1164,8 +1164,8 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
     assert_eq!(files(&p.repo), before);
     // A store in the middle of a ticket holds a proposal and a current ticket, both a store's own.
     assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
-    assert!(run(&p.repo, &["tool", "file_ticket", A_TICKET]).status.success());
-    assert!(run(&p.repo, &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
+    assert!(run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]).status.success());
+    assert!(run(&p.repo, &["tool", "brew_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
     assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
     assert!(p.store.join("proposals").join("0001.json").is_file() && p.store.join("current.json").is_file());
     let out = run(&p.repo, &["uninstall", "--delete-store"]);
@@ -1391,10 +1391,10 @@ fn a_second_daemon_is_refused() {
     drop(daemon);
     // The marker it leaves is only a likely name, said as such, when another process holds the lock.
     let held = grimoire_server::store_io::lock(&p.store).unwrap();
-    let refused = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    let refused = run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(text(&refused).contains("if that daemon is gone, another grimoire process"), "{}", text(&refused));
     drop(held);
-    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    let filed = run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
 }
 
@@ -1409,7 +1409,7 @@ fn a_cli_writer_beside_a_holder_is_refused() {
     // This test process holds the lock, as a daemon still starting or another command would.
     let held = grimoire_server::store_io::lock(&p.store).unwrap();
     let before = contents(&p.store);
-    for args in [vec!["tool", "file_ticket", A_TICKET], vec!["adopt", "--reason", "again"]] {
+    for args in [vec!["tool", "inscribe_ticket", A_TICKET], vec!["adopt", "--reason", "again"]] {
         let out = run(&p.repo, &args);
         assert!(!out.status.success(), "{args:?}: {}", text(&out));
         assert!(text(&out).contains("in use by another grimoire process"), "{}", text(&out));
@@ -1428,7 +1428,7 @@ fn a_cli_writer_beside_a_holder_is_refused() {
     let adopted = baseline_count(&p.store);
     assert!(run(&p.repo, &["check"]).status.success());
     assert!(baseline_count(&p.store) < adopted, "with the lock free, check prunes what was fixed");
-    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    let filed = run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
 }
 
@@ -1477,7 +1477,7 @@ fn a_store_inside_the_repository_is_refused() {
         }
     }
     std::fs::write(q.repo.join(".grimoire.toml"), "store = \"./local-store\"\n").unwrap();
-    for args in [vec!["check"], vec!["tool", "board", "{}"], vec!["tool", "file_ticket", A_TICKET], vec!["serve", "--port", "0"], vec!["uninstall", "--delete-store"]] {
+    for args in [vec!["check"], vec!["tool", "board", "{}"], vec!["tool", "inscribe_ticket", A_TICKET], vec!["serve", "--port", "0"], vec!["uninstall", "--delete-store"]] {
         let out = run(&q.repo, &args);
         assert!(!out.status.success(), "{args:?}: {}", text(&out));
         assert!(text(&out).contains("inside the repository"), "{args:?}: {}", text(&out));
@@ -1566,10 +1566,10 @@ fn the_daemon_runs_the_local_policy() {
     let (p, _) = project();
     let (_daemon, port) = serve(&p);
     let page = r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#;
-    // A caller on this machine may read and write; a change of intent lands in a started ticket.
+    // A caller on this machine may read and write; a change of intent goes into a started ticket.
     assert_eq!(status_of(port, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
-    assert_eq!(status_of(port, "POST", "/api/file_ticket", "Host: 127.0.0.1\r\n", A_TICKET), 200);
-    assert_eq!(status_of(port, "POST", "/api/start_ticket", "Host: 127.0.0.1\r\n", r#"{"ref":"ticket:0001"}"#), 200);
+    assert_eq!(status_of(port, "POST", "/api/inscribe_ticket", "Host: 127.0.0.1\r\n", A_TICKET), 200);
+    assert_eq!(status_of(port, "POST", "/api/brew_ticket", "Host: 127.0.0.1\r\n", r#"{"ref":"ticket:0001"}"#), 200);
     assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\n", page), 200);
     // A page on another site, or a name rebound to this machine, is refused.
     assert_eq!(status_of(port, "POST", "/api/put_page", "Host: 127.0.0.1\r\nOrigin: https://example.com\r\n", page), 403);
@@ -1585,9 +1585,9 @@ fn the_daemon_runs_the_local_policy() {
 fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
     let (p, _) = project();
     let store = p.store.to_string_lossy().to_string();
-    // A page written under a ticket and landed in the truth by its close.
-    assert!(run(&p.repo, &["tool", "file_ticket", A_TICKET]).status.success());
-    assert!(run(&p.repo, &["tool", "start_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
+    // A page written under a ticket and bottled in the truth by its close.
+    assert!(run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]).status.success());
+    assert!(run(&p.repo, &["tool", "brew_ticket", r#"{"ref":"ticket:0001"}"#]).status.success());
     assert!(run(&p.repo, &["tool", "put_page", r#"{"slug":"goal","title":"Goal","body":"b","links":[]}"#]).status.success());
     assert!(run(&p.repo, &["tool", "close_ticket", r#"{"ref":"ticket:0001","decision":{"text":"Done."}}"#]).status.success());
     // A copy: the first checkout still exists, so the store stays its own.
@@ -1682,10 +1682,10 @@ fn init_adopts_a_scaffolded_store() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-commit-lands-the-ticket-waiting-on-it", "checks": ["crates/cli/src/check#land", "crates/cli/src/init#landing-hook"]}
+/// {"test": "a-commit-bottles-the-ticket-simmering-on-it", "checks": ["crates/cli/src/check#bottle", "crates/cli/src/init#bottling-hook"]}
 /// ```
 #[test]
-fn a_commit_lands_the_ticket_waiting_on_it() {
+fn a_commit_bottles_the_ticket_simmering_on_it() {
     // A real git repository, so the hooks init installs are the ones that run,
     // with this build first on the path, since the hooks call `grimoire` by name.
     let p = uninitialised();
@@ -1708,51 +1708,56 @@ fn a_commit_lands_the_ticket_waiting_on_it() {
         assert!(git(&["add", "-A"]).status.success());
         git(&["commit", "-q", "-m", message])
     };
-    let ticket = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
-    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
-    // A commit made while the ticket is still being worked lands nothing, and is not refused for it.
+    let ticket = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    // A commit made while the ticket is still being worked bottles nothing, and is not refused for it.
     let c = commit("work");
     assert!(c.status.success(), "{}", text(&c));
-    assert!(text(&c).contains("no ticket was waiting to land"), "{}", text(&c));
-    assert_eq!(status(&ticket), "active");
-    // The decision is written and the ticket waits; a commit the check refuses lands nothing.
-    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
-    assert_eq!(status(&ticket), "landing");
+    assert!(text(&c).contains("no ticket was simmering"), "{}", text(&c));
+    assert_eq!(status(&ticket), "brewing");
+    // The decision is written and the ticket waits; a commit the check refuses bottles nothing.
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#));
+    assert_eq!(status(&ticket), "simmering");
     std::fs::write(p.repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
     let refused = commit("a module with no contract");
     assert!(!refused.status.success(), "the check refuses a new finding: {}", text(&refused));
-    assert_eq!(status(&ticket), "landing");
-    // The next commit that passes the check lands it: the ticket is closed with the decision written before.
+    assert_eq!(status(&ticket), "simmering");
+    // The next commit that passes the check bottles it: the ticket is bottled with the decision written before.
     std::fs::remove_file(p.repo.join("src").join("b.rs")).unwrap();
-    std::fs::write(p.repo.join("notes.txt"), "landed\n").unwrap();
-    let c = commit("land");
+    std::fs::write(p.repo.join("notes.txt"), "bottled\n").unwrap();
+    let c = commit("bottle");
     assert!(c.status.success(), "{}", text(&c));
-    assert!(text(&c).contains(&format!("landed {ticket}")), "{}", text(&c));
+    assert!(text(&c).contains(&format!("bottled {ticket}")), "{}", text(&c));
     let closed = tool("get", &format!(r#"{{"ref":"{ticket}"}}"#));
-    assert_eq!((closed["node"]["status"].as_str(), closed["node"]["decision"]["text"].as_str()), (Some("closed"), Some("Done.")));
-    // Named, a ticket that is not landing is refused, and only then does the command exit non-zero.
-    let again = run(&p.repo, &["land", &ticket]);
-    assert!(!again.status.success() && text(&again).contains("landing refused"), "{}", text(&again));
-    assert!(run(&p.repo, &["land"]).status.success(), "nothing waiting is not a failure");
+    assert_eq!((closed["node"]["status"].as_str(), closed["node"]["decision"]["text"].as_str()), (Some("bottled"), Some("Done.")));
+    // Named, a ticket that is not simmering is refused, and only then does the command exit non-zero.
+    let again = run(&p.repo, &["bottle", &ticket]);
+    assert!(!again.status.success() && text(&again).contains("bottling refused"), "{}", text(&again));
+    assert!(run(&p.repo, &["bottle"]).status.success(), "nothing waiting is not a failure");
+    // `land`, the command's name before bottling, still runs it, and no help lists it.
+    let former = run(&p.repo, &["land"]);
+    assert!(former.status.success() && text(&former).contains("no ticket was simmering"), "{}", text(&former));
+    let help = text(&run(&p.repo, &["--help"]));
+    assert!(help.contains("bottle") && !help.contains("land"), "{help}");
     // A store that cannot be reached is said, with a non-zero exit, and changes nothing.
     let gone = p.dir.join("no-such-store");
-    let unreachable = run(&p.repo, &["land", "--store", &gone.to_string_lossy()]);
+    let unreachable = run(&p.repo, &["bottle", "--store", &gone.to_string_lossy()]);
     assert!(!unreachable.status.success() && text(&unreachable).contains("is not a store"), "{}", text(&unreachable));
-    // `git merge` makes its merge commit without invoking the pre-commit or post-commit hook, so a ticket landing then waits for the command.
-    let second = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
-    tool("start_ticket", &format!(r#"{{"ref":"{second}"}}"#));
+    // `git merge` makes its merge commit without invoking the pre-commit or post-commit hook, so a ticket bottling then waits for the command.
+    let second = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{second}"}}"#));
     assert!(git(&["switch", "-q", "-c", "side"]).status.success());
     std::fs::write(p.repo.join("side.txt"), "side\n").unwrap();
     assert!(commit("on a branch").status.success());
     assert!(git(&["switch", "-q", "-"]).status.success());
     std::fs::write(p.repo.join("main.txt"), "main\n").unwrap();
     assert!(commit("on the main line").status.success());
-    tool("close_ticket", &format!(r#"{{"ref":"{second}","decision":{{"text":"Merged."}},"when":"landed"}}"#));
+    tool("close_ticket", &format!(r#"{{"ref":"{second}","decision":{{"text":"Merged."}},"when":"bottled"}}"#));
     let merge = git(&["merge", "--no-ff", "-q", "-m", "merge", "side"]);
     assert!(merge.status.success(), "{}", text(&merge));
-    assert_eq!(status(&second), "landing", "a merge runs no post-commit hook: {}", text(&merge));
-    let by_hand = run(&p.repo, &["land"]);
-    assert!(by_hand.status.success() && text(&by_hand).contains(&format!("landed {second}")), "{}", text(&by_hand));
+    assert_eq!(status(&second), "simmering", "a merge runs no post-commit hook: {}", text(&merge));
+    let by_hand = run(&p.repo, &["bottle"]);
+    assert!(by_hand.status.success() && text(&by_hand).contains(&format!("bottled {second}")), "{}", text(&by_hand));
 }
 
 /// # Test contract
@@ -1794,13 +1799,13 @@ fn a_store_is_served_for_a_team_behind_tokens() {
     let bearer = |t: &str| format!("Host: 127.0.0.1\r\nAuthorization: Bearer {t}\r\n");
     assert_eq!(status_of(port, "POST", "/api/status", "Host: 127.0.0.1\r\n", "{}"), 403, "no token, though local");
     assert_eq!(status_of(port, "POST", "/api/status", &bearer(&ana), "{}"), 200);
-    assert_eq!(status_of(port, "POST", "/api/file_ticket", &bearer(&ana), A_TICKET), 200);
-    assert_eq!(status_of(port, "POST", "/api/file_ticket", &bearer(&check), A_TICKET), 403, "read-only");
+    assert_eq!(status_of(port, "POST", "/api/inscribe_ticket", &bearer(&ana), A_TICKET), 200);
+    assert_eq!(status_of(port, "POST", "/api/inscribe_ticket", &bearer(&check), A_TICKET), 403, "read-only");
     assert_eq!(status_of(port, "POST", "/api/board", &bearer(&check), "{}"), 200);
     // A command beside the daemon sends its token and is answered by it; without one it is not let through.
-    let via = grimoire().args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env("GRIMOIRE_TOKEN", &ana).output().unwrap();
+    let via = grimoire().args(["tool", "--store", &store, "inscribe_ticket", A_TICKET]).current_dir(&host).env("GRIMOIRE_TOKEN", &ana).output().unwrap();
     assert!(via.status.success(), "{}", text(&via));
-    let without = grimoire().args(["tool", "--store", &store, "file_ticket", A_TICKET]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
+    let without = grimoire().args(["tool", "--store", &store, "inscribe_ticket", A_TICKET]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
     assert!(!without.status.success() && text(&without).contains("refused this command") && text(&without).contains("GRIMOIRE_TOKEN"), "{}", text(&without));
     // A read without a token is refused the same way: it does not go round the daemon to a repository that is not there.
     let read = grimoire().args(["tool", "--store", &store, "board"]).current_dir(&host).env_remove("GRIMOIRE_TOKEN").output().unwrap();
@@ -1861,7 +1866,7 @@ fn the_marker_names_the_port_really_listened_on() {
     assert_ne!(port, 0, "{marker}");
     assert_eq!(status_of(port, "GET", "/api/status", "Host: 127.0.0.1\r\n", ""), 200);
     // So a command beside it finds it and is answered by it.
-    let filed = run(&p.repo, &["tool", "file_ticket", A_TICKET]);
+    let filed = run(&p.repo, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
 }
 
@@ -1948,25 +1953,25 @@ fn a_checkout_works_against_a_teams_server() {
     let copy = std::fs::read_dir(home.join("copies")).unwrap().flatten().next().unwrap().path();
     assert!(copy.join("grimoire.json").is_file() && copy.join("copy.json").is_file(), "the copy, laid out as a store, outside the repository");
     // A write goes to the server; the ticket it starts is this checkout's current one.
-    let filed = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+    let filed = team(&p.repo, &home, None, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(filed.status.success(), "{}", text(&filed));
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
     let slug = ticket.trim_start_matches("ticket:").to_string();
-    assert!(team(&p.repo, &home, None, &["tool", "start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    assert!(team(&p.repo, &home, None, &["tool", "brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
     let put = team(&p.repo, &home, None, &["tool", "put_page", r#"{"slug":"aim","title":"Aim","body":"b","links":[]}"#]);
     assert!(put.status.success(), "{}", text(&put));
     let bearer = format!("Host: 127.0.0.1\r\nAuthorization: Bearer {ana}\r\n");
     assert_eq!(status_of(port, "POST", "/api/get", &bearer, &format!(r#"{{"ref":"page:aim","ticket":"{slug}"}}"#)), 200, "in the ticket's proposal on the server");
     assert_eq!(status_of(port, "POST", "/api/get", &bearer, r#"{"ref":"page:aim"}"#), 404, "and not in the truth");
-    // A commit on a team lands nothing: the hook's unnamed landing says where a ticket lands, and passes.
-    let decided = team(&p.repo, &home, None, &["tool", "close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)]);
+    // A commit on a team bottles nothing: the hook's unnamed bottling says where a ticket is bottled, and passes.
+    let decided = team(&p.repo, &home, None, &["tool", "close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#)]);
     assert!(decided.status.success(), "{}", text(&decided));
-    let hook = team(&p.repo, &home, None, &["land"]);
-    assert!(hook.status.success() && text(&hook).contains("nothing landed") && text(&hook).contains("main line") && text(&hook).contains(&ticket), "{}", text(&hook));
-    // The main line lands it, by name, signed in as a pipeline is: by the environment, with nothing kept.
+    let hook = team(&p.repo, &home, None, &["bottle"]);
+    assert!(hook.status.success() && text(&hook).contains("nothing bottled") && text(&hook).contains("main line") && text(&hook).contains(&ticket), "{}", text(&hook));
+    // The main line bottles it, by name, signed in as a pipeline is: by the environment, with nothing kept.
     let ci = p.dir.join("pipeline-home");
-    let landed = team(&p.repo, &ci, Some(&pipeline), &["land", &slug]);
-    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")), "{}", text(&landed));
+    let bottled = team(&p.repo, &ci, Some(&pipeline), &["bottle", &slug]);
+    assert!(bottled.status.success() && text(&bottled).contains(&format!("bottled {ticket}")), "{}", text(&bottled));
     assert!(!ci.join("credentials.json").exists());
     assert_eq!(status_of(port, "POST", "/api/get", &bearer, r#"{"ref":"page:aim"}"#), 200, "applied to the server's truth");
     // A daemon in the checkout serves its copy with its code, and a command beside it goes through it.
@@ -1978,12 +1983,12 @@ fn a_checkout_works_against_a_teams_server() {
         let status: serde_json::Value = serde_json::from_slice(&status.stdout).unwrap();
         assert_eq!((status["server"]["address"].as_str(), status["server"]["reachable"].as_bool(), status["shared"].as_bool()), (Some(address.as_str()), Some(true), Some(false)), "{status}");
         assert!(status["nodes"]["module"].as_u64().unwrap() > 0, "the checkout's code is in its graph");
-        let through = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+        let through = team(&p.repo, &home, None, &["tool", "inscribe_ticket", A_TICKET]);
         assert!(through.status.success(), "{}", text(&through));
         // The person's token is revoked while the daemon serves. The next write finds out, and from then
         // nothing is read on in silence, by the daemon or by a command beside it, until they sign in again.
         assert!(run(&host, &["token", "revoke", "ana", "--store", &store]).status.success());
-        let refused = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+        let refused = team(&p.repo, &home, None, &["tool", "inscribe_ticket", A_TICKET]);
         assert!(!refused.status.success() && text(&refused).contains("store_unavailable") && text(&refused).contains("grimoire login"), "{}", text(&refused));
         let check = team(&p.repo, &home, None, &["check"]);
         assert!(!check.status.success() && text(&check).contains("refused this machine's token"), "{}", text(&check));
@@ -1991,10 +1996,10 @@ fn a_checkout_works_against_a_teams_server() {
         assert!(team(&p.repo, &home, None, &["login", "--token", &again]).status.success());
         let check = team(&p.repo, &home, None, &["check"]);
         assert!(text(&check).contains("finding(s)") && !text(&check).contains("refused"), "{}", text(&check));
-        assert!(team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]).status.success());
+        assert!(team(&p.repo, &home, None, &["tool", "inscribe_ticket", A_TICKET]).status.success());
         // A command run with a token of its own goes to the server as itself, though the daemon it goes through could write.
         let reader = String::from_utf8_lossy(&run(&host, &["token", "add", "reader", "--read-only", "--store", &store]).stdout).trim().to_string();
-        let as_reader = team(&p.repo, &home, Some(&reader), &["tool", "file_ticket", A_TICKET]);
+        let as_reader = team(&p.repo, &home, Some(&reader), &["tool", "inscribe_ticket", A_TICKET]);
         assert!(!as_reader.status.success() && text(&as_reader).contains("may only read"), "{}", text(&as_reader));
     }
     // What a team's project has no use for here says so, and changes nothing.
@@ -2005,9 +2010,9 @@ fn a_checkout_works_against_a_teams_server() {
     // The server goes away: the check still runs over the copy and says so; a write is refused.
     server.take();
     let offline = team(&p.repo, &home, None, &["check"]);
-    // It fails only as it would with the server there: on the page the landing left unlinked, a new finding.
+    // It fails only as it would with the server there: on the page the bottling left unlinked, a new finding.
     assert!(text(&offline).contains("cannot be reached") && text(&offline).contains("as of") && text(&offline).contains("1 new") && text(&offline).contains("page:aim"), "{}", text(&offline));
-    let write = team(&p.repo, &home, None, &["tool", "file_ticket", A_TICKET]);
+    let write = team(&p.repo, &home, None, &["tool", "inscribe_ticket", A_TICKET]);
     assert!(!write.status.success() && text(&write).contains("store_unavailable"), "{}", text(&write));
     // With the checkout's daemon running and holding the copy, a command asks it, and says the same.
     let _ = std::fs::remove_file(copy.join("serve.json"));
@@ -2066,7 +2071,7 @@ fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line", "crates/cli/src/check#land", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
+/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line", "crates/cli/src/check#bottle", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
 /// ```
 #[test]
 fn the_main_line_prunes_a_teams_baseline() {
@@ -2093,15 +2098,15 @@ fn the_main_line_prunes_a_teams_baseline() {
     let answer: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
     assert!(!again.status.success() && answer["new"].as_u64() == Some(2) && text(&again).contains("pruned 0"), "standard output is the findings alone: {}", text(&again));
     assert_eq!(baseline_count(&t.origin.store), adopted - 2, "what the main line saw and the baseline lacks is never added");
-    // A landing on a team prunes against the truth with the ticket applied: src's missing contract is fixed on the main line.
+    // A bottling on a team prunes against the truth with the ticket applied: src's missing contract is fixed on the main line.
     let tool = |name: &str, input: &str| assert!(team(repo, &home, Some(&t.writer), &["tool", name, input]).status.success(), "{name}");
-    let filed = team(repo, &home, Some(&t.writer), &["tool", "file_ticket", A_TICKET]);
+    let filed = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
-    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
+    tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#));
     std::fs::write(repo.join("src").join("lib.rs"), CONTRACTED).unwrap();
-    let landed = team(repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
-    assert!(landed.status.success() && text(&landed).contains(&format!("landed {ticket}")) && text(&landed).contains("pruned 1 baselined finding(s)"), "{}", text(&landed));
+    let bottled = team(repo, &ci, Some(&t.writer), &["bottle", ticket.trim_start_matches("ticket:")]);
+    assert!(bottled.status.success() && text(&bottled).contains(&format!("bottled {ticket}")) && text(&bottled).contains("pruned 1 baselined finding(s)"), "{}", text(&bottled));
     assert_eq!(baseline_count(&t.origin.store), adopted - 3);
     // With a daemon serving the pipeline's checkout, the main line still reads the server, never that daemon's copy.
     let copy = {
@@ -2162,7 +2167,7 @@ fn the_main_line_prunes_a_teams_baseline() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line", "crates/cli/src/check#land", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
+/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line", "crates/cli/src/check#bottle", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
 /// ```
 #[test]
 fn the_main_line_sends_its_recipes_to_a_teams_site() {
@@ -2189,15 +2194,15 @@ fn the_main_line_sends_its_recipes_to_a_teams_site() {
     assert_eq!(ids, ["button", "icon"]);
     assert_eq!(record["recipes"][0]["title"], "Button");
     assert!(!record.to_string().contains("src/a.rs") && !record.to_string().contains("button.recipe.md"), "{record}");
-    // A send the server does not take, here a body past what the route reads, is said and fails nothing: the ticket lands, the prune is taken.
+    // A send the server does not take, here a body past what the route reads, is said and fails nothing: the ticket is bottled, the prune is taken.
     std::fs::remove_file(repo.join("ui").join("icon.recipe.md")).unwrap();
     std::fs::write(repo.join("ui").join("big.recipe.md"), format!("# Big\n\n{}\n\n## Recipe\n\n```json\n{{\"id\":\"big\",\"kind\":\"component\"}}\n```\n", "word ".repeat(1 << 20))).unwrap();
     let tool = |name: &str, input: &str| team(repo, &home, Some(&t.writer), &["tool", name, input]);
-    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("file_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    assert!(tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
-    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)).status.success());
-    let landed = team(repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
-    assert!(landed.status.success() && text(&landed).contains("pruned") && text(&landed).contains("recipes were not sent"), "{}", text(&landed));
+    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("inscribe_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
+    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#)).status.success());
+    let bottled = team(repo, &ci, Some(&t.writer), &["bottle", ticket.trim_start_matches("ticket:")]);
+    assert!(bottled.status.success() && text(&bottled).contains("pruned") && text(&bottled).contains("recipes were not sent"), "{}", text(&bottled));
     assert_eq!(held()["recipes"].as_array().unwrap().len(), 2, "the record the server last took stays");
     // The next main-line check sends them again, replaced whole.
     std::fs::remove_file(repo.join("ui").join("big.recipe.md")).unwrap();
@@ -2258,7 +2263,7 @@ fn http(port: u16, request: &str) -> (u16, String) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/check#land"]}
+/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/check#bottle"]}
 /// ```
 #[test]
 fn a_build_that_cannot_read_a_language_does_not_prune() {
@@ -2270,16 +2275,20 @@ fn a_build_that_cannot_read_a_language_does_not_prune() {
     let check = team(&t.checkout.repo, &ci, Some(&t.writer), &["check", "--main-line"]);
     assert!(!check.status.success() && text(&check).contains("the baseline was not pruned") && text(&check).contains("cobol"), "{}", text(&check));
     assert_eq!(baseline_count(&t.origin.store), adopted, "nothing was sent");
-    // A landing is taken, then its prune is refused the same way: the command says the ticket landed, and fails.
+    // A bottling is taken, then its prune is refused the same way: the command says the ticket was bottled, and fails.
     let home = t.checkout.dir.join("home");
     let tool = |name: &str, input: &str| team(&t.checkout.repo, &home, Some(&t.writer), &["tool", name, input]);
-    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("file_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
-    assert!(tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
-    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#)).status.success());
-    let landed = team(&t.checkout.repo, &ci, Some(&t.writer), &["land", ticket.trim_start_matches("ticket:")]);
-    assert!(!landed.status.success() && text(&landed).contains(&format!("landed {ticket}")) && text(&landed).contains("the ticket landed, but the baseline was not pruned"), "{}", text(&landed));
+    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("inscribe_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
+    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#)).status.success());
+    let bottled = team(&t.checkout.repo, &ci, Some(&t.writer), &["bottle", ticket.trim_start_matches("ticket:")]);
+    assert!(
+        !bottled.status.success() && text(&bottled).contains(&format!("bottled {ticket}")) && text(&bottled).contains("the ticket was bottled, but the baseline was not pruned"),
+        "{}",
+        text(&bottled)
+    );
     let status = serde_json::from_slice::<serde_json::Value>(&tool("get", &format!(r#"{{"ref":"{ticket}"}}"#)).stdout).unwrap();
-    assert_eq!(status["node"]["status"], "closed");
+    assert_eq!(status["node"]["status"], "bottled");
     assert_eq!(baseline_count(&t.origin.store), adopted);
 }
 
@@ -2307,15 +2316,15 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
         assert!(o.status.success(), "{name}: {}", text(&o));
         serde_json::from_slice(&o.stdout).unwrap()
     };
-    let ticket = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    let ticket = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
     let slug = ticket.trim_start_matches("ticket:").to_string();
-    tool("start_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
     // The proposal names a criterion this code does not have yet.
     tool(
         "put_requirement",
         r#"{"slug":"proposed","title":"Proposed","statement":"It SHALL offer b.","scenarios":[{"title":"t","given":"g","when":"w","then":"t"}],"covered_by":["criterion:src/b#exports-b"]}"#,
     );
-    let open = tool("file_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    let open = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
     // The pipeline: signed in by the environment with a read-only token, nothing kept, no current ticket.
     let ci = p.dir.join("pipeline-home");
     let check = |args: &[&str]| team(&p.repo, &ci, Some(&pipeline), &[&["check"][..], args].concat());
@@ -2330,19 +2339,19 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
     assert!(!ci.join("credentials.json").exists());
     // A ticket with no proposal to read, and one that does not exist, are said and fail.
     let not_live = check(&["--ticket", &open]);
-    assert!(!not_live.status.success() && text(&not_live).contains("neither active nor landing"), "{}", text(&not_live));
+    assert!(!not_live.status.success() && text(&not_live).contains("neither brewing nor simmering"), "{}", text(&not_live));
     let missing = check(&["--ticket", "no-such-ticket"]);
     assert!(!missing.status.success() && text(&missing).contains("cannot check against ticket:no-such-ticket"), "{}", text(&missing));
     // The person's checkout has the ticket as its current one: with none named, its proposal is the intent; a ticket named overrides it.
     let mine = team(&p.repo, &home, Some(&ana), &["check"]);
     assert!(!mine.status.success() && text(&mine).contains("req:proposed"), "the current ticket's proposal: {}", text(&mine));
     let overridden = team(&p.repo, &home, Some(&ana), &["check", "--ticket", &open]);
-    assert!(!overridden.status.success() && text(&overridden).contains("neither active nor landing"), "{}", text(&overridden));
-    // A landing ticket keeps its proposal, so the pipeline still judges against it, the same in JSON.
-    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"landed"}}"#));
-    let landing = check(&["--ticket", &slug, "--json"]);
-    let found: serde_json::Value = serde_json::from_slice(&landing.stdout).unwrap();
-    assert!(!landing.status.success() && found["new"].as_u64().unwrap() > 0 && found["findings"].as_array().unwrap().iter().any(|f| f["ref"] == "req:proposed"), "{}", text(&landing));
+    assert!(!overridden.status.success() && text(&overridden).contains("neither brewing nor simmering"), "{}", text(&overridden));
+    // A simmering ticket keeps its proposal, so the pipeline still judges against it, the same in JSON.
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#));
+    let bottling = check(&["--ticket", &slug, "--json"]);
+    let found: serde_json::Value = serde_json::from_slice(&bottling.stdout).unwrap();
+    assert!(!bottling.status.success() && found["new"].as_u64().unwrap() > 0 && found["findings"].as_array().unwrap().iter().any(|f| f["ref"] == "req:proposed"), "{}", text(&bottling));
     // Another process holds the runner's copy, so it cannot be fetched now: a named ticket refuses to read it, though the server is there.
     let ci_copy = std::fs::read_dir(ci.join("copies")).unwrap().flatten().next().unwrap().path();
     {

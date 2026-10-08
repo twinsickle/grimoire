@@ -180,6 +180,8 @@ fn error_response(e: ToolError) -> Response {
 }
 
 async fn run(answerer: Arc<dyn Answerer>, caller: Option<Caller>, tool: String, input: Value, token: Option<String>) -> Response {
+    // A former tool name is answered as the tool it now names (req:tools-former-names).
+    let tool = grimoire_core::tools::canonical(&tool).to_string();
     if !grimoire_core::tools::TOOL_NAMES.contains(&tool.as_str()) {
         return error_response(ToolError::invalid(format!("unknown tool `{tool}`"), vec![]));
     }
@@ -224,6 +226,7 @@ async fn call_post(State(answerer): State<Arc<dyn Answerer>>, caller: Option<Ext
 /// GET form for convenience: each query value is parsed as JSON when it is,
 /// otherwise taken as a string, so `?ref=page:overview&depth=3` works.
 async fn call_get(State(answerer): State<Arc<dyn Answerer>>, caller: Option<Extension<Caller>>, Path(tool): Path<String>, Query(q): Query<Vec<(String, String)>>) -> Response {
+    let tool = grimoire_core::tools::canonical(&tool).to_string();
     // A write always takes a POST with a JSON body: a GET is the easiest
     // request for another site to forge.
     if grimoire_core::tools::is_write(&tool) {

@@ -2,8 +2,8 @@
  * What each view does, against the fixture store serve.mjs builds: a root
  * page and a second root with one page under it, an area with one
  * requirement and two contracted modules, a module
- * without a contract, one test, and tickets open, high, closed and a gap, the
- * first active with a proposal, one landing, and one closed touching a
+ * without a contract, one test, and tickets inscribed, high, bottled and a gap, the
+ * first brewing with a proposal, one simmering, and one bottled touching a
  * requirement and relying on a page that no longer exist.
  * Every finding at that point is adopted as the baseline, and one requirement
  * added after it, so the views have inherited and new findings to tell apart.
@@ -452,7 +452,7 @@ test("\"It's almost magic\" shows where a whole view has nothing yet, and nowher
   // Its cauldron: the filters, then the empty state in place of the bands and the Unsettled section.
   await page.goto("/g/ledger/cauldron");
   await expect(page.locator("main h1")).toHaveText("Cauldron");
-  await expect(empty.locator("p").first()).toHaveText("The cauldron is empty: no change is open and no gap or question waits. A ticket an agent files shows here.");
+  await expect(empty.locator("p").first()).toHaveText("The cauldron is empty: no change is inscribed or brewing and no gap or question waits. A ticket an agent inscribes shows here.");
   await expect(jingle).toHaveCount(1);
   const glinting = await drawn(1);
   expect(await twinkle(glinting)).toEqual(moving);
@@ -467,15 +467,15 @@ test("\"It's almost magic\" shows where a whole view has nothing yet, and nowher
     await expect(page.locator("[data-empty-state]"), path).toHaveCount(0);
     await expect(jingle, path).toHaveCount(0);
   }
-  // A change filed and closed in ledger leaves its cauldron empty, and the recently closed still show it when asked for.
+  // A change inscribed and bottled in ledger leaves its cauldron empty, and the recently bottled still show it when asked for.
   const ledger = async (name: string, input: object) => (await page.request.post(`/g/ledger/api/${name}`, { data: input })).json();
-  const filed = await ledger("file_ticket", { title: "Brewed and done", kind: "change", priority: "later", touches: [], body: "Closed at once." });
-  await ledger("start_ticket", { ref: filed.node.ref });
+  const filed = await ledger("inscribe_ticket", { title: "Brewed and done", kind: "change", priority: "later", touches: [], body: "Bottled at once." });
+  await ledger("brew_ticket", { ref: filed.node.ref });
   await ledger("close_ticket", { ref: filed.node.ref, decision: { text: "Done.", date: "2026-01-20" } });
   await page.goto("/g/ledger/cauldron");
   await expect(page.locator("main [data-empty-state]")).toContainText("The cauldron is empty");
-  await page.getByRole("button", { name: "Closed", exact: true }).click();
-  await expect(page.locator("#closed")).toContainText("Brewed and done");
+  await page.getByRole("button", { name: "Bottled", exact: true }).click();
+  await expect(page.locator("#bottled")).toContainText("Brewed and done");
   await expect(jingle).toHaveCount(1);
   // A grimoire with things in it shows the jingle nowhere: not its views, its node pages, nor a search that finds nothing.
   // The Library is Grimoire's own page, and carries the jingle by design.
@@ -561,7 +561,7 @@ test("the header shows new findings as a warning and inherited ones dimmed", asy
  */
 test("the header shows what other work may conflict apart from the findings, not as a warning", async ({ page }) => {
   const lint = await tool<{ advisories: unknown[] }>(page, "lint");
-  expect(lint.advisories.length, "the fixture's landing ticket proposes a criterion its code lacks").toBeGreaterThan(0);
+  expect(lint.advisories.length, "the fixture's simmering ticket proposes a criterion its code lacks").toBeGreaterThan(0);
   await page.goto("/g/repo/cauldron");
   // At a glance only what is new; the rest in the pill's panel.
   await expect(page.locator("header button[aria-label^='Where you are']")).not.toContainText("may conflict");
@@ -582,7 +582,7 @@ test("a node's page says under its title the other work that may conflict with i
   type Advisory = { from: { kind: string; ticket?: string }; finding: { ref: string } };
   const lint = await tool<{ advisories: Advisory[] }>(page, "lint");
   const on = lint.advisories.find((a) => a.finding.ref === "req:ready-writes-nothing" && a.from.kind === "ticket");
-  expect(on, "the landing ticket's repointed requirement").toBeTruthy();
+  expect(on, "the simmering ticket's repointed requirement").toBeTruthy();
   await page.goto("/g/repo/n/req%3Aready-writes-nothing");
   const item = page.locator("[aria-label='Trouble here'] [data-mark-line='conflict']", { hasText: "criterion:src/ready#not-written-yet" });
   await expect(item).toContainText("may conflict");
@@ -936,7 +936,7 @@ test("a page holds one event stream however many queries it mounts", async ({ pa
  * ```
  */
 test("a reference is a link to its node, tagged with its kind", async ({ page }) => {
-  // In the active ticket's Proposed list, the requirement it proposes a change to.
+  // In the brewing ticket's Proposed list, the requirement it proposes a change to.
   await page.goto("/g/repo/n/ticket%3A0001");
   const proposed = page.locator("main h2", { hasText: "Proposed" }).locator("xpath=following-sibling::ul[1]");
   const link = proposed.locator('a[href="/g/repo/n/req%3Aready-needs-commit"]');
@@ -944,11 +944,11 @@ test("a reference is a link to its node, tagged with its kind", async ({ page })
   await expect(link.locator("xpath=..")).toContainText("req");
   await link.click();
   await expect(page).toHaveURL("/g/repo/n/req%3Aready-needs-commit");
-  // The one exception: a closed ticket's reference to a node that no longer exists keeps its kind tag and is text, marked.
+  // The one exception: a bottled ticket's reference to a node that no longer exists keeps its kind tag and is text, marked.
   await page.goto("/g/repo/cauldron");
-  await page.getByRole("button", { name: /^Closed/ }).click();
+  await page.getByRole("button", { name: /^Bottled/ }).click();
   await page.getByRole("button", { name: "Show Name the readiness module" }).click();
-  const gone = page.locator("#closed li[data-ticket='ticket:0004'] [data-gone='req:ready-old-name']").first();
+  const gone = page.locator("#bottled li[data-ticket='ticket:0004'] [data-gone='req:ready-old-name']").first();
   await expect(gone).toHaveText("reqready-old-nameno longer exists");
   await expect(gone.locator("a")).toHaveCount(0);
 });
@@ -1011,7 +1011,7 @@ async function bandRefs(page: Page, band: string): Promise<string[]> {
   return page.locator(`#band-${band} li[data-ticket]`).evaluateAll((ls) => ls.map((l) => l.getAttribute("data-ticket") ?? ""));
 }
 
-type BoardAnswer = { tickets: { ref: string; priority: string; waits_on?: { ref: string; status: string }[] }[]; unattached: { ref: string }[]; closed: { ref: string }[] };
+type BoardAnswer = { tickets: { ref: string; priority: string; waits_on?: { ref: string; status: string }[] }[]; unattached: { ref: string }[]; bottled: { ref: string }[] };
 
 /**
  * # Test contract
@@ -1031,7 +1031,7 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
   await expect(line).toContainText("0005");
   await expect(line.getByRole("link", { name: "Should readiness count submodules?" })).toHaveAttribute("href", "/g/repo/n/ticket%3A0005");
   await expect(line).toContainText("later");
-  await expect(line).toContainText("open");
+  await expect(line).toContainText("inscribed");
   await expect(row(page, "ticket:0006").getByRole("button", { name: /^Hide/ })).toHaveCount(0);
   await expect(page.locator("li[data-ticket='ticket:0005']")).toHaveCount(0);
   await expect(row(page, "ticket:0002")).toContainText("ready");
@@ -1039,20 +1039,20 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
   // The gap no change relies on is unattached; the question a change relies on is not.
   await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toBeVisible();
   await expect(page.locator("#unattached li[data-ticket='ticket:0005']")).toHaveCount(0);
-  // Closed tickets are hidden until asked for.
+  // Bottled tickets are hidden until asked for.
   await expect(page.getByRole("link", { name: "Name the readiness module" })).toHaveCount(0);
   await page.getByRole("button", { name: /^Ready/ }).click();
   await expect(row(page, "ticket:0002")).toHaveCount(0);
   await expect(row(page, "ticket:0006")).toBeVisible();
   await page.getByRole("button", { name: /^Ready/ }).click();
-  await page.getByRole("button", { name: /^Closed/ }).click();
-  await expect(page.locator("#closed").getByRole("link", { name: "Name the readiness module" })).toBeVisible();
+  await page.getByRole("button", { name: /^Bottled/ }).click();
+  await expect(page.locator("#bottled").getByRole("link", { name: "Name the readiness module" })).toBeVisible();
   // An answered question no change relies on is marked; a gap a change was built on, and a change, are not.
-  await expect(page.locator("#closed li[data-ticket='ticket:0008']")).toContainText("nothing built on it");
+  await expect(page.locator("#bottled li[data-ticket='ticket:0008']")).toContainText("nothing built on it");
   // What the mark means is read out, not only shown on hover.
-  await expect(page.locator("#closed li[data-ticket='ticket:0008']")).toContainText("it needed no work, or its work was never filed");
-  await expect(page.locator("#closed li[data-ticket='ticket:0009']")).not.toContainText("nothing built on it");
-  await expect(page.locator("#closed li[data-ticket='ticket:0010']")).not.toContainText("nothing built on it");
+  await expect(page.locator("#bottled li[data-ticket='ticket:0008']")).toContainText("it needed no work, or its work was never filed");
+  await expect(page.locator("#bottled li[data-ticket='ticket:0009']")).not.toContainText("nothing built on it");
+  await expect(page.locator("#bottled li[data-ticket='ticket:0010']")).not.toContainText("nothing built on it");
 });
 
 /**
@@ -1062,11 +1062,11 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
  * {"test": "a-line-says-whether-what-a-change-relies-on-is-answered", "checks": ["web/src/views/Board#first-screen"]}
  * ```
  */
-test("a line under a change says whether what it relies on is open, answered or closed, with its priority", async ({ page }) => {
+test("a line under a change says whether what it relies on is inscribed, answered or bottled, with its priority", async ({ page }) => {
   // The tool's own answer, with question 0005 set to each status in turn: the store the other specs share is not touched.
   // One handler for the whole test, reading the status of the pass it answers in: swapping handlers between passes
   // left a moment with none, and a refetch an event started then reached the page as the real answer.
-  let status: string = "open";
+  let status: string = "inscribed";
   await page.route("**/api/board", async (route) => {
     const response = await route.fetch();
     const board = (await response.json()) as BoardAnswer;
@@ -1074,9 +1074,9 @@ test("a line under a change says whether what it relies on is open, answered or 
     await route.fulfill({ response, json: board });
   });
   for (const [now, said, ready] of [
-    ["landing", "answered", true],
-    ["closed", "closed", true],
-    ["open", "open", false],
+    ["simmering", "answered", true],
+    ["bottled", "bottled", true],
+    ["inscribed", "inscribed", false],
   ] as const) {
     status = now;
     await page.goto("/g/repo/cauldron");
@@ -1103,12 +1103,12 @@ test("a board row opens into the whole ticket, with what it waits on and its nex
   // The panel's own list, past the line under the row that names the question too.
   const panel = opened.locator("li:not([data-wait])", { has: page.getByRole("link", { name: "Should readiness count submodules?" }) });
   await expect(panel.getByRole("link", { name: "Should readiness count submodules?" })).toBeVisible();
-  // The question's own line says it is open.
-  await expect(panel).toContainText("open");
+  // The question's own line says it is inscribed.
+  await expect(panel).toContainText("inscribed");
   await expect(opened).toContainText("Needs refinement: it waits on whether submodules count.");
   await expect(opened.locator("a[href='/g/repo/n/module%3Asrc%2Fready']").first()).toBeVisible();
   // Its next step is a line for the agent, never a start or a close.
-  await expect(opened.locator("[data-handoff]")).toHaveText('Start ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
+  await expect(opened.locator("[data-handoff]")).toHaveText('Brew ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
   await expect(opened.getByRole("button", { name: "Start", exact: true })).toHaveCount(0);
   await expect(opened.getByRole("link", { name: "Open the ticket's page" })).toHaveAttribute("href", "/g/repo/n/ticket%3A0006");
   // A gap opens the same way, its line asking for the options to be laid out, and nothing closes it from here.
@@ -1120,23 +1120,23 @@ test("a board row opens into the whole ticket, with what it waits on and its nex
   await expect(gap.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
   // Copied from the row as from the page; and where the browser refuses, it says to copy it by hand.
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await opened.getByRole("button", { name: /^Copy: Start ticket 0006/ }).click();
+  await opened.getByRole("button", { name: /^Copy: Brew ticket 0006/ }).click();
   await expect(opened.getByRole("button", { name: /^Copy: / })).toHaveText("Copied");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Start ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Brew ticket 0006 ("Report readiness per workspace") with the grimoire skill.');
   await page.evaluate(() => {
     navigator.clipboard.writeText = () => Promise.reject(new Error("refused"));
   });
   await gap.getByRole("button", { name: /^Copy: Resolve the gap 0003/ }).click();
   await expect(gap.getByRole("alert")).toHaveText("The browser would not copy it: select the line and copy it by hand.");
   await expect(gap.getByRole("button", { name: /^Copy: / })).toHaveText("Copy");
-  // Closed where it is decided, through the tools, the row leaves the unsettled at once; the specs after this one rely on it closed.
+  // Closed where it is decided, through the tools, the row leaves the unsettled at once; the specs after this one rely on it bottled.
   await tool(page, "close_ticket", { ref: "ticket:0003", decision: { text: "Submodules are out of scope for readiness." } });
   await expect(page.locator("#unattached li[data-ticket='ticket:0003']")).toHaveCount(0);
-  expect((await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0003" })).node.status).toBe("closed");
-  // A closed ticket opens the same way: what it touched that still exists is a link, what no longer exists is marked and is none.
-  await page.getByRole("button", { name: /^Closed/ }).click();
+  expect((await tool<{ node: { status: string } }>(page, "get", { ref: "ticket:0003" })).node.status).toBe("bottled");
+  // A bottled ticket opens the same way: what it touched that still exists is a link, what no longer exists is marked and is none.
+  await page.getByRole("button", { name: /^Bottled/ }).click();
   await page.getByRole("button", { name: "Show Name the readiness module" }).click();
-  const closed = page.locator("#closed li[data-ticket='ticket:0004']");
+  const closed = page.locator("#bottled li[data-ticket='ticket:0004']");
   await expect(closed.locator("a[href='/g/repo/n/module%3Asrc%2Fready']").first()).toBeVisible();
   // One it touched and one it relied on, each listed under its own heading.
   for (const [ref, href] of [
@@ -1265,7 +1265,7 @@ test("a change the priority rule raises back stays where the tool put it, and th
   const reorders: unknown[] = [];
   await page.route("**/api/update_ticket", async (route) => {
     const node = (await tool<{ node: unknown }>(page, "get", { ref: "ticket:0002" })).node;
-    await route.fulfill({ json: { node, warnings: [], baselined: 0, reprioritised: [{ ref: "ticket:0002", title: "Explain readiness", kind: "change", priority: "high", status: "open" }] } });
+    await route.fulfill({ json: { node, warnings: [], baselined: 0, reprioritised: [{ ref: "ticket:0002", title: "Explain readiness", kind: "change", priority: "high", status: "inscribed" }] } });
   });
   await page.route("**/api/reorder", async (route) => {
     reorders.push(route.request().postDataJSON());
@@ -1536,29 +1536,29 @@ test("a ticket's page hands its next step to an agent, and starts and closes not
   const line = page.locator("main [data-handoff]");
   await page.goto("/g/repo/n/ticket%3A0002");
   await expect(page.getByRole("heading", { name: "Next step" })).toBeVisible();
-  await expect(line).toHaveText('Start ticket 0002 ("Explain readiness") with the grimoire skill.');
-  for (const name of ["Start", "Close"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expect(line).toHaveText('Brew ticket 0002 ("Explain readiness") with the grimoire skill.');
+  for (const name of ["Start", "Brew", "Close", "Bottle"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Decision")).toHaveCount(0);
 
   // Copy puts the line on the clipboard, says so, and writes nothing.
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.getByRole("button", { name: /^Copy: Start ticket 0002/ }).click();
+  await page.getByRole("button", { name: /^Copy: Brew ticket 0002/ }).click();
   await expect(page.getByRole("button", { name: /^Copy: / })).toHaveText("Copied");
   await expect(page.locator("main [role=status]")).toHaveText("Copied to the clipboard.");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Start ticket 0002 ("Explain readiness") with the grimoire skill.');
-  expect(await status()).toBe("open");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Brew ticket 0002 ("Explain readiness") with the grimoire skill.');
+  expect(await status()).toBe("inscribed");
 
-  // Started and closed where the work is done, through the tools: the page follows, with the next step for each.
-  await tool(page, "start_ticket", { ref: "ticket:0002" });
+  // Brewed and bottled where the work is done, through the tools: the page follows, with the next step for each.
+  await tool(page, "brew_ticket", { ref: "ticket:0002" });
   await expect(line).toHaveText('Continue ticket 0002 ("Explain readiness") with the grimoire skill.');
   // A new line has not been copied: the button says Copy again.
   await expect(page.getByRole("button", { name: /^Copy: Continue ticket 0002/ })).toHaveText("Copy");
   await tool(page, "close_ticket", { ref: "ticket:0002", decision: { text: "Explained in the area page." } });
-  await expect.poll(status).toBe("closed");
+  await expect.poll(status).toBe("bottled");
   await expect(page.getByRole("heading", { name: "Next step" })).toHaveCount(0);
   await expect(line).toHaveCount(0);
 
-  // A closed ticket has no next step.
+  // A bottled ticket has no next step.
   await page.goto("/g/repo/n/ticket%3A0004");
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
   await expect(line).toHaveCount(0);
@@ -1568,13 +1568,13 @@ test("a ticket's page hands its next step to an agent, and starts and closes not
  * # Test contract
  *
  * ```json
- * {"test": "a-closed-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/NodeGraph#centred"]}
+ * {"test": "a-bottled-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/NodeGraph#centred"]}
  * ```
  */
-test("a closed ticket's reference that leads nowhere is drawn marked and not a link; an open ticket's stays a link", async ({ page }) => {
-  // The fixture's closed ticket touches a module that exists and a requirement that does not, and relied on a page that is gone.
+test("a bottled ticket's reference that leads nowhere is drawn marked and not a link; an unbottled ticket's stays a link", async ({ page }) => {
+  // The fixture's bottled ticket touches a module that exists and a requirement that does not, and relied on a page that is gone.
   const closed = await tool<{ node: { status: string; touches: string[]; out: { ref: string; title: string | null }[] } }>(page, "get", { ref: "ticket:0004" });
-  expect(closed.node.status).toBe("closed");
+  expect(closed.node.status).toBe("bottled");
   expect(closed.node.out.find((e) => e.ref === "req:ready-old-name")?.title, "get gives the missing end no title").toBeNull();
   await page.goto("/g/repo/n/ticket%3A0004");
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
@@ -1590,10 +1590,10 @@ test("a closed ticket's reference that leads nowhere is drawn marked and not a l
   expect(refs).not.toContain("req:ready-old-name");
   expect(refs).not.toContain("page:old-naming");
   expect(refs, "what still exists is a link as before").toContain("module:src/ready");
-  // The same answer for a ticket still open: the check reports that one, and the graph links it as before.
+  // The same answer for a ticket still inscribed: the check reports that one, and the graph links it as before.
   await page.route("**/api/get", async (route) => {
     if (route.request().postDataJSON().ref !== "ticket:0004") return route.continue();
-    await route.fulfill({ json: { ...closed, node: { ...closed.node, status: "open", decision: null } } });
+    await route.fulfill({ json: { ...closed, node: { ...closed.node, status: "inscribed", decision: null } } });
   });
   await page.reload();
   await expect(page.getByRole("heading", { name: "Name the readiness module" })).toBeVisible();
@@ -1634,7 +1634,7 @@ test("a body with script in it renders as Markdown and runs nothing", async ({ p
     "",
     '<img alt="set" src="https://example.com/a.png" srcset="https://example.com/a.png 1x, javascript:alert(1) 2x">',
   ].join("\n");
-  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "A hostile body", kind: "gap", priority: "later", touches: [], body });
+  const filed = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "A hostile body", kind: "gap", priority: "later", touches: [], body });
   await page.goto(`/g/repo/n/${encodeURIComponent(filed.node.ref)}`);
   const md = page.locator("main .md").first();
   await expect(md.locator("strong", { hasText: "Still bold." })).toBeVisible();
@@ -2069,10 +2069,10 @@ test("a requirement's page shows its decisions in force and folds the superseded
   // Ids are carried, not positions, and a decision waiting in a ticket has none yet.
   await page.goto("/g/repo/n/req%3Awaiting");
   await expect(main.getByText("Ours, waiting.")).toBeVisible();
-  await expect(main.getByText("waiting for its ticket to land", { exact: true })).toBeVisible();
+  await expect(main.getByText("waiting for its ticket to be bottled", { exact: true })).toBeVisible();
   await expect(main.getByText("d3", { exact: true })).toBeVisible();
   await main.getByText("1 superseded").click();
-  await expect(main.getByText("d1 · superseded by a decision waiting for its ticket to land")).toBeVisible();
+  await expect(main.getByText("d1 · superseded by a decision waiting for its ticket to be bottled")).toBeVisible();
   // A decision's own page: whose it is, what it says and what it supersedes.
   await page.goto("/g/repo/n/req%3Arevised%23d3");
   await expect(main.getByRole("heading", { name: "Decision d3 of revised" })).toBeVisible();
@@ -2089,7 +2089,7 @@ test("a requirement's page shows its decisions in force and folds the superseded
  * {"test": "a-ticket-lists-its-proposal-and-a-node-reads-as-proposed", "checks": ["web/src/views/Node#draft-shown"]}
  * ```
  */
-test("an active ticket lists what it proposes, and a node page reads it as proposed", async ({ page }) => {
+test("a brewing ticket lists what it proposes, and a node page reads it as proposed", async ({ page }) => {
   await page.goto("/g/repo/n/ticket%3A0001");
   const main = page.locator("main");
   await expect(main.getByRole("heading", { name: "Proposed" })).toBeVisible();
@@ -2109,7 +2109,7 @@ test("an active ticket lists what it proposes, and a node page reads it as propo
   await expect(main.locator("h1")).toHaveText("Ready only with a commit");
   await expect(main.getByText("proposes a change to this")).toBeVisible();
   await expect(main.getByRole("link", { name: "read it as proposed" })).toHaveAttribute("href", "/g/repo/n/req%3Aready-needs-commit?ticket=0001");
-  // An open ticket has nothing proposed and no section.
+  // An inscribed ticket has nothing proposed and no section.
   await page.goto("/g/repo/n/ticket%3A0006");
   await expect(main.locator("h1")).toHaveText("Report readiness per workspace");
   await expect(main.getByRole("heading", { name: "Next step" })).toBeVisible();
@@ -2126,7 +2126,7 @@ test("an active ticket lists what it proposes, and a node page reads it as propo
 test("a ticket another proposes to edit is named on its page and in the cauldron, and listed in the proposal", async ({ page }) => {
   type Got = { node: { touches: string[]; relies_on: string[] }; drafts?: string[] };
   const before = (await tool<Got>(page, "get", { ref: "ticket:0006" })).node;
-  // Ticket 0001's proposal repoints 0006's touches; 0006 keeps the truth's until 0001 lands.
+  // Ticket 0001's proposal repoints 0006's touches; 0006 keeps the truth's until 0001 is bottled.
   await tool(page, "update_ticket", { ref: "ticket:0006", touches: [...before.touches, "page:readiness"], ticket: "0001" });
   expect((await tool<Got>(page, "get", { ref: "ticket:0006" })).drafts).toEqual(["ticket:0001"]);
   const main = page.locator("main");
@@ -2181,32 +2181,32 @@ test("a page names the ticket that would change it, and reads as proposed on req
  * # Test contract
  *
  * ```json
- * {"test": "a-landing-ticket-shows-its-decision-as-waiting", "checks": ["web/src/views/Node#ticket-actions", "web/src/views/Board#first-screen"]}
+ * {"test": "a-simmering-ticket-shows-its-decision-as-waiting", "checks": ["web/src/views/Node#ticket-actions", "web/src/views/Board#first-screen"]}
  * ```
  */
-test("a landing ticket shows its decision as waiting to land, on its page and on the board", async ({ page }) => {
-  // Filed and landed here, last of all, so the fixture's own tickets are as the other specs expect them.
-  const ref = (await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Wait to land", kind: "change", priority: "high", touches: ["module:src/ready"], body: "Its decision is written before its change lands." })).node.ref;
-  await tool(page, "start_ticket", { ref });
-  await tool(page, "close_ticket", { ref, decision: { text: "Decided, and waiting.", date: "2026-01-20" }, when: "landed" });
+test("a simmering ticket shows its decision as waiting to be bottled, on its page and on the board", async ({ page }) => {
+  // Inscribed and bottled here, last of all, so the fixture's own tickets are as the other specs expect them.
+  const ref = (await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Wait to be bottled", kind: "change", priority: "high", touches: ["module:src/ready"], body: "Its decision is written before its change is bottled." })).node.ref;
+  await tool(page, "brew_ticket", { ref });
+  await tool(page, "close_ticket", { ref, decision: { text: "Decided, and waiting.", date: "2026-01-20" }, when: "bottled" });
   await page.goto(`/g/repo/n/${encodeURIComponent(ref)}`);
   const main = page.locator("main");
-  await expect(main).toContainText("landing");
+  await expect(main).toContainText("simmering");
   await expect(main).toContainText("Decided, and waiting.");
-  await expect(main).toContainText("written, waiting for its change to land");
-  // Not closed yet: its body and proposal are kept, and its next step is the landing, handed to the agent.
-  await expect(main).toContainText("Its decision is written before its change lands.");
+  await expect(main).toContainText("written, waiting for its change to be bottled");
+  // Not bottled yet: its body and proposal are kept, and its next step is the bottling, handed to the agent.
+  await expect(main).toContainText("Its decision is written before its change is bottled.");
   await expect(page.getByRole("heading", { name: "Proposed" })).toBeVisible();
-  await expect(main.locator("[data-handoff]")).toHaveText(`Ticket ${ref.slice("ticket:".length)} ("Wait to land") is waiting to land: land it with the grimoire skill once its change is on the main line.`);
-  for (const name of ["Start", "Close"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-  // On the board it is listed with the changes, marked as waiting to land.
+  await expect(main.locator("[data-handoff]")).toHaveText(`Ticket ${ref.slice("ticket:".length)} ("Wait to be bottled") is simmering: bottle it with the grimoire skill once its change is on the main line.`);
+  for (const name of ["Start", "Brew", "Close", "Bottle"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  // On the board it is listed with the changes, marked as waiting to be bottled.
   await page.goto("/g/repo/cauldron");
-  await expect(row(page, ref)).toContainText("waiting to land");
-  await expect(row(page, ref)).toContainText("landing");
+  await expect(row(page, ref)).toContainText("waiting to be bottled");
+  await expect(row(page, ref)).toContainText("simmering");
   await expect(row(page, ref)).not.toContainText("ready");
-  // The landing closes it with the decision written before.
-  const landed = await tool<{ landed: boolean; node: { status: string; decision: { text: string } } }>(page, "land_ticket", { ref });
-  expect([landed.landed, landed.node.status, landed.node.decision.text]).toEqual([true, "closed", "Decided, and waiting."]);
+  // The bottling bottles it with the decision written before.
+  const bottled = await tool<{ bottled: boolean; node: { status: string; decision: { text: string } } }>(page, "bottle_ticket", { ref });
+  expect([bottled.bottled, bottled.node.status, bottled.node.decision.text]).toEqual([true, "bottled", "Decided, and waiting."]);
 });
 
 /**
@@ -2258,7 +2258,7 @@ async function unsettledRefs(page: Page, band: string): Promise<string[]> {
  */
 test("the unsettled gaps and questions are ranked by band, apart from the changes", async ({ page }) => {
   // Two questions and two changes of the test's own in later, deleted at the end, so it holds whatever the specs before it moved.
-  const file = async (title: string, kind: string) => (await tool<{ node: { ref: string } }>(page, "file_ticket", { title, kind, priority: "later", touches: [], body: "Ranked by a spec." })).node.ref;
+  const file = async (title: string, kind: string) => (await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title, kind, priority: "later", touches: [], body: "Ranked by a spec." })).node.ref;
   const a = await file("Rank me A", "question");
   const b = await file("Rank me B", "question");
   // An earlier spec may leave a question of its own unsettled in later; this spec looks only at its own.
@@ -2352,13 +2352,13 @@ test("a stream the browser closed is opened again, and the page is current once 
     return route.fulfill({ status: 500, contentType: "text/plain", body: "" });
   });
   // A gap of the spec's own, so earlier specs' writes to the fixture do not matter.
-  const own = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Seen before the rebuild", kind: "gap", priority: "later", touches: [], body: "On the board from the start." });
+  const own = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Seen before the rebuild", kind: "gap", priority: "later", touches: [], body: "On the board from the start." });
   await page.goto("/g/repo/cauldron");
   await expect(page.locator(`#unattached li[data-ticket='${own.node.ref}']`)).toBeVisible();
   await expect.poll(() => refused, { message: "the page tries the stream again after it was closed" }).toBeGreaterThan(1);
   // The daemon answers again: the stream is opened, and a write elsewhere shows without a reload.
   await page.unroute(events);
-  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Back after a rebuild", kind: "gap", priority: "later", touches: [], body: "Filed once the stream was back." });
+  const filed = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Back after a rebuild", kind: "gap", priority: "later", touches: [], body: "Filed once the stream was back." });
   await expect(page.locator(`#unattached li[data-ticket='${filed.node.ref}']`)).toBeVisible({ timeout: 20_000 });
 });
 
@@ -2370,7 +2370,7 @@ test("a stream the browser closed is opened again, and the page is current once 
  * ```
  */
 test("while the daemon is away the page says so, keeps what it showed, and recovers", async ({ page }) => {
-  const own = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Shown before the daemon went", kind: "gap", priority: "later", touches: [], body: "Stays shown while it is away." });
+  const own = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Shown before the daemon went", kind: "gap", priority: "later", touches: [], body: "Stays shown while it is away." });
   await page.goto("/g/repo/cauldron");
   const gap = page.locator(`#unattached li[data-ticket='${own.node.ref}']`);
   await expect(gap).toBeVisible();
@@ -2378,7 +2378,7 @@ test("while the daemon is away the page says so, keeps what it showed, and recov
   await expect(header).not.toContainText("not answering");
   // Tool calls now meet the proxy's empty 500; the open stream still carries the event that makes the board fetch again.
   await daemonAway(page);
-  const away = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Written while away", kind: "gap", priority: "later", touches: [], body: "Its event makes the board fetch." });
+  const away = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Written while away", kind: "gap", priority: "later", touches: [], body: "Its event makes the board fetch." });
   await expect(header).toContainText("daemon not answering · retrying");
   // Its dot turns to the bad colour while it is away, and back once it answers.
   await expect(header.locator("button[aria-label^='Where you are'] .bg-bad")).toHaveCount(1);
@@ -2417,20 +2417,20 @@ test("a page opened while the daemon cannot be reached says so in each of its vi
  * {"test": "a-withdrawn-change-reads-as-withdrawn", "checks": ["web/src/components#withdrawn-tag"]}
  * ```
  */
-test("a withdrawn change reads as withdrawn on its page and in the cauldron, apart from one that landed", async ({ page }) => {
-  // Last of all: a ticket it closes would push the fixture's own out of the recently closed that earlier specs read.
+test("a withdrawn change reads as withdrawn on its page and in the cauldron, apart from one that was bottled", async ({ page }) => {
+  // Last of all: a ticket it bottles would push the fixture's own out of the recently bottled that earlier specs read.
   // A change of the spec's own, filed and withdrawn through the tools.
-  const filed = await tool<{ node: { ref: string } }>(page, "file_ticket", { title: "Count bytes too", kind: "change", priority: "later", touches: [], body: "Reconsidered before it began." });
+  const filed = await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Count bytes too", kind: "change", priority: "later", touches: [], body: "Reconsidered before it began." });
   await tool(page, "withdraw_ticket", { ref: filed.node.ref, decision: { text: "Bytes are not what anyone counts." } });
   await page.goto(`/g/repo/n/${encodeURIComponent(filed.node.ref)}`);
   await expect(page.locator("main").getByText("withdrawn", { exact: true })).toBeVisible();
   await expect(page.locator("main")).toContainText("withdrawn: nothing of it was applied");
   await page.goto("/g/repo/cauldron");
-  await page.getByRole("button", { name: /^Closed/ }).click();
-  const row = page.locator(`#closed li[data-ticket='${filed.node.ref}']`);
+  await page.getByRole("button", { name: /^Bottled/ }).click();
+  const row = page.locator(`#bottled li[data-ticket='${filed.node.ref}']`);
   await expect(row).toContainText("withdrawn");
-  // A change that landed still reads as closed.
-  await expect(page.locator("#closed li[data-ticket='ticket:0010']")).not.toContainText("withdrawn");
+  // A change that was bottled still reads as bottled.
+  await expect(page.locator("#bottled li[data-ticket='ticket:0010']")).not.toContainText("withdrawn");
 });
 
 /**
@@ -2443,7 +2443,7 @@ test("a withdrawn change reads as withdrawn on its page and in the cauldron, apa
 test("who has a ticket checked out is shown on its row and its page, and not on one no one works", async ({ page }) => {
   const said = /checked out by alex · since \d\d:\d\d/;
   await page.goto("/g/repo/cauldron");
-  // The draft is active, started by the person on this machine; the open change beside it is no one's.
+  // The draft is brewing, brewed by the person on this machine; the inscribed change beside it is no one's.
   await expect(row(page, "ticket:0001").locator("[data-checked-out]")).toHaveText(said);
   await expect(row(page, "ticket:0006").locator("[data-checked-out]")).toHaveCount(0);
   const main = page.locator("main");

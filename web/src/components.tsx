@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The small shared pieces: the section icons, Grimoire's jingle and the empty state that carries it, a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"empty-state","statement":"EmptyState draws a whole view that has nothing yet to show: its section's icon drawn large with a glint beside it in the accent colour that twinkles only where motion is allowed, the direction it is given, a span between backticks set as code, and beneath them Grimoire's jingle, drawn by Jingle. Jingle draws Grimoire's jingle, It's almost magic., in the accent colour; it is the one place in the UI the jingle is written, and EmptyState and the Library are the only views that draw it."},{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a closed ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of closed, so a withdrawn change reads apart from one that landed wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body, and a recipe's text, is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and a recipe's prose is Markdown, and in nothing else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it closes when that change lands, a closed ticket nothing; it calls no tool."}]}
+ * {"purpose":"The small shared pieces: the section icons, Grimoire's jingle and the empty state that carries it, a reference rendered as a kind tag plus link, priority, status and count badges, the ticket table, a ticket's line to hand to an agent, the error box, the Markdown renderer for bodies and its five-line fold, and the utility class sets the views share.","criteria":[{"id":"empty-state","statement":"EmptyState draws a whole view that has nothing yet to show: its section's icon drawn large with a glint beside it in the accent colour that twinkles only where motion is allowed, the direction it is given, a span between backticks set as code, and beneath them Grimoire's jingle, drawn by Jingle. Jingle draws Grimoire's jingle, It's almost magic., in the accent colour; it is the one place in the UI the jingle is written, and EmptyState and the Library are the only views that draw it."},{"id":"ref-is-a-link","statement":"Every reference shown anywhere is tagged with its kind and is a link to that node's page, except a bottled ticket's reference to a node the graph no longer holds, which is shown as its id in plain text marked no longer exists, since a link would lead nowhere."},{"id":"withdrawn-tag","statement":"StatusTag shows a ticket given as withdrawn as withdrawn, dimmed, in place of bottled, so a withdrawn change reads apart from one that was bottled wherever a ticket's status is shown: the ticket table, the cauldron's rows and the ticket's page, which also labels its decision as withdrawn, nothing of it applied."},{"id":"markdown-bodies","statement":"A page body, and a recipe's text, is rendered as Markdown wherever it is shown, since the schema allows Markdown in bodies and a recipe's prose is Markdown, and in nothing else."},{"id":"markdown-inert","statement":"Rendered Markdown is sanitised before it reaches the page: HTML only, no SVG or MathML; no event, style or srcset attributes; no script, style, iframe, object, embed or form elements; and every URL-bearing attribute holds an http, https, mailto or relative URL, data URLs included in what is refused."},{"id":"handoff-copy","statement":"Handoff shows a ticket's line from handoff, selectable, with a Copy button that puts the line on the clipboard and then reads Copied and says so aloud, until the line changes; where the clipboard is missing or refuses, it says aloud to select the line and copy it by hand; a gap or question waiting for its change gets no line and says it is bottled when that change is, a bottled ticket nothing; it calls no tool."}]}
  * ```
  */
 
@@ -125,11 +125,11 @@ export function PriorityTag({ p }: { p: Priority }) {
   return <span className={`font-mono font-semibold text-[11px] uppercase tracking-[0.05em] ${PRIORITY_COLOR[p]}`}>{p}</span>;
 }
 
-const STATUS_COLOR: Record<Status, string> = { open: "text-fg-dim", active: "text-accent", landing: "text-warn", closed: "text-fg-faint" };
+const STATUS_COLOR: Record<Status, string> = { inscribed: "text-fg-dim", brewing: "text-accent", simmering: "text-warn", bottled: "text-fg-faint" };
 
-/** A ticket's status; a closed change that was withdrawn reads as withdrawn, nothing of it applied (req:tool-withdraw-ticket). */
+/** A ticket's status; a bottled change that was withdrawn reads as withdrawn, nothing of it applied (req:tool-withdraw-ticket). */
 export function StatusTag({ s, withdrawn }: { s: Status; withdrawn?: boolean }) {
-  if (s === "closed" && withdrawn) return <span className="text-fg-faint italic">withdrawn</span>;
+  if (s === "bottled" && withdrawn) return <span className="text-fg-faint italic">withdrawn</span>;
   return <span className={STATUS_COLOR[s]}>{s}</span>;
 }
 
@@ -228,14 +228,14 @@ export function Folded({ text }: { text: string }) {
 
 /**
  * A ticket's next step, handed to the person's agent: the line to give it, and a Copy button. The UI starts and closes
- * nothing; an answer waiting for its change says when it closes, and a closed ticket shows nothing.
+ * nothing; an answer waiting for its change says when it is bottled, and a bottled ticket shows nothing.
  */
 export function Handoff({ ticket }: { ticket: { ref: Ref; title: string; kind: TicketKind; status: Status } }) {
   // What the last press did, to the line it copied: a line that has since changed is not the one copied.
   const [copied, setCopied] = useState<{ line: string; ok: boolean } | null>(null);
   const line = handoff(ticket);
-  if (ticket.status === "closed") return null;
-  if (!line) return <p className="m-0 text-fg-dim text-[13px]">Answered: closes when the change applying it lands.</p>;
+  if (ticket.status === "bottled") return null;
+  if (!line) return <p className="m-0 text-fg-dim text-[13px]">Answered: bottled when the change applying it is.</p>;
   const said = copied?.line === line ? copied : null;
   async function copy(text: string) {
     try {

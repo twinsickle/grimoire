@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it, and to a requirement's decisions (page links, tickets that are not closed, roots, the pages the site shows, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted), a list that already named the new reference keeping it once, leaving closed tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
+//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it, and to a requirement's decisions (page links, tickets that are not bottled, roots, the pages the site shows, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted), a list that already named the new reference keeping it once, leaving bottled tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
 //! ```
 
 use super::*;
@@ -109,7 +109,7 @@ pub fn rename_node(store: &mut Store, r: &Reference, to: &str) -> Result<(Refere
     }
     // Each ticket's lists as they were, so an edit a proposal holds that rested on them follows the rename.
     let lists_before: std::collections::BTreeMap<String, String> = store.tickets.iter().map(|(s, t)| (s.clone(), crate::fingerprint::of_record(&TicketReferences::of(t)))).collect();
-    for t in store.tickets.values_mut().filter(|t| t.status != Status::Closed) {
+    for t in store.tickets.values_mut().filter(|t| t.status != Status::Bottled) {
         let a = swap(&mut t.touches);
         let b = swap(&mut t.relies_on);
         if a || b {
@@ -274,8 +274,8 @@ mod tests {
         assert_eq!(p.pages["aim"].record.links, vec![Reference::page("lost"), Reference::page("readiness")], "the link it already had to the new slug is kept once");
         assert!(moved(&s, "later-1").is_empty());
         // Deleting the ticket takes its start, its proposal and its currency with it.
-        start_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
-        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), closed_in: None });
+        brew_ticket(&mut s, &Reference::ticket("phase-62")).unwrap();
+        s.starts.insert("phase-62".into(), Start { ticket: "phase-62".into(), fingerprints: Default::default(), simmering_in: None });
         let lost = s.pages["lost"].clone();
         propose(&mut s, "phase-62", Proposing::Whole, |w| put_page(w, Page { body: "theirs".into(), ..lost })).unwrap();
         let changed = delete_node(&mut s, &Reference::ticket("phase-62")).unwrap();
@@ -291,7 +291,7 @@ mod tests {
                 title: "G".into(),
                 kind: TicketKind::Gap,
                 priority: Priority::Later,
-                status: Status::Open,
+                status: Status::Inscribed,
                 touches: vec![],
                 relies_on: vec![],
                 body: "b".into(),
@@ -306,17 +306,17 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-landing-ticket-is-renamed-and-reordered-like-an-active-one", "checks": ["crates/core/src/ops/rename#rename", "crates/core/src/ops#reorder", "crates/core/src/ops#delete-node"]}
+    /// {"test": "a-simmering-ticket-is-renamed-and-reordered-like-a-brewing-one", "checks": ["crates/core/src/ops/rename#rename", "crates/core/src/ops#reorder", "crates/core/src/ops#delete-node"]}
     /// ```
     #[test]
-    fn a_landing_ticket_is_renamed_and_reordered_like_an_active_one() {
+    fn a_simmering_ticket_is_renamed_and_reordered_like_a_brewing_one() {
         let mut s = crate::graph::fixtures::store();
-        // later-1 touches page:orphan; its decision is written and it waits to land.
+        // later-1 touches page:orphan; its decision is written and it waits to be bottled.
         let t = s.tickets.get_mut("later-1").unwrap();
-        t.status = Status::Landing;
+        t.status = Status::Simmering;
         t.decision = Some(Decision::new("2026-10-03", "Done."));
         assert!(validate_ticket(&s.tickets["later-1"]).is_empty());
-        // A rename reaches its references, as it reaches an active ticket's.
+        // A rename reaches its references, as it reaches a brewing ticket's.
         rename_node(&mut s, &Reference::page("orphan"), "kept").unwrap();
         assert_eq!(s.tickets["later-1"].touches, vec![Reference::page("kept")]);
         // It keeps its place in its band's order.

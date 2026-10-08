@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, this checkout's current ticket's id and title, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that active or landing ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"checked-out","statement":"get on a ticket being worked, active or a change waiting to land, answers checked_out, who has it checked out and since when as the store keeps them, empty when none is kept; on any other ticket or node it answers none."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, this checkout's current ticket's id and title, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that brewing or simmering ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"checked-out","statement":"get on a ticket being worked, active or a change waiting to be bottled, answers checked_out, who has it checked out and since when as the store keeps them, empty when none is kept; on any other ticket or node it answers none."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -123,12 +123,13 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
                 kinds: Option<Vec<TicketKind>>,
                 priority: Option<Vec<Priority>>,
                 touching: Option<Reference>,
-                #[serde(default)]
-                closed: usize,
+                // Read as `closed` too, its name before ticket 0168.
+                #[serde(default, alias = "closed")]
+                bottled: usize,
             }
             let i: In = parse(input)?;
             let g = state.graph_for(view)?;
-            let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref(), closed: i.closed };
+            let f = BoardFilter { status: i.status.as_deref(), kinds: i.kinds.as_deref(), priority: i.priority.as_deref(), touching: i.touching.as_ref(), bottled: i.bottled };
             answer(name, query::board(g, &f), None)
         }
         "related_tickets" => {
@@ -294,12 +295,12 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
             Draft { r#ref: Reference::page(&q.record.slug), title: q.record.title.clone(), new: truth.is_none(), differs }
         })
         .collect();
-    // A requirement it holds a record of, or adds decisions to, read as it would land.
+    // A requirement it holds a record of, or adds decisions to, read as it would be bottled.
     let slugs: std::collections::BTreeSet<&String> = p.requirements.keys().chain(p.decisions.keys()).collect();
     let requirements = slugs
         .into_iter()
         .filter(|slug| changes(store, p, &Reference::req(slug)))
-        .filter_map(|slug| crate::store::with_decisions(store.requirements.get(slug), p, slug, crate::store::Landing::Waiting))
+        .filter_map(|slug| crate::store::with_decisions(store.requirements.get(slug), p, slug, crate::store::Bottling::Waiting))
         .map(|q| {
             let truth = store.requirements.get(&q.slug);
             let differs = truth
@@ -327,7 +328,7 @@ fn proposal_view(store: &crate::store::Store, p: &Proposal) -> ProposalView {
         .tickets
         .iter()
         .filter_map(|(slug, q)| {
-            let t = store.tickets.get(slug).filter(|t| t.status != Status::Closed)?;
+            let t = store.tickets.get(slug).filter(|t| t.status != Status::Bottled)?;
             let differs: Vec<String> =
                 [("touches", t.touches != q.record.touches), ("relies_on", t.relies_on != q.record.relies_on)].into_iter().filter(|(_, d)| *d).map(|(f, _)| f.to_string()).collect();
             (!differs.is_empty()).then(|| Draft { r#ref: Reference::ticket(slug), title: t.title.clone(), new: false, differs })
@@ -555,7 +556,7 @@ mod tests {
         assert!(call(&mut s, "get", json!({ "ref": "page:orphan" }), "2026-10-02").unwrap().output.get("drafts").is_none());
         assert_eq!(call(&mut s, "get", json!({ "ref": "ticket:later-1" }), "2026-10-02").unwrap().output["proposal"]["pages"], json!([]));
         call(&mut s, "put_page", json!({ "slug": "orphan", "title": "ORPHAN", "body": "proposed", "links": ["page:nowhere"], "ticket": "later-1" }), "2026-10-02").unwrap();
-        assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "phase-62" }), "2026-10-02")), "conflict", "an open ticket has no branch");
+        assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "phase-62" }), "2026-10-02")), "conflict", "an inscribed ticket has no branch");
         assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": "nope" }), "2026-10-02")), "not_found");
         assert_eq!(code(call(&mut s, "get", json!({ "ref": "page:orphan", "ticket": 7 }), "2026-10-02")), "invalid");
         // lint: the truth without a ticket, the branch with one, the current ticket's branch when there is one.

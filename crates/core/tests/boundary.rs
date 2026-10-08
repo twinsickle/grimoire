@@ -92,7 +92,6 @@ fn every_finding_is_about_connection() {
         // Whether a judgement was recorded at the recipe's present fingerprint, never what it concluded (req:recipe-due).
         ("due-recipe", "no judgement of a recipe was made at its recipe and files as they are now"),
         ("duplicate-recipe", "two recipes are written with one id"),
-        ("landing-moved", "a landing ticket's proposal rests on a truth that moved"),
         // An omen, not a finding: it fails nothing, and counts lines the extractor read, judging no meaning (req:lint-omens).
         ("large-file", "a file in the contract scope reaches the large-file limit, its tests aside"),
         ("malformed-file", "a store record cannot be read"),
@@ -102,8 +101,9 @@ fn every_finding_is_about_connection() {
         ("missing-{which}-root", "a root the config does not name, or names as no page"),
         ("no-contract", "a module in the contract scope carries no contract"),
         ("no-scenario", "a requirement has no scenario"),
-        ("proposal-moved", "an active ticket's proposal rests on a truth that moved"),
+        ("proposal-moved", "a brewing ticket's proposal rests on a truth that moved"),
         ("rite-names-code", "a rule of work names a criterion"),
+        ("simmering-moved", "a simmering ticket's proposal rests on a truth that moved"),
         ("ticket-cycle", "tickets rely on one another in a loop"),
         ("uncovered-criterion", "no requirement names a criterion"),
         ("undeclared-kind", "a recipe is of a kind the config does not declare"),

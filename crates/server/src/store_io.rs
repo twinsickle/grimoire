@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each active or landing ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe, or a proposal or current naming a ticket that is neither active nor landing; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed, but for the text of the main line's recipes, kept as the recipe file reads."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming an active or landing ticket; replacing removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each brewing or simmering ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe, or a proposal or current naming a ticket that is neither brewing nor simmering; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed, but for the text of the main line's recipes, kept as the recipe file reads."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming a brewing or simmering ticket; replacing removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -231,8 +231,10 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
                 Ok(p) if !validate_proposal(&p).is_empty() => {
                     malformed.push(Malformed { path: rel(store_dir, &path), reason: validate_proposal(&p).iter().map(|e| format!("{}: {}", e.field, e.reason)).collect::<Vec<_>>().join("; ") })
                 }
-                // A proposal belongs to an active or landing ticket; one left behind by a ticket that is gone or closed is not read as intent.
-                Ok(p) if !active(&store, &p.ticket) => malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("names ticket `{}`, which is neither active nor landing", p.ticket) }),
+                // A proposal belongs to a brewing or simmering ticket; one left behind by a ticket that is gone or closed is not read as intent.
+                Ok(p) if !worked(&store, &p.ticket) => {
+                    malformed.push(Malformed { path: rel(store_dir, &path), reason: format!("names ticket `{}`, which is neither brewing nor simmering", p.ticket) })
+                }
                 Ok(p) => {
                     store.proposals.insert(stem, p);
                 }
@@ -261,7 +263,7 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
     if current_path.is_file() {
         match read_record::<Current>(&current_path, trim) {
             Ok(c) if !grimoire_core::store::is_slug(&c.ticket) => malformed.push(Malformed { path: CURRENT_FILE.to_string(), reason: format!("`{}` is not a ticket slug", c.ticket) }),
-            Ok(c) if !active(&store, &c.ticket) => malformed.push(Malformed { path: CURRENT_FILE.to_string(), reason: format!("names ticket `{}`, which is neither active nor landing", c.ticket) }),
+            Ok(c) if !worked(&store, &c.ticket) => malformed.push(Malformed { path: CURRENT_FILE.to_string(), reason: format!("names ticket `{}`, which is neither brewing nor simmering", c.ticket) }),
             Ok(c) => store.current = Some(c.ticket),
             Err(reason) => malformed.push(Malformed { path: CURRENT_FILE.to_string(), reason }),
         }
@@ -314,8 +316,8 @@ pub fn load(store_dir: &Path) -> Result<(Store, Vec<Malformed>), StoreIoError> {
     Ok((store, malformed))
 }
 
-/// Whether the store holds `ticket` as a ticket being worked, active or a change waiting to land: what a proposal and the current ticket must name.
-fn active(store: &Store, ticket: &str) -> bool {
+/// Whether the store holds `ticket` as a ticket being worked, brewing or a change simmering: what a proposal and the current ticket must name.
+fn worked(store: &Store, ticket: &str) -> bool {
     store.tickets.get(ticket).is_some_and(Ticket::is_worked)
 }
 
@@ -427,7 +429,7 @@ pub fn persist(store_dir: &Path, store: &Store, changed: &Changed) -> Result<(),
             let s = store.starts.get(slug).expect("a started ticket has a start");
             write_atomic(&store_dir.join(STARTS_DIR).join(format!("{slug}.json")), &to_pretty(s))
         }
-        Changed::Closed(slug) => {
+        Changed::Bottled(slug) => {
             persist(store_dir, store, &Changed::Ticket(slug.clone()))?;
             remove_if_present(&store_dir.join(STARTS_DIR).join(format!("{slug}.json")))
         }
@@ -513,13 +515,13 @@ pub fn write_all(store_dir: &Path, store: &Store, replace: bool) -> Result<(), S
     for (k, p) in &store.proposals {
         keyed("proposal", k, &p.ticket)?;
         invalid(format!("proposal {}", p.ticket), validate_proposal(p))?;
-        if !active(store, &p.ticket) {
-            return Err(StoreIoError::Invalid(format!("proposal {}", p.ticket), "names a ticket that is neither active nor landing".into()));
+        if !worked(store, &p.ticket) {
+            return Err(StoreIoError::Invalid(format!("proposal {}", p.ticket), "names a ticket that is neither brewing nor simmering".into()));
         }
     }
     if let Some(c) = &store.current {
-        if !active(store, c) {
-            return Err(StoreIoError::Invalid(CURRENT_FILE.into(), format!("names ticket `{c}`, which is neither active nor landing")));
+        if !worked(store, c) {
+            return Err(StoreIoError::Invalid(CURRENT_FILE.into(), format!("names ticket `{c}`, which is neither brewing nor simmering")));
         }
     }
     if let Some(b) = &store.baseline {
@@ -714,7 +716,7 @@ mod tests {
         b.baseline = Some(Baseline { date: "2026-09-30".into(), reason: "adopted ".into(), findings: vec![] });
         assert!(refused(&b));
         let mut st = good.clone();
-        st.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), " f".to_string())].into(), closed_in: None });
+        st.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), " f".to_string())].into(), simmering_in: None });
         assert!(refused(&st));
         let mut k = good.clone();
         k.pages.insert("other".into(), good.pages["goal"].clone());
@@ -722,13 +724,13 @@ mod tests {
         let mut v1 = good.clone();
         v1.config.version = StoreConfig::TRIMMED_ON_READ;
         assert!(refused(&v1), "version 1 is only read, never written");
-        // A proposal under another key, one that would not load, one naming a ticket that is not active, and a current ticket that is not active.
+        // A proposal under another key, one that would not load, one naming a ticket that is not brewing, and a current ticket that is not brewing.
         let active = Ticket {
             slug: "0001".into(),
             title: "T".into(),
             kind: TicketKind::Change,
             priority: Priority::Later,
-            status: Status::Active,
+            status: Status::Brewing,
             touches: vec![],
             relies_on: vec![],
             body: "b".into(),
@@ -754,23 +756,23 @@ mod tests {
         pt.proposals.insert("0001".into(), proposal("0001", "Goal"));
         assert!(refused(&pt), "no such ticket");
         let mut pc = with_ticket.clone();
-        pc.tickets.get_mut("0001").unwrap().status = Status::Open;
+        pc.tickets.get_mut("0001").unwrap().status = Status::Inscribed;
         pc.proposals.insert("0001".into(), proposal("0001", "Goal"));
-        assert!(refused(&pc), "not active");
-        // A landing ticket keeps its proposal and stays current, so both are written for one.
-        let mut landing = with_ticket.clone();
-        let t = landing.tickets.get_mut("0001").unwrap();
-        t.status = Status::Landing;
+        assert!(refused(&pc), "not brewing");
+        // A simmering ticket keeps its proposal and stays current, so both are written for one.
+        let mut bottling = with_ticket.clone();
+        let t = bottling.tickets.get_mut("0001").unwrap();
+        t.status = Status::Simmering;
         t.decision = Some(grimoire_core::model::Decision::new("2026-10-03", "Done."));
-        landing.proposals.insert("0001".into(), proposal("0001", "Goal"));
-        landing.current = Some("0001".into());
-        assert!(!refused(&landing), "a landing ticket is written with its proposal");
+        bottling.proposals.insert("0001".into(), proposal("0001", "Goal"));
+        bottling.current = Some("0001".into());
+        assert!(!refused(&bottling), "a simmering ticket is written with its proposal");
         let mut cu = good.clone();
         cu.current = Some("0001".into());
         assert!(refused(&cu), "no such ticket is current");
         // Replacing writes the starts, proposals, current ticket and baseline given, and leaves none of the old store's behind.
         let mut full = with_ticket.clone();
-        full.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), "f".to_string())].into(), closed_in: None });
+        full.starts.insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:goal".to_string(), "f".to_string())].into(), simmering_in: None });
         full.proposals.insert("0001".into(), proposal("0001", "Goal"));
         full.current = Some("0001".into());
         full.baseline = Some(Baseline { date: "2026-09-30".into(), reason: "adopted".into(), findings: vec![] });
@@ -819,9 +821,10 @@ mod tests {
         store.tickets.insert(ticket.slug.clone(), ticket);
         store.baseline =
             Some(serde_json::from_value(serde_json::json!({"date": "2026-09-30", "reason": "r", "findings": [{"rule": "uncovered", "check": "no-requirement", "ref": "page:vision"}]})).unwrap());
-        store
-            .starts
-            .insert("0001".into(), Start { ticket: "0001".into(), fingerprints: [("page:vision".to_string(), "f".to_string()), ("page:goal".to_string(), "g".to_string())].into(), closed_in: None });
+        store.starts.insert(
+            "0001".into(),
+            Start { ticket: "0001".into(), fingerprints: [("page:vision".to_string(), "f".to_string()), ("page:goal".to_string(), "g".to_string())].into(), simmering_in: None },
+        );
         // The ticket's proposal holds a changed vision resting on the truth's, and a new page linking both the old and the new slug.
         let base = grimoire_core::fingerprint::of_record(&store.pages["vision"]);
         store.proposals.insert(
@@ -952,7 +955,7 @@ mod tests {
         // persist a delete
         persist(dir, &loaded, &Changed::Deleted(Reference::page("overview"))).unwrap();
         assert!(!dir.join("pages").join("overview.json").exists());
-        // A proposal and the current ticket round-trip for an active ticket, and are malformed when they name none.
+        // A proposal and the current ticket round-trip for a brewing ticket, and are malformed when they name none.
         let mut store = loaded.clone();
         store.tickets.insert(
             "0001".into(),
@@ -961,7 +964,7 @@ mod tests {
                 title: "T".into(),
                 kind: TicketKind::Change,
                 priority: Priority::Later,
-                status: Status::Active,
+                status: Status::Brewing,
                 touches: vec![],
                 relies_on: vec![],
                 body: "b".into(),
@@ -990,9 +993,9 @@ mod tests {
         let (back, malformed) = load(dir).unwrap();
         assert!(back.proposals.len() == 1 && back.current.is_none());
         let reasons: Vec<(&str, &str)> = malformed.iter().map(|m| (m.path.as_str(), m.reason.as_str())).collect();
-        assert!(reasons.iter().any(|(p, r)| *p == "proposals/0002.json" && r.contains("neither active nor landing")), "{reasons:?}");
+        assert!(reasons.iter().any(|(p, r)| *p == "proposals/0002.json" && r.contains("neither brewing nor simmering")), "{reasons:?}");
         assert!(reasons.iter().any(|(p, _)| *p == "proposals/0003.json"), "{reasons:?}");
-        assert!(reasons.iter().any(|(p, r)| *p == CURRENT_FILE && r.contains("neither active nor landing")), "{reasons:?}");
+        assert!(reasons.iter().any(|(p, r)| *p == CURRENT_FILE && r.contains("neither brewing nor simmering")), "{reasons:?}");
         // Deleting a ticket takes its start and proposal files; a removed proposal or current is removed from disk.
         std::fs::create_dir_all(dir.join(STARTS_DIR)).unwrap();
         std::fs::write(dir.join(STARTS_DIR).join("0001.json"), r#"{"ticket":"0001","fingerprints":{}}"#).unwrap();
@@ -1122,7 +1125,7 @@ mod tests {
                 title: "T".into(),
                 kind: TicketKind::Change,
                 priority: Priority::Next,
-                status: Status::Open,
+                status: Status::Inscribed,
                 touches: vec![],
                 relies_on: vec![],
                 body: "Do it.".into(),
@@ -1316,28 +1319,28 @@ mod tests {
                 title: "T".into(),
                 kind: TicketKind::Change,
                 priority: Priority::Next,
-                status: Status::Active,
+                status: Status::Brewing,
                 touches: vec![],
                 relies_on: vec![],
                 body: "b".into(),
                 decision: None,
             },
         );
-        store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect(), closed_in: None });
+        store.starts.insert("0040".into(), Start { ticket: "0040".into(), fingerprints: [("page:a".to_string(), "1".to_string())].into_iter().collect(), simmering_in: None });
         write_all(dir, &store, false).unwrap();
         persist(dir, &store, &Changed::Started("0040".into())).unwrap();
         let text = std::fs::read_to_string(dir.join(STARTS_DIR).join("0040.json")).unwrap();
         assert!(!text.contains("date"), "a start carries no date");
-        assert!(!text.contains("closed_in"), "only a start closed when: landed names its checkout");
+        assert!(!text.contains("simmering_in"), "only a start closed when: bottled names its checkout");
         let (loaded, malformed) = load(dir).unwrap();
         assert!(malformed.is_empty(), "{malformed:?}");
         assert_eq!(loaded.starts, store.starts);
-        // Closed to wait for its landing, it names the checkout it was closed in, and reads back so.
-        store.starts.get_mut("0040").unwrap().closed_in = Some("C:/repo".into());
+        // Closed to wait for its bottling, it names the checkout it was bottled in, and reads back so.
+        store.starts.get_mut("0040").unwrap().simmering_in = Some("C:/repo".into());
         persist(dir, &store, &Changed::Started("0040".into())).unwrap();
         assert_eq!(load(dir).unwrap().0.starts, store.starts);
         store.starts.remove("0040");
-        persist(dir, &store, &Changed::Closed("0040".into())).unwrap();
+        persist(dir, &store, &Changed::Bottled("0040".into())).unwrap();
         assert!(!dir.join(STARTS_DIR).join("0040.json").exists());
     }
 

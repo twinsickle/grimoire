@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not closed, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a closed one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid; its body is edited in part as BodyEdit does: replace swaps the one passage old for new, refused as invalid when old is empty, absent or present more than once, saying which and how many times, append adds its text after the body's trailing whitespace is dropped and a blank line, or alone on an empty body, the replace applied first, and either given beside a whole body is invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not closed, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a closed ticket and a gap or question waiting, landing, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not bottled, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a bottled one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-is-partial","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid; its body is edited in part as BodyEdit does: replace swaps the one passage old for new, refused as invalid when old is empty, absent or present more than once, saying which and how many times, append adds its text after the body's trailing whitespace is dropped and a blank line, or alone on an empty body, the replace applied first, and either given beside a whole body is invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not bottled, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a bottled ticket and a gap or question waiting, simmering, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -84,8 +84,8 @@ pub enum Changed {
     Config,
     /// A ticket started: its record and its snapshot.
     Started(String),
-    /// A ticket closed: its record, and its snapshot removed.
-    Closed(String),
+    /// A ticket bottled: its record, and its snapshot removed.
+    Bottled(String),
     /// A ticket's proposal changed: written as it now is, or removed when the
     /// store no longer holds one for the ticket.
     Proposed(String),
@@ -182,14 +182,14 @@ pub fn configure(store: &mut Store, change: ConfigChange, supported: &[String]) 
 }
 
 /// Replace one band's order with `order`, every entry a ticket of that
-/// priority that is not closed, named once.
+/// priority that is not bottled, named once.
 pub fn reorder(store: &mut Store, priority: Priority, order: &[Reference]) -> Result<(Vec<String>, Changed), ToolError> {
     let mut errors = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for r in order {
-        let ok = r.kind == Kind::Ticket && store.tickets.get(&r.id).is_some_and(|t| t.status != Status::Closed && t.priority == priority);
+        let ok = r.kind == Kind::Ticket && store.tickets.get(&r.id).is_some_and(|t| t.status != Status::Bottled && t.priority == priority);
         if !ok {
-            errors.push(FieldError::new("order", format!("{r} is not a {} ticket that is still open, active or landing", format!("{priority:?}").to_lowercase())));
+            errors.push(FieldError::new("order", format!("{r} is not a {} ticket that is still inscribed, brewing or simmering", format!("{priority:?}").to_lowercase())));
         } else if !seen.insert(&r.id) {
             errors.push(FieldError::new("order", format!("{r} is named twice")));
         }
@@ -210,11 +210,11 @@ pub fn adopt(store: &mut Store, findings: Vec<FindingKey>, reason: String, date:
 }
 
 /// Record a judgement of a recipe: appended to its judgements, made in a ticket the store holds and
-/// that is not closed (req:tool-judge-recipe).
+/// that is not bottled (req:tool-judge-recipe).
 pub fn judge(store: &mut Store, judgement: Judgement) -> Result<(Judgement, Changed), ToolError> {
     match store.tickets.get(&judgement.ticket) {
         None => return Err(ToolError::not_found(&Reference::ticket(&judgement.ticket))),
-        Some(t) if t.status == Status::Closed => return Err(ToolError::conflict(format!("ticket:{} is closed: a recipe is judged in a ticket that is not closed", judgement.ticket))),
+        Some(t) if t.status == Status::Bottled => return Err(ToolError::conflict(format!("ticket:{} is bottled: a recipe is judged in a ticket that is not bottled", judgement.ticket))),
         Some(_) => {}
     }
     let recipe = judgement.recipe.clone();
@@ -344,17 +344,17 @@ pub fn put_requirement(store: &mut Store, mut req: Requirement) -> Result<(Requi
 }
 
 pub fn delete_node(store: &mut Store, r: &Reference) -> Result<Changed, ToolError> {
-    // Decisions are history: a decided requirement is retired, and a closed ticket stays.
+    // Decisions are history: a decided requirement is retired, and a bottled ticket stays.
     match r.kind {
         Kind::Req if store.requirements.get(&r.id).is_some_and(|q| !q.decisions.is_empty()) => {
             return Err(ToolError::invalid(format!("{r} has decisions, which are never removed; retire it with retire_node instead"), vec![]));
         }
-        Kind::Ticket if store.tickets.get(&r.id).is_some_and(|t| t.status == Status::Closed) => {
-            return Err(ToolError::invalid(format!("{r} is closed: a closed ticket is history, already off the board and the lints, and is not deleted"), vec![]));
+        Kind::Ticket if store.tickets.get(&r.id).is_some_and(|t| t.status == Status::Bottled) => {
+            return Err(ToolError::invalid(format!("{r} is bottled: a bottled ticket is history, already off the board and the lints, and is not deleted"), vec![]));
         }
         // An answer waiting for its change carries the person's decision: it closes or reopens with that change.
-        Kind::Ticket if store.tickets.get(&r.id).is_some_and(|t| t.kind != TicketKind::Change && t.status == Status::Landing) => {
-            return Err(ToolError::invalid(format!("{r} is an answer waiting for the change that applies it, and carries the person's decision: it closes when that change lands, or reopens if the change goes away, and is not deleted"), vec![]));
+        Kind::Ticket if store.tickets.get(&r.id).is_some_and(|t| t.kind != TicketKind::Change && t.status == Status::Simmering) => {
+            return Err(ToolError::invalid(format!("{r} is an answer waiting for the change that applies it, and carries the person's decision: it closes when that change is bottled, or reopens if the change goes away, and is not deleted"), vec![]));
         }
         _ => {}
     }
@@ -496,13 +496,13 @@ mod tests {
         assert_eq!(delete_node(&mut s, &Reference::module("src/a/ready")).unwrap_err().code(), "invalid");
         assert!(delete_node(&mut s, &Reference::page("orphan")).is_ok());
         assert_eq!(delete_node(&mut s, &Reference::page("orphan")).unwrap_err().code(), "not_found");
-        // A requirement with decisions is retired instead, and a closed ticket stays.
+        // A requirement with decisions is retired instead, and a bottled ticket stays.
         let e = delete_node(&mut s, &Reference::req("ready-only-with-commit")).unwrap_err();
         assert!(e.code() == "invalid" && e.to_string().contains("retire_node"), "{e}");
         assert!(s.requirements.contains_key("ready-only-with-commit"));
         assert_eq!(delete_node(&mut s, &Reference::ticket("old")).unwrap_err().code(), "invalid");
         assert!(s.tickets.contains_key("old"));
         assert!(delete_node(&mut s, &Reference::req("stale")).is_ok(), "a requirement with no decision can go");
-        assert!(delete_node(&mut s, &Reference::ticket("later-1")).is_ok(), "an active ticket can go");
+        assert!(delete_node(&mut s, &Reference::ticket("later-1")).is_ok(), "a brewing ticket can go");
     }
 }

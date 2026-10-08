@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Judge a checkout's code against its grimoire for a hook or a pipeline, and land the ticket a change carried: check and land, which share how a store is judged and its baseline pruned.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; beside each finding it prints every change still waiting to land from this checkout that the lint answer's mended says would mend it, the finding still failing; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither active nor landing, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then sends the server the recipes that code reads with send_recipes, and prints the findings of the intent and code that prune judged, as check does, says how many entries went and how many recipes the server holds, on standard error under --json, or as a warning on standard error why the recipes were not taken; it exits non-zero when there are new findings or the prune failed, never because the recipes were not taken; on a store of the project's own it does what check does."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"check-omens","statement":"check prints each omen after the findings and before the advisories, then a line counting them and saying they do not fail the check, exits non-zero for none of them, and under --json answers them as omens."},{"id":"land","statement":"land runs land_ticket for the ticket it is given, or with none for the current ticket when that one is landing; it prints what landed or that no ticket was waiting, or on a project that names a server and with no ticket given that a ticket lands on the main line, names the tickets still landing; on a project that names a server, once a ticket it named has landed, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went, then sends the server the recipes that code reads with send_recipes, whatever the prune came to, saying how many the server holds or, as a warning on standard error, why they were not taken; it exits non-zero when a landing was refused, when a landing taken on a team could not then prune, saying the ticket landed, printing the records that moved, or when the store cannot be reached, never because no ticket was waiting."}]}
+//! {"purpose":"Judge a checkout's code against its grimoire for a hook or a pipeline, and bottle the ticket a change carried: check and bottle, which share how a store is judged and its baseline pruned.","criteria":[{"id":"check-without-daemon","statement":"The check command runs the lints without a daemon, for hooks and CI, over the store as the checkout it runs in sees it, exits non-zero only when there are findings outside the baseline, and prunes the baseline itself when no daemon serves the store, but never on a project that names a server, nor from a checkout of a store of its own other than its main one; a command run in another checkout of a store of its own adds it to the store's checkouts when it is not one yet."},{"id":"check-own-work","statement":"check, with neither --ticket nor --main-line, gives the state the code of the checkout's base, the merge base of HEAD with the main line, when there is one, so it fails only on findings outside the baseline that its own work causes; beside each finding it prints every change still waiting to be bottled from this checkout that the lint answer's mended says would mend it, the finding still failing; it prints after the findings each advisory, what other work causes, under the work it comes from, the main line since the base or a ticket by id and title, saying they do not fail the check, and under --json answers them as `advisories`; with --ticket or --main-line it takes no base."},{"id":"check-names-a-ticket","statement":"check with --ticket judges the code against the truth plus that ticket's proposal in place of the current ticket's, a slug or a ticket: reference, and fails with the reason when the ticket does not exist or is neither brewing nor simmering, or, on a project that names a server, when the server's intent cannot be read as it is now; without it, against the current ticket's proposal, or the truth when there is no current ticket."},{"id":"check-main-line","statement":"check with --main-line judges the code against the truth whatever the current ticket, and is refused beside --ticket; on a project that names a server it prunes the server's baseline with prune_from_main_line, which reads the server's intent as it is now, never the checkout's copy, then sends the server the recipes that code reads with send_recipes, and prints the findings of the intent and code that prune judged, as check does, says how many entries went and how many recipes the server holds, on standard error under --json, or as a warning on standard error why the recipes were not taken; it exits non-zero when there are new findings or the prune failed, never because the recipes were not taken; on a store of the project's own it does what check does."},{"id":"unsupported-first","statement":"check prints a finding that the build cannot extract a configured language before every other line, baselined or not, so the reason an old binary fails is the first thing read."},{"id":"check-omens","statement":"check prints each omen after the findings and before the advisories, then a line counting them and saying they do not fail the check, exits non-zero for none of them, and under --json answers them as omens."},{"id":"bottle","statement":"bottle, and land, its name before it was bottle, which no help lists, runs bottle_ticket for the ticket it is given, or with none for the current ticket when that one is simmering; it prints what was bottled or that no ticket was simmering, or on a project that names a server and with no ticket given that a ticket is bottled on the main line, names the tickets still simmering; on a project that names a server, once a ticket it named has been bottled, it prunes the server's baseline from the checkout's code against the truth as it is now, with prune_from_main_line, and says how many entries went, then sends the server the recipes that code reads with send_recipes, whatever the prune came to, saying how many the server holds or, as a warning on standard error, why they were not taken; it exits non-zero when a bottling was refused, when a bottling taken on a team could not then prune, saying the ticket was bottled, printing the records that moved, or when the store cannot be reached, never because no ticket was simmering."}]}
 //! ```
 
 use anyhow::{bail, Context};
@@ -61,7 +61,7 @@ pub(crate) fn check(target: Target, rules: Vec<String>, json: bool, ticket: Opti
             loaded
         }
     };
-    // A branch is judged by its own work: what landed on the main line since it was cut is shown,
+    // A branch is judged by its own work: what reached the main line since it was cut is shown,
     // not failed (req:check-own-work). A pipeline's gates on the main line take no base.
     if ticket.is_none() && !main_line {
         if let Err(e) = grimoire_server::base::give(&mut loaded.state, &loaded.repo) {
@@ -75,7 +75,7 @@ pub(crate) fn check(target: Target, rules: Vec<String>, json: bool, ticket: Opti
         rules.iter().map(|r| serde_json::from_value(serde_json::Value::String(r.clone())).with_context(|| format!("unknown rule `{r}`"))).collect::<anyhow::Result<_>>()?
     };
     // On a branch the current ticket is the branch; its proposal is the intent the code is judged against.
-    // A pipeline has no current ticket and names the one it checks, as it names the one it lands.
+    // A pipeline has no current ticket and names the one it checks, as it names the one it bottles.
     // The main line is judged against the truth, whatever ticket this checkout is working.
     let judged = match &ticket {
         Some(t) => Some(t.trim().strip_prefix("ticket:").unwrap_or(t.trim()).to_string()),
@@ -137,7 +137,7 @@ pub(crate) fn check(target: Target, rules: Vec<String>, json: bool, ticket: Opti
 }
 
 /// What sending the main line's recipes came to: said, never failing, since the site's catalog is a
-/// published snapshot the next landing or main-line check sends again (req:recipe-main-line-snapshot).
+/// published snapshot the next bottling or main-line check sends again (req:recipe-main-line-snapshot).
 fn say_sent(sent: anyhow::Result<u64>, json: bool) {
     match sent {
         Ok(held) if json => eprintln!("sent the server the main line's recipes: it holds {held}"),
@@ -158,10 +158,10 @@ fn print_omens(omens: &[grimoire_core::lint::Omen]) {
 }
 
 /// Beside a finding, each change this checkout still carries that would mend it: it still fails,
-/// since a branch holds one ticket until it lands (req:check-own-work).
+/// since a branch holds one ticket until it is bottled (req:check-own-work).
 fn print_mended(mended: &[grimoire_core::advisories::Mended], f: &lint::Finding) {
     for m in mended.iter().filter(|m| m.finding == f.key()) {
-        println!("            ticket:{} ({}) would mend this: it is still waiting to land from this checkout; land it first", m.ticket, m.title);
+        println!("            ticket:{} ({}) would mend this: it is still simmering from this checkout; bottle it first", m.ticket, m.title);
     }
 }
 
@@ -179,8 +179,8 @@ fn print_advisories(advisories: &[grimoire_core::advisories::Advisory]) {
     }
     for work in from {
         match work {
-            OtherWork::SinceBase => println!("may conflict, landed on the main line since this branch's base (merge the main line):"),
-            OtherWork::Ticket { ticket, title } => println!("may conflict, ticket:{ticket} ({title}) would bring when it lands:"),
+            OtherWork::SinceBase => println!("may conflict, reached the main line since this branch's base (merge the main line):"),
+            OtherWork::Ticket { ticket, title } => println!("may conflict, ticket:{ticket} ({title}) would bring when it is bottled:"),
         }
         for f in advisories.iter().filter(|a| &a.from == work).map(|a| &a.finding) {
             println!("  {:<11} {}  {}", f.rule.name(), f.r#ref, f.reason);
@@ -189,22 +189,22 @@ fn print_advisories(advisories: &[grimoire_core::advisories::Advisory]) {
     println!("{} advisory(ies) from other work; they do not fail the check", advisories.len());
 }
 
-/// Land a ticket and say what happened, for the post-commit hook and for a
-/// pipeline. A commit with no ticket waiting on it is ordinary and exits 0;
-/// a landing that was refused exits 1, and so does a store that cannot be
+/// Bottle a ticket and say what happened, for the post-commit hook and for a
+/// pipeline. A commit with no ticket simmering on it is ordinary and exits 0;
+/// a bottling that was refused exits 1, and so does a store that cannot be
 /// reached, which a pipeline must hear of and a post-commit hook cannot act on.
-pub(crate) fn land(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> {
+pub(crate) fn bottle(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> {
     let input = match ticket {
         Some(t) => json!({ "ref": format!("ticket:{}", t.strip_prefix("ticket:").unwrap_or(t)) }),
         None => json!({}),
     };
-    match run_tool(target, "land_ticket", input, None)? {
+    match run_tool(target, "bottle_ticket", input, None)? {
         Ok(out) => {
             if let Some(note) = out["note"].as_str() {
-                // On a team a commit on a machine is not the main line: nothing lands here unnamed.
-                println!("nothing landed: {note}");
-            } else if out["landed"].as_bool() == Some(true) {
-                println!("landed {}: {}", out["node"]["ref"].as_str().unwrap_or("the ticket"), out["node"]["title"].as_str().unwrap_or(""));
+                // On a team a commit on a machine is not the main line: nothing is bottled here unnamed.
+                println!("nothing bottled: {note}");
+            } else if out["bottled"].as_bool() == Some(true) {
+                println!("bottled {}: {}", out["node"]["ref"].as_str().unwrap_or("the ticket"), out["node"]["title"].as_str().unwrap_or(""));
                 let new = out["findings"].as_array().map_or(0, Vec::len);
                 if new > 0 {
                     println!("{new} new finding(s) on what it touched; run `grimoire check`");
@@ -214,13 +214,13 @@ pub(crate) fn land(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> 
                 if !untouched.is_empty() {
                     println!("touched but never changed: {}", untouched.join(", "));
                 }
-                // On a team a ticket lands by name on the main line, which then tells the server what is fixed,
+                // On a team a ticket is bottled by name on the main line, which then tells the server what is fixed,
                 // against the truth with the ticket applied. A store of the project's own was pruned by the write.
                 if let Some(team) = &target.team {
                     let (server, mut line) = match team.server().and_then(|server| team::prune_from_main_line(team, &server).map(|line| (server, line))) {
                         Ok(read) => read,
                         Err(e) => {
-                            eprintln!("the ticket landed, but {e}");
+                            eprintln!("the ticket was bottled, but {e}");
                             std::process::exit(1)
                         }
                     };
@@ -232,7 +232,7 @@ pub(crate) fn land(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> 
                             false
                         }
                         Err(e) => {
-                            eprintln!("the ticket landed, but {e}");
+                            eprintln!("the ticket was bottled, but {e}");
                             true
                         }
                     };
@@ -242,16 +242,16 @@ pub(crate) fn land(target: &Target, ticket: Option<&str>) -> anyhow::Result<()> 
                     }
                 }
             } else {
-                println!("no ticket was waiting to land");
+                println!("no ticket was simmering");
             }
             let waiting: Vec<String> = out["waiting"].as_array().into_iter().flatten().map(|w| format!("{} ({})", w["ref"].as_str().unwrap_or("?"), w["title"].as_str().unwrap_or(""))).collect();
             if !waiting.is_empty() {
-                println!("still waiting to land: {}; land one with `grimoire land <ticket>`", waiting.join(", "));
+                println!("still simmering: {}; bottle one with `grimoire bottle <ticket>`", waiting.join(", "));
             }
             Ok(())
         }
         Err(e) => {
-            eprintln!("landing refused: {}", e["message"].as_str().unwrap_or("unknown error"));
+            eprintln!("bottling refused: {}", e["message"].as_str().unwrap_or("unknown error"));
             for d in e["details"].as_array().into_iter().flatten() {
                 eprintln!("  {}: {}", d["field"].as_str().unwrap_or("?"), d["reason"].as_str().unwrap_or(""));
             }

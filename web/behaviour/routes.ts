@@ -26,15 +26,15 @@ export const ROUTES: Route[] = [
   // The header's pill opened: the project's checkouts, the finding counts and the way to every project.
   { name: "header-open", path: `${repo}/cauldron`, content: "section[id^='band-']", press: "header button[aria-label^='Where you are']", mask: ["[data-checked-out]"] },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
-  // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
+  // A requirement the simmering ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
   { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "[aria-label='Trouble here'] [data-mark-line='conflict']" },
   // A requirement with a new finding: said under its title, and its box in the graph marked.
   { name: "node-requirement-marked", path: node("req:ready-names-its-errors"), content: "section[aria-label='Graph'] [data-marks]" },
   { name: "node-ticket", path: node("ticket:0006"), content: "section[aria-label='Graph']" },
-  // A closed ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
-  { name: "node-ticket-closed", path: node("ticket:0004"), content: "section[aria-label='Graph']" },
-  // A landing ticket: its decision written, its change yet to land.
-  { name: "node-ticket-landing", path: node("ticket:0011"), content: "section[aria-label='Graph']", mask: ["[data-checked-out]"] },
+  // A bottled ticket touching a requirement and relying on a page that no longer exist, so the mark for them is seen.
+  { name: "node-ticket-bottled", path: node("ticket:0004"), content: "section[aria-label='Graph']" },
+  // A simmering ticket: its decision written, its change yet to be bottled.
+  { name: "node-ticket-simmering", path: node("ticket:0011"), content: "section[aria-label='Graph']", mask: ["[data-checked-out]"] },
   { name: "node-module", path: node("module:src/ready"), content: "h1" },
   // A module the scope leaves out, with no contract: said quietly, never as an error.
   { name: "node-module-outside-scope", path: node("module:src/generated"), content: "[data-contract-scope='outside']" },

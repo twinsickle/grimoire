@@ -133,7 +133,7 @@ fn mend(malformed: &[grimoire_core::Malformed], new: &Store) -> Vec<Changed> {
             (dir, s) if dir == store_io::PROPOSALS_DIR => Changed::Proposed(s.to_string()),
             (dir, s) if dir == store_io::JUDGEMENTS_DIR => Changed::Judged(s.to_string()),
             (dir, s) if dir == store_io::STARTS_DIR && new.starts.contains_key(s) && new.tickets.contains_key(s) => Changed::Started(s.to_string()),
-            (dir, s) if dir == store_io::STARTS_DIR && new.tickets.contains_key(s) => Changed::Closed(s.to_string()),
+            (dir, s) if dir == store_io::STARTS_DIR && new.tickets.contains_key(s) => Changed::Bottled(s.to_string()),
             // A start with no ticket: its file goes as a deleted ticket's does.
             (dir, s) if dir == store_io::STARTS_DIR => Changed::Deleted(Reference::ticket(s)),
             _ => continue,

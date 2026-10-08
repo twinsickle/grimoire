@@ -14,7 +14,7 @@ pub const ROOT_SLUG: &str = "overview";
 pub const ARCHITECTURE_SLUG: &str = "architecture";
 /// The rites root, the second of the two roots every grimoire has, and what it says until someone writes it.
 pub const RITES_SLUG: &str = "rites";
-pub const RITES_PROMPT: &str = "How this project's code is developed: the practices its work follows the same way every time, so that each piece of it can be judged before it lands. The grimoire beside it says what the project is and must do; this says how its people work on it. A requirement here is held by the work, which each ticket's closing decision shows, not by the code; put a rule of work here, through a ticket, rather than in an agent's own guidance file.";
+pub const RITES_PROMPT: &str = "How this project's code is developed: the practices its work follows the same way every time, so that each piece of it can be judged before it is bottled. The grimoire beside it says what the project is and must do; this says how its people work on it. A requirement here is held by the work, which each ticket's closing decision shows, not by the code; put a rule of work here, through a ticket, rather than in an agent's own guidance file.";
 /// The first page under the rites, and what it says until someone writes it.
 pub const CONVENTIONS: (&str, &str, &str) = ("conventions", "Conventions", "How things are written here: naming, the shape of pages and decisions, how contracts are written, commits, code style. Breaking one is inconsistent, not wrong. A convention a tool checks stays here, held by its gate; a rule about what the code must do or how it is built belongs in the grimoire, under constraints when it holds whichever part is changed.");
 

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is closed and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and the modules it represents, an ingredient to its recipe, and a decision to its requirement."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a decision its date and text, a gap or question that is landing its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"recipes-resting","statement":"recipes_over gives the recipes a change to a node can break: a recipe itself, an ingredient's recipe, the recipes a requirement or page names, and for a module, or the module of a file or criterion, the recipes representing it or a module importing it, however far up through imports alone, never through what it imports or through the requirements, tests and pages above it; then every recipe using one of those, however far up. recipes_resting gives, for the given nodes, every recipe recipes_over one of them gives, each once, in reference order, with its title, whether it is due and the first given node it was reached from; an ingredient is not a recipe, and a node the graph does not hold reaches none."},{"id":"assumptions","statement":"assumptions parts a rests_on walk into the nodes kept in full, every node at distance one, every requirement and every node carrying a decision in force, in the walk's order, and the references of the rest, in the walk's order."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, a requirement's decisions left out since they are read through it, and a recipe or its ingredient only when the recipe is one recipes_over the node gives, nothing being reached through one left out, and separately the tickets not closed whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is bottled and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and the modules it represents, an ingredient to its recipe, and a decision to its requirement."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a decision its date and text, a gap or question that is simmering its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"recipes-resting","statement":"recipes_over gives the recipes a change to a node can break: a recipe itself, an ingredient's recipe, the recipes a requirement or page names, and for a module, or the module of a file or criterion, the recipes representing it or a module importing it, however far up through imports alone, never through what it imports or through the requirements, tests and pages above it; then every recipe using one of those, however far up. recipes_resting gives, for the given nodes, every recipe recipes_over one of them gives, each once, in reference order, with its title, whether it is due and the first given node it was reached from; an ingredient is not a recipe, and a node the graph does not hold reaches none."},{"id":"assumptions","statement":"assumptions parts a rests_on walk into the nodes kept in full, every node at distance one, every requirement and every node carrying a decision in force, in the walk's order, and the references of the rest, in the walk's order."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, a requirement's decisions left out since they are read through it, and a recipe or its ingredient only when the recipe is one recipes_over the node gives, nothing being reached through one left out, and separately the tickets not bottled whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -54,7 +54,7 @@ fn says_of(g: &Graph, r: &Reference) -> Option<String> {
             Some(out)
         }
         Node::Decision(d) => Some(format!("Decided {}: {}", d.date, d.text)),
-        Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Landing => {
+        Node::Ticket(t) if t.kind != TicketKind::Change && t.status == Status::Simmering => {
             t.decision.as_ref().map(|d| format!("Answered {}, waiting for the change that applies it: {}", d.date, d.text))
         }
         _ => None,
@@ -95,18 +95,18 @@ pub fn absent_title(g: &Graph, r: &Reference) -> String {
 }
 
 /// The decisions a reached node contributes: a requirement's, newest first,
-/// or a closed ticket's.
+/// or a bottled ticket's.
 fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
     match g.get(r) {
         // Only what is in force: a superseded decision no longer says why.
         Some(Node::Req(q)) => {
-            // Newest first; decisions of one day in the order they landed, the later first.
+            // Newest first; decisions of one day in the order they were bottled, the later first.
             let mut d: Vec<Decision> = q.in_force().into_iter().rev().cloned().collect();
             d.sort_by(|a, b| b.date.cmp(&a.date));
             d
         }
-        // A landing ticket carries a decision already written; nothing is decided until it lands.
-        Some(Node::Ticket(t)) if t.status == Status::Closed => t.decision.iter().cloned().collect(),
+        // A simmering ticket carries a decision already written; nothing is decided until it is bottled.
+        Some(Node::Ticket(t)) if t.status == Status::Bottled => t.decision.iter().cloned().collect(),
         _ => Vec::new(),
     }
 }
@@ -226,7 +226,7 @@ pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
             queue.push_back(e.from.clone());
         }
     }
-    let mut tickets: Vec<&Ticket> = g.tickets().filter(|t| t.status != Status::Closed).filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x))).collect();
+    let mut tickets: Vec<&Ticket> = g.tickets().filter(|t| t.status != Status::Bottled).filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x))).collect();
     tickets.sort_by(|a, b| a.slug.cmp(&b.slug));
     RestsOnMe { nodes, tickets: tickets.into_iter().map(ticket_summary).collect() }
 }
@@ -316,7 +316,7 @@ pub fn recipes_resting(g: &Graph, nodes: &[Reference]) -> Vec<RecipeState> {
     out.into_values().collect()
 }
 
-/// What start_ticket answers of its walk: in full the assumptions to challenge, every node the start
+/// What brew_ticket answers of its walk: in full the assumptions to challenge, every node the start
 /// names directly, every requirement and every node carrying a decision in force; and the rest, by
 /// reference alone, in the walk's order.
 pub fn assumptions(walk: Vec<RestsOn>) -> (Vec<RestsOn>, Vec<Reference>) {
@@ -360,14 +360,14 @@ mod tests {
     #[test]
     fn rests_on_is_bounded_at_tickets_and_pages() {
         let mut store = crate::graph::fixtures::store();
-        // A ticket relying on the closed ticket `old` (which touches a missing page)
+        // A ticket relying on the bottled ticket `old` (which touches a missing page)
         // and on the root page, which links to the whole grimoire.
-        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Open, &[], &["ticket:old", "page:overview"]);
+        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Inscribed, &[], &["ticket:old", "page:overview"]);
         store.tickets.insert(t.slug.clone(), t);
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::ticket("new"), None);
         let refs: Vec<String> = r.iter().map(|x| x.r#ref.to_string()).collect();
-        // The closed ticket is present with its decision and was not expanded.
+        // The bottled ticket is present with its decision and was not expanded.
         let old = r.iter().find(|x| x.r#ref == Reference::ticket("old")).unwrap();
         assert_eq!(old.decisions.len(), 1);
         assert!(!refs.contains(&"page:renamed-away".to_string()));
@@ -437,18 +437,18 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-landing-tickets-decision-is-not-yet-decided", "checks": ["crates/core/src/query/walks#bounded-walk"]}
+    /// {"test": "a-simmering-tickets-decision-is-not-yet-decided", "checks": ["crates/core/src/query/walks#bounded-walk"]}
     /// ```
     #[test]
-    fn a_landing_tickets_decision_is_not_yet_decided() {
+    fn a_simmering_tickets_decision_is_not_yet_decided() {
         let mut store = crate::graph::fixtures::store();
-        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Landing, &[], &[]));
-        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Open, &[], &["ticket:waits", "ticket:old"]);
+        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Simmering, &[], &[]));
+        let t = crate::graph::fixtures::ticket("new", TicketKind::Change, Priority::Next, Status::Inscribed, &[], &["ticket:waits", "ticket:old"]);
         store.tickets.insert(t.slug.clone(), t);
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::ticket("new"), None);
         let decisions = |slug: &str| r.iter().find(|x| x.r#ref == Reference::ticket(slug)).unwrap().decisions.len();
-        assert_eq!((decisions("waits"), decisions("old")), (0, 1), "a decision written is not one in force until the change lands");
+        assert_eq!((decisions("waits"), decisions("old")), (0, 1), "a decision written is not one in force until the change is bottled");
     }
 
     /// # Test contract
@@ -477,27 +477,27 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "what-the-start-names-says-what-it-says", "checks": ["crates/core/src/query/walks#says-direct", "crates/core/src/query/walks#bounded-walk"]}
+    /// {"test": "what-the-brew-names-says-what-it-says", "checks": ["crates/core/src/query/walks#says-direct", "crates/core/src/query/walks#bounded-walk"]}
     /// ```
     #[test]
     fn what_the_start_names_says_what_it_says() {
         let mut store = crate::graph::fixtures::store();
-        // A gap answered and waiting for the change relying on it, and one still open.
-        let mut answered = crate::graph::fixtures::ticket("answered", TicketKind::Gap, Priority::Next, Status::Landing, &[], &[]);
+        // A gap answered and waiting for the change relying on it, and one still inscribed.
+        let mut answered = crate::graph::fixtures::ticket("answered", TicketKind::Gap, Priority::Next, Status::Simmering, &[], &[]);
         answered.decision = Some(Decision::new("2026-10-04", "Fix it so."));
         store.tickets.insert(answered.slug.clone(), answered);
-        store.tickets.insert("unanswered".into(), crate::graph::fixtures::ticket("unanswered", TicketKind::Gap, Priority::Next, Status::Open, &[], &[]));
+        store.tickets.insert("unanswered".into(), crate::graph::fixtures::ticket("unanswered", TicketKind::Gap, Priority::Next, Status::Inscribed, &[], &[]));
         let t = crate::graph::fixtures::ticket(
             "work",
             TicketKind::Change,
             Priority::Next,
-            Status::Open,
+            Status::Inscribed,
             &["req:ready-only-with-commit", "page:git-readiness", "module:src/a/ready"],
             &["ticket:answered", "ticket:unanswered", "ticket:old"],
         );
         store.tickets.insert(t.slug.clone(), t);
         // A ticket resting on one decision: it says its text, and leads to its requirement.
-        let on_decision = crate::graph::fixtures::ticket("on-decision", TicketKind::Change, Priority::Next, Status::Open, &[], &["req:ready-only-with-commit#d1"]);
+        let on_decision = crate::graph::fixtures::ticket("on-decision", TicketKind::Change, Priority::Next, Status::Inscribed, &[], &["req:ready-only-with-commit#d1"]);
         store.tickets.insert(on_decision.slug.clone(), on_decision);
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::ticket("work"), None);
@@ -516,7 +516,7 @@ mod tests {
         for c in &module.criteria {
             assert!(module_says.contains(&format!("- {}: {}", c.id, c.statement)), "{module_says}");
         }
-        // The answer a change applies, though not yet in force; nothing for an open gap or a closed ticket, whose decision is listed already.
+        // The answer a change applies, though not yet in force; nothing for an inscribed gap or a bottled ticket, whose decision is listed already.
         assert_eq!(says(&Reference::ticket("answered")), Some("Answered 2026-10-04, waiting for the change that applies it: Fix it so.".to_string()));
         assert_eq!(r.iter().find(|x| x.r#ref == Reference::ticket("answered")).unwrap().decisions.len(), 0);
         assert_eq!((says(&Reference::ticket("unanswered")), says(&Reference::ticket("old"))), (None, None));
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(says(&Reference::module("src/a/layout")), None);
         // Named directly but saying nothing of its own: a criterion, whose statement is its title, and a node that does not exist.
         let mut named = store.clone();
-        let t = crate::graph::fixtures::ticket("odd", TicketKind::Change, Priority::Next, Status::Open, &["criterion:src/a/ready#guarantee", "page:nowhere"], &[]);
+        let t = crate::graph::fixtures::ticket("odd", TicketKind::Change, Priority::Next, Status::Inscribed, &["criterion:src/a/ready#guarantee", "page:nowhere"], &[]);
         named.tickets.insert(t.slug.clone(), t);
         let g2 = Graph::build(&named, &crate::extraction::fixtures::extraction(), &[]);
         let r2 = rests_on(&g2, &Reference::ticket("odd"), None);
@@ -542,17 +542,17 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-landing-ticket-still-reaches-what-it-touches", "checks": ["crates/core/src/query/walks#rests-on-me"]}
+    /// {"test": "a-simmering-ticket-still-reaches-what-it-touches", "checks": ["crates/core/src/query/walks#rests-on-me"]}
     /// ```
     #[test]
-    fn a_landing_ticket_still_reaches_what_it_touches() {
+    fn a_simmering_ticket_still_reaches_what_it_touches() {
         let mut store = crate::graph::fixtures::store();
-        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Landing, &["page:orphan"], &[]));
-        store.tickets.insert("done".into(), crate::graph::fixtures::ticket("done", TicketKind::Change, Priority::Next, Status::Closed, &["page:orphan"], &[]));
+        store.tickets.insert("waits".into(), crate::graph::fixtures::ticket("waits", TicketKind::Change, Priority::Next, Status::Simmering, &["page:orphan"], &[]));
+        store.tickets.insert("done".into(), crate::graph::fixtures::ticket("done", TicketKind::Change, Priority::Next, Status::Bottled, &["page:orphan"], &[]));
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let reaching: Vec<String> = rests_on_me(&g, &Reference::page("orphan")).tickets.iter().map(|t| t.r#ref.to_string()).collect();
         assert!(reaching.contains(&"ticket:waits".to_string()), "{reaching:?}");
-        assert!(!reaching.contains(&"ticket:done".to_string()), "a closed ticket no longer reaches it: {reaching:?}");
+        assert!(!reaching.contains(&"ticket:done".to_string()), "a bottled ticket no longer reaches it: {reaching:?}");
     }
 
     /// # Test contract
@@ -632,13 +632,13 @@ mod tests {
     #[test]
     fn the_assumptions_in_full_and_the_rest_by_reference() {
         let mut store = crate::graph::fixtures::store();
-        let t = crate::graph::fixtures::ticket("work", TicketKind::Change, Priority::Next, Status::Open, &["module:src/a/ready", "page:orphan"], &["ticket:old"]);
+        let t = crate::graph::fixtures::ticket("work", TicketKind::Change, Priority::Next, Status::Inscribed, &["module:src/a/ready", "page:orphan"], &["ticket:old"]);
         store.tickets.insert(t.slug.clone(), t);
         let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
         let walk = rests_on(&g, &Reference::ticket("work"), None);
         let (kept, rest) = assumptions(walk.clone());
         let refs: Vec<String> = kept.iter().map(|x| x.r#ref.to_string()).collect();
-        // Named directly, with what each says, and the closed ticket with its decision.
+        // Named directly, with what each says, and the bottled ticket with its decision.
         assert!(refs.contains(&"module:src/a/ready".to_string()) && refs.contains(&"page:orphan".to_string()) && refs.contains(&"ticket:old".to_string()), "{refs:?}");
         // The module it imports and the criteria further away, by reference alone.
         assert!(rest.contains(&Reference::module("src/a/layout")), "{rest:?}");

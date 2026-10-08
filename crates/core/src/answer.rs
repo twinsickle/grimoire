@@ -85,7 +85,7 @@ pub enum CoverageAnswer {
     OfRequirement { criteria: Vec<CoveringCriterion> },
 }
 
-/// `related_tickets`: the open gaps and questions sharing a node with the ticket.
+/// `related_tickets`: the gaps and questions not yet bottled sharing a node with the ticket.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct TicketsAnswer {
@@ -99,7 +99,7 @@ pub struct LintAnswer {
     pub findings: Vec<Finding>,
     // What other work causes, shown apart and never counted as new (req:check-own-work).
     pub advisories: Vec<crate::advisories::Advisory>,
-    // Each finding above that a change this checkout closed `when: landed`, not landed yet, would mend; it still fails (req:check-own-work).
+    // Each finding above that a change this checkout closed `when: bottled`, not bottled yet, would mend; it still fails (req:check-own-work).
     pub mended: Vec<crate::advisories::Mended>,
     // Signs that something may be wrong, apart from the findings: never failing, never baselined (req:lint-omens).
     pub omens: Vec<crate::lint::Omen>,
@@ -212,19 +212,19 @@ pub struct Written {
     pub reprioritised: Option<Vec<Summary>>,
 }
 
-/// `start_ticket`: the ticket, what it rests on, and the gaps and questions near it.
+/// `brew_ticket`: the ticket, what it rests on, and the gaps and questions near it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct Started {
+pub struct Brewed {
     pub node: NodeView,
     // The assumptions to challenge, in full: what the ticket names directly, every requirement reached and every node carrying a decision.
     pub rests_on: Vec<RestsOn>,
-    // The rest of what it rests on, by reference alone; the rests_on tool answers the whole walk (req:tool-start-ticket).
+    // The rest of what it rests on, by reference alone; the rests_on tool answers the whole walk (req:tool-brew-ticket).
     pub reaches: Reaches,
     pub related: Vec<Summary>,
     // The recipes resting on what the ticket touches, each with whether it is due (req:recipe-in-tickets).
     pub recipes: Vec<RecipeState>,
-    // The changes this checkout closed `when: landed` that have not landed: a warning each, never a refusal (req:tool-start-ticket).
+    // The changes this checkout closed `when: bottled` that have not been bottled: a warning each, never a refusal (req:tool-brew-ticket).
     pub waiting: Vec<WaitingHere>,
     // Who has the ticket checked out now, the caller among them, and since when (req:ticket-checked-out).
     pub checked_out: Vec<crate::model::CheckedOut>,
@@ -250,7 +250,7 @@ pub struct Reaches {
     pub refs: Vec<Reference>,
 }
 
-/// A change this checkout closed `when: landed` that has not landed yet, with the warning a start here gives.
+/// A change this checkout closed `when: bottled` that has not been bottled yet, with the warning a start here gives.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct WaitingHere {
@@ -259,7 +259,7 @@ pub struct WaitingHere {
     pub warning: String,
 }
 
-/// `close_ticket`: the closed ticket, new findings on what it touched, the
+/// `close_ticket`: the bottled ticket, new findings on what it touched, the
 /// touched nodes that never changed and what changed that it never touched
 /// with the intent resting on it (each null when it was never started), the
 /// gaps and questions whose answers closed with it, and for an answer closed
@@ -275,7 +275,7 @@ pub struct Closed {
     pub settled: Vec<Summary>,
     // The recipes it reached that are due: above what it touched, or changed since it started; null with no code held.
     pub due: Option<Vec<RecipeState>>,
-    // A gap or question closed with `change`: that change, filed in the same write, as file_ticket answers it.
+    // A gap or question closed with `change`: that change, filed in the same write, as inscribe_ticket answers it.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub filed: Option<Written>,
@@ -285,12 +285,12 @@ pub struct Closed {
     pub others: Vec<Holder>,
 }
 
-/// `land_ticket`: whether a ticket landed, and when one did what its close
-/// answers; then the changes still waiting to land.
+/// `bottle_ticket`: whether a ticket was bottled, and when one was what its close
+/// answers; then the changes still simmering.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct Landed {
-    pub landed: bool,
+pub struct Bottled {
+    pub bottled: bool,
     pub node: Option<NodeView>,
     pub findings: Vec<Finding>,
     pub baselined: usize,
@@ -299,7 +299,7 @@ pub struct Landed {
     pub settled: Vec<Summary>,
     pub due: Option<Vec<RecipeState>>,
     pub waiting: Vec<Summary>,
-    // Why nothing landed, when the reason is not that no ticket was waiting.
+    // Why nothing was bottled, when the reason is not that no ticket was waiting.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub note: Option<String>,
@@ -362,7 +362,7 @@ pub struct Deleted {
     pub reopened: Option<Vec<Summary>>,
 }
 
-/// `withdraw_ticket`: the change as closed, with nothing of it applied, and the answers it was
+/// `withdraw_ticket`: the change as bottled, with nothing of it applied, and the answers it was
 /// waiting to apply that closed, another change having applied them, or reopened.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -434,10 +434,10 @@ answers! {
     SourceLocation => ["module_source"],
     SourceAnswer => ["source"],
     StatusAnswer => ["status"],
-    Written => ["put_page", "patch_page", "put_requirement", "file_ticket", "update_ticket", "retire_node"],
-    Started => ["start_ticket"],
+    Written => ["put_page", "patch_page", "put_requirement", "inscribe_ticket", "update_ticket", "retire_node"],
+    Brewed => ["brew_ticket"],
     Closed => ["close_ticket"],
-    Landed => ["land_ticket"],
+    Bottled => ["bottle_ticket"],
     Renamed => ["rename_node"],
     Reordered => ["reorder"],
     Configured => ["configure"],

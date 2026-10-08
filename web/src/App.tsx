@@ -300,7 +300,7 @@ function Where() {
               to="/findings"
               onClick={() => setOpen(false)}
               className="text-fg-dim"
-              title="Other work, landed since this branch's base or being worked elsewhere, that may conflict with this checkout. It does not fail the check."
+              title="Other work, on the main line since this branch's base or being worked elsewhere, that may conflict with this checkout. It does not fail the check."
             >
               {conflicts} may conflict
             </Link>

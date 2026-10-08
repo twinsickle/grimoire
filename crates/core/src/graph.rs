@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, and each ticket whose references it edits with the references the edit holds, so every query and lint answers over a branch's own intent when asked to; such a graph names as judged that ticket and the tickets it edits, and the truth's graph names none; it names the ticket it is read with, and holds that ticket's moved records when it is active as well as every landing ticket's."},{"id":"recipes","statement":"Each recipe is a node recipe:<id> with a uses edge to recipe:<id> for each id it uses and a represents edge to each module holding a file at or under a path its files name, and each of its ingredients a node recipe:<id>#<ingredient> that belongs to it; of two recipes with one id the first by file path is the node and every file holding that id is kept for the lint, with the recipe files that could not be read, the config's recipe kinds and the store's judgements of recipes."},{"id":"decisions","statement":"Each landed decision of a requirement is a node req:<slug>#d<id> that belongs to its requirement, with a supersedes edge to req:<slug>#d<n> for each id it supersedes, kept when that decision is not there so the lint reports it; a decision not yet landed is no node, and a decision node's title is how it is said, decision <id> of <slug>, and find matches nothing of it."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
+//! {"purpose":"Join the store and the extraction into one graph of nodes and edges and derive every reverse edge.","criteria":[{"id":"tests","statement":"Each test is a node test:<file>#<name>, contained by its file, with a checks edge to each criterion or requirement it names; what a criterion or requirement is checked by is derived from those edges."},{"id":"contract-scope","statement":"A module is expected to carry a contract only when its adapter expects one and the store config's scope covers it."},{"id":"downward-only-input","statement":"Edges are read only from the node that owns them, the one edited when the relationship changes; every reverse relation is derived here and nowhere else."},{"id":"dangling-kept","statement":"An edge whose target does not exist is kept in the graph so the lints can report it."},{"id":"retired-covers-nothing","statement":"A retired requirement makes no covered_by edge, so it covers no criterion; its covered_by stays in its record as history."},{"id":"with-proposal","statement":"with_proposal builds the graph from the store as a ticket's proposal would leave it, the proposed pages and requirements in place of the truth's and the deleted ones gone, joined with the same extraction, and each ticket whose references it edits with the references the edit holds, so every query and lint answers over a branch's own intent when asked to; such a graph names as judged that ticket and the tickets it edits, and the truth's graph names none; it names the ticket it is read with, and holds that ticket's moved records when it is brewing as well as every simmering ticket's."},{"id":"recipes","statement":"Each recipe is a node recipe:<id> with a uses edge to recipe:<id> for each id it uses and a represents edge to each module holding a file at or under a path its files name, and each of its ingredients a node recipe:<id>#<ingredient> that belongs to it; of two recipes with one id the first by file path is the node and every file holding that id is kept for the lint, with the recipe files that could not be read, the config's recipe kinds and the store's judgements of recipes."},{"id":"decisions","statement":"Each bottled decision of a requirement is a node req:<slug>#d<id> that belongs to its requirement, with a supersedes edge to req:<slug>#d<n> for each id it supersedes, kept when that decision is not there so the lint reports it; a decision not yet bottled is no node, and a decision node's title is how it is said, decision <id> of <slug>, and find matches nothing of it."},{"id":"rites","statement":"A page or requirement is a rite when it is under the rites root and not under the grimoire's, under meaning a page reached from that root through page links, the root included, or a requirement one of them links; one under both is the code's, and with a root missing nothing is under it."}]}
 //! ```
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -113,8 +113,8 @@ pub struct Graph {
     /// The graph was built by a daemon that holds no code: what only code can
     /// show is unknown, not missing, and the lint leaves it out.
     pub without_code: bool,
-    /// Landing tickets the truth moved under, each with the records that moved, for the lint.
-    pub landing_moved: BTreeMap<String, Vec<String>>,
+    /// Bottling tickets the truth moved under, each with the records that moved, for the lint.
+    pub simmering_moved: BTreeMap<String, Vec<String>>,
     /// Configured languages the running build cannot extract, and the ones
     /// it can; set by whoever knows the build (`State`), empty otherwise.
     pub unsupported_languages: Vec<String>,
@@ -136,7 +136,7 @@ pub struct Graph {
     /// proposal edits, since a ticket's references are its proposal state.
     pub judged: HashSet<String>,
     /// The ticket the graph is read with, none for the truth's: a finding only its owner can mend,
-    /// as a landing whose truth moved, is judged on this one alone (req:lint-landing-moved).
+    /// as a bottling whose truth moved, is judged on this one alone (req:lint-simmering-moved).
     pub read_with: Option<String>,
     /// For each ticket whose references a proposal would change, the tickets
     /// proposing it.
@@ -156,12 +156,12 @@ impl Graph {
     pub fn with_proposal(store: &Store, ticket: &str, extraction: &Extraction, malformed: &[Malformed]) -> Graph {
         let mut g = Graph::build(&store.applied(ticket), extraction, malformed);
         // Judged against the truth itself: with its own proposal laid on top, a ticket's records never look moved.
-        g.landing_moved = crate::ops::landing_moved(store);
-        // The ticket read with is told when the truth moved under it while it is still active too (req:lint-landing-moved).
-        if store.tickets.get(ticket).is_some_and(|t| t.status == crate::model::Status::Active) {
+        g.simmering_moved = crate::ops::simmering_moved(store);
+        // The ticket read with is told when the truth moved under it while it is still brewing too (req:lint-simmering-moved).
+        if store.tickets.get(ticket).is_some_and(|t| t.status == crate::model::Status::Brewing) {
             let refs: Vec<String> = crate::ops::moved(store, ticket).into_iter().map(|e| e.field).collect();
             if !refs.is_empty() {
-                g.landing_moved.insert(ticket.to_string(), refs);
+                g.simmering_moved.insert(ticket.to_string(), refs);
             }
         }
         g.drafted = store.ticket_drafts();
@@ -180,7 +180,7 @@ impl Graph {
             unresolved_imports: extraction.unresolved_imports,
             baseline: store.baseline.iter().flat_map(|b| b.findings.iter().cloned()).collect(),
             order: store.config.order.clone(),
-            landing_moved: crate::ops::landing_moved(store),
+            simmering_moved: crate::ops::simmering_moved(store),
             drafted: store.ticket_drafts(),
             checked_out: store.checked_out.clone(),
             large_file: store.config.large_file(),
@@ -201,7 +201,7 @@ impl Graph {
             for c in r.covered_by.iter().filter(|_| !r.retired) {
                 g.edge(&from, c, Relation::CoveredBy);
             }
-            // Each landed decision, by its id: what a reference to one names (req:decision-references).
+            // Each bottled decision, by its id: what a reference to one names (req:decision-references).
             for d in &r.decisions {
                 let Some(id) = d.id else { continue };
                 let dref = Reference::decision(&r.slug, id);
@@ -455,8 +455,8 @@ pub(crate) mod fixtures {
             status,
             touches: touches.iter().map(|l| l.parse().unwrap()).collect(),
             relies_on: relies_on.iter().map(|l| l.parse().unwrap()).collect(),
-            body: if status == Status::Closed { String::new() } else { "Do it.".into() },
-            decision: if matches!(status, Status::Landing | Status::Closed) { Some(Decision::new("2026-01-01", "Done.")) } else { None },
+            body: if status == Status::Bottled { String::new() } else { "Do it.".into() },
+            decision: if matches!(status, Status::Simmering | Status::Bottled) { Some(Decision::new("2026-01-01", "Done.")) } else { None },
         }
     }
 
@@ -491,10 +491,10 @@ pub(crate) mod fixtures {
             s.requirements.insert(r.slug.clone(), r);
         }
         for t in [
-            ticket("phase-62", TicketKind::Change, Priority::Next, Status::Open, &["req:ready-only-with-commit", "module:src/a/ready"], &["page:git-readiness"]),
-            ticket("gap-1", TicketKind::Gap, Priority::Later, Status::Open, &["module:src/a/ready"], &[]),
-            ticket("later-1", TicketKind::Change, Priority::Later, Status::Active, &["page:orphan"], &[]),
-            ticket("old", TicketKind::Change, Priority::High, Status::Closed, &["page:renamed-away"], &[]),
+            ticket("phase-62", TicketKind::Change, Priority::Next, Status::Inscribed, &["req:ready-only-with-commit", "module:src/a/ready"], &["page:git-readiness"]),
+            ticket("gap-1", TicketKind::Gap, Priority::Later, Status::Inscribed, &["module:src/a/ready"], &[]),
+            ticket("later-1", TicketKind::Change, Priority::Later, Status::Brewing, &["page:orphan"], &[]),
+            ticket("old", TicketKind::Change, Priority::High, Status::Bottled, &["page:renamed-away"], &[]),
         ] {
             s.tickets.insert(t.slug.clone(), t);
         }
@@ -699,7 +699,7 @@ mod tests {
         assert!(g.out_with(&d2, Relation::BelongsTo).any(|e| e.to == Reference::req("ready-only-with-commit")));
         assert!(g.out_with(&d2, Relation::Supersedes).any(|e| e.to == Reference::decision("ready-only-with-commit", 1)));
         assert!(g.inbound_with(&d2, Relation::ReliesOn).any(|e| e.from == Reference::ticket("later-1")), "a ticket relying on it is an edge to it");
-        assert!(!g.contains(&Reference::decision("ready-only-with-commit", 3)), "one not landed is no node");
+        assert!(!g.contains(&Reference::decision("ready-only-with-commit", 3)), "one not bottled is no node");
         assert!(crate::query::find(&g, "Instead", None, 10).is_empty(), "find matches nothing of a decision");
         // One naming a decision its requirement does not hold dangles: a ticket's, read with it, and a supersession.
         let read = Graph::with_proposal(&s, "later-1", &crate::extraction::fixtures::extraction(), &[]);

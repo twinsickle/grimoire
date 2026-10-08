@@ -11,13 +11,13 @@ find it with `rests_on_me` on the module, or `find`.
 | Changed behaviour | Reword the criterion and the requirement's statement. `record_decision` on the requirement: what changed and why, naming in `supersedes` any earlier decision it overturns. |
 | Removed behaviour | Remove the criterion. The requirement naming it goes dangling: reword its `covered_by`, or, if the requirement no longer holds, `retire_node` it with why (it unlinks itself and keeps its decisions; `delete_node` only for one that never had a decision). |
 | Renamed criterion id | Same as removed plus new: update `covered_by` on every requirement that named it and `checks` in every test contract that named it. `find` the old id first. |
-| Renamed page or requirement | `rename_node`, never delete and put: it keeps the requirement's decisions and rewrites links, open tickets, roots and the baseline. Then edit each test block it lists in `still_named_in`; the tool never writes code. |
+| Renamed page or requirement | `rename_node`, never delete and put: it keeps the requirement's decisions and rewrites links, the tickets not yet bottled, roots and the baseline. Then edit each test block it lists in `still_named_in`; the tool never writes code. |
 | A test now checks something else | Update its test contract's `checks`. A test deleted leaves its criteria untested unless another test checks them. |
 | New area (a group of modules with its own purpose) | A page under architecture (or the right parent), with intent in the body, linking its requirements and modules. `patch_page` the parent with `add_links`. |
 | A choice made while working, however small it feels | `record_decision` on the requirement it governs: what was chosen and why, one paragraph, written for a reader a year from now. |
 | Behaviour added to a module the ticket does not touch | `update_ticket` to add the module to `touches`, then the row above that fits. A ticket's `touches` is a claim about what changed; keep it true. |
 | A file a recipe names changed, or the recipe itself | Judge the recipe against what it represents now: `judge_recipe` with `held` when it still says truly how to use it, or update the recipe to match and judge it `updated`. A recipe no judgement holds of as it is now is `due`, a finding. |
-| A question or gap discovered while working | `file_ticket` with kind `question` or `gap`, `relies_on` this ticket. Do not resolve it alone. |
+| A question or gap discovered while working | `inscribe_ticket` with kind `question` or `gap`, `relies_on` this ticket. Do not resolve it alone. |
 | Code that turns out to contradict a requirement | Stop. Either the code is wrong (fix it) or the requirement is (reword it and `record_decision` why). Never leave both standing. |
 
 ## What does not change the grimoire

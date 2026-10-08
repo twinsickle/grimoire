@@ -59,7 +59,7 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
         order: Default::default(),
         recipe_kinds: Default::default(),
     };
-    // An active, current ticket, so a write that changes intent has a proposal to land in; reads of it name the ticket.
+    // A brewing, current ticket, so a write that changes intent has a proposal to go into; reads of it name the ticket.
     let mut s = Store::new(config);
     s.tickets.insert(
         "work".into(),
@@ -68,7 +68,7 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
             title: "Work".into(),
             kind: grimoire_core::model::TicketKind::Change,
             priority: grimoire_core::model::Priority::Later,
-            status: grimoire_core::model::Status::Active,
+            status: grimoire_core::model::Status::Brewing,
             touches: vec![],
             relies_on: vec![],
             body: "b".into(),
@@ -250,6 +250,8 @@ fn mcp_instructions_carry_the_rules() {
         "Never write the store's files",
         "never on your own decision",
         "Pass `checkout`, your working directory, with every call",
+        "`grimoire bottle` then bottles it",
+        "A ticket is inscribed, brewing, simmering or bottled",
     ] {
         assert!(text.contains(rule), "the instructions say {rule:?}: {text}");
     }
@@ -558,14 +560,14 @@ fn a_shared_daemon_admits_by_token_and_serves_no_interface() {
     assert_eq!(request_as(s.port, "GET", "/api/tools", None, "127.0.0.1", "").0, 403);
     assert_eq!(request_as(s.port, "POST", "/mcp", Some(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} })), "127.0.0.1", "").0, 403);
     // A token signs its caller in, whatever name the request was addressed to.
-    let (code, _, body) = request_as(s.port, "POST", "/api/file_ticket", Some(&ticket), "grimoire.team.example", &bearer(&writer));
+    let (code, _, body) = request_as(s.port, "POST", "/api/inscribe_ticket", Some(&ticket), "grimoire.team.example", &bearer(&writer));
     assert_eq!(code, 200, "{body}");
     let (code, _, body) = request_as(s.port, "POST", "/api/status", Some(&json!({})), "grimoire.team.example", &bearer(&reader));
     assert_eq!((code, json(&body)["shared"].clone()), (200, json!(true)), "{body}");
     // A read-only token reads and does not write.
     let (code, _, body) = request_as(s.port, "POST", "/api/lint", Some(&json!({})), "127.0.0.1", &bearer(&reader));
     assert_eq!((code, json(&body)["without_code"].clone()), (200, json!(true)), "{body}");
-    let (code, _, body) = request_as(s.port, "POST", "/api/file_ticket", Some(&ticket), "127.0.0.1", &bearer(&reader));
+    let (code, _, body) = request_as(s.port, "POST", "/api/inscribe_ticket", Some(&ticket), "127.0.0.1", &bearer(&reader));
     assert_eq!(code, 403, "{body}");
     assert!(json(&body)["message"].as_str().unwrap().contains("may only read"), "{body}");
     assert_eq!(s.daemon.call("board", json!({ "kinds": ["gap"] })).unwrap()["unattached"].as_array().unwrap().len(), 1, "one ticket was filed, by the writer");

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a requirement's decisions: append one, link the earlier decisions one supersedes, and retire a requirement that no longer holds, removing and rewriting nothing.","criteria":[{"id":"decisions-append-only","statement":"No write removes a decision or changes its text, date or id: put_requirement preserves the existing decisions, record_decision appends, and supersede only adds to a decision's supersedes list."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, with the next id, the ids of the earlier decisions it supersedes and whether it is an adoption, the mark set only here; an id naming no landed decision the requirement holds, or a retired requirement, is invalid, and a missing requirement not_found."},{"id":"supersede","statement":"supersede adds to the landed decision of a requirement with a given id the ids of earlier decisions it supersedes, keeping those it had and every text, date and id; an id naming no landed decision below it, or a retired requirement, is invalid, and a missing requirement or decision, one not yet landed among them, not_found."},{"id":"retire","statement":"retire_node records on a requirement a last decision superseding every earlier landed one, marks it retired and removes it from every page's links, persisting the pages first and the requirement last so a failure part way leaves it live and a retry completes; a ticket, an already retired requirement or any other kind is invalid, a missing requirement not_found, and a retired requirement refuses put_requirement, record_decision and supersede."}]}
+//! {"purpose":"Keep a requirement's decisions: append one, link the earlier decisions one supersedes, and retire a requirement that no longer holds, removing and rewriting nothing.","criteria":[{"id":"decisions-append-only","statement":"No write removes a decision or changes its text, date or id: put_requirement preserves the existing decisions, record_decision appends, and supersede only adds to a decision's supersedes list."},{"id":"record-decision","statement":"record_decision appends a dated decision to an existing requirement, defaulting the date to today, with the next id, the ids of the earlier decisions it supersedes and whether it is an adoption, the mark set only here; an id naming no bottled decision the requirement holds, or a retired requirement, is invalid, and a missing requirement not_found."},{"id":"supersede","statement":"supersede adds to the bottled decision of a requirement with a given id the ids of earlier decisions it supersedes, keeping those it had and every text, date and id; an id naming no bottled decision below it, or a retired requirement, is invalid, and a missing requirement or decision, one not yet bottled among them, not_found."},{"id":"retire","statement":"retire_node records on a requirement a last decision superseding every earlier bottled one, marks it retired and removes it from every page's links, persisting the pages first and the requirement last so a failure part way leaves it live and a retry completes; a ticket, an already retired requirement or any other kind is invalid, a missing requirement not_found, and a retired requirement refuses put_requirement, record_decision and supersede."}]}
 //! ```
 
 use super::{invalid_if, Changed, ToolError};
@@ -28,12 +28,12 @@ fn store_it(store: &mut Store, req: Requirement) -> Result<(Requirement, Changed
 }
 
 /// The id a decision appended now takes: the next, unless one before it waits in a proposal, read
-/// through it, when it waits too and takes its id as it lands.
+/// through it, when it waits too and takes its id as it is bottled.
 fn next(req: &Requirement) -> Option<u32> {
     req.decisions.iter().all(|d| d.id.is_some()).then(|| req.next_id())
 }
 
-/// Refused unless each of `ids` names a landed decision of `req` below `below`.
+/// Refused unless each of `ids` names a bottled decision of `req` below `below`.
 fn earlier(req: &Requirement, r: &Reference, ids: &[u32], below: u32) -> Result<(), ToolError> {
     match ids.iter().find(|&&id| id >= below || req.decision(id).is_none()) {
         Some(id) => {
@@ -44,7 +44,7 @@ fn earlier(req: &Requirement, r: &Reference, ids: &[u32], below: u32) -> Result<
 }
 
 /// Append a decision with the next id. Under a ticket, the proposal keeps it apart with no id, and
-/// it takes its id when the ticket lands (req:tool-record-decision).
+/// it takes its id when the ticket is bottled (req:tool-record-decision).
 pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: String, supersedes: Vec<u32>, adopted: bool) -> Result<(Requirement, Changed), ToolError> {
     let mut req = live(store, r)?.clone();
     earlier(&req, r, &supersedes, req.next_id())?;
@@ -52,12 +52,12 @@ pub fn record_decision(store: &mut Store, r: &Reference, text: String, date: Str
     store_it(store, req)
 }
 
-/// Add to the landed decision `decision`, by id, the earlier decisions it
+/// Add to the bottled decision `decision`, by id, the earlier decisions it
 /// supersedes: how a supersession written in prose is linked.
 pub fn supersede(store: &mut Store, r: &Reference, decision: u32, supersedes: &[u32]) -> Result<(Requirement, Changed), ToolError> {
     let mut req = live(store, r)?.clone();
     if req.decision(decision).is_none() {
-        return Err(ToolError::NotFound { message: format!("{r} has no decision d{decision}: a decision not yet landed has no id") });
+        return Err(ToolError::NotFound { message: format!("{r} has no decision d{decision}: a decision not yet bottled has no id") });
     }
     earlier(&req, r, supersedes, decision)?;
     let d = req.decisions.iter_mut().find(|d| d.id == Some(decision)).expect("found above");
@@ -77,7 +77,7 @@ pub fn retire_node(store: &mut Store, r: &Reference, text: String, date: String)
         return Err(ToolError::invalid(format!("{r} is a ticket: a ticket retires by closing"), vec![]));
     }
     let mut req = live(store, r)?.clone();
-    // Every landed decision; under a ticket, the landing supersedes every one the truth holds then (req:tool-retire-node).
+    // Every bottled decision; under a ticket, the bottling supersedes every one the truth holds then (req:tool-retire-node).
     let earlier = req.decisions.iter().filter_map(|d| d.id).collect();
     req.decisions.push(Decision { id: next(&req), supersedes: earlier, ..Decision::new(date, text) });
     req.retired = true;
@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(record_decision(&mut s, &r, "x".into(), "2026-09-29".into(), vec![2], false).unwrap_err().code(), "invalid", "a decision that went missing is named by nothing");
         let (out, _) = record_decision(&mut s, &r, "After.".into(), "2026-09-29".into(), vec![3], false).unwrap();
         assert_eq!(out.decisions.iter().map(|d| d.id).collect::<Vec<_>>(), vec![Some(1), Some(3), Some(4)]);
-        // A decision dated before the last still lands after it: the order is the order they landed.
+        // A decision dated before the last is still bottled after it: the order is the order they were bottled.
         let (out, _) = record_decision(&mut s, &r, "Earlier date.".into(), "2026-01-01".into(), vec![], false).unwrap();
         assert_eq!(out.decisions.last().map(|d| d.id), Some(Some(5)));
     }

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the code a checkout's branch was cut from, so a check can tell its own work from what landed on the main line since: the main line, the merge base of HEAD with it, and that commit's code read from git and extracted.","criteria":[{"id":"main-line","statement":"main_line names a repository's main line: the branch the remote origin's HEAD names, else a local main, else a local master; base_commit answers the merge base of HEAD with it, and none outside git, which it tells from the folders above the checkout without running git, with no main line, or when HEAD is the main line's own branch."},{"id":"base-code","statement":"base_code writes a commit's tree into a folder kept for it outside the repository, through an index of its own, so the checkout's index, HEAD and files are untouched, reuses a folder already written for that commit, removes another commit's folder only once it is an hour old, so a check still reading it is not cut short, and extracts it in the languages given from the checkout's place in the tree, refusing the whole base when any of it could not be read rather than judging against part of it; give hands a state the code of its repository's base, or none when it has none."}]}
+//! {"purpose":"Find the code a checkout's branch was cut from, so a check can tell its own work from what reached the main line since: the main line, the merge base of HEAD with it, and that commit's code read from git and extracted.","criteria":[{"id":"main-line","statement":"main_line names a repository's main line: the branch the remote origin's HEAD names, else a local main, else a local master; base_commit answers the merge base of HEAD with it, and none outside git, which it tells from the folders above the checkout without running git, with no main line, or when HEAD is the main line's own branch."},{"id":"base-code","statement":"base_code writes a commit's tree into a folder kept for it outside the repository, through an index of its own, so the checkout's index, HEAD and files are untouched, reuses a folder already written for that commit, removes another commit's folder only once it is an hour old, so a check still reading it is not cut short, and extracts it in the languages given from the checkout's place in the tree, refusing the whole base when any of it could not be read rather than judging against part of it; give hands a state the code of its repository's base, or none when it has none."}]}
 //! ```
 
 use std::collections::hash_map::DefaultHasher;
@@ -149,7 +149,7 @@ mod tests {
         std::fs::write(repo.join("src/lib.rs"), contract("on-the-branch")).unwrap();
         run(&repo, &["commit", "-q", "-am", "branch"]);
         run(&repo, &["checkout", "-q", "main"]);
-        std::fs::write(repo.join("src/lib.rs"), contract("landed-since")).unwrap();
+        std::fs::write(repo.join("src/lib.rs"), contract("bottled-since")).unwrap();
         run(&repo, &["commit", "-q", "-am", "main moves on"]);
         run(&repo, &["checkout", "-q", "feature"]);
         assert_eq!(base_commit(&repo).as_deref(), Some(base.as_str()), "the merge base, not the main line's tip");

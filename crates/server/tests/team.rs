@@ -72,11 +72,11 @@ fn host() -> Host {
             retired: false,
         },
     );
-    for (slug, status) in [("0001", Status::Open), ("0002", Status::Open), ("0003", Status::Active)] {
+    for (slug, status) in [("0001", Status::Inscribed), ("0002", Status::Inscribed), ("0003", Status::Brewing)] {
         s.tickets.insert(slug.into(), ticket(slug, status));
     }
     s.current = Some("0003".into());
-    s.starts.insert("0003".into(), Start { ticket: "0003".into(), fingerprints: Default::default(), closed_in: None });
+    s.starts.insert("0003".into(), Start { ticket: "0003".into(), fingerprints: Default::default(), simmering_in: None });
     store_io::write_all(&store, &s, false).unwrap();
     let writer = store_io::tokens::add(&store, "ana", true).unwrap();
     let reader = store_io::tokens::add(&store, "pipeline-check", false).unwrap();
@@ -168,7 +168,7 @@ fn a_machine_joins_the_servers_intent_with_its_own_code() {
     assert_eq!((note.server.as_str(), note.fetched.ends_with('Z')), (h.address.as_str(), true));
     // After that only what differs is written: nothing, then the one ticket the server gained.
     assert!(remote::sync(&server, &m.copy, &m.repository(), None).unwrap().changed.is_empty());
-    let filed = h.daemon.call("file_ticket", json!({ "title": "From the team", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+    let filed = h.daemon.call("inscribe_ticket", json!({ "title": "From the team", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
     let slug = filed["node"]["ref"].as_str().unwrap().trim_start_matches("ticket:").to_string();
     assert_eq!(remote::sync(&server, &m.copy, &m.repository(), None).unwrap().changed, vec![Changed::Ticket(slug)]);
     // What does not load is in no difference: a write stopped part way, or a hand's edit. The sync makes it the server's again.
@@ -204,10 +204,10 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     let m = machine();
     let d = m.open(h.as_writer());
     // A start is the server's write, answered with what the machine's graph shows.
-    let started = d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    assert_eq!(started["node"]["status"], "active");
+    let started = d.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    assert_eq!(started["node"]["status"], "brewing");
     assert!(started["rests_on"].is_array());
-    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "active");
+    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "brewing");
     assert!(m.holds("starts/0001.json") && !h.store.join("starts").join("0001.json").exists(), "the start is the checkout's, with its code: the server records none");
     // A requirement naming a criterion the code does not declare: taken by the server, which holds no code,
     // and answered with the dangling edge only the machine can see.
@@ -217,7 +217,7 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     assert!(h.daemon.call("get", json!({ "ref": "req:says-b", "ticket": "0001" })).is_ok(), "in the ticket's proposal on the server");
     assert!(m.holds("proposals/0001.json"), "and in the copy, by the sync");
     // An id the server generates is the one answered.
-    let filed = d.call("file_ticket", json!({ "title": "Found on the way", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+    let filed = d.call("inscribe_ticket", json!({ "title": "Found on the way", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
     let filed_ref = filed["node"]["ref"].as_str().unwrap().to_string();
     assert_eq!(h.daemon.call("get", json!({ "ref": filed_ref })).unwrap()["node"]["title"], "Found on the way");
     // The copy behind the server: a teammate retitled the ticket and nothing here has fetched that.
@@ -242,7 +242,7 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     let reading = machine();
     let r = reading.open(Server::new(&h.address, Some(h.reader.clone())));
     assert!(r.call("board", json!({})).is_ok());
-    let e = r.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err();
+    let e = r.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err();
     assert!(e.to_string().contains("may only read"), "{e}");
     // adopt carries what the machine sees, which the server alone could not list.
     let seen = d.call("lint", json!({ "ticket": null })).unwrap();
@@ -254,12 +254,12 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
         on_server.findings.len() > truth && on_server.findings.iter().any(|f| f.r#ref.to_string().starts_with("module:") || f.r#ref.to_string().starts_with("criterion:")),
         "what only code shows is in it: {seen}"
     );
-    // The decision written, the ticket waits; landed by name, the close is answered with what the machine's start shows.
-    assert_eq!(d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap()["node"]["status"], "landing");
-    let landed = d.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    assert_eq!((landed["landed"].clone(), landed["node"]["status"].clone()), (json!(true), json!("closed")));
-    assert!(landed["untouched"].is_array() && landed["unnamed"].is_array(), "the machine holds the start and the code: {landed}");
-    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "closed");
+    // The decision written, the ticket waits; bottled by name, the close is answered with what the machine's start shows.
+    assert_eq!(d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "bottled" })).unwrap()["node"]["status"], "simmering");
+    let bottled = d.call("bottle_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    assert_eq!((bottled["bottled"].clone(), bottled["node"]["status"].clone()), (json!(true), json!("bottled")));
+    assert!(bottled["untouched"].is_array() && bottled["unnamed"].is_array(), "the machine holds the start and the code: {bottled}");
+    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "bottled");
     assert!(h.daemon.call("get", json!({ "ref": "req:says-b" })).is_ok(), "applied to the server's truth");
     assert!(!m.holds("current.json") && !m.holds("starts/0001.json") && !m.holds("proposals/0001.json"));
 }
@@ -267,17 +267,17 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-answer-and-its-change-are-one-write-on-the-server", "checks": ["crates/server/src/remote#writes-through", "req:answer-lands-with-its-change"]}
+/// {"test": "an-answer-and-its-change-are-one-write-on-the-server", "checks": ["crates/server/src/remote#writes-through", "req:answer-bottled-with-its-change"]}
 /// ```
 #[test]
 fn an_answer_and_its_change_are_one_write_on_the_server() {
     let h = host();
     let m = machine();
     let d = m.open(h.as_writer());
-    let gap = d.call("file_ticket", json!({ "title": "Which way?", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+    let gap = d.call("inscribe_ticket", json!({ "title": "Which way?", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
     let gap = gap["node"]["ref"].as_str().unwrap().to_string();
     let gap_slug = gap.trim_start_matches("ticket:").to_string();
-    d.call("start_ticket", json!({ "ref": gap })).unwrap();
+    d.call("brew_ticket", json!({ "ref": gap })).unwrap();
     let close = json!({ "ref": gap, "decision": { "text": "Decided by the user: this way." }, "change": { "title": "Go this way", "body": "b", "touches": ["page:overview"], "priority": "high" } });
     let count = |store: &Path| store_io::load(store).unwrap().0.tickets.len();
     let (on_server, in_copy) = (count(&h.store), count(&m.copy));
@@ -285,7 +285,7 @@ fn an_answer_and_its_change_are_one_write_on_the_server() {
     d.call("put_page", json!({ "slug": "aside", "title": "T", "body": "b", "links": [], "ticket": gap_slug })).unwrap();
     assert_eq!(code(d.call("close_ticket", close.clone()).unwrap_err()), "invalid");
     assert_eq!((count(&h.store), count(&m.copy)), (on_server, in_copy), "no change filed");
-    assert_eq!(h.daemon.call("get", json!({ "ref": gap })).unwrap()["node"]["status"], "active");
+    assert_eq!(h.daemon.call("get", json!({ "ref": gap })).unwrap()["node"]["status"], "brewing");
     d.call("delete_node", json!({ "ref": "page:aside", "ticket": gap_slug })).unwrap();
     // Taken: the server holds both, and the machine's copy follows.
     let closed = d.call("close_ticket", close).unwrap();
@@ -294,10 +294,10 @@ fn an_answer_and_its_change_are_one_write_on_the_server() {
     for store in [&h.store, &m.copy] {
         let s = store_io::load(store).unwrap().0;
         let (answer, change) = (&s.tickets[&gap_slug], &s.tickets[&slug]);
-        assert_eq!((answer.status, answer.decision.as_ref().map(|x| x.text.clone())), (Status::Landing, Some(format!("Decided by the user: this way. Applied by {slug}."))));
-        assert_eq!((change.status, change.relies_on.clone(), change.priority), (Status::Open, vec![Reference::ticket(&gap_slug)], Priority::High));
+        assert_eq!((answer.status, answer.decision.as_ref().map(|x| x.text.clone())), (Status::Simmering, Some(format!("Decided by the user: this way. Applied by {slug}."))));
+        assert_eq!((change.status, change.relies_on.clone(), change.priority), (Status::Inscribed, vec![Reference::ticket(&gap_slug)], Priority::High));
     }
-    assert_eq!((closed["node"]["ref"].as_str(), closed["node"]["status"].as_str()), (Some(gap.as_str()), Some("landing")));
+    assert_eq!((closed["node"]["ref"].as_str(), closed["node"]["status"].as_str()), (Some(gap.as_str()), Some("simmering")));
 }
 
 /// # Test contract
@@ -314,7 +314,7 @@ fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
         std::fs::write(each.repo.join("src").join("a.recipe.md"), recipe).unwrap();
     }
     let d = m.open(h.as_writer());
-    d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    d.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     let digest = match d.call("get", json!({ "ref": "recipe:says-a" })).unwrap()["node"]["digest"].as_str() {
         Some(digest) => digest.to_string(),
         None => panic!("the recipe carries its digest"),
@@ -353,7 +353,7 @@ fn a_close_is_judged_with_the_languages_the_server_now_reads() {
     .unwrap();
     let d = m.open(h.as_writer());
     // Started while the grimoire reads Rust alone: the TypeScript module is not in the graph.
-    d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    d.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     d.call("update_ticket", json!({ "ref": "ticket:0001", "touches": ["module:src/b"] })).unwrap();
     assert!(d.call("get", json!({ "ref": "module:src/b" })).is_err());
     // A teammate has the server read TypeScript too, and this copy has not heard of it.
@@ -377,9 +377,9 @@ fn the_current_ticket_is_each_checkouts_own() {
     // Ben signs in with a token of his own, so the server lists each by name.
     let bens = store_io::tokens::add(&h.store, "ben", true).unwrap();
     let (a, b) = (ana.open(h.as_writer()), ben.open(Server::new(&h.address, Some(bens))));
-    a.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    b.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
-    // Each write that names no ticket lands in its own checkout's.
+    a.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    b.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    // Each write that names no ticket goes into its own checkout's.
     a.call("put_page", page("from-ana")).unwrap();
     b.call("put_page", page("from-ben")).unwrap();
     assert!(h.daemon.call("get", json!({ "ref": "page:from-ana", "ticket": "0001" })).is_ok());
@@ -407,8 +407,8 @@ fn the_current_ticket_is_each_checkouts_own() {
     // A ticket already being worked is taken up in a second checkout: sent, so the server lists ben beside ana,
     // and ben is told she has it; nothing else of it changes.
     let before = h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"].clone();
-    let taken = b.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    assert_eq!(taken["node"]["status"], "active");
+    let taken = b.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    assert_eq!(taken["node"]["status"], "brewing");
     assert_eq!(who("ticket:0001"), ["ana", "ben"]);
     assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"], before);
     assert_eq!((taken["others"][0]["by"].clone(), taken["others"].as_array().map(Vec::len)), (json!("ana"), Some(1)));
@@ -421,14 +421,14 @@ fn the_current_ticket_is_each_checkouts_own() {
     a.sync_now().unwrap();
     a.call("put_page", page("still-ana")).unwrap();
     assert!(h.daemon.call("get", json!({ "ref": "page:still-ana", "ticket": "0001" })).is_ok());
-    // An unnamed landing lands nothing on a team, and is not sent: the ticket is still landing on the server.
-    a.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap();
-    let none = a.call("land_ticket", json!({})).unwrap();
-    assert_eq!((none["landed"].clone(), none["waiting"][0]["ref"].clone()), (json!(false), json!("ticket:0001")));
+    // An unnamed bottling bottles nothing on a team, and is not sent: the ticket is still simmering on the server.
+    a.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "bottled" })).unwrap();
+    let none = a.call("bottle_ticket", json!({})).unwrap();
+    assert_eq!((none["bottled"].clone(), none["waiting"][0]["ref"].clone()), (json!(false), json!("ticket:0001")));
     assert!(none["note"].as_str().unwrap().contains("main line"));
-    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "landing");
-    // Landed on the main line, by name, with a pipeline's token: every checkout's current ticket and start for it go.
-    assert_eq!(h.daemon.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap()["landed"], true);
+    assert_eq!(h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"]["status"], "simmering");
+    // Bottled on the main line, by name, with a pipeline's token: every checkout's current ticket and start for it go.
+    assert_eq!(h.daemon.call("bottle_ticket", json!({ "ref": "ticket:0001" })).unwrap()["bottled"], true);
     assert!(a.sync_now().unwrap() && b.sync_now().unwrap());
     for m in [&ana, &ben] {
         assert!(!m.holds("current.json") && !m.holds("starts/0001.json"));
@@ -439,31 +439,31 @@ fn the_current_ticket_is_each_checkouts_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-checkout-is-told-of-a-ticket-it-still-carries", "checks": ["crates/core/src/tools/write/tickets#start-warns", "crates/core/src/ops/tickets#waits-here"]}
+/// {"test": "a-checkout-is-told-of-a-ticket-it-still-carries", "checks": ["crates/core/src/tools/write/tickets#brew-warns", "crates/core/src/ops/tickets#waits-here"]}
 /// ```
 #[test]
 fn a_checkout_is_told_of_a_ticket_it_still_carries() {
     let h = host();
     let (ana, ben) = (machine(), machine());
     let (a, b) = (ana.open(h.as_writer()), ben.open(h.as_writer()));
-    a.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    b.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
-    // Closed to wait for its landing in Ana's checkout: her copy's start says so, and the server keeps no start.
-    a.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "landed" })).unwrap();
-    assert!(std::fs::read_to_string(ana.copy.join("starts").join("0001.json")).unwrap().contains("closed_in"));
+    a.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    b.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    // Closed to wait for its bottling in Ana's checkout: her copy's start says so, and the server keeps no start.
+    a.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." }, "when": "bottled" })).unwrap();
+    assert!(std::fs::read_to_string(ana.copy.join("starts").join("0001.json")).unwrap().contains("simmering_in"));
     assert!(!h.store.join("starts").join("0001.json").exists());
-    // Ben helped with it, but it was not closed in his checkout: his next start is not warned.
-    assert_eq!(b.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"], json!([]));
+    // Ben helped with it, but it was not bottled in his checkout: his next start is not warned.
+    assert_eq!(b.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"], json!([]));
     // Ana's is, and the start goes ahead; read again from her copy, it still is.
-    let started = a.call("start_ticket", json!({ "ref": "ticket:0003" })).unwrap();
-    assert_eq!((started["node"]["status"].clone(), started["waiting"][0]["ticket"].clone()), (json!("active"), json!("0001")));
+    let started = a.call("brew_ticket", json!({ "ref": "ticket:0003" })).unwrap();
+    assert_eq!((started["node"]["status"].clone(), started["waiting"][0]["ticket"].clone()), (json!("brewing"), json!("0001")));
     drop(a);
     let a = ana.open(h.as_writer());
-    assert_eq!(a.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"][0]["ticket"], "0001");
-    // Landed on the main line, it is waiting nowhere.
-    assert_eq!(h.daemon.call("land_ticket", json!({ "ref": "ticket:0001" })).unwrap()["landed"], true);
+    assert_eq!(a.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap()["waiting"][0]["ticket"], "0001");
+    // Bottled on the main line, it is waiting nowhere.
+    assert_eq!(h.daemon.call("bottle_ticket", json!({ "ref": "ticket:0001" })).unwrap()["bottled"], true);
     a.sync_now().unwrap();
-    assert_eq!(a.call("start_ticket", json!({ "ref": "ticket:0003" })).unwrap()["waiting"], json!([]));
+    assert_eq!(a.call("brew_ticket", json!({ "ref": "ticket:0003" })).unwrap()["waiting"], json!([]));
 }
 
 /// # Test contract
@@ -478,7 +478,7 @@ fn a_teammates_write_arrives_without_a_reload() {
     let (a, b) = (ana.open(h.as_writer()), ben.open(h.as_writer()));
     remote::follow(&b);
     let mut heard = b.subscribe();
-    a.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    a.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     a.call("put_page", page("from-ana")).unwrap();
     // Nobody asks ben's daemon to sync: it hears the server and fetches.
     eventually("ana's page shows on ben's machine", || b.call("get", json!({ "ref": "page:from-ana", "ticket": "0001" })).is_ok());
@@ -508,7 +508,7 @@ fn offline_a_machine_reads_its_copy_and_writes_nothing() {
     let mut h = host();
     let m = machine();
     let d = m.open(h.as_writer());
-    d.call("start_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    d.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
     d.call("put_page", page("aim")).unwrap();
     // A token the server refuses does not open, copy or no copy.
     assert!(matches!(Daemon::open_remote(&m.copy, &m.repo, Server::new(&h.address, Some("grm_not-held".into()))), Err(OpenError::Server(RemoteError::Refused(..)))));
@@ -520,11 +520,11 @@ fn offline_a_machine_reads_its_copy_and_writes_nothing() {
     assert_eq!(e.code(), "store_unavailable");
     assert!(e.to_string().contains(&h.address), "{e}");
     assert!(d.call("get", json!({ "ref": "page:more", "ticket": "0001" })).is_err());
-    assert_eq!(code(d.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap_err()), "store_unavailable");
+    assert_eq!(code(d.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap_err()), "store_unavailable");
     let status = d.call("status", json!({})).unwrap();
     assert_eq!((status["server"]["reachable"].clone(), status["server"]["fetched"].clone()), (json!(false), fetched.clone()), "unreachable, and when the copy was fetched");
-    // What is the checkout's own needs no server: an unnamed landing still answers.
-    assert_eq!(d.call("land_ticket", json!({})).unwrap()["landed"], false);
+    // What is the checkout's own needs no server: an unnamed bottling still answers.
+    assert_eq!(d.call("bottle_ticket", json!({})).unwrap()["bottled"], false);
     // Opened anew with the server still away, the machine reads the copy it holds: the check still runs.
     drop(d);
     let again = m.open(h.as_writer());
@@ -596,26 +596,26 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
     // start leaves here is held nowhere else, so the machine's run of it is kept, in memory and in the copy.
     let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
     let gone = Server::new(&answers_then_goes(vec![intent, json!({ "node": { "ref": "ticket:0002", "status": "active" }, "rests_on": [], "related": [] })]), Some(h.writer.clone()));
-    let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "start_ticket", json!({ "ref": "ticket:0002" }), "2026-10-03").unwrap();
+    let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "brew_ticket", json!({ "ref": "ticket:0002" }), "2026-10-03").unwrap();
     assert_eq!(answer["node"]["ref"], "ticket:0002");
     assert_eq!(changed, vec![Changed::Many(vec![Changed::Started("0002".into()), Changed::Current])]);
     assert_eq!(loaded.state.current().as_deref(), Some("0002"));
     let (kept, malformed) = store_io::load(&m.copy).unwrap();
     assert!(malformed.is_empty(), "{malformed:?}");
-    assert_eq!((kept.current.as_deref(), kept.starts.contains_key("0002"), kept.tickets["0002"].status), (Some("0002"), true, Status::Active));
+    assert_eq!((kept.current.as_deref(), kept.starts.contains_key("0002"), kept.tickets["0002"].status), (Some("0002"), true, Status::Brewing));
     assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
-    // And a close: the server takes the close `when: landed` and is gone. Which checkout closed it is held nowhere
-    // else, so the machine's run is kept too, and a later start here is told the change still waits to land.
-    h.daemon.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    // And a close: the server takes the close `when: bottled` and is gone. Which checkout closed it is held nowhere
+    // else, so the machine's run is kept too, and a later start here is told the change still waits to be bottled.
+    h.daemon.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
     let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
-    let gone = Server::new(&answers_then_goes(vec![intent, json!({ "node": { "ref": "ticket:0002", "status": "landing" }, "findings": [], "baselined": 0 })]), Some(h.writer.clone()));
-    let close = json!({ "ref": "ticket:0002", "decision": { "text": "Done." }, "when": "landed" });
+    let gone = Server::new(&answers_then_goes(vec![intent, json!({ "node": { "ref": "ticket:0002", "status": "simmering" }, "findings": [], "baselined": 0 })]), Some(h.writer.clone()));
+    let close = json!({ "ref": "ticket:0002", "decision": { "text": "Done." }, "when": "bottled" });
     let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "close_ticket", close, "2026-10-03").unwrap();
-    assert_eq!((answer["node"]["status"].clone(), changed.len()), (json!("landing"), 1));
+    assert_eq!((answer["node"]["status"].clone(), changed.len()), (json!("simmering"), 1));
     let (kept, malformed) = store_io::load(&m.copy).unwrap();
     assert!(malformed.is_empty(), "{malformed:?}");
     let repository = kept.config.repository.clone();
-    assert_eq!((kept.tickets["0002"].status, kept.starts["0002"].closed_in.as_deref()), (Status::Landing, Some(repository.as_str())));
+    assert_eq!((kept.tickets["0002"].status, kept.starts["0002"].simmering_in.as_deref()), (Status::Simmering, Some(repository.as_str())));
     assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
     assert_eq!(grimoire_core::ops::waiting_here(&kept, None).len(), 1, "a start here would be told it still waits");
 }
@@ -629,14 +629,14 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
 fn an_older_server_still_lets_a_ticket_be_taken_up() {
     let h = host();
     let m = machine();
-    h.daemon.call("start_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    h.daemon.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
     drop(m.open(h.as_writer()));
-    // A server older than who has a ticket refuses to start one already active: the take-up is the machine's alone.
+    // A server older than who has a ticket refuses to start one already brewing: the take-up is the machine's alone.
     let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
-    let older = Server::new(&answers_then_goes(vec![intent, json!({ "error": "conflict", "message": "ticket:0002 is active, not open" })]), Some(h.writer.clone()));
+    let older = Server::new(&answers_then_goes(vec![intent, json!({ "error": "conflict", "message": "ticket:0002 is brewing, not inscribed" })]), Some(h.writer.clone()));
     let mut loaded = grimoire_server::load(&m.copy).unwrap();
-    let (answer, _) = remote::write_through(&older, &m.copy, &mut loaded.state, "start_ticket", json!({ "ref": "ticket:0002" }), "2026-10-08").unwrap();
-    assert_eq!(answer["node"]["status"], "active");
+    let (answer, _) = remote::write_through(&older, &m.copy, &mut loaded.state, "brew_ticket", json!({ "ref": "ticket:0002" }), "2026-10-08").unwrap();
+    assert_eq!(answer["node"]["status"], "brewing");
     let (kept, _) = store_io::load(&m.copy).unwrap();
     assert_eq!((kept.current.as_deref(), kept.starts.contains_key("0002")), (Some("0002"), true), "current here, with this checkout's start");
     assert_eq!(kept, *loaded.state.store(), "memory holds what the copy does");
@@ -659,38 +659,38 @@ fn a_refused_token_is_not_a_server_that_is_away() {
     // Revoked while the daemon serves: the next time the server is asked, here by a write, it refuses,
     // and that is told apart from a token that may only read, which is refused its write and no more.
     assert!(store_io::tokens::revoke(&h.store, "ana").unwrap());
-    let e = d.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err();
+    let e = d.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err();
     assert_eq!(e.code(), "store_unavailable");
     assert!(e.to_string().contains("grimoire login") && !e.to_string().contains("waits until"), "{e}");
     let reading = machine();
     let r = reading.open(Server::new(&h.address, Some(h.reader.clone())));
-    assert_eq!(code(r.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "invalid");
+    assert_eq!(code(r.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "invalid");
     assert_eq!(r.call("status", json!({})).unwrap()["server"]["refused"], false);
     assert!(r.call("board", json!({})).is_ok(), "a reader goes on reading");
     // A caller with a token of its own, as a command run with GRIMOIRE_TOKEN is: its write goes signed in as it, not as the daemon.
     let pipeline = store_io::tokens::add(&h.store, "pipeline", true).unwrap();
     let filed = json!({ "title": "From a pipeline", "kind": "gap", "priority": "later", "body": "b" });
-    assert!(r.call_as("file_ticket", filed.clone(), Some(pipeline.clone())).is_ok(), "the reader's daemon, the pipeline's token");
-    assert_eq!(code(r.call_as("file_ticket", filed.clone(), None).unwrap_err()), "invalid", "with none, the daemon's own");
-    assert_eq!(code(d.call_as("file_ticket", filed, Some(h.reader.clone())).unwrap_err()), "invalid", "and a token that may only read is not lent the daemon's");
+    assert!(r.call_as("inscribe_ticket", filed.clone(), Some(pipeline.clone())).is_ok(), "the reader's daemon, the pipeline's token");
+    assert_eq!(code(r.call_as("inscribe_ticket", filed.clone(), None).unwrap_err()), "invalid", "with none, the daemon's own");
+    assert_eq!(code(d.call_as("inscribe_ticket", filed, Some(h.reader.clone())).unwrap_err()), "invalid", "and a token that may only read is not lent the daemon's");
     let status = d.call("status", json!({})).unwrap();
     assert_eq!((status["server"]["refused"].clone(), status["server"]["reachable"].clone()), (json!(true), json!(false)), "said as refused, in status, which still answers");
     // Its copy is not read on in silence, and nothing is written.
     let e = d.call("board", json!({})).unwrap_err();
     assert_eq!(e.code(), "store_unavailable");
     assert!(e.to_string().contains("grimoire login"), "{e}");
-    assert_eq!(code(d.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "store_unavailable");
+    assert_eq!(code(d.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "store_unavailable");
     // The person signs in again: the daemon finds the new token by itself, and takes up where it was.
     let again = store_io::tokens::add(&h.store, "ana-again", true).unwrap();
     remote::keep_token(&credentials, &h.address, &again).unwrap();
     assert!(d.call("board", json!({})).is_ok(), "asked again on the next call, with nobody telling it to");
     let status = d.call("status", json!({})).unwrap();
     assert_eq!((status["server"]["reachable"].clone(), status["server"]["refused"].clone()), (json!(true), json!(false)));
-    assert!(d.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).is_ok());
+    assert!(d.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).is_ok());
     // Refused again, and then the server goes away before it can be asked again: still refused, not merely offline,
     // so the copy is not read on. Only a server that takes the token ends it.
     assert!(store_io::tokens::revoke(&h.store, "ana-again").unwrap());
-    assert_eq!(code(d.call("file_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "store_unavailable");
+    assert_eq!(code(d.call("inscribe_ticket", json!({ "title": "T", "kind": "gap", "priority": "later", "body": "b" })).unwrap_err()), "store_unavailable");
     h.stop();
     assert_eq!(code(d.call("board", json!({})).unwrap_err()), "store_unavailable");
     let status = d.call("status", json!({})).unwrap();

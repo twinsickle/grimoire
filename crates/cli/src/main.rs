@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, land, token, login, logout, scaffold, init, uninstall or tool.","criteria":[{"id":"token","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked; token revoke removes one by name and fails when there is none; token list prints each name and what it may do; each finds its store as every command does, refusing a project that names a server unless --store names the store, and takes the tokens' own lock, never the store's, so it works while a daemon serves; a command run with GRIMOIRE_TOKEN set sends it to the daemon it calls, and one the daemon refuses says so and does not go round it."},{"id":"writes-through-daemon","statement":"tool, adopt, land and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it or names a server, whose store here is this checkout's copy of the server's intent; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and land for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check, or from the moment a daemon's library has let the store go, to the store's removal; refused, it writes nothing, but uninstall --delete-store, which queues the deletion when another holds the lock. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, bottle, token, login, logout, scaffold, init, uninstall or tool.","criteria":[{"id":"token","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked; token revoke removes one by name and fails when there is none; token list prints each name and what it may do; each finds its store as every command does, refusing a project that names a server unless --store names the store, and takes the tokens' own lock, never the store's, so it works while a daemon serves; a command run with GRIMOIRE_TOKEN set sends it to the daemon it calls, and one the daemon refuses says so and does not go round it."},{"id":"writes-through-daemon","statement":"tool, adopt, bottle and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-resolution","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it or names a server, whose store here is this checkout's copy of the server's intent; a --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"takes-the-lock","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and bottle for the call, init from creating or opening the store to adopting, scaffold while it writes the store, and uninstall --delete-store from its first check, or from the moment a daemon's library has let the store go, to the store's removal; refused, it writes nothing, but uninstall --delete-store, which queues the deletion when another holds the lock. Reads take no lock, and check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."}]}
 //! ```
 
 mod check;
@@ -70,7 +70,7 @@ enum Command {
         #[arg(long)]
         json: bool,
         /// Judge the code against this ticket's proposal, a slug or a ticket:
-        /// reference, as a pipeline does before the change lands. Defaults to
+        /// reference, as a pipeline does before the change is bottled. Defaults to
         /// the current ticket, or the truth when there is none.
         #[arg(long)]
         ticket: Option<String>,
@@ -98,7 +98,7 @@ enum Command {
     /// Point a repository at a store and install the integration: .grimoire.toml,
     /// the agent skill and its references, a marked section in CLAUDE.md and
     /// AGENTS.md, the MCP entry, a pre-commit hook running `check` and a
-    /// post-commit hook running `land`.
+    /// post-commit hook running `bottle`.
     Init {
         #[arg(long)]
         repo: Option<PathBuf>,
@@ -142,12 +142,15 @@ enum Command {
         #[arg(long)]
         reason: String,
     },
-    /// Tell Grimoire a change landed: close the ticket waiting on it with the
-    /// decision it carries. With no ticket, the current one when it is landing.
-    Land {
+    /// Tell Grimoire a change is on the main line: bottle the ticket simmering
+    /// on it, with the decision it carries. With no ticket, the current one when
+    /// it is simmering.
+    // `land`, its name before ticket 0168, still runs it, so hooks and pipelines written for it go on working.
+    #[command(alias = "land")]
+    Bottle {
         #[arg(long)]
         store: Option<String>,
-        /// The ticket to land, a slug or a ticket: reference. Defaults to the current ticket.
+        /// The ticket to bottle, a slug or a ticket: reference. Defaults to the current ticket.
         ticket: Option<String>,
     },
     /// The tokens a shared daemon admits: add one, revoke one, or list them.
@@ -342,7 +345,7 @@ fn run_tool(target: &Target, name: &str, input: Value, held: Option<&store_io::S
     let mut loaded = grimoire_server::load_for(store_dir, view.as_deref())?;
     // A lint is the check's answer, judged by this checkout's own work (req:check-own-work), and a close
     // names only this ticket's own work (req:tool-untouched): both tell it from the base's code.
-    if matches!(name, "lint" | "close_ticket" | "land_ticket") {
+    if matches!(name, "lint" | "close_ticket" | "bottle_ticket") {
         if let Err(e) = grimoire_server::base::give(&mut loaded.state, &loaded.repo) {
             eprintln!("warning: {e}");
         }
@@ -489,14 +492,15 @@ fn main() -> anyhow::Result<()> {
         Command::Init { repo, store, server, languages, port, name, empty } => init::command::run(repo, store, server, languages, port, name, empty),
         Command::Uninstall { repo, delete_store } => uninstall::uninstall(repo, delete_store),
         Command::Adopt { store, reason } => adopt(&target(store.as_deref())?, &reason, None),
-        Command::Land { store, ticket } => check::land(&target(store.as_deref())?, ticket.as_deref()),
+        Command::Bottle { store, ticket } => check::bottle(&target(store.as_deref())?, ticket.as_deref()),
         Command::Tool { store, name, input } => {
             let target = target(store.as_deref())?;
             let input: Value = match input {
                 Some(s) => serde_json::from_str(&s).context("input is not JSON")?,
                 None => json!({}),
             };
-            match run_tool(&target, &name, input, None)? {
+            // A former tool name is answered as the tool it now names (req:tools-former-names).
+            match run_tool(&target, grimoire_core::tools::canonical(&name), input, None)? {
                 Ok(out) => {
                     println!("{}", serde_json::to_string_pretty(&out)?);
                     Ok(())

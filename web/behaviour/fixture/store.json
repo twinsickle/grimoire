@@ -175,7 +175,7 @@
       "relies_on": [
         "page:old-naming"
       ],
-      "body": "Closed by the fixture, touching a requirement and relying on a page that have since gone.",
+      "body": "Bottled by the fixture, touching a requirement and relying on a page that have since gone.",
       "close": "Named ready."
     },
     {
@@ -239,8 +239,8 @@
       "touches": [
         "module:src/ready"
       ],
-      "body": "Landing: its decision is written and its change has yet to land.",
-      "land": "Reported in one line, once it lands."
+      "body": "Simmering: its decision is written and its change has yet to be bottled.",
+      "bottle": "Reported in one line, once it is bottled."
     }
   ],
   "after_adoption": {

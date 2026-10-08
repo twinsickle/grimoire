@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the landing. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to start, specify, finish and file a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's start sequence reads the recipes start_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"landing-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire land, so a commit lands the ticket waiting on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; it says how the work is done is in the rites, the grimoire's second root, to be read before working, that a rule of work belongs there and never in the file, and that the rest of the file is the project's own; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"skill-one-ticket-per-branch","statement":"The embedded skill says a branch holds one ticket until that ticket lands, landed with grimoire land, on a team once the branch has merged to the main line; that work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone lands; that work found along the way is filed as a ticket of its own; and that start_ticket answers in waiting each ticket the checkout still carries, never refusing, its start sequence saying to land that one first or move the work to a new branch."}]}
+//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the bottling. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to brew, specify, finish and inscribe a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's brew sequence reads the recipes brew_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"bottling-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire bottle, so a commit bottles the ticket simmering on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so; the post-commit hook an earlier release wrote, running grimoire land, is init's own and rewritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; it says how the work is done is in the rites, the grimoire's second root, to be read before working, that a rule of work belongs there and never in the file, and that the rest of the file is the project's own; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"skill-one-ticket-per-branch","statement":"The embedded skill says a branch holds one ticket until that ticket is bottled, bottled with grimoire bottle, on a team once the branch has merged to the main line; that work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone is bottled; that work found along the way is inscribed as a ticket of its own; and that brew_ticket answers in waiting each ticket the checkout still carries, never refusing, its brew sequence saying to bottle that one first or move the work to a new branch."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ pub const CODEX_REL: &str = ".codex/config.toml";
 /// What `.codex/config.toml` still needs of the person.
 pub const CODEX_TRUST: &str = "Codex reads this only once the project is trusted in your own Codex configuration (~/.codex/config.toml); init leaves that to you";
 pub const HOOK_REL: &str = ".git/hooks/pre-commit";
-pub const LANDING_HOOK_REL: &str = ".git/hooks/post-commit";
+pub const BOTTLING_HOOK_REL: &str = ".git/hooks/post-commit";
 
 /// The guidance section for one harness, naming its copy of the skill.
 pub fn section(harness: &Harness) -> String {
@@ -93,14 +93,20 @@ pub fn hook_script() -> String {
     "#!/bin/sh\n# Installed by `grimoire init`. Fails the commit when the grimoire and the code disagree.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"pre-commit: grimoire is not on PATH; the grimoire was not checked\" >&2\n  exit 0\nfi\nexec grimoire check\n".to_string()
 }
 
-/// The post-commit hook: tells Grimoire the commit landed, so the ticket waiting on it closes.
-pub fn landing_hook_script() -> String {
-    "#!/bin/sh\n# Installed by `grimoire init`. Lands the ticket waiting on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was landed\" >&2\n  exit 0\nfi\nexec grimoire land\n".to_string()
+/// The post-commit hook: tells Grimoire a commit was made, so the ticket simmering on it is bottled.
+pub fn bottling_hook_script() -> String {
+    "#!/bin/sh\n# Installed by `grimoire init`. Bottles the ticket simmering on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was bottled\" >&2\n  exit 0\nfi\nexec grimoire bottle\n".to_string()
+}
+
+/// The script an earlier release installed at `rel`, before ticket 0168 renamed landing to bottling:
+/// still init's own, so uninstall takes it out unedited and init rewrites it.
+pub fn former_hook_script(rel: &str) -> Option<String> {
+    (rel == BOTTLING_HOOK_REL).then(|| "#!/bin/sh\n# Installed by `grimoire init`. Lands the ticket waiting on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was landed\" >&2\n  exit 0\nfi\nexec grimoire land\n".to_string())
 }
 
 /// init's hooks: where each goes, its script, and the command it runs.
 pub fn hooks() -> [(&'static str, String, &'static str); 2] {
-    [(HOOK_REL, hook_script(), "grimoire check"), (LANDING_HOOK_REL, landing_hook_script(), "grimoire land")]
+    [(HOOK_REL, hook_script(), "grimoire check"), (BOTTLING_HOOK_REL, bottling_hook_script(), "grimoire bottle")]
 }
 
 /// Write the integration into `repo`: `plan_install`, then apply it.
@@ -170,7 +176,7 @@ impl Install {
             });
         }
 
-        // The hooks, the check before a commit and the landing after it: only
+        // The hooks, the check before a commit and the bottling after it: only
         // when the repository is a git checkout, and each only where there is none.
         let git = repo.join(".git");
         for (rel, script, command) in hooks() {
@@ -251,7 +257,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber", "crates/cli/src/init#landing-hook"]}
+    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber", "crates/cli/src/init#bottling-hook"]}
     /// ```
     #[test]
     fn installs_and_merges() {
@@ -265,12 +271,12 @@ mod tests {
         let wrote = install(repo, 4343, "shop").unwrap();
         // Three skill files per harness, two guidance files, .mcp.json, .codex/config.toml, the two hooks.
         assert_eq!(wrote.len(), 12);
-        // The check before a commit and the landing after it, each quiet when grimoire is not on the path.
+        // The check before a commit and the bottling after it, each quiet when grimoire is not on the path.
         for (rel, _, command) in hooks() {
             let hook = std::fs::read_to_string(repo.join(rel)).unwrap();
             assert!(hook.contains(HOOK_MARK) && hook.ends_with(&format!("exec {command}\n")) && hook.contains("exit 0"), "{rel}: {hook}");
         }
-        assert!(landing_hook_script().contains("exec grimoire land"));
+        assert!(bottling_hook_script().contains("exec grimoire bottle"));
         let noted: Vec<_> = wrote.iter().filter(|w| !matches!(w, Wrote::Written(_))).collect();
         assert_eq!(noted, [&Wrote::Noted { path: repo.join(CODEX_REL), note: CODEX_TRUST.into() }]);
 
@@ -433,7 +439,7 @@ mod tests {
     /// ```
     #[test]
     fn skill_holds_every_sequence() {
-        for s in ["start a ticket", "write the spec", "finish a ticket", "file a ticket", "resolve a gap or question", "adopt existing code"] {
+        for s in ["brew a ticket", "write the spec", "finish a ticket", "inscribe a ticket", "resolve a gap or question", "adopt existing code"] {
             assert!(SKILL_MD.contains(&format!("## Sequence: {s}")), "the skill has no `{s}` sequence");
         }
         let adopt = &SKILL_MD[SKILL_MD.find("## Sequence: adopt existing code").unwrap_or(0)..];
@@ -453,8 +459,8 @@ mod tests {
     /// ```
     #[test]
     fn the_skill_judges_the_recipes_due_before_closing() {
-        let start = SKILL_MD.split("## Sequence: start a ticket").nth(1).and_then(|s| s.split("## Sequence:").next()).expect("a start sequence");
-        assert!(start.contains("`recipes`") && start.contains("`due`"), "the start reads the recipes resting on what the ticket touches");
+        let start = SKILL_MD.split("## Sequence: brew a ticket").nth(1).and_then(|s| s.split("## Sequence:").next()).expect("a brew sequence");
+        assert!(start.contains("`recipes`") && start.contains("`due`"), "the brew reads the recipes resting on what the ticket touches");
         let finish = SKILL_MD.split("## Sequence: finish a ticket").nth(1).and_then(|s| s.split("## Sequence:").next()).expect("a finish sequence");
         let (judge, close) = (finish.find("Judge the recipes").expect("a step judging the recipes"), finish.find("`close_ticket {").expect("a close step"));
         assert!(judge < close, "recipes are judged before the close");
@@ -490,14 +496,15 @@ mod tests {
     fn the_skill_says_a_branch_holds_one_ticket() {
         let flat = SKILL_MD.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
-            flat.contains("**A branch holds one ticket** until that ticket lands") && flat.contains("landed with `grimoire land`, which on a team is once the branch has merged to the main line"),
+            flat.contains("**A branch holds one ticket** until that ticket is bottled")
+                && flat.contains("bottled with `grimoire bottle`, which on a team is once the branch has merged to the main line"),
             "the rule"
         );
-        assert!(flat.contains("split into branches of the ticket's branch") && flat.contains("merges back into the ticket's branch, which alone lands"), "helpers");
-        assert!(flat.contains("Work found along the way is filed as a ticket of its own"), "found work");
-        assert!(flat.contains("Nothing refuses a second ticket: `start_ticket` answers in `waiting`"), "a warning, never a refusal");
-        let start = &flat[flat.find("## Sequence: start a ticket").expect("a start sequence")..];
-        assert!(start.contains("If it answers `waiting`") && start.contains("land that one first or move this work to a new branch"), "the start sequence says what to do");
+        assert!(flat.contains("split into branches of the ticket's branch") && flat.contains("merges back into the ticket's branch, which alone is bottled"), "helpers");
+        assert!(flat.contains("Work found along the way is inscribed as a ticket of its own"), "found work");
+        assert!(flat.contains("Nothing refuses a second ticket: `brew_ticket` answers in `waiting`"), "a warning, never a refusal");
+        let start = &flat[flat.find("## Sequence: brew a ticket").expect("a brew sequence")..];
+        assert!(start.contains("If it answers `waiting`") && start.contains("bottle that one first or move this work to a new branch"), "the brew sequence says what to do");
     }
 
     /// # Test contract

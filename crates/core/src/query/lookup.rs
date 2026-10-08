@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Show a node the way every read tool returns it, in full or as a summary, and find nodes by text.","criteria":[{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"withdrawn-marked","statement":"A ticket's summary says withdrawn, true, when its decision is marked withdrawn, and leaves it out otherwise, so the board and every list of tickets tell a withdrawn change from one that landed."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."}]}
+//! {"purpose":"Show a node the way every read tool returns it, in full or as a summary, and find nodes by text.","criteria":[{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"withdrawn-marked","statement":"A ticket's summary says withdrawn, true, when its decision is marked withdrawn, and leaves it out otherwise, so the board and every list of tickets tell a withdrawn change from one that bottled."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."}]}
 //! ```
 
 use serde::Serialize;
@@ -52,7 +52,7 @@ pub struct Summary {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub status: Option<Status>,
-    // A closed change withdrawn, nothing of it applied (req:tool-withdraw-ticket).
+    // A bottled change withdrawn, nothing of it applied (req:tool-withdraw-ticket).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub withdrawn: bool,
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn a_withdrawn_change_is_marked_in_its_summary() {
         use crate::graph::fixtures::ticket;
-        let mut t = ticket("w", TicketKind::Change, Priority::Later, Status::Closed, &[], &[]);
+        let mut t = ticket("w", TicketKind::Change, Priority::Later, Status::Bottled, &[], &[]);
         assert!(!ticket_summary(&t).withdrawn);
         assert!(serde_json::to_value(ticket_summary(&t)).unwrap().get("withdrawn").is_none(), "left out when not withdrawn");
         t.decision.as_mut().unwrap().withdrawn = true;

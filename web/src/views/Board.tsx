@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The cauldron: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the unsettled gaps and questions, which no change relies on, then on request the recently closed; any row opens into the whole ticket, and the changes, and apart from them the unsettled gaps and questions, are ranked by dragging.","criteria":[{"id":"empty-cauldron","statement":"When the board tool returns no change and no unsettled gap or question, the cauldron shows its filters and, in place of its bands and the Unsettled section, an EmptyState with the cauldron saying it is empty and that a ticket an agent files shows here; the recently closed still show when asked for."},{"id":"first-screen","statement":"Open, active and landing changes are listed in the board tool's order under their priority, each marked ready or as waiting on the count of its unanswered gaps and questions, a landing one marked as waiting to land, counted as neither and shown whatever the filters, followed by the unsettled gaps and questions, those no change relies on, under their priority in the board tool's order; under each change's row, open or not, a line for each gap or question it relies on gives its kind, id, title and own priority under the row's columns and its status, open, answered while it waits for its change, or closed and muted, and no gap or question is listed in a band; filters show or hide ready changes, changes needing refinement, unsettled gaps and questions, and the most recently closed tickets, which are hidden at first and capped; among those closed, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; a change, and apart from the changes an unsettled gap or question, is moved only among the tickets of its own list: dragging one within its band calls reorder with the band's whole order, both lists in it so a move in one never loses the other's, dropping it in another band calls update_ticket for its priority and then reorder, announcing the gaps and questions moved with it, or, when the priority rule raised it back, calls no reorder and says it stays, and Alt+Up or Alt+Down on its handle moves it one place in its list, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the ticket's own row, or among the other list's, does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a closed ticket's reference to a node that no longer exists marked so and not a link, the line naming each active or landing ticket whose proposal would change its references as its page shows it, the line to hand to an agent for its next step with its Copy button, never a start or close, and a link to its own page."},{"id":"checked-out","statement":"A row of a ticket being worked, a change's or an unsettled gap's or question's, says who has it checked out and since when as checkedOutWords words it, from the board tool's checked_out, and a row the tool gives no checked_out says nothing of it."},{"id":"focus-follows","statement":"After a move from the keyboard, once the cauldron has drawn the moved ticket in its new place, focus is on that ticket's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
+ * {"purpose":"The cauldron: one view of what can be worked on, from the board tool. Changes in its order by priority, each ready or waiting on the gaps and questions it relies on, then the unsettled gaps and questions, which no change relies on, then on request the recently closed; any row opens into the whole ticket, and the changes, and apart from them the unsettled gaps and questions, are ranked by dragging.","criteria":[{"id":"empty-cauldron","statement":"When the board tool returns no change and no unsettled gap or question, the cauldron shows its filters and, in place of its bands and the Unsettled section, an EmptyState with the cauldron saying it is empty and that a ticket an agent inscribes shows here; the recently bottled still show when asked for."},{"id":"first-screen","statement":"Inscribed, brewing and simmering changes are listed in the board tool's order under their priority, each marked ready or as waiting on the count of its unanswered gaps and questions, a simmering one marked as waiting to be bottled, counted as neither and shown whatever the filters, followed by the unsettled gaps and questions, those no change relies on, under their priority in the board tool's order; under each change's row, open or not, a line for each gap or question it relies on gives its kind, id, title and own priority under the row's columns and its status, inscribed or brewing, answered while it waits for its change, or bottled and muted, and no gap or question is listed in a band; filters show or hide ready changes, changes needing refinement, unsettled gaps and questions, and the most recently bottled tickets, which are hidden at first and capped; among those bottled, a gap or question no change relies on is marked as having nothing built on it."},{"id":"order-from-tool","statement":"Rows appear in the order the board tool returns them and the view never re-sorts; a change, and apart from the changes an unsettled gap or question, is moved only among the tickets of its own list: dragging one within its band calls reorder with the band's whole order, both lists in it so a move in one never loses the other's, dropping it in another band calls update_ticket for its priority and then reorder, announcing the gaps and questions moved with it, or, when the priority rule raised it back, calls no reorder and says it stays, and Alt+Up or Alt+Down on its handle moves it one place in its list, into the neighbouring band past an edge, announcing the move; moves run one at a time, each from the order the last one wrote, and a drop on the ticket's own row, or among the other list's, does nothing."},{"id":"ticket-in-place","statement":"Any row expands in place into the whole ticket read with get: what it waits on with each one's status, its body as folded Markdown, what it touches and relies on, a bottled ticket's reference to a node that no longer exists marked so and not a link, the line naming each brewing or simmering ticket whose proposal would change its references as its page shows it, the line to hand to an agent for its next step with its Copy button, never a start or close, and a link to its own page."},{"id":"checked-out","statement":"A row of a ticket being worked, a change's or an unsettled gap's or question's, says who has it checked out and since when as checkedOutWords words it, from the board tool's checked_out, and a row the tool gives no checked_out says nothing of it."},{"id":"focus-follows","statement":"After a move from the keyboard, once the cauldron has drawn the moved ticket in its new place, focus is on that ticket's handle when the redraw took it away, in another band as within one, so a further press moves it again; focus follows only the redraws of that move, while it is being written and for a moment after, and not at all once the person has moved focus elsewhere, started a drag, or the move has failed."}]}
  * ```
  */
 
@@ -21,12 +21,12 @@ const KIND_CHIP: Record<TicketKind, string> = {
   gap: "text-warn border-warn/40",
   question: "text-req border-req/40",
 };
-const CLOSED_FIRST = 5;
+const BOTTLED_FIRST = 5;
 /** Where a dragged row would land: which list, which band, and before which row (null for the end). */
 type Over = { group: Group; band: Priority; before: Ref | null };
-const CLOSED_MORE = 10;
+const BOTTLED_MORE = 10;
 
-type Show = { ready: boolean; refine: boolean; unattached: boolean; closed: boolean };
+type Show = { ready: boolean; refine: boolean; unattached: boolean; bottled: boolean };
 type Bands = Record<Priority, Ref[]>;
 /** The two lists a person ranks: the changes, and the unsettled gaps and questions. Neither is dropped among the other. */
 type Group = "changes" | "unsettled";
@@ -60,19 +60,19 @@ function stamp(): number {
   return Date.now();
 }
 
-/** The gaps and questions a change still waits on: those not yet answered. A landing one is answered and waits for the change. */
+/** The gaps and questions a change still waits on: those not yet answered. A simmering one is answered and waits for the change. */
 function openWaits(t: BoardTicket): Summary[] {
-  return (t.waits_on ?? []).filter((w) => w.status === "open" || w.status === "active");
+  return (t.waits_on ?? []).filter((w) => w.status === "inscribed" || w.status === "brewing");
 }
 
 /** A row's columns, shared by the lines under it so each line's kind, id, title, priority and status sit under the row's own. */
-const ROW_COLUMNS = "grid grid-cols-[20px_28px_76px_minmax(120px,22ch)_minmax(0,1fr)_auto_56px] gap-x-2.5 items-center";
+const ROW_COLUMNS = "grid grid-cols-[20px_28px_76px_minmax(120px,22ch)_minmax(0,1fr)_auto_76px] gap-x-2.5 items-center";
 
 /** What a gap or question's status says under the change relying on it. */
 function waitStatus(w: Summary): { text: string; className: string; title: string } {
-  if (w.status === "closed") return { text: "closed", className: "text-fg-dim", title: "Answered and closed." };
-  if (w.status === "landing") return { text: "answered", className: "text-ok", title: "Answered: it closes when the change applying it lands." };
-  return { text: "open", className: "text-warn", title: "Not yet answered: the change waits on it." };
+  if (w.status === "bottled") return { text: "bottled", className: "text-fg-dim", title: "Answered and bottled." };
+  if (w.status === "simmering") return { text: "answered", className: "text-ok", title: "Answered: it is bottled when the change applying it is." };
+  return { text: w.status ?? "inscribed", className: "text-warn", title: "Not yet answered: the change waits on it." };
 }
 
 /** One line under a change's row for each gap or question it relies on, lined up with the row: kind, id, title, its own priority and its status. */
@@ -81,7 +81,7 @@ function WaitLines({ waits }: { waits: Summary[] }) {
     <ul aria-label="Relies on" className="list-none m-0 px-2.5 pt-1 pb-1.5 border-t border-line/60 flex flex-col gap-0.5">
       {waits.map((w) => {
         const st = waitStatus(w);
-        const closed = w.status === "closed";
+        const bottled = w.status === "bottled";
         return (
           <li key={w.ref} data-wait={w.ref} className={`${ROW_COLUMNS} min-h-6`}>
             <span />
@@ -90,10 +90,10 @@ function WaitLines({ waits }: { waits: Summary[] }) {
             <Link to={nodePath(w.ref)} className={`${mono} text-fg-dim text-xs overflow-hidden text-ellipsis whitespace-nowrap`}>
               {idOf(w.ref)}
             </Link>
-            <Link to={nodePath(w.ref)} className={`text-[13px] overflow-hidden text-ellipsis whitespace-nowrap ${closed ? "text-fg-dim" : "text-fg"}`}>
+            <Link to={nodePath(w.ref)} className={`text-[13px] overflow-hidden text-ellipsis whitespace-nowrap ${bottled ? "text-fg-dim" : "text-fg"}`}>
               {w.title}
             </Link>
-            <span className={`justify-self-end text-xs ${closed ? "text-fg-dim" : BAND_COLOR[w.priority ?? "later"]}`}>{w.priority}</span>
+            <span className={`justify-self-end text-xs ${bottled ? "text-fg-dim" : BAND_COLOR[w.priority ?? "later"]}`}>{w.priority}</span>
             <span title={st.title} className={`justify-self-end text-xs ${st.className}`}>
               {st.text}
             </span>
@@ -104,11 +104,11 @@ function WaitLines({ waits }: { waits: Summary[] }) {
   );
 }
 
-/** What can be worked on: changes by priority with their readiness, the unsettled gaps and questions, and the recently closed. */
+/** What can be worked on: changes by priority with their readiness, the unsettled gaps and questions, and the recently bottled. */
 export function BoardView() {
   useTabTitle("Cauldron");
-  const [show, setShow] = useState<Show>({ ready: true, refine: true, unattached: true, closed: false });
-  const [closedCount, setClosedCount] = useState(CLOSED_FIRST);
+  const [show, setShow] = useState<Show>({ ready: true, refine: true, unattached: true, bottled: false });
+  const [bottledCount, setBottledCount] = useState(BOTTLED_FIRST);
   const [open, setOpen] = useState<Set<Ref>>(new Set());
   const [dragging, setDragging] = useState<Ref | null>(null);
   const [over, setOver] = useState<Over | null>(null);
@@ -121,7 +121,7 @@ export function BoardView() {
   // second quick move never works from an answer that predates the first.
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const writtenRef = useRef<{ order: Order; at: number } | null>(null);
-  const { data, error } = useQuery(() => api.board({ closed: show.closed ? closedCount : 0 }), [show.closed, closedCount]);
+  const { data, error } = useQuery(() => api.board({ bottled: show.bottled ? bottledCount : 0 }), [show.bottled, bottledCount]);
   const dataRef = useRef<Board | null>(null);
   // The change being moved from the keyboard, and until when a redraw is still that move's:
   // while it is being written, then for a moment after. Not a redraw from anything else, later.
@@ -144,11 +144,11 @@ export function BoardView() {
 
   const changes = data.tickets;
   const band = (p: Priority) => changes.filter((t) => t.priority === p);
-  // A landing change is done being worked: neither ready to start nor in need of refinement.
-  const landing = changes.filter((t) => t.status === "landing").length;
-  const ready = changes.filter((t) => t.status !== "landing" && openWaits(t).length === 0).length;
-  const refine = changes.length - ready - landing;
-  // Nothing open of either list: the cauldron is empty, whatever the filters.
+  // A simmering change is done being worked: neither ready to brew nor in need of refinement.
+  const simmering = changes.filter((t) => t.status === "simmering").length;
+  const ready = changes.filter((t) => t.status !== "simmering" && openWaits(t).length === 0).length;
+  const refine = changes.length - ready - simmering;
+  // Nothing left in either list: the cauldron is empty, whatever the filters.
   const nothing = changes.length === 0 && data.unattached.length === 0;
   const toggle = (ref: Ref) => setOpen((s) => new Set(s.has(ref) ? [...s].filter((r) => r !== ref) : [...s, ref]));
 
@@ -354,16 +354,16 @@ export function BoardView() {
         {chip("ready", "Ready", ready, "bg-ok")}
         {chip("refine", "Needs refinement", refine, "bg-warn")}
         {chip("unattached", "Unsettled", data.unattached.length, "bg-req")}
-        {chip("closed", "Closed", null, "bg-fg-dim")}
+        {chip("bottled", "Bottled", null, "bg-fg-dim")}
       </div>
       <p aria-live="polite" className="sr-only">
         {said}
       </p>
       {failed && <p className={errorBox}>{failed}</p>}
       {/* Nothing in the cauldron at all: the empty state, with Grimoire's jingle (req:web-empty-states). */}
-      {nothing && <EmptyState icon="cauldron" text="The cauldron is empty: no change is open and no gap or question waits. A ticket an agent files shows here." />}
+      {nothing && <EmptyState icon="cauldron" text="The cauldron is empty: no change is inscribed or brewing and no gap or question waits. A ticket an agent inscribes shows here." />}
       {!nothing && BANDS.map((p) => {
-        const rows = band(p).filter((t) => t.status === "landing" || (openWaits(t).length ? show.refine : show.ready));
+        const rows = band(p).filter((t) => t.status === "simmering" || (openWaits(t).length ? show.refine : show.ready));
         // An empty band shows only while a change is dragged, as somewhere to drop it.
         if (rows.length === 0 && draggingGroup !== "changes") return null;
         return (
@@ -378,7 +378,7 @@ export function BoardView() {
           <h2 className="m-0 text-[11.5px] uppercase tracking-[0.06em] font-semibold text-req">
             Unsettled <span className="normal-case tracking-normal font-normal text-fg-dim">· gaps and questions not yet answered, with no change relying on them</span>
           </h2>
-          {data.unattached.length === 0 && <p className={empty}>Every open gap and question is attached to a change.</p>}
+          {data.unattached.length === 0 && <p className={empty}>Every gap and question not yet bottled is attached to a change.</p>}
           {BANDS.map((p) => {
             const rows = unsettled(p);
             // As for the changes: an empty band shows only while one of these is dragged.
@@ -392,19 +392,19 @@ export function BoardView() {
           })}
         </section>
       )}
-      {show.closed && (
-        <section id="closed" aria-label="Recently closed" className="flex flex-col gap-1">
+      {show.bottled && (
+        <section id="bottled" aria-label="Recently bottled" className="flex flex-col gap-1">
           <h2 className="m-0 text-[11.5px] uppercase tracking-[0.06em] font-semibold text-fg-dim">
-            Recently closed <span className="normal-case tracking-normal font-normal">· newest first</span>
+            Recently bottled <span className="normal-case tracking-normal font-normal">· newest first</span>
           </h2>
           <ul className="list-none m-0 p-0 flex flex-col gap-1">
-            {data.closed.map((t) => (
+            {data.bottled.map((t) => (
               <Row key={t.ref} t={t} open={open.has(t.ref)} onToggle={() => toggle(t.ref)} />
             ))}
           </ul>
-          {data.closed.length === closedCount && (
-            <button className="self-start" onClick={() => setClosedCount((n) => n + CLOSED_MORE)}>
-              Show {CLOSED_MORE} more
+          {data.bottled.length === bottledCount && (
+            <button className="self-start" onClick={() => setBottledCount((n) => n + BOTTLED_MORE)}>
+              Show {BOTTLED_MORE} more
             </button>
           )}
         </section>
@@ -475,8 +475,8 @@ function Row({ t, open, onToggle, move }: { t: BoardTicket; open: boolean; onTog
         </Link>
         <span className="flex items-center gap-2 justify-end text-xs whitespace-nowrap">
           <CheckedOutBy list={t.checked_out} />
-          {isChange && t.status === "landing" && <span className="border rounded-[10px] px-2 text-warn border-warn/40">waiting to land</span>}
-          {isChange && t.status !== "closed" && t.status !== "landing" && (
+          {isChange && t.status === "simmering" && <span className="border rounded-[10px] px-2 text-warn border-warn/40">waiting to be bottled</span>}
+          {isChange && t.status !== "bottled" && t.status !== "simmering" && (
             <span className={`border rounded-[10px] px-2 ${waiting ? "text-warn border-warn/40" : "text-ok border-ok/40"}`}>{waiting ? `waits on ${waiting}` : "ready"}</span>
           )}
           {t.followed_by?.length === 0 && (
@@ -523,7 +523,7 @@ function Ticket({ t }: { t: BoardTicket }) {
                     {w.title}
                   </Link>
                   <span className={`${mono} text-fg-dim text-xs`}>{idOf(w.ref)}</span>
-                  <span className={`ml-auto text-xs ${w.status === "closed" || w.status === "landing" ? "text-ok" : "text-warn"}`}>{w.status === "closed" ? "answered" : w.status === "landing" ? "answered, waits to land" : "open"}</span>
+                  <span className={`ml-auto text-xs ${w.status === "bottled" || w.status === "simmering" ? "text-ok" : "text-warn"}`}>{w.status === "bottled" ? "answered" : w.status === "simmering" ? "answered, waits to be bottled" : w.status}</span>
                 </li>
               ))}
             </ul>
@@ -533,7 +533,7 @@ function Ticket({ t }: { t: BoardTicket }) {
           <div>
             <h3 className={label}>
               Decision · {n.decision.date}
-              {n.status === "landing" && " · written, waiting for its change to land"}
+              {n.status === "simmering" && " · written, waiting for its change to be bottled"}
             </h3>
             <Markdown text={n.decision.text} />
           </div>
@@ -544,7 +544,7 @@ function Ticket({ t }: { t: BoardTicket }) {
         )}
       </div>
       <aside className="flex flex-col gap-3 min-w-0">
-        {n.status !== "closed" && <Handoff ticket={{ ref: t.ref, title: n.title, kind: n.kind, status: n.status }} />}
+        {n.status !== "bottled" && <Handoff ticket={{ ref: t.ref, title: n.title, kind: n.kind, status: n.status }} />}
         <div>
           <h3 className={label}>Touches</h3>
           {n.touches.length === 0 && <p className={empty}>Nothing.</p>}

@@ -116,7 +116,7 @@ impl Daemon {
             let mut theirs = store.clone();
             theirs.config.repository = state.store().config.repository.clone();
             let current = state.store().current.clone();
-            theirs.current = current.clone().filter(|t| theirs.tickets.get(t).is_some_and(|k| matches!(k.status, grimoire_core::model::Status::Active | grimoire_core::model::Status::Landing)));
+            theirs.current = current.clone().filter(|t| theirs.tickets.get(t).is_some_and(|k| matches!(k.status, grimoire_core::model::Status::Brewing | grimoire_core::model::Status::Simmering)));
             let cleared = current.is_some() && theirs.current.is_none();
             let languages = (state.store().config.languages != store.config.languages).then(|| store.config.languages.clone());
             state.set_store(theirs, malformed.to_vec());
@@ -194,14 +194,14 @@ mod tests {
         assert!(main.call("put_page", page("from-main")).is_ok());
         assert_eq!(other.call("put_page", page("from-wt")).unwrap_err().code(), "invalid", "the worktree has started no ticket");
         // A write in one is read at once in the other.
-        let filed = other.call("file_ticket", json!({ "title": "In the worktree", "kind": "change", "priority": "later", "body": "b" })).unwrap();
+        let filed = other.call("inscribe_ticket", json!({ "title": "In the worktree", "kind": "change", "priority": "later", "body": "b" })).unwrap();
         let ticket = filed["node"]["ref"].as_str().unwrap().to_string();
         assert!(main.call("get", json!({ "ref": ticket })).is_ok(), "the main checkout reads the worktree's ticket");
-        other.call("start_ticket", json!({ "ref": ticket })).unwrap();
+        other.call("brew_ticket", json!({ "ref": ticket })).unwrap();
         other.call("put_page", page("from-wt")).unwrap();
         let slug = ticket.trim_start_matches("ticket:").to_string();
         assert!(main.call("get", json!({ "ref": "page:from-wt", "ticket": slug })).is_ok(), "in the worktree's ticket's proposal, which the main checkout reads too");
-        assert!(main.call("get", json!({ "ref": "page:from-main", "ticket": "work" })).is_ok(), "the main checkout's still lands in its own");
+        assert!(main.call("get", json!({ "ref": "page:from-main", "ticket": "work" })).is_ok(), "the main checkout's still goes into its own");
         // Kept apart on disk: the main checkout's in current.json, the worktree's with it in checkouts.json.
         assert_eq!(store_io::load(&h.store).unwrap().0.current.as_deref(), Some("work"));
         assert_eq!(store_io::load_for(&h.store, &wt_at).unwrap().0.current.as_deref(), Some(slug.as_str()));
@@ -210,14 +210,14 @@ mod tests {
         let before = stored();
         std::fs::write(wt.join("src").join("b.rs"), CONTRACTED.replace("Say a.", "Say b.")).unwrap();
         other.reextract(&["src/b.rs".to_string()]);
-        assert_eq!(stored(), before, "a branch's fix has not landed");
+        assert_eq!(stored(), before, "a branch's fix has not reached the main line");
         std::fs::write(h.repo.join("src").join("b.rs"), CONTRACTED.replace("Say a.", "Say b.")).unwrap();
         main.reextract(&["src/b.rs".to_string()]);
         assert!(stored() < before, "the main checkout's prunes it");
         let held = |d: &Daemon| d.state.lock().unwrap().store().baseline.as_ref().map(|b| b.findings.len()).unwrap_or(0);
         assert_eq!(held(&other), stored(), "and the smaller baseline is handed to the worktree's view");
         // A ticket closed in one clears it as the other's current ticket.
-        main.call("start_ticket", json!({ "ref": ticket })).unwrap();
+        main.call("brew_ticket", json!({ "ref": ticket })).unwrap();
         main.call("close_ticket", json!({ "ref": ticket, "decision": { "text": "Done." } })).unwrap();
         assert_eq!(other.state.lock().unwrap().store().current, None);
         assert_eq!(store_io::load_for(&h.store, &wt_at).unwrap().0.current, None);
@@ -255,9 +255,9 @@ mod tests {
         // The main checkout's `work` is current, the worktree's none yet.
         assert_eq!(tickets(&main), vec![json!("work"), Value::Null]);
         // The worktree starts one: the main checkout's status names it at once, with no listing of the library since.
-        let filed = other.call("file_ticket", json!({ "title": "In the worktree", "kind": "change", "priority": "later", "body": "b" })).unwrap();
+        let filed = other.call("inscribe_ticket", json!({ "title": "In the worktree", "kind": "change", "priority": "later", "body": "b" })).unwrap();
         let ticket = filed["node"]["ref"].as_str().unwrap().to_string();
-        other.call("start_ticket", json!({ "ref": ticket })).unwrap();
+        other.call("brew_ticket", json!({ "ref": ticket })).unwrap();
         let listed = main.call("status", json!({})).unwrap()["library"][1]["current"].clone();
         assert_eq!(listed, json!({ "id": ticket.trim_start_matches("ticket:"), "title": "In the worktree" }));
         // A checkout that is no kin, as a team's each keep a copy of their own: named once the library tells of it.
