@@ -232,8 +232,9 @@ pub struct WaitingHere {
 
 /// `close_ticket`: the closed ticket, new findings on what it touched, the
 /// touched nodes that never changed and what changed that it never touched
-/// with the intent resting on it (each null when it was never started), and
-/// the gaps and questions whose answers closed with it.
+/// with the intent resting on it (each null when it was never started), the
+/// gaps and questions whose answers closed with it, and for an answer closed
+/// with the change that applies it, that change.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Closed {
@@ -245,6 +246,10 @@ pub struct Closed {
     pub settled: Vec<Summary>,
     // The recipes it reached that are due: above what it touched, or changed since it started; null with no code held.
     pub due: Option<Vec<RecipeState>>,
+    // A gap or question closed with `change`: that change, filed in the same write, as file_ticket answers it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub filed: Option<Written>,
 }
 
 /// `land_ticket`: whether a ticket landed, and when one did what its close

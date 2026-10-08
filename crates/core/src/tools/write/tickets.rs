@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the tools of a ticket's life, start_ticket, close_ticket, land_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what changed that it never touched, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as closed and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"start-warns","statement":"start_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it lands, to land it first or start this ticket on a new branch; the start goes ahead whatever waits."}]}
+//! {"purpose":"Answer the tools of a ticket's life, start_ticket, close_ticket, land_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"start_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by land_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what changed that it never touched, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"lands","statement":"close_ticket with when: landed refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket landing with nothing applied; land_ticket closes a landing ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still landing."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as closed and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"land-answers","statement":"land_ticket lands the ticket its input names, a conflict when that one is not landing or is a gap or question waiting for its change, or with none the store's current ticket when it is landing and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket landed, what its close answers, and the changes still landing, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, start_ticket on a ticket already being worked, active or a change waiting to land, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's, and land_ticket naming no ticket lands nothing and says a ticket lands on the main line, by name; on any other state start_ticket refuses a ticket that is not open, a gap or question waiting for its change among them."},{"id":"files-its-change","statement":"close_ticket given change on a gap or question files that change as file_ticket files one, open, relying on the gap or question before the references given, and keeping pace, then writes the decision, followed by a sentence naming that change as what applies it, as close_ticket with when: landed writes it, in one write: when either part is refused nothing of it is kept, the filed change removed, and the change is persisted first, an open change of that title already relying on the gap or question being taken as the one filed, so a call stopped between its records is completed by running it again; it answers with the gap or question as when: landed answers and with the change in filed as file_ticket answers it, and what changed names the change before the decision; change given on a change, or with when: now, is invalid before anything changes, and a close without change answers no filed."},{"id":"start-warns","statement":"start_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it lands, to land it first or start this ticket on a new branch; the start goes ahead whatever waits."}]}
 //! ```
 
 use serde::Deserialize;
@@ -87,8 +87,8 @@ pub(super) fn close(state: &mut State, name: &str, input: Value, today: &str) ->
     struct In {
         r#ref: Reference,
         decision: DecisionIn,
-        #[serde(default)]
-        when: When,
+        when: Option<When>,
+        change: Option<ChangeIn>,
     }
     let i: In = parse(input)?;
     let touched = open_ticket_touches(state, &i.r#ref)?;
@@ -97,22 +97,47 @@ pub(super) fn close(state: &mut State, name: &str, input: Value, today: &str) ->
     if !crate::store::is_date(&decision.date) || decision.text.trim().is_empty() {
         return Err(ToolError::invalid("a decision is a dated paragraph: text, and an ISO date naming a day", vec![]));
     }
-    if i.when == When::Landed {
+    let change = state.store.tickets.get(&i.r#ref.id).is_some_and(|t| t.kind == TicketKind::Change);
+    // The change that applies an answer is filed with it, and the answer then waits for it to land (req:answer-lands-with-its-change).
+    let when = match (&i.change, i.when) {
+        (Some(_), _) if change => {
+            return Err(ToolError::invalid(format!("{} is a change: `change` files the change that applies a gap's or question's answer, so give it when closing a gap or question", i.r#ref), vec![]))
+        }
+        (Some(_), Some(When::Now)) => {
+            return Err(ToolError::invalid("`change` files the change that applies this answer, and the answer then waits for it to land: give no `when`, or `when: landed`", vec![]))
+        }
+        (Some(_), _) => When::Landed,
+        (None, w) => w.unwrap_or_default(),
+    };
+    if when == When::Landed {
         // The decision is written and the ticket waits: nothing reaches the truth until its change lands.
         // An answer holds no proposal, so decide_ticket refuses one that does before any comparison.
-        let change = state.store.tickets.get(&i.r#ref.id).is_some_and(|t| t.kind == TicketKind::Change);
         let moved = if change { ops::moved(state.store(), &i.r#ref.id) } else { vec![] };
         if !moved.is_empty() {
             return Err(ToolError::conflict_with(format!("{} cannot wait to land: the truth moved under its proposal; read what moved again and propose it again", i.r#ref), moved));
         }
-        let (_, changed) = ops::decide_ticket(state.store_mut(), &i.r#ref, decision)?;
+        let (filed, changed) = match i.change {
+            None => (None, ops::decide_ticket(state.store_mut(), &i.r#ref, decision)?.1),
+            Some(c) => {
+                let (slug, moved, changed) = file_and_decide(state, &i.r#ref, decision, c)?;
+                (Some((slug, moved)), changed)
+            }
+        };
+        // The change as file_ticket answers it, its warnings judged as lint with no ticket judges them.
+        let filed = filed.map(|(slug, moved)| {
+            let r = Reference::ticket(&slug);
+            let reprioritised = super::summaries_of(state, &moved);
+            let (warnings, baselined) = super::ticket_warnings(state, None, &r);
+            let node = query::view(state.graph(), &r).expect("just filed");
+            Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised) }
+        });
         // What the check before the landing will see: the truth with this ticket's proposal on it.
         let (code, start) = (!state.without_code(), state.store.starts.get(&i.r#ref.id).cloned());
         let g = state.graph_for(Some(&i.r#ref.id))?;
         let node = query::view(g, &i.r#ref).expect("just written");
         let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
         let due = code.then(|| due_over(g, &touched, start.as_ref()));
-        return answer(name, Closed { node, findings, baselined, untouched: None, unnamed: None, settled: vec![], due }, Some(changed));
+        return answer(name, Closed { node, findings, baselined, untouched: None, unnamed: None, settled: vec![], due, filed }, Some(changed));
     }
     let (closed, changed) = close_now(state, &i.r#ref, decision, touched)?;
     answer(name, closed, Some(changed))
@@ -273,7 +298,65 @@ fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<
     let g = state.graph();
     let node = query::view(g, r).expect("just written");
     let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
-    Ok((Closed { node, findings, baselined, untouched, unnamed, settled, due }, changed))
+    Ok((Closed { node, findings, baselined, untouched, unnamed, settled, due, filed: None }, changed))
+}
+
+/// The change close_ticket files with an answer: what file_ticket takes, its kind aside, since it is a change.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChangeIn {
+    title: String,
+    body: String,
+    touches: Vec<Reference>,
+    priority: Priority,
+    #[serde(default)]
+    relies_on: Vec<Reference>,
+}
+
+/// File the change that applies the answer `r` and write the answer's decision, naming that change, to wait for it:
+/// one write, so when either part is refused nothing of it is kept. Answers the change's slug, the tickets keeping
+/// pace moved, and what changed, the change first, so a writer stopped between leaves an open change relying on an
+/// answer still active, which is a state the tools make anyway.
+fn file_and_decide(state: &mut State, r: &Reference, decision: Decision, c: ChangeIn) -> Result<(String, Vec<String>, Changed), ToolError> {
+    let mut relies_on = vec![r.clone()];
+    for x in c.relies_on {
+        if !relies_on.contains(&x) {
+            relies_on.push(x);
+        }
+    }
+    // Written per record, the change first: a call stopped between left it filed and the answer active, and running
+    // the call again completes it with that change rather than filing a second (req:store-io-atomic-writes).
+    let left = state.store.tickets.values().find(|t| t.kind == TicketKind::Change && t.status == Status::Open && t.title == c.title && t.relies_on.contains(r)).cloned();
+    let fresh = left.is_none();
+    let (filed, filed_changed) = match left {
+        Some(t) => (t, Changed::Many(vec![])),
+        None => {
+            let new = ops::NewTicket { title: c.title, kind: TicketKind::Change, priority: c.priority, touches: c.touches, relies_on, body: c.body };
+            ops::file_ticket(state.store_mut(), new)?
+        }
+    };
+    // The change's id is known before the decision is written, so the decision names what applies it.
+    let text = decision.text.trim_end();
+    // A stop inside a closing quote or bracket still ends the sentence.
+    let stop = if text.trim_end_matches(['"', '\'', ')', '\u{201d}', '\u{2019}']).ends_with(['.', '!', '?']) { "" } else { "." };
+    let decision = Decision::new(decision.date, format!("{text}{stop} Applied by {}.", filed.slug));
+    let decided = match ops::decide_ticket(state.store_mut(), r, decision) {
+        Ok((_, changed)) => changed,
+        Err(e) => {
+            // Refused: the change filed for it goes too, and the store is as it was before the call.
+            if fresh {
+                state.store_mut().tickets.remove(&filed.slug);
+            }
+            return Err(e);
+        }
+    };
+    // A change filed relying on something more urgent is filed at that priority, as file_ticket files it.
+    let (moved, more) = ops::keep_pace(state.store_mut(), &filed.slug, None);
+    let mut changes = vec![filed_changed, decided];
+    if !moved.is_empty() {
+        changes.push(more);
+    }
+    Ok((filed.slug, moved, Changed::Many(changes)))
 }
 
 /// The recipes a ticket's work reached that are due: those resting on what it touched, and those
@@ -635,6 +718,72 @@ mod tests {
         let out = call(&mut s, "land_ticket", json!({}), "2026-10-07").unwrap();
         assert_eq!(refs(&out.output["settled"]), vec![q.clone()]);
         assert_eq!(s.store().tickets[q.trim_start_matches("ticket:")].status, Status::Closed);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-answer-files-the-change-that-applies-it", "checks": ["crates/core/src/tools/write/tickets#files-its-change", "req:answer-lands-with-its-change", "req:tools-write-responses"]}
+    /// ```
+    #[test]
+    fn an_answer_files_the_change_that_applies_it() {
+        let mut s = state();
+        let code = |r: Result<Outcome, ToolError>| r.unwrap_err().code();
+        let change = json!({ "title": "Apply it", "body": "Not Y.", "touches": ["page:overview", "req:nowhere"], "priority": "next", "relies_on": ["ticket:gap-1", "ticket:later-1"] });
+        let close = |when: Option<&str>| {
+            let mut i = json!({ "ref": "ticket:gap-1", "decision": { "text": "Do X" }, "change": change.clone() });
+            if let Some(w) = when {
+                i["when"] = json!(w);
+            }
+            i
+        };
+        let tickets = |s: &State| s.store().tickets.len();
+        call(&mut s, "start_ticket", json!({ "ref": "ticket:gap-1" }), "2026-10-08").unwrap();
+        let before = tickets(&s);
+        // Refused before anything changes: a change is not an answer, and the answer waits for the change it files.
+        let mut on_change = close(None);
+        on_change["ref"] = json!("ticket:later-1");
+        assert_eq!(code(call(&mut s, "close_ticket", on_change, "2026-10-08")), "invalid");
+        assert_eq!(code(call(&mut s, "close_ticket", close(Some("now")), "2026-10-08")), "invalid");
+        assert_eq!(tickets(&s), before);
+        // Refused by the decision's write, with a proposal on the answer: the change filed for it goes too.
+        call(&mut s, "put_page", json!({ "slug": "note", "title": "Note", "body": "b", "links": [], "ticket": "gap-1" }), "2026-10-08").unwrap();
+        let e = call(&mut s, "close_ticket", close(None), "2026-10-08").unwrap_err();
+        assert_eq!(e.code(), "invalid", "{e}");
+        assert_eq!(tickets(&s), before, "no change is left filed");
+        let gap = s.store().tickets["gap-1"].clone();
+        assert_eq!((gap.status, gap.decision), (Status::Active, None));
+        s.store_mut().proposals.remove("gap-1");
+        // One call: the change filed relying on the answer first, the answer waiting for it with a decision naming it.
+        let out = call(&mut s, "close_ticket", close(Some("landed")), "2026-10-08").unwrap();
+        let filed = &out.output["filed"];
+        let slug = filed["node"]["ref"].as_str().unwrap().trim_start_matches("ticket:").to_string();
+        let t = s.store().tickets[&slug].clone();
+        assert_eq!((t.kind, t.status, t.title.as_str(), t.body.as_str()), (TicketKind::Change, Status::Open, "Apply it", "Not Y."));
+        assert_eq!(t.relies_on, vec![Reference::ticket("gap-1"), Reference::ticket("later-1")], "the answer first, each once");
+        let gap = s.store().tickets["gap-1"].clone();
+        assert_eq!((gap.status, gap.decision.map(|d| d.text)), (Status::Landing, Some(format!("Do X. Applied by {slug}."))));
+        assert_eq!(out.output["node"]["ref"], "ticket:gap-1");
+        assert!(filed["warnings"].as_array().unwrap().iter().any(|w| w["edge"]["to"] == "req:nowhere"), "{filed}");
+        assert!(filed["reprioritised"].is_array());
+        // The change is persisted before the decision, so a writer stopped between leaves an open change relying on an active answer.
+        let Some(Changed::Many(changes)) = out.changed else { panic!("many changes") };
+        assert_eq!(changes[0], Changed::Ticket(slug.clone()));
+        // A call stopped after the change was written, before the decision: running it again completes it with that change.
+        call(&mut s, "file_ticket", json!({ "title": "Settle it", "kind": "question", "priority": "later", "body": "b" }), "2026-10-08").unwrap();
+        let q = s.store().tickets.values().find(|t| t.title == "Settle it").unwrap().slug.clone();
+        let left = call(&mut s, "file_ticket", json!({ "title": "Apply it", "kind": "change", "priority": "later", "relies_on": [format!("ticket:{q}")], "body": "b" }), "2026-10-08").unwrap();
+        let left = left.output["node"]["ref"].as_str().unwrap().trim_start_matches("ticket:").to_string();
+        call(&mut s, "start_ticket", json!({ "ref": format!("ticket:{q}") }), "2026-10-08").unwrap();
+        let before = tickets(&s);
+        let mut again = close(None);
+        again["ref"] = json!(format!("ticket:{q}"));
+        let out = call(&mut s, "close_ticket", again, "2026-10-08").unwrap();
+        assert_eq!((tickets(&s), out.output["filed"]["node"]["ref"].as_str()), (before, Some(format!("ticket:{left}").as_str())), "no second change");
+        assert_eq!(s.store().tickets[&q].decision.as_ref().map(|d| d.text.clone()), Some(format!("Do X. Applied by {left}.")));
+        // A close without `change` answers no `filed`.
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), "2026-10-08").unwrap();
+        assert!(out.output.get("filed").is_none(), "{}", out.output);
     }
 
     /// # Test contract

@@ -351,12 +351,17 @@ A gap or question closes on the person's decision, never on yours.
 3. The person chooses, amends or adds one. Their choice, in their terms, is
    the decision; your reasoning is its why.
 4. If the answer needs no work, `close_ticket` with that decision, opening
-   "Decided by the user". If it implies work, first `file_ticket` the change
-   that applies it, with `relies_on` naming the gap or question and what the
-   person said (scope, what to avoid, priority) in its body; then
-   `close_ticket` the gap or question with the decision and
-   `when: landed`. It waits, `landing`, and closes when every change
-   relying on it has landed; the change counts it as answered and is ready.
+   "Decided by the user". If it implies work, `close_ticket` the gap or
+   question with the decision and `change`, the change that applies it:
+   `title`, `touches`, `priority`, a `body` carrying what the person said
+   (scope, what to avoid), and any further `relies_on`. One call files that
+   change relying on the gap or question, writes the decision ending
+   "Applied by <id>." and answers the change in `filed`; refused, it
+   changes nothing. Fix any `warnings` in `filed` with `update_ticket`. A
+   change already filed, relying on it, needs no `change`: close with
+   `when: landed`. Either way the answer waits, `landing`, and closes when
+   every change relying on it has landed; the change counts it as answered
+   and is ready.
    Nothing closes a waiting answer by hand: if its last change is deleted or
    stops relying on it, it reopens with the answer in its body, to be
    examined again. A question is never edited into a change: the record

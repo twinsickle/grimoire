@@ -154,7 +154,7 @@ pub fn decide_ticket(store: &mut Store, r: &Reference, decision: Decision) -> Re
     if answer {
         let kind = format!("{:?}", t.kind).to_lowercase();
         if !applying(store, &r.id).any(|c| c.status != Status::Closed) {
-            return Err(ToolError::invalid(format!("{r} is a {kind} no change relies on: file the change that applies its answer first, relying on it, then close {r} with when: landed; an answer that needs no work closes at once, without when"), vec![]));
+            return Err(ToolError::invalid(format!("{r} is a {kind} no change relies on: file the change that applies its answer first, relying on it, then close {r} with when: landed, or give that change to this close as `change`, which files it in the same write; an answer that needs no work closes at once, without when"), vec![]));
         }
         if store.proposals.get(&r.id).is_some_and(|p| !(p.pages.is_empty() && p.requirements.is_empty() && p.deleted.is_empty())) {
             return Err(ToolError::invalid(format!("{r} holds a proposal: an answer's spec belongs in the change that applies it, so move it there, or close {r} at once"), vec![]));

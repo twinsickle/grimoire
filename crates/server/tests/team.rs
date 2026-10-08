@@ -267,6 +267,42 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "an-answer-and-its-change-are-one-write-on-the-server", "checks": ["crates/server/src/remote#writes-through", "req:answer-lands-with-its-change"]}
+/// ```
+#[test]
+fn an_answer_and_its_change_are_one_write_on_the_server() {
+    let h = host();
+    let m = machine();
+    let d = m.open(h.as_writer());
+    let gap = d.call("file_ticket", json!({ "title": "Which way?", "kind": "gap", "priority": "later", "body": "b" })).unwrap();
+    let gap = gap["node"]["ref"].as_str().unwrap().to_string();
+    let gap_slug = gap.trim_start_matches("ticket:").to_string();
+    d.call("start_ticket", json!({ "ref": gap })).unwrap();
+    let close = json!({ "ref": gap, "decision": { "text": "Decided by the user: this way." }, "change": { "title": "Go this way", "body": "b", "touches": ["page:overview"], "priority": "high" } });
+    let count = |store: &Path| store_io::load(store).unwrap().0.tickets.len();
+    let (on_server, in_copy) = (count(&h.store), count(&m.copy));
+    // Refused on the server, by the answer's proposal: nothing of it is kept there or here.
+    d.call("put_page", json!({ "slug": "aside", "title": "T", "body": "b", "links": [], "ticket": gap_slug })).unwrap();
+    assert_eq!(code(d.call("close_ticket", close.clone()).unwrap_err()), "invalid");
+    assert_eq!((count(&h.store), count(&m.copy)), (on_server, in_copy), "no change filed");
+    assert_eq!(h.daemon.call("get", json!({ "ref": gap })).unwrap()["node"]["status"], "active");
+    d.call("delete_node", json!({ "ref": "page:aside", "ticket": gap_slug })).unwrap();
+    // Taken: the server holds both, and the machine's copy follows.
+    let closed = d.call("close_ticket", close).unwrap();
+    let filed = closed["filed"]["node"]["ref"].as_str().unwrap().to_string();
+    let slug = filed.trim_start_matches("ticket:").to_string();
+    for store in [&h.store, &m.copy] {
+        let s = store_io::load(store).unwrap().0;
+        let (answer, change) = (&s.tickets[&gap_slug], &s.tickets[&slug]);
+        assert_eq!((answer.status, answer.decision.as_ref().map(|x| x.text.clone())), (Status::Landing, Some(format!("Decided by the user: this way. Applied by {slug}."))));
+        assert_eq!((change.status, change.relies_on.clone(), change.priority), (Status::Open, vec![Reference::ticket(&gap_slug)], Priority::High));
+    }
+    assert_eq!((closed["node"]["ref"].as_str(), closed["node"]["status"].as_str()), (Some(gap.as_str()), Some("landing")));
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/export#whole-intent", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]
