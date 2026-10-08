@@ -2205,8 +2205,10 @@ test("a simmering ticket shows its decision as waiting to be bottled, on its pag
   await expect(row(page, ref)).toContainText("simmering");
   await expect(row(page, ref)).not.toContainText("ready");
   // The bottling bottles it with the decision written before.
-  const bottled = await tool<{ bottled: boolean; node: { status: string; decision: { text: string } } }>(page, "bottle_ticket", { ref });
-  expect([bottled.bottled, bottled.node.status, bottled.node.decision.text]).toEqual([true, "bottled", "Decided, and waiting."]);
+  const bottled = await tool<{ bottled: boolean; node: { status: string } }>(page, "bottle_ticket", { ref });
+  expect([bottled.bottled, bottled.node.status]).toEqual([true, "bottled"]);
+  const got = await tool<{ node: { decision: { text: string } } }>(page, "get", { ref });
+  expect(got.node.decision.text).toBe("Decided, and waiting.");
 });
 
 /**

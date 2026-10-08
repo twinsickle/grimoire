@@ -25,9 +25,9 @@ pub struct NodesAnswer {
     pub nodes: Vec<Summary>,
 }
 
-/// `get` and `record_decision`: one node in full. A ticket comes with its
-/// proposal as drafts; a page, requirement or ticket with the tickets whose
-/// proposals would change it.
+/// One node in full, as `get` answers it. A ticket comes with its proposal
+/// as drafts; a page, requirement or ticket with the tickets whose proposals
+/// would change it.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct NodeAnswer {
@@ -42,6 +42,16 @@ pub struct NodeAnswer {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub checked_out: Option<Vec<crate::model::CheckedOut>>,
+}
+
+/// `get`: one node as `{ref}` asks for it, or several as `{refs}` asks, in the order given, with the
+/// references the graph does not hold under `missing` rather than refused (req:tool-get).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(untagged)]
+pub enum GetAnswer {
+    One(Box<NodeAnswer>),
+    Several { nodes: Vec<NodeAnswer>, missing: Vec<Reference> },
 }
 
 /// A ticket's proposal as a reader sees it: each proposed page and
@@ -198,7 +208,8 @@ pub struct ServerCopy {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Written {
-    pub node: NodeView,
+    // The node's summary, never the whole record the writer sent (req:tools-write-responses).
+    pub node: Summary,
     pub warnings: Vec<Finding>,
     pub baselined: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,10 +228,12 @@ pub struct Written {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Brewed {
     pub node: NodeView,
-    // The assumptions to challenge, in full: what the ticket names directly, every requirement reached and every node carrying a decision.
+    // The map of what binds the work: what the ticket names directly, saying what it says, every requirement reached by its counts, and each bottled ticket relied on with its decision.
     pub rests_on: Vec<RestsOn>,
     // The rest of what it rests on, by reference alone; the rests_on tool answers the whole walk (req:tool-brew-ticket).
     pub reaches: Reaches,
+    // What holds whichever part is changed: the constraints page's requirements, saying what they say, but those the ticket names.
+    pub constraints: Vec<RestsOn>,
     pub related: Vec<Summary>,
     // The recipes resting on what the ticket touches, each with whether it is due (req:recipe-in-tickets).
     pub recipes: Vec<RecipeState>,
@@ -267,7 +280,7 @@ pub struct WaitingHere {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Closed {
-    pub node: NodeView,
+    pub node: Summary,
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
@@ -291,7 +304,7 @@ pub struct Closed {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Bottled {
     pub bottled: bool,
-    pub node: Option<NodeView>,
+    pub node: Option<Summary>,
     pub findings: Vec<Finding>,
     pub baselined: usize,
     pub untouched: Option<Vec<Reference>>,
@@ -318,7 +331,7 @@ pub struct StillNamed {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Renamed {
-    pub node: NodeView,
+    pub node: Summary,
     pub still_named_in: Vec<StillNamed>,
 }
 
@@ -367,13 +380,20 @@ pub struct Deleted {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Withdrawn {
-    pub node: NodeView,
+    pub node: Summary,
     pub settled: Vec<Summary>,
     pub reopened: Vec<Summary>,
 }
 
-/// `judge_recipe`: the recipe judged, the judgement recorded, and whether the recipe is still due
-/// over this checkout's code, null where none is held.
+/// `judge_recipe`: each recipe judged, in the order given, whether one or several (req:tool-judge-recipe).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct JudgedAll {
+    pub judged: Vec<Judged>,
+}
+
+/// One recipe judged: the recipe, the judgement recorded, and whether the recipe is still due over
+/// this checkout's code, null where none is held.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Judged {
@@ -423,7 +443,7 @@ macro_rules! answers {
 
 answers! {
     NodesAnswer => ["find"],
-    NodeAnswer => ["get", "record_decision", "supersede"],
+    GetAnswer => ["get"],
     Outline => ["outline"],
     RestsOnAnswer => ["rests_on"],
     RestsOnMe => ["rests_on_me"],
@@ -434,7 +454,7 @@ answers! {
     SourceLocation => ["module_source"],
     SourceAnswer => ["source"],
     StatusAnswer => ["status"],
-    Written => ["put_page", "patch_page", "put_requirement", "inscribe_ticket", "update_ticket", "retire_node"],
+    Written => ["put_page", "patch_page", "put_requirement", "record_decision", "supersede", "inscribe_ticket", "update_ticket", "retire_node"],
     Brewed => ["brew_ticket"],
     Closed => ["close_ticket"],
     Bottled => ["bottle_ticket"],
@@ -444,7 +464,7 @@ answers! {
     Adopted => ["adopt"],
     Deleted => ["delete_node"],
     Withdrawn => ["withdraw_ticket"],
-    Judged => ["judge_recipe"],
+    JudgedAll => ["judge_recipe"],
 }
 
 /// The UI's generated TypeScript: every type the answers and the tool error

@@ -409,7 +409,7 @@ fn a_branch_is_judged_by_its_own_work() {
     // A branch is cut; then the main line brings a requirement covered by a criterion only its code declares.
     git(&p.repo, &["branch", "feature"]);
     let filed: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "inscribe_ticket", r#"{"title":"b is bottled","kind":"change","priority":"next","body":"b"}"#]).stdout).unwrap();
-    let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
+    let ticket = filed["node"]["ref"].as_str().unwrap().trim_start_matches("ticket:").to_string();
     assert!(run(&p.repo, &["tool", "brew_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).status.success());
     let req = r#"{"slug":"b-exports","title":"b exports b","statement":"The module b SHALL export b.","scenarios":[{"title":"b","given":"b","when":"b","then":"b"}],"covered_by":["criterion:src/b#exports-b"]}"#;
     assert!(run(&p.repo, &["tool", "put_requirement", req]).status.success());
@@ -455,7 +455,7 @@ fn the_check_names_a_ticket_still_simmering_here() {
     let start = |title: &str| {
         let filed: serde_json::Value =
             serde_json::from_slice(&run(&p.repo, &["tool", "inscribe_ticket", &format!(r#"{{"title":"{title}","kind":"change","priority":"next","body":"b"}}"#)]).stdout).unwrap();
-        let ticket = filed["node"]["slug"].as_str().unwrap().to_string();
+        let ticket = filed["node"]["ref"].as_str().unwrap().trim_start_matches("ticket:").to_string();
         let started: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "brew_ticket", &format!(r#"{{"ref":"ticket:{ticket}"}}"#)]).stdout).unwrap();
         (ticket, started)
     };

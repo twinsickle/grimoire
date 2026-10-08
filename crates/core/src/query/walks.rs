@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision first, each with the path it was reached by and the decisions it carries that are in force, one superseded by another left out."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is bottled and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its decisions but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and the modules it represents, an ingredient to its recipe, and a decision to its requirement."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a decision its date and text, a gap or question that is simmering its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order with its decisions in force and says, a module followed by the requirements that name any of its criteria, in reference order, with their decisions and says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions and no says."},{"id":"recipes-resting","statement":"recipes_over gives the recipes a change to a node can break: a recipe itself, an ingredient's recipe, the recipes a requirement or page names, and for a module, or the module of a file or criterion, the recipes representing it or a module importing it, however far up through imports alone, never through what it imports or through the requirements, tests and pages above it; then every recipe using one of those, however far up. recipes_resting gives, for the given nodes, every recipe recipes_over one of them gives, each once, in reference order, with its title, whether it is due and the first given node it was reached from; an ingredient is not a recipe, and a node the graph does not hold reaches none."},{"id":"assumptions","statement":"assumptions parts a rests_on walk into the nodes kept in full, every node at distance one, every requirement and every node carrying a decision in force, in the walk's order, and the references of the rest, in the walk's order."},{"id":"rests-on-me","statement":"rests_on_me returns the transitive upward closure of a node through the derived edges, a requirement's decisions left out since they are read through it, and a recipe or its ingredient only when the recipe is one recipes_over the node gives, nothing being reached through one left out, and separately the tickets not bottled whose touches or relies_on reach it."}]}
+//! {"purpose":"Walk the graph from a node: down to what it rests on, with the decisions behind each, and up to what rests on it.","criteria":[{"id":"nearest-first","statement":"rests_on lists nodes nearest the start first and, within a distance, by newest decision in force first, each with the path it was reached by; a requirement with its scenario_count and its decision_count, how many of its decisions are in force, and no decisions, a bottled ticket with its decision, and no other node with any."},{"id":"bounded-walk","statement":"rests_on expands only the starting node by its full rules; a ticket reached on the way contributes its decision once it is bottled and is not expanded, a page reached on the way contributes its requirements and modules but not its child pages, and a retired requirement contributes its counts but nothing below it, since it no longer holds; a recipe leads to the recipes it uses and the modules it represents, an ingredient to its recipe, and a decision to its requirement."},{"id":"says-direct","statement":"Each node rests_on lists at distance one from the start carries says, what it says as text: a page its body, a requirement its statement then each scenario, a module its purpose then each criterion by id, a recipe its text then each ingredient by id, a decision its date and text, a gap or question that is simmering its answer with its date; any other node at distance one, a module on a graph that holds no code, which has no contract to say, and every node further away, carries none."},{"id":"intent-of","statement":"intent_of lists each given node in order as rests_on lists a node, with says, a module followed by the requirements that name any of its criteria, in reference order, with their says and the module as their path; each node appears once, a requirement already given or already reached through an earlier module left out; a node no longer in the graph carries its reference with no decisions, counts or says."},{"id":"recipes-resting","statement":"recipes_over gives the recipes a change to a node can break: a recipe itself, an ingredient's recipe, the recipes a requirement or page names, and for a module, or the module of a file or criterion, the recipes representing it or a module importing it, however far up through imports alone, never through what it imports or through the requirements, tests and pages above it; then every recipe using one of those, however far up. recipes_resting gives, for the given nodes, every recipe recipes_over one of them gives, each once, in reference order, with its title, whether it is due and the first given node it was reached from; an ingredient is not a recipe, and a node the graph does not hold reaches none."},{"id":"assumptions","statement":"assumptions parts a rests_on walk into the nodes kept, every node at distance one, every requirement and every node carrying a decision in force, in the walk's order, and the references of the rest, in the walk's order; constraints gives each requirement the constraints page links, in its order, with says, but those given."},{"id":"rests-on-me","statement":"rests_on_me answers as binds the requirements naming the node's own criteria, a module's, the module's of a file or declaration, or a criterion itself, each once in reference order with says and the criterion it names as its path; as nodes the rest of the transitive upward closure of the node through the derived edges but tests, criteria, files and declarations, which it counts by kind as counted, a requirement's decisions left out since they are read through it, and a recipe or its ingredient only when the recipe is one recipes_over the node gives, nothing being reached through one left out; and separately the tickets not bottled whose touches or relies_on reach it."}]}
 //! ```
 
 use std::collections::{HashSet, VecDeque};
@@ -18,11 +18,36 @@ pub struct RestsOn {
     pub r#ref: Reference,
     pub title: String,
     pub via: Vec<Reference>,
+    // A bottled ticket's decision; a requirement's are counted, and read with get (req:query-nearest-first).
     pub decisions: Vec<Decision>,
+    // A requirement's: how many scenarios it has, and how many of its decisions are in force.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub scenario_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub decision_count: Option<usize>,
     // What the node says, for a node the start names directly; none further away.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub says: Option<String>,
+}
+
+impl RestsOn {
+    /// A node as a walk lists it: what binds, and of why only a bottled ticket's decision, which is all that remains of it.
+    fn of(g: &Graph, r: &Reference, via: Vec<Reference>, says: Option<String>) -> RestsOn {
+        let title = g.get(r).map(Node::title).unwrap_or_else(|| absent_title(g, r));
+        let (scenario_count, decision_count) = match g.get(r) {
+            Some(Node::Req(q)) => (Some(q.scenarios.len()), Some(q.in_force().len())),
+            _ => (None, None),
+        };
+        let decisions = match g.get(r) {
+            // A simmering ticket carries a decision already written; nothing is decided until it is bottled.
+            Some(Node::Ticket(t)) if t.status == Status::Bottled => t.decision.iter().cloned().collect(),
+            _ => Vec::new(),
+        };
+        RestsOn { r#ref: r.clone(), title, via, decisions, scenario_count, decision_count, says }
+    }
 }
 
 /// What a node says, as text: a page's body; a requirement's statement and
@@ -94,43 +119,34 @@ pub fn absent_title(g: &Graph, r: &Reference) -> String {
     }
 }
 
-/// The decisions a reached node contributes: a requirement's, newest first,
-/// or a bottled ticket's.
-fn decisions_of(g: &Graph, r: &Reference) -> Vec<Decision> {
+/// The date a walk orders a node by within its distance: its newest decision in force, a
+/// requirement's or a bottled ticket's, though the walk no longer answers a requirement's.
+fn newest_decision(g: &Graph, r: &Reference) -> String {
     match g.get(r) {
-        // Only what is in force: a superseded decision no longer says why.
-        Some(Node::Req(q)) => {
-            // Newest first; decisions of one day in the order they were bottled, the later first.
-            let mut d: Vec<Decision> = q.in_force().into_iter().rev().cloned().collect();
-            d.sort_by(|a, b| b.date.cmp(&a.date));
-            d
-        }
-        // A simmering ticket carries a decision already written; nothing is decided until it is bottled.
-        Some(Node::Ticket(t)) if t.status == Status::Bottled => t.decision.iter().cloned().collect(),
-        _ => Vec::new(),
+        Some(Node::Req(q)) => q.in_force().iter().map(|d| d.date.clone()).max().unwrap_or_default(),
+        Some(Node::Ticket(t)) if t.status == Status::Bottled => t.decision.as_ref().map(|d| d.date.clone()).unwrap_or_default(),
+        _ => String::new(),
     }
 }
 
 /// What rests on each node a ticket's work reached without naming it, as
-/// rests_on lists a node: each with its decisions in force and `says`, and a
-/// module followed by the requirements that name its criteria, reached
-/// through it. A node removed since carries its reference alone. Each node
-/// is listed once: a requirement on two of the modules, or among the nodes
-/// given, appears only where it is first met.
+/// rests_on lists a node, with `says`, and a module followed by the
+/// requirements that name its criteria, reached through it. A node removed
+/// since carries its reference alone. Each node is listed once: a requirement
+/// on two of the modules, or among the nodes given, appears only where it is
+/// first met.
 pub fn intent_of(g: &Graph, nodes: &[Reference]) -> Vec<RestsOn> {
     let mut out = Vec::new();
     let mut listed: HashSet<Reference> = nodes.iter().cloned().collect();
     for r in nodes {
-        let title = g.get(r).map(Node::title).unwrap_or_else(|| absent_title(g, r));
-        out.push(RestsOn { r#ref: r.clone(), title, via: vec![], decisions: decisions_of(g, r), says: says_of(g, r) });
+        out.push(RestsOn::of(g, r, vec![], says_of(g, r)));
         if let Some(Node::Module(m)) = g.get(r) {
             let mut reqs: Vec<Reference> =
                 m.criteria.iter().flat_map(|c| g.inbound_with(&Reference::criterion(&m.id, &c.id), Relation::CoveredBy).map(|e| e.from.clone()).collect::<Vec<_>>()).collect();
             reqs.sort();
             reqs.dedup();
             for q in reqs.into_iter().filter(|q| listed.insert(q.clone())) {
-                let title = g.get(&q).map(Node::title).unwrap_or_default();
-                out.push(RestsOn { r#ref: q.clone(), title, via: vec![r.clone()], decisions: decisions_of(g, &q), says: says_of(g, &q) });
+                out.push(RestsOn::of(g, &q, vec![r.clone()], says_of(g, &q)));
             }
         }
     }
@@ -138,7 +154,7 @@ pub fn intent_of(g: &Graph, nodes: &[Reference]) -> Vec<RestsOn> {
 }
 
 pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<RestsOn> {
-    let mut out: Vec<(usize, RestsOn)> = Vec::new();
+    let mut out: Vec<(usize, String, RestsOn)> = Vec::new();
     let mut seen: HashSet<Reference> = HashSet::new();
     seen.insert(start.clone());
     let mut queue: VecDeque<(Reference, Vec<Reference>)> = VecDeque::new();
@@ -154,24 +170,14 @@ pub fn rests_on(g: &Graph, start: &Reference, depth: Option<usize>) -> Vec<Rests
             }
             let mut path = via.clone();
             path.push(r.clone());
-            let decisions = decisions_of(g, &next);
-            let title = g.get(&next).map(Node::title).unwrap_or_else(|| absent_title(g, &next));
             // What the start names directly comes with what it says; nothing further away does.
             let says = if dist == 0 { says_of(g, &next) } else { None };
-            out.push((dist + 1, RestsOn { r#ref: next.clone(), title, via: path.clone(), decisions, says }));
+            out.push((dist + 1, newest_decision(g, &next), RestsOn::of(g, &next, path.clone(), says)));
             queue.push_back((next, path));
         }
     }
-    out.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then_with(|| {
-                let da = a.1.decisions.first().map(|d| d.date.as_str()).unwrap_or("");
-                let db = b.1.decisions.first().map(|d| d.date.as_str()).unwrap_or("");
-                db.cmp(da)
-            })
-            .then_with(|| a.1.r#ref.cmp(&b.1.r#ref))
-    });
-    out.into_iter().map(|(_, r)| r).collect()
+    out.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)).then_with(|| a.2.r#ref.cmp(&b.2.r#ref)));
+    out.into_iter().map(|(_, _, r)| r).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -189,14 +195,50 @@ pub struct Affected {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 pub struct RestsOnMe {
+    // What binds whoever edits the node: the requirements on its own criteria, with what they say (req:tool-rests-on-me).
+    pub binds: Vec<RestsOn>,
     pub nodes: Vec<Affected>,
+    // Tests, criteria, files and declarations reached, by kind: climbed through, not listed.
+    pub counted: std::collections::BTreeMap<String, usize>,
     pub tickets: Vec<Summary>,
 }
 
-/// Everything that would be affected if the node changed: the transitive
-/// upward closure through the derived edges, excluding tickets, which are
-/// listed separately.
+/// The node's own criteria: a module's, the module's of a file or declaration, or a criterion itself.
+fn own_criteria(g: &Graph, start: &Reference) -> Vec<Reference> {
+    let module_of_file = |f: &Reference| -> Vec<Reference> { g.inbound_with(f, Relation::Contains).filter(|e| e.from.kind == Kind::Module).map(|e| e.from.clone()).collect() };
+    let modules = match g.get(start) {
+        Some(Node::Criterion(_)) => return vec![start.clone()],
+        Some(Node::Module(_)) => vec![start.clone()],
+        Some(Node::File(_)) => module_of_file(start),
+        Some(Node::Decl(d)) => module_of_file(&Reference::file(&d.file)),
+        _ => vec![],
+    };
+    modules
+        .iter()
+        .filter_map(|m| match g.get(m) {
+            Some(Node::Module(m)) => Some(m.criteria.iter().map(|c| Reference::criterion(&m.id, &c.id)).collect::<Vec<_>>()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
+/// Everything that would be affected if the node changed: first the
+/// requirements on its own criteria, with what they say; then the rest of the
+/// transitive upward closure through the derived edges, tests, criteria,
+/// files and declarations counted rather than listed, and tickets apart.
 pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
+    let mut binds: Vec<RestsOn> = Vec::new();
+    let mut bound: HashSet<Reference> = HashSet::new();
+    let mut by_criterion: Vec<(Reference, Reference)> =
+        own_criteria(g, start).into_iter().flat_map(|c| g.inbound_with(&c, Relation::CoveredBy).map(|e| (e.from.clone(), c.clone())).collect::<Vec<_>>()).collect();
+    by_criterion.sort();
+    for (q, c) in by_criterion {
+        if bound.insert(q.clone()) {
+            binds.push(RestsOn::of(g, &q, vec![c], says_of(g, &q)));
+        }
+    }
+    let mut counted: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut nodes: Vec<Affected> = Vec::new();
     let recipes = recipes_over(g, start);
     let mut seen: HashSet<Reference> = HashSet::new();
@@ -221,14 +263,22 @@ pub fn rests_on_me(g: &Graph, start: &Reference) -> RestsOnMe {
             if !seen.insert(e.from.clone()) {
                 continue;
             }
+            queue.push_back(e.from.clone());
+            // Climbed through, and counted: the tests run anyway, and a criterion, file or declaration is read through its module.
+            if matches!(e.from.kind, Kind::Test | Kind::Criterion | Kind::File | Kind::Decl) {
+                *counted.entry(e.from.kind.as_str().to_string()).or_default() += 1;
+                continue;
+            }
+            if bound.contains(&e.from) {
+                continue;
+            }
             let title = g.get(&e.from).map(Node::title).unwrap_or_default();
             nodes.push(Affected { r#ref: e.from.clone(), title, relation: e.relation });
-            queue.push_back(e.from.clone());
         }
     }
     let mut tickets: Vec<&Ticket> = g.tickets().filter(|t| t.status != Status::Bottled).filter(|t| t.touches.iter().chain(t.relies_on.iter()).any(|x| seen.contains(x))).collect();
     tickets.sort_by(|a, b| a.slug.cmp(&b.slug));
-    RestsOnMe { nodes, tickets: tickets.into_iter().map(ticket_summary).collect() }
+    RestsOnMe { binds, nodes, counted, tickets: tickets.into_iter().map(ticket_summary).collect() }
 }
 
 /// A recipe resting on what a ticket touches, and whether a judgement holds of it as it is.
@@ -316,9 +366,16 @@ pub fn recipes_resting(g: &Graph, nodes: &[Reference]) -> Vec<RecipeState> {
     out.into_values().collect()
 }
 
-/// What brew_ticket answers of its walk: in full the assumptions to challenge, every node the start
-/// names directly, every requirement and every node carrying a decision in force; and the rest, by
-/// reference alone, in the walk's order.
+/// What holds whichever part is changed: each requirement the constraints page links, in its order,
+/// saying what it says, but those in `given`, already said where they were named.
+pub fn constraints(g: &Graph, given: &[Reference]) -> Vec<RestsOn> {
+    let Some(Node::Page(p)) = g.get(&Reference::page(crate::lint::CONSTRAINTS_PAGE)) else { return Vec::new() };
+    p.links.iter().filter(|l| l.kind == Kind::Req && !given.contains(l) && g.contains(l)).map(|q| RestsOn::of(g, q, vec![], says_of(g, q))).collect()
+}
+
+/// What brew_ticket answers of its walk: the map of what binds the work, every node the start names
+/// directly, every requirement by its counts and every node carrying a decision in force; and the
+/// rest, by reference alone, in the walk's order.
 pub fn assumptions(walk: Vec<RestsOn>) -> (Vec<RestsOn>, Vec<Reference>) {
     let (kept, rest): (Vec<RestsOn>, Vec<RestsOn>) = walk.into_iter().partition(|x| x.via.len() <= 1 || x.r#ref.kind == Kind::Req || !x.decisions.is_empty());
     (kept, rest.into_iter().map(|x| x.r#ref).collect())
@@ -344,8 +401,11 @@ mod tests {
         assert_eq!(refs[1], "page:git-readiness");
         assert_eq!(refs[2], "module:src/a/ready");
         assert!(refs.contains(&"module:src/a/layout".to_string()));
+        // A requirement by its counts: what binds, and how much was decided, never the decisions (req:query-nearest-first).
         let req = r.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).unwrap();
-        assert_eq!(req.decisions.len(), 1);
+        assert!(req.decisions.is_empty());
+        assert_eq!(req.decision_count, Some(1));
+        assert!(req.scenario_count.is_some_and(|n| n > 0), "{req:?}");
         assert_eq!(req.via, vec![Reference::ticket("phase-62")]);
         let layout = r.iter().find(|x| x.r#ref == Reference::module("src/a/layout")).unwrap();
         assert_eq!(layout.via.last().unwrap(), &Reference::module("src/a/ready"));
@@ -405,6 +465,56 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
+    /// {"test": "what-binds-a-module-comes-first", "checks": ["crates/core/src/query/walks#rests-on-me", "req:tool-rests-on-me"]}
+    /// ```
+    #[test]
+    fn what_binds_a_module_comes_first() {
+        let g = graph();
+        // The module's own criterion is named by a requirement: it binds whoever edits it, saying what it says.
+        let r = rests_on_me(&g, &Reference::module("src/a/ready"));
+        let bound: Vec<String> = r.binds.iter().map(|x| x.r#ref.to_string()).collect();
+        assert_eq!(bound, ["req:ready-only-with-commit"]);
+        let req = &r.binds[0];
+        assert_eq!(req.via, [Reference::criterion("src/a/ready", "guarantee")], "the criterion it names");
+        assert!(req.says.as_deref().is_some_and(|s| s.starts_with("The system SHALL ready-only-with-commit.") && s.contains("Scenario: It holds.")), "{req:?}");
+        assert!(req.decisions.is_empty() && req.decision_count == Some(1));
+        // The rest by name; tests and criteria counted, not listed, and what binds not listed twice.
+        let names: Vec<String> = r.nodes.iter().map(|x| x.r#ref.to_string()).collect();
+        assert!(names.contains(&"page:git-readiness".to_string()) && names.contains(&"page:overview".to_string()), "{names:?}");
+        assert!(!names.iter().any(|n| n.starts_with("test:") || n.starts_with("criterion:") || n == "req:ready-only-with-commit"), "{names:?}");
+        assert_eq!(r.counted.get("criterion"), Some(&2), "{:?}", r.counted);
+        assert_eq!(r.counted.get("test"), Some(&1), "{:?}", r.counted);
+        // A module imported by it: nothing of its own binds, and the importer's requirement comes by name.
+        let below = rests_on_me(&g, &Reference::module("src/a/layout"));
+        assert!(below.binds.is_empty(), "{:?}", below.binds);
+        assert!(below.nodes.iter().any(|x| x.r#ref == Reference::req("ready-only-with-commit")));
+        // A file is its module's, a criterion itself.
+        assert_eq!(rests_on_me(&g, &Reference::file("src/a/ready.rs")).binds.len(), 1);
+        assert_eq!(rests_on_me(&g, &Reference::criterion("src/a/ready", "guarantee")).binds.len(), 1);
+        assert!(rests_on_me(&g, &Reference::criterion("src/a/ready", "reads-only")).binds.is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-constraints-say-what-they-say", "checks": ["crates/core/src/query/walks#assumptions"]}
+    /// ```
+    #[test]
+    fn the_constraints_say_what_they_say() {
+        let mut store = crate::graph::fixtures::store();
+        assert!(constraints(&Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]), &[]).is_empty(), "no constraints page, none");
+        store.pages.insert(crate::lint::CONSTRAINTS_PAGE.into(), crate::graph::fixtures::page(crate::lint::CONSTRAINTS_PAGE, &["req:stale", "req:ready-only-with-commit", "req:missing"]));
+        let g = Graph::build(&store, &crate::extraction::fixtures::extraction(), &[]);
+        let all: Vec<String> = constraints(&g, &[]).iter().map(|x| x.r#ref.id.clone()).collect();
+        assert_eq!(all, ["stale", "ready-only-with-commit"], "in the page's order, a missing one left out");
+        let c = constraints(&g, &[Reference::req("stale")]);
+        assert_eq!(c.len(), 1, "one already named is said where it was named");
+        assert!(c[0].says.as_deref().is_some_and(|s| s.contains("Scenario:")), "{c:?}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
     /// {"test": "rests-on-carries-only-decisions-in-force", "checks": ["crates/core/src/query/walks#nearest-first"]}
     /// ```
     #[test]
@@ -415,17 +525,19 @@ mod tests {
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::ticket("phase-62"), None);
         let req = r.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).expect("reached");
-        let texts: Vec<&str> = req.decisions.iter().map(|d| d.text.as_str()).collect();
-        assert_eq!(texts, vec!["Instead."], "the superseded decision is left out");
-        // Two decisions in force from one day: the later position first.
-        let mut same = crate::graph::fixtures::store();
-        let q = same.requirements.get_mut("ready-only-with-commit").expect("fixture");
-        q.decisions = vec![Decision::new("2026-09-29", "Earlier."), Decision::new("2026-09-29", "Later.")];
-        let g2 = Graph::build(&same, &crate::extraction::fixtures::extraction(), &[]);
-        let r2 = rests_on(&g2, &Reference::ticket("phase-62"), None);
-        let req2 = r2.iter().find(|x| x.r#ref == Reference::req("ready-only-with-commit")).expect("reached");
-        assert_eq!(req2.decisions.iter().map(|d| d.text.as_str()).collect::<Vec<_>>(), vec!["Later.", "Earlier."]);
-        // Retired, it contributes its decisions and nothing below it.
+        assert_eq!(req.decision_count, Some(1), "the superseded decision is not counted");
+        assert!(req.decisions.is_empty(), "read with get, not answered by the walk");
+        // Ordered by its newest decision in force, though the walk no longer answers it: the newer first within a distance.
+        let mut newer = crate::graph::fixtures::store();
+        newer.pages.get_mut("git-readiness").expect("fixture").links.push(Reference::req("other-rule"));
+        let mut other = newer.requirements["ready-only-with-commit"].clone();
+        other.slug = "other-rule".into();
+        other.decisions = vec![Decision::new("2026-10-30", "Later.")];
+        newer.requirements.insert(other.slug.clone(), other);
+        let g2 = Graph::build(&newer, &crate::extraction::fixtures::extraction(), &[]);
+        let order: Vec<String> = rests_on(&g2, &Reference::page("git-readiness"), None).into_iter().filter(|x| x.r#ref.kind == Kind::Req).map(|x| x.r#ref.id).collect();
+        assert_eq!(order[..2], ["other-rule", "ready-only-with-commit"], "{order:?}");
+        // Retired, it contributes its counts and nothing below it.
         s.requirements.get_mut("ready-only-with-commit").expect("fixture").retired = true;
         let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
         let r = rests_on(&g, &Reference::req("ready-only-with-commit"), None);

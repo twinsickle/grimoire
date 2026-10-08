@@ -240,7 +240,7 @@ mod schema_errors {
         assert!(message.contains("`scenarios[0].title`") && message.contains("missing field `title`"), "{message}");
         assert_eq!(fields, ["scenarios[0].title"]);
         // A field missing at the top: named alone.
-        let (message, fields) = invalid(call(&mut s, "get", json!({}), "2026-10-06"));
+        let (message, fields) = invalid(call(&mut s, "rests_on_me", json!({}), "2026-10-06"));
         assert!(message.contains("at `ref`"), "{message}");
         assert_eq!(fields, ["ref"]);
         // A wrong type deep down: the path to it.

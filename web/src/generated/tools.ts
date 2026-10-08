@@ -26,9 +26,9 @@ export type BoardTicket = { waits_on?: Array<Summary>, followed_by?: Array<Summa
  */
 drafts?: Array<Ref>, checked_out?: Array<CheckedOut>, ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 
-export type Bottled = { bottled: boolean, node: NodeView | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, waiting: Array<Summary>, note?: string, };
+export type Bottled = { bottled: boolean, node: Summary | null, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, waiting: Array<Summary>, note?: string, };
 
-export type Brewed = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, checked_out: Array<CheckedOut>, others: Array<Holder>, };
+export type Brewed = { node: NodeView, rests_on: Array<RestsOn>, reaches: Reaches, constraints: Array<RestsOn>, related: Array<Summary>, recipes: Array<RecipeState>, waiting: Array<WaitingHere>, checked_out: Array<CheckedOut>, others: Array<Holder>, };
 
 export type CheckedOut = { 
 /**
@@ -40,7 +40,7 @@ by: string,
  */
 since: string, };
 
-export type Closed = { node: NodeView, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, filed?: Written, others?: Array<Holder>, };
+export type Closed = { node: Summary, findings: Array<Finding>, baselined: number, untouched: Array<Ref> | null, unnamed: Array<RestsOn> | null, settled: Array<Summary>, due: Array<RecipeState> | null, filed?: Written, others?: Array<Holder>, };
 
 export type Configured = { config: StoreConfig, new: number, };
 
@@ -99,11 +99,15 @@ export type FindingEdge = { from: Ref, to: Ref, relation: Relation, };
 
 export type FindingKey = { rule: Rule, check: string, ref: Ref, edge?: FindingEdge, };
 
+export type GetAnswer = NodeAnswer | { nodes: Array<NodeAnswer>, missing: Array<Ref>, };
+
 export type Holder = { by: string | null, since: string | null, warning: string, };
 
 export type Ingredient = { recipe: string, id: string, says: string, };
 
 export type Judged = { recipe: Ref, judgement: Judgement, due: boolean | null, };
+
+export type JudgedAll = { judged: Array<Judged>, };
 
 export type Judgement = { recipe: string, fingerprint: string, date: string, ticket: string, outcome: JudgementOutcome, };
 
@@ -138,7 +142,7 @@ export type ModuleSummary = { ref: Ref, purpose: string | null, };
 
 export type NodeAnswer = { node: NodeView, proposal?: ProposalView, drafts?: Array<Ref>, checked_out?: Array<CheckedOut>, };
 
-export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient | DecisionNode);
+export type NodeView = { ref: Ref, in: Array<EdgeView>, out: Array<EdgeView>, bottled_tickets?: { [key in string]: number }, } & (Page | Requirement | Ticket | Module | Criterion | File | Decl | Test | Recipe | Ingredient | DecisionNode);
 
 export type NodesAnswer = { nodes: Array<Summary>, };
 
@@ -168,7 +172,7 @@ export type Ref = string;
 
 export type Relation = "links" | "covered_by" | "touches" | "relies_on" | "contains" | "imports" | "belongs_to" | "checks" | "uses" | "represents" | "supersedes";
 
-export type Renamed = { node: NodeView, still_named_in: Array<StillNamed>, };
+export type Renamed = { node: Summary, still_named_in: Array<StillNamed>, };
 
 export type Reordered = { priority: Priority, order: Array<Ref>, };
 
@@ -179,11 +183,11 @@ export type Requirement = { slug: string, title: string, statement: string, scen
  */
 retired?: boolean, };
 
-export type RestsOn = { ref: Ref, title: string, via: Array<Ref>, decisions: Array<Decision>, says?: string, };
+export type RestsOn = { ref: Ref, title: string, via: Array<Ref>, decisions: Array<Decision>, scenario_count?: number, decision_count?: number, says?: string, };
 
 export type RestsOnAnswer = { nodes: Array<RestsOn>, };
 
-export type RestsOnMe = { nodes: Array<Affected>, tickets: Array<Summary>, };
+export type RestsOnMe = { binds: Array<RestsOn>, nodes: Array<Affected>, counted: { [key in string]: number }, tickets: Array<Summary>, };
 
 export type Rollup = { modules: number, contracted: number, criteria: number, tested: number, requirements: number, held: number, described: number, decided: number, };
 
@@ -244,16 +248,14 @@ tests: number, rollup: Rollup, rites: boolean, children: Array<Tree>, };
 
 export type WaitingHere = { ticket: string, title: string, warning: string, };
 
-export type Withdrawn = { node: NodeView, settled: Array<Summary>, reopened: Array<Summary>, };
+export type Withdrawn = { node: Summary, settled: Array<Summary>, reopened: Array<Summary>, };
 
-export type Written = { node: NodeView, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
+export type Written = { node: Summary, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
 
 /** Each tool's answer, by tool name. */
 export type ToolAnswers = {
   find: NodesAnswer;
-  get: NodeAnswer;
-  record_decision: NodeAnswer;
-  supersede: NodeAnswer;
+  get: GetAnswer;
   outline: Outline;
   rests_on: RestsOnAnswer;
   rests_on_me: RestsOnMe;
@@ -267,6 +269,8 @@ export type ToolAnswers = {
   put_page: Written;
   patch_page: Written;
   put_requirement: Written;
+  record_decision: Written;
+  supersede: Written;
   inscribe_ticket: Written;
   update_ticket: Written;
   retire_node: Written;
@@ -279,5 +283,5 @@ export type ToolAnswers = {
   adopt: Adopted;
   delete_node: Deleted;
   withdraw_ticket: Withdrawn;
-  judge_recipe: Judged;
+  judge_recipe: JudgedAll;
 };

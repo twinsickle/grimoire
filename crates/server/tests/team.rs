@@ -230,7 +230,7 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
     // A body edited in part is edited as the server holds it: the teammate's paragraph, not yet fetched here, stays.
     h.daemon.call("update_ticket", json!({ "ref": filed_ref, "append": "A teammate's note." })).unwrap();
     let appended = d.call("update_ticket", json!({ "ref": filed_ref, "append": "Mine." })).unwrap();
-    assert_eq!(appended["node"]["body"], "b\n\nA teammate's note.\n\nMine.", "{appended}");
+    assert!(appended["node"].get("body").is_none(), "a write answers the ticket's summary: {appended}");
     assert_eq!(h.daemon.call("get", json!({ "ref": filed_ref })).unwrap()["node"]["body"], "b\n\nA teammate's note.\n\nMine.");
     // Refused by the server: its error is the answer, and nothing changes here.
     let mut refused = page("aim");
@@ -322,11 +322,17 @@ fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
     // A recipe this machine's code does not hold is refused here, and nothing reaches the server.
     assert_eq!(code(d.call("judge_recipe", json!({ "ref": "recipe:gone", "outcome": "held" })).unwrap_err()), "not_found");
     let judged = d.call("judge_recipe", json!({ "ref": "recipe:says-a", "outcome": "held" })).unwrap();
-    assert_eq!((judged["judgement"]["fingerprint"].clone(), judged["judgement"]["ticket"].clone(), judged["due"].clone()), (json!(digest), json!("0001"), json!(false)), "{judged}");
+    let one = &judged["judged"][0];
+    assert_eq!((one["judgement"]["fingerprint"].clone(), one["judgement"]["ticket"].clone(), one["due"].clone()), (json!(digest), json!("0001"), json!(false)), "{judged}");
     // The server, which holds no code, keeps the fingerprint the machine's code gave, and the copy follows.
     let on_server = store_io::load(&h.store).unwrap().0.judgements;
     assert_eq!(on_server["says-a"].iter().map(|j| j.fingerprint.as_str()).collect::<Vec<_>>(), [digest.as_str()]);
     assert!(m.holds("judgements/says-a.json"));
+    // Several at once: each sent with the digest this machine's code gives its recipe.
+    let several = d.call("judge_recipe", json!({ "judgements": [{ "ref": "recipe:says-a", "outcome": "held" }, { "ref": "recipe:says-a", "outcome": "updated" }] })).unwrap();
+    assert_eq!(several["judged"].as_array().map(Vec::len), Some(2), "{several}");
+    let on_server = store_io::load(&h.store).unwrap().0.judgements;
+    assert_eq!(on_server["says-a"].iter().map(|j| j.fingerprint.as_str()).collect::<Vec<_>>(), [digest.as_str(); 3]);
     // Another machine with the same files finds the recipe judged; with the file changed there, due.
     let o = other.open(h.as_writer());
     let due = |d: &Daemon| d.call("lint", json!({})).unwrap()["findings"].as_array().unwrap().iter().any(|f| f["check"] == "due-recipe" && f["ref"] == "recipe:says-a");
@@ -360,7 +366,9 @@ fn a_close_is_judged_with_the_languages_the_server_now_reads() {
     h.daemon.call("configure", json!({ "languages": ["rust", "typescript"] })).unwrap();
     // The close is judged with the languages the server now reads: the module it touched is there, and changed.
     let closed = d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } })).unwrap();
-    let edge = closed["node"]["out"].as_array().unwrap().iter().find(|e| e["ref"] == "module:src/b").cloned().unwrap();
+    assert_eq!(closed["node"]["status"], "bottled", "{closed}");
+    let ticket = d.call("get", json!({ "ref": "ticket:0001" })).unwrap();
+    let edge = ticket["node"]["out"].as_array().unwrap().iter().find(|e| e["ref"] == "module:src/b").cloned().unwrap();
     assert!(!edge["title"].is_null(), "judged with TypeScript read, the module it touched is in the graph: {closed}");
     assert!(d.call("get", json!({ "ref": "module:src/b" })).is_ok());
 }

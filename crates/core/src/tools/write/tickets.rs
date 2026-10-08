@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the tools of a ticket's life, brew_ticket, close_ticket, bottle_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"brew_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by bottle_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what fingerprint::unnamed gives of its own work, the pages and requirements its proposal held and, for a change, the modules whose code differs from the state's base_fingerprints when a base is set and from the start otherwise, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"bottles","statement":"close_ticket with when: bottled refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket simmering with nothing applied; bottle_ticket closes a simmering ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still simmering."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as bottled and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"bottle-answers","statement":"bottle_ticket bottles the ticket its input names, a conflict when that one is not simmering or is a gap or question waiting for its change, or with none the store's current ticket when it is simmering and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket was bottled, what its close answers, and the changes still simmering, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, brew_ticket on a change already being worked, brewing or simmering, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's; on a state that holds no code it takes such a change up too, changing nothing of it and setting no current ticket and no start; and bottle_ticket naming no ticket bottles nothing and says a ticket is bottled on the main line, by name; on any other state brew_ticket refuses a ticket that is not inscribed but a brewing gap or question, which it claims, a gap or question waiting for its change among those refused."},{"id":"inscribes-its-change","statement":"close_ticket given change on a gap or question files that change as inscribe_ticket files one, inscribed, relying on the gap or question before the references given, and keeping pace, then writes the decision, followed by a sentence naming that change as what applies it, as close_ticket with when: bottled writes it, in one write: when either part is refused nothing of it is kept, the filed change removed, and the change is persisted first, an inscribed change of that title already relying on the gap or question being taken as the one filed, so a call stopped between its records is completed by running it again; it answers with the gap or question as when: bottled answers and with the change in filed as inscribe_ticket answers it, and what changed names the change before the decision; change given on a change, or with when: now, is invalid before anything changes, and a close without change answers no filed."},{"id":"checks-out","statement":"brew_ticket adds the state's caller, when it has one, to who has the ticket checked out with ops::check_out, and answers as checked_out the list as it then is, empty when nobody is listed."},{"id":"claims","statement":"brew_ticket on an inscribed gap or question makes it brewing, and on a brewing one, on any state, changes nothing of it, and in either case neither makes it the current ticket nor records a start, the current ticket staying what it was, and answers no waiting."},{"id":"close-notes","statement":"close_ticket answers as others each who had the ticket checked out but the state's caller, by name and since when, with a note that it was closed all the same, and none for a ticket that was not being worked or that lists nobody; the close goes ahead whoever has it."},{"id":"brew-answers","statement":"brew_ticket answers the ticket's rests_on walk, as its own proposal leaves the graph, parted by query::assumptions: as rests_on the nodes kept in full, and as reaches the count and references of the rest, nearest first, with the related gaps and questions and the recipes resting on what it touches."},{"id":"brew-warns","statement":"brew_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it is bottled, to bottle it first or start this ticket on a new branch; the start goes ahead whatever waits; and answers as others each who had the ticket checked out before it but the state's caller, by name and since when, with a warning, a ticket being worked with nobody listed as one unknown, and none for a ticket that was inscribed; the start goes ahead whoever has it."}]}
+//! {"purpose":"Answer the tools of a ticket's life, brew_ticket, close_ticket, bottle_ticket and withdraw_ticket, with what each records of the ticket, applies to the truth and settles of the answers it relies on.","criteria":[{"id":"untouched","statement":"brew_ticket records the fingerprint of every node as the ticket's start, but on a state that holds no code, which records none; a close, by close_ticket or by bottle_ticket, answers with the touched nodes whose fingerprint is unchanged and, as unnamed, the intent_of what fingerprint::unnamed gives of its own work, the pages and requirements its proposal held and, for a change, the modules whose code differs from the state's base_fingerprints when a base is set and from the start otherwise, both null when the ticket has no start or the state holds no code, and removes the start."},{"id":"bottles","statement":"close_ticket with when: bottled refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise writes the decision and leaves the ticket simmering with nothing applied; bottle_ticket closes a simmering ticket as close_ticket does, with the decision it carries and that decision's date, and when the truth moved refuses with the same conflict, the ticket still simmering."},{"id":"withdraws","statement":"withdraw_ticket closes the change it names with ops::withdraw_ticket, refusing a decision with no text or no ISO date as invalid before anything changes, then settles the answers the change relied on as gone, saying it was withdrawn, and answers with the change as bottled and the answers it settled and reopened; it takes no ticket field and applies nothing, whether or not the truth moved under its proposal."},{"id":"bottle-answers","statement":"bottle_ticket bottles the ticket its input names, a conflict when that one is not simmering or is a gap or question waiting for its change, or with none the store's current ticket when it is simmering and otherwise nothing, which is not an error and changes nothing; it answers whether a ticket was bottled, what its close answers, and the changes still simmering, and takes no ticket field."},{"id":"takes-up","statement":"On a machine's copy of a server's intent, or on a store of its own the state is told several checkouts share, brew_ticket on a change already being worked, brewing or simmering, makes it this checkout's current ticket and records its start, changing nothing of the ticket, a store of its own keeping the start it has, since there a ticket's start is the store's, not one checkout's; on a state that holds no code it takes such a change up too, changing nothing of it and setting no current ticket and no start; and bottle_ticket naming no ticket bottles nothing and says a ticket is bottled on the main line, by name; on any other state brew_ticket refuses a ticket that is not inscribed but a brewing gap or question, which it claims, a gap or question waiting for its change among those refused."},{"id":"inscribes-its-change","statement":"close_ticket given change on a gap or question files that change as inscribe_ticket files one, inscribed, relying on the gap or question before the references given, and keeping pace, then writes the decision, followed by a sentence naming that change as what applies it, as close_ticket with when: bottled writes it, in one write: when either part is refused nothing of it is kept, the filed change removed, and the change is persisted first, an inscribed change of that title already relying on the gap or question being taken as the one filed, so a call stopped between its records is completed by running it again; it answers with the gap or question as when: bottled answers and with the change in filed as inscribe_ticket answers it, and what changed names the change before the decision; change given on a change, or with when: now, is invalid before anything changes, and a close without change answers no filed."},{"id":"checks-out","statement":"brew_ticket adds the state's caller, when it has one, to who has the ticket checked out with ops::check_out, and answers as checked_out the list as it then is, empty when nobody is listed."},{"id":"claims","statement":"brew_ticket on an inscribed gap or question makes it brewing, and on a brewing one, on any state, changes nothing of it, and in either case neither makes it the current ticket nor records a start, the current ticket staying what it was, and answers no waiting."},{"id":"close-notes","statement":"close_ticket answers as others each who had the ticket checked out but the state's caller, by name and since when, with a note that it was closed all the same, and none for a ticket that was not being worked or that lists nobody; the close goes ahead whoever has it."},{"id":"brew-answers","statement":"brew_ticket answers the ticket's rests_on walk, as its own proposal leaves the graph, parted by query::assumptions: as rests_on the nodes kept, a requirement by its counts and with no decisions, and as reaches the count and references of the rest, nearest first, with as constraints what query::constraints gives but what the ticket names, the related gaps and questions and the recipes resting on what it touches; its size does not grow with the decisions of the requirements it reaches without naming them."},{"id":"brew-warns","statement":"brew_ticket answers as waiting each change ops::waiting_here gives for this checkout other than the ticket started, with its title and a warning naming it and saying a branch holds one ticket until it is bottled, to bottle it first or start this ticket on a new branch; the start goes ahead whatever waits; and answers as others each who had the ticket checked out before it but the state's caller, by name and since when, with a warning, a ticket being worked with nobody listed as one unknown, and none for a ticket that was inscribed; the start goes ahead whoever has it."}]}
 //! ```
 
 use serde::Deserialize;
@@ -75,12 +75,15 @@ pub(super) fn start(state: &mut State, name: &str, input: Value) -> Result<Outco
     // As the ticket's own proposal leaves the graph: one taken up already carries its spec.
     let g = state.graph_for(Some(&i.r#ref.id))?;
     let node = query::view(g, &i.r#ref).expect("just written");
-    // The assumptions to challenge in full; the rest of the blast radius by reference (req:tool-brew-ticket).
+    // The map of what binds the work; the rest of the blast radius by reference (req:tool-brew-ticket).
     let (rests_on, rest) = query::assumptions(query::rests_on(g, &i.r#ref, None));
     let reaches = Reaches { count: rest.len(), refs: rest };
-    let (related, recipes) = match g.get(&i.r#ref) {
-        Some(crate::graph::Node::Ticket(t)) => (query::related_tickets(g, t), query::recipes_resting(g, &t.touches)),
-        _ => (vec![], vec![]),
+    let (related, recipes, constraints) = match g.get(&i.r#ref) {
+        Some(crate::graph::Node::Ticket(t)) => {
+            let named: Vec<Reference> = t.touches.iter().chain(t.relies_on.iter()).cloned().collect();
+            (query::related_tickets(g, t), query::recipes_resting(g, &t.touches), query::constraints(g, &named))
+        }
+        _ => (vec![], vec![], vec![]),
     };
     // A branch holds one ticket until it is bottled: a change this checkout still carries is named, and the start goes ahead.
     // A gap or question claimed takes no branch, so nothing waits for it.
@@ -95,7 +98,7 @@ pub(super) fn start(state: &mut State, name: &str, input: Value) -> Result<Outco
             ),
         })
         .collect();
-    answer(name, Brewed { node, rests_on, reaches, related, recipes, waiting, checked_out, others }, changed)
+    answer(name, Brewed { node, rests_on, reaches, constraints, related, recipes, waiting, checked_out, others }, changed)
 }
 
 /// Each who had a ticket checked out, `before`, but the caller, with the sentence `say` gives for who and since
@@ -180,13 +183,13 @@ pub(super) fn close(state: &mut State, name: &str, input: Value, today: &str) ->
             let r = Reference::ticket(&slug);
             let reprioritised = super::summaries_of(state, &moved);
             let (warnings, baselined) = super::ticket_warnings(state, None, &r);
-            let node = query::view(state.graph(), &r).expect("just filed");
+            let node = query::summary_at(state.graph(), &r).expect("just filed");
             Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised) }
         });
         // What the check before the bottling will see: the truth with this ticket's proposal on it.
         let (code, start) = (!state.without_code(), state.store.starts.get(&i.r#ref.id).cloned());
         let g = state.graph_for(Some(&i.r#ref.id))?;
-        let node = query::view(g, &i.r#ref).expect("just written");
+        let node = query::summary_at(g, &i.r#ref).expect("just written");
         let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
         let due = code.then(|| due_over(g, &touched, start.as_ref()));
         return answer(name, Closed { node, findings, baselined, untouched: None, unnamed: None, settled: vec![], due, filed, others }, Some(changed));
@@ -227,7 +230,7 @@ pub(super) fn withdraw(state: &mut State, name: &str, input: Value, today: &str)
         (settled, reopened) = summaries(state, &s);
     }
     let g = state.graph_for(None)?;
-    let node = query::view(g, &i.r#ref).expect("just closed");
+    let node = query::summary_at(g, &i.r#ref).expect("just closed");
     answer(name, crate::answer::Withdrawn { node, settled, reopened }, Some(changed))
 }
 
@@ -372,7 +375,7 @@ fn close_now(state: &mut State, r: &Reference, decision: Decision, touched: Vec<
     }
     let changed = Changed::Many(changes);
     let g = state.graph();
-    let node = query::view(g, r).expect("just written");
+    let node = query::summary_at(g, r).expect("just written");
     let (findings, baselined) = split_new(lint::lint_touching(g, &touched));
     Ok((Closed { node, findings, baselined, untouched, unnamed, settled, due, filed: None, others: vec![] }, changed))
 }
@@ -542,7 +545,7 @@ mod tests {
         assert_eq!(s.store().tickets["c"].status, Status::Brewing);
         let out = call(&mut s, "withdraw_ticket", json!({ "ref": "ticket:c", "decision": { "text": "Reconsidered: lines are not counted." } }), "2026-10-06").unwrap().output;
         assert_eq!(out["node"]["status"], "bottled");
-        assert_eq!(out["node"]["decision"]["withdrawn"], true);
+        assert_eq!(out["node"]["withdrawn"], true);
         assert_eq!(out["reopened"][0]["ref"], "ticket:q", "{out}");
         let q = &s.store().tickets["q"];
         assert_eq!(q.status, Status::Inscribed, "a withdrawn change, closed after the answer, never counts as having applied it");
@@ -717,6 +720,48 @@ mod tests {
         let layout = walk["nodes"].as_array().unwrap().iter().find(|x| x["ref"] == "module:src/a/layout").expect("the whole walk").clone();
         assert_eq!(layout["via"].as_array().unwrap().last(), Some(&json!("module:src/a/ready")));
         assert_eq!(walk["nodes"].as_array().unwrap().len(), full.len() + refs.len());
+        // A requirement by its counts, never its decisions: those are read with get.
+        let req = out["rests_on"].as_array().unwrap().iter().find(|x| x["ref"] == "req:ready-only-with-commit").unwrap().clone();
+        assert_eq!((req["decisions"].clone(), req["decision_count"].clone(), req["scenario_count"].clone()), (json!([]), json!(1), json!(1)));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-brew-is-a-map-not-a-paper-trail", "checks": ["crates/core/src/tools/write/tickets#brew-answers", "req:tool-brew-ticket"]}
+    /// ```
+    #[test]
+    fn a_brew_is_a_map_not_a_paper_trail() {
+        // A ticket touching a page, reaching its requirements without naming them; a constraints page beside it.
+        let brewed = |decisions: usize| {
+            let mut store = crate::graph::fixtures::store();
+            store.pages.insert(crate::lint::CONSTRAINTS_PAGE.into(), crate::graph::fixtures::page(crate::lint::CONSTRAINTS_PAGE, &["req:stale", "req:ready-only-with-commit"]));
+            for q in store.requirements.values_mut() {
+                q.decisions = (1..=decisions as u32).map(|id| Decision { id: Some(id), ..Decision::new("2026-10-01", format!("Reason {id}, at some length, as reasons are.")) }).collect();
+            }
+            let t = crate::graph::fixtures::ticket("map", TicketKind::Change, Priority::Next, Status::Inscribed, &["page:git-readiness", "req:stale"], &[]);
+            store.tickets.insert(t.slug.clone(), t);
+            let mut s = State::new(store, crate::extraction::fixtures::extraction(), vec![]);
+            call(&mut s, "brew_ticket", json!({ "ref": "ticket:map" }), "2026-10-08").unwrap().output
+        };
+        let (one, fifty) = (brewed(1), brewed(50));
+        // Alike but for each requirement's decision_count: the paper trail is a call away, not in the answer.
+        let uncounted = |out: &serde_json::Value| {
+            let mut out = out.clone();
+            for part in ["rests_on", "constraints"] {
+                for x in out[part].as_array_mut().unwrap() {
+                    x.as_object_mut().unwrap().remove("decision_count");
+                }
+            }
+            ["rests_on", "reaches", "constraints"].map(|k| out[k].clone())
+        };
+        assert_eq!(uncounted(&one), uncounted(&fifty));
+        let counts = |out: &serde_json::Value| out["rests_on"].as_array().unwrap().iter().filter_map(|x| x["decision_count"].as_u64()).collect::<Vec<_>>();
+        assert!(counts(&fifty).iter().all(|n| *n == 50) && !counts(&fifty).is_empty(), "{:?}", counts(&fifty));
+        // The constraints say what they say, but one the ticket names, said where it was named.
+        let constraints: Vec<&str> = one["constraints"].as_array().unwrap().iter().map(|x| x["ref"].as_str().unwrap()).collect();
+        assert_eq!(constraints, ["req:ready-only-with-commit"]);
+        assert!(one["constraints"][0]["says"].as_str().is_some_and(|s| s.contains("Scenario:")));
     }
 
     #[test]
@@ -726,7 +771,8 @@ mod tests {
         assert!(!out.output["rests_on"].as_array().unwrap().is_empty());
         assert_eq!(out.output["related"].as_array().unwrap().len(), 1);
         let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), "2026-09-27").unwrap();
-        assert_eq!(out.output["node"]["decision"]["date"], "2026-09-27");
+        assert_eq!(out.output["node"]["status"], "bottled");
+        assert_eq!(s.store().tickets["phase-62"].decision.as_ref().map(|d| d.date.as_str()), Some("2026-09-27"));
         assert!(out.output["findings"].is_array());
     }
 

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, this checkout's current ticket's id and title, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that brewing or simmering ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"checked-out","statement":"get on a ticket being worked, brewing or a change simmering, answers checked_out, who has it checked out and since when as the store keeps them, empty when none is kept; on any other ticket or node it answers none."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
+//! {"purpose":"Answer the read tools: each parses its input, checks the reference it names and answers with a query over the current graph.","criteria":[{"id":"status","statement":"status returns the repository path, roots, languages, node counts by kind, edge count, unresolved import count, malformed file count, the contract scope and the baseline's date, reason and count, this checkout's current ticket's id and title, the grimoire's name in its daemon's library and that library's grimoires, plus the build's version and supported_languages as the loader told State, and tiers, each configured language in the config's order with the tier the build was told it reads it at or none, so the answer is the same over every transport."},{"id":"lint-tool","statement":"lint runs the selected rules (all by default) and returns the findings with counts per rule, and the omens apart; it is the same function grimoire check prints."},{"id":"source","statement":"source answers for a module, criterion, file, declaration or test with its file's text from the reader the caller supplied, the node's line as the focus, the file's annotations, and plain true exactly when the text has more lines than the config's plain-file limit; it asks the reader only for a file the graph knows and never for more than 2 MB, refuses a larger file or one over 20,000 lines as invalid, and answers store_unavailable when there is no reader or the reader fails."},{"id":"ticket-view","statement":"Every read tool takes an optional ticket and answers over the graph as that brewing or simmering ticket's proposal would leave it, a ticket that is neither being a conflict; absent, over the truth, except lint, which uses the store's current ticket when there is one. get names in drafts, however the node is read, the tickets whose proposals would change a page, a requirement or a ticket's references, and gives a ticket its own proposal, the tickets whose references it would change listed with the lists that differ."},{"id":"checked-out","statement":"get on a ticket being worked, brewing or a change simmering, answers checked_out, who has it checked out and since when as the store keeps them, empty when none is kept; on any other ticket or node it answers none."},{"id":"get-several","statement":"get given refs answers nodes, each as get given that one reference answers it, in the order given, and missing, each reference the graph does not hold, in the order given, refusing none for it; given both ref and refs, or neither, it is invalid."},{"id":"without-code","statement":"On a state that holds no code, get, rests_on and rests_on_me of a module, criterion, file, declaration or test, and coverage, module_source and source of anything, are refused as store_unavailable saying the daemon holds no code, never answered as not found; outline answers over the intent with without_code true, and a node from the code that a walk or a tree reaches is titled as not held here, not as missing."}]}
 //! ```
 
 use serde::Deserialize;
@@ -13,6 +13,7 @@ use crate::lint::Rule;
 use crate::model::*;
 use crate::ops::ToolError;
 use crate::query::{self, BoardFilter};
+use crate::store::FieldError;
 
 /// Run the read tool `name`. A `ticket` in the input picks the view: the
 /// graph as that ticket's proposal would leave it; absent, the truth, except
@@ -30,6 +31,17 @@ fn no_code_for(state: &State, r: &Reference) -> Result<(), ToolError> {
         return Err(no_code(r));
     }
     Ok(())
+}
+
+/// One node as `get` answers it, or none when the graph does not hold it.
+fn got(state: &mut State, view: Option<&str>, r: &Reference) -> Result<Option<NodeAnswer>, ToolError> {
+    no_code_for(state, r)?;
+    let (proposal, drafts) = drafts_of(state.store(), r);
+    let g = state.graph_for(view)?;
+    let Some(node) = query::view(g, r) else { return Ok(None) };
+    // Who has a ticket being worked checked out: what the store keeps beside the ticket, not in it (req:ticket-checked-out).
+    let checked_out = (r.kind == Kind::Ticket).then(|| state.store().checked_out_of(&r.id)).flatten();
+    Ok(Some(NodeAnswer { node, proposal, drafts, checked_out }))
 }
 
 pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Outcome, ToolError> {
@@ -52,14 +64,31 @@ pub(super) fn call(state: &mut State, name: &str, mut input: Value) -> Result<Ou
             answer(name, NodesAnswer { nodes: query::find(g, &i.query, i.kinds.as_deref(), i.limit.unwrap_or(20)) }, None)
         }
         "get" => {
-            let i: RefIn = parse(input)?;
-            no_code_for(state, &i.r#ref)?;
-            let (proposal, drafts) = drafts_of(state.store(), &i.r#ref);
-            let g = state.graph_for(view)?;
-            let node = query::view(g, &i.r#ref).ok_or_else(|| ToolError::not_found(&i.r#ref))?;
-            // Who has a ticket being worked checked out: what the store keeps beside the ticket, not in it (req:ticket-checked-out).
-            let checked_out = (i.r#ref.kind == Kind::Ticket).then(|| state.store().checked_out_of(&i.r#ref.id)).flatten();
-            answer(name, NodeAnswer { node, proposal, drafts, checked_out }, None)
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct In {
+                r#ref: Option<Reference>,
+                refs: Option<Vec<Reference>>,
+            }
+            let i: In = parse(input)?;
+            match (i.r#ref, i.refs) {
+                (Some(r), None) => {
+                    let node = got(state, view, &r)?.ok_or_else(|| ToolError::not_found(&r))?;
+                    answer(name, GetAnswer::One(Box::new(node)), None)
+                }
+                // A group in one call: what the graph lacks is listed, never a refusal of the rest (req:tool-get).
+                (None, Some(refs)) => {
+                    let (mut nodes, mut missing) = (Vec::new(), Vec::new());
+                    for r in refs {
+                        match got(state, view, &r)? {
+                            Some(node) => nodes.push(node),
+                            None => missing.push(r),
+                        }
+                    }
+                    answer(name, GetAnswer::Several { nodes, missing }, None)
+                }
+                _ => Err(ToolError::invalid("give `ref` for one node or `refs` for several, not both or neither", vec![FieldError::new("ref", "give this or refs")])),
+            }
         }
         "outline" => {
             #[derive(Deserialize)]
@@ -528,6 +557,27 @@ mod tests {
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
         s.set_source(Arc::new(Memory(vec![("src/a/ready.rs", "\n".repeat(SOURCE_LINES + 1))])));
         assert!(matches!(call(&mut s, "source", json!({ "ref": "file:src/a/ready.rs" }), "2026-09-29").unwrap_err(), ToolError::Invalid { .. }));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "get-reads-several-at-once", "checks": ["crates/core/src/tools/read#get-several", "req:tool-get"]}
+    /// ```
+    #[test]
+    fn get_reads_several_at_once() {
+        let mut s = state();
+        let out = call(&mut s, "get", json!({ "refs": ["req:stale", "page:nope", "req:ready-only-with-commit", "ticket:later-1"] }), "2026-10-08").unwrap().output;
+        let got: Vec<&str> = out["nodes"].as_array().unwrap().iter().map(|n| n["node"]["ref"].as_str().unwrap()).collect();
+        assert_eq!(got, ["req:stale", "req:ready-only-with-commit", "ticket:later-1"], "in the order given");
+        assert_eq!(out["missing"], json!(["page:nope"]), "listed, not refused");
+        // Each as get of it alone answers it.
+        let alone = call(&mut s, "get", json!({ "ref": "ticket:later-1" }), "2026-10-08").unwrap().output;
+        assert_eq!(out["nodes"][2], alone);
+        // Both or neither: invalid.
+        assert_eq!(call(&mut s, "get", json!({ "ref": "req:stale", "refs": ["req:stale"] }), "2026-10-08").unwrap_err().code(), "invalid");
+        assert_eq!(call(&mut s, "get", json!({}), "2026-10-08").unwrap_err().code(), "invalid");
+        assert_eq!(call(&mut s, "get", json!({ "ref": "page:nope" }), "2026-10-08").unwrap_err().code(), "not_found", "one alone is still not_found");
     }
 
     /// # Test contract

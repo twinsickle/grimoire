@@ -935,9 +935,9 @@ mod tests {
         let ticket = d.call("inscribe_ticket", json!({ "title": "T", "kind": "change", "priority": "later", "body": "b" })).unwrap()["node"]["ref"].clone();
         d.call("brew_ticket", json!({ "ref": ticket })).unwrap();
         let judged = d.call("judge_recipe", json!({ "ref": "recipe:button", "outcome": "held" })).unwrap();
-        assert_ne!(judged["judgement"]["fingerprint"], before, "not the digest the watcher last reported");
-        assert_eq!(judged["judgement"]["fingerprint"], digest(&d));
-        assert_eq!(judged["due"], false);
+        assert_ne!(judged["judged"][0]["judgement"]["fingerprint"], before, "not the digest the watcher last reported");
+        assert_eq!(judged["judged"][0]["judgement"]["fingerprint"], digest(&d));
+        assert_eq!(judged["judged"][0]["due"], false);
     }
 
     /// # Test contract

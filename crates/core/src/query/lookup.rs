@@ -1,8 +1,10 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Show a node the way every read tool returns it, in full or as a summary, and find nodes by text.","criteria":[{"id":"node-view","statement":"Every node any tool returns has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling."},{"id":"withdrawn-marked","statement":"A ticket's summary says withdrawn, true, when its decision is marked withdrawn, and leaves it out otherwise, so the board and every list of tickets tell a withdrawn change from one that bottled."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."}]}
+//! {"purpose":"Show a node the way every read tool returns it, in full or as a summary, and find nodes by text.","criteria":[{"id":"node-view","statement":"Every node a tool returns in full, as get and brew_ticket do, has the same shape: its stored or derived fields, plus ref, plus in and out, the derived edge lists as {ref, relation, title}, title being the other end's one-line name or null when it is dangling; in leaves out the edges from bottled tickets, which bottled_tickets counts per relation, left out when there are none."},{"id":"withdrawn-marked","statement":"A ticket's summary says withdrawn, true, when its decision is marked withdrawn, and leaves it out otherwise, so the board and every list of tickets tell a withdrawn change from one that bottled."},{"id":"find","statement":"find matches a query case-insensitively against slug, title, statement, purpose, body, declaration path and test name, optionally restricted to kinds, and returns up to limit summaries ordered by match quality."},{"id":"get","statement":"get returns one node in full with its edges, or not_found."}]}
 //! ```
+
+use std::collections::BTreeMap;
 
 use serde::Serialize;
 
@@ -18,6 +20,10 @@ pub struct NodeView {
     pub node: Node,
     pub r#in: Vec<EdgeView>,
     pub out: Vec<EdgeView>,
+    // The node's history: the edges from bottled tickets, counted per relation rather than listed (req:tools-node-view).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<BTreeMap<String, usize>>", optional))]
+    pub bottled_tickets: BTreeMap<String, usize>,
 }
 
 /// One edge as a node view lists it: the other end, the relation, and the
@@ -34,7 +40,17 @@ pub struct EdgeView {
 pub fn view(g: &Graph, r: &Reference) -> Option<NodeView> {
     let node = g.get(r)?.clone();
     let edge = |other: &Reference, relation: Relation| EdgeView { r#ref: other.clone(), relation, title: g.get(other).map(Node::title) };
-    Some(NodeView { r#ref: r.clone(), node, r#in: g.inbound(r).map(|e| edge(&e.from, e.relation)).collect(), out: g.out(r).map(|e| edge(&e.to, e.relation)).collect() })
+    let bottled = |from: &Reference| matches!(g.get(from), Some(Node::Ticket(t)) if t.status == Status::Bottled);
+    let mut bottled_tickets: BTreeMap<String, usize> = BTreeMap::new();
+    let mut r#in = Vec::new();
+    for e in g.inbound(r) {
+        if bottled(&e.from) {
+            *bottled_tickets.entry(e.relation.as_str().to_string()).or_default() += 1;
+        } else {
+            r#in.push(edge(&e.from, e.relation));
+        }
+    }
+    Some(NodeView { r#ref: r.clone(), node, r#in, out: g.out(r).map(|e| edge(&e.to, e.relation)).collect(), bottled_tickets })
 }
 
 /// The short form used in lists.
@@ -64,6 +80,11 @@ pub fn summary(r: &Reference, n: &Node) -> Summary {
         _ => (None, None, None, false),
     };
     Summary { r#ref: r.clone(), title: n.title(), kind, priority, status, withdrawn }
+}
+
+/// A node's summary, as a write answers it, or none when the graph does not hold it.
+pub fn summary_at(g: &Graph, r: &Reference) -> Option<Summary> {
+    g.get(r).map(|n| summary(r, n))
 }
 
 pub fn ticket_summary(t: &Ticket) -> Summary {
@@ -159,5 +180,33 @@ mod tests {
         let json = serde_json::to_value(&v).unwrap();
         assert_eq!(json["ref"], "module:src/a/ready");
         assert!(json["purpose"].is_string());
+        assert!(json.get("bottled_tickets").is_none(), "left out when there are none");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "bottled-tickets-are-counted-not-listed", "checks": ["crates/core/src/query/lookup#node-view", "req:tools-node-view"]}
+    /// ```
+    #[test]
+    fn bottled_tickets_are_counted_not_listed() {
+        use crate::graph::fixtures::ticket;
+        let mut s = crate::graph::fixtures::store();
+        for (slug, status, touches, relies_on) in [
+            ("b1", Status::Bottled, true, false),
+            ("b2", Status::Bottled, true, false),
+            ("b3", Status::Bottled, true, false),
+            ("b4", Status::Bottled, false, true),
+            ("live", Status::Brewing, true, false),
+        ] {
+            let on: &[&str] = &["page:orphan"];
+            s.tickets.insert(slug.into(), ticket(slug, TicketKind::Change, Priority::Later, status, if touches { on } else { &[] }, if relies_on { on } else { &[] }));
+        }
+        let g = Graph::build(&s, &crate::extraction::fixtures::extraction(), &[]);
+        let v = view(&g, &Reference::page("orphan")).unwrap();
+        let listed: Vec<String> = v.r#in.iter().map(|e| e.r#ref.id.clone()).collect();
+        assert!(listed.contains(&"live".to_string()) && listed.contains(&"later-1".to_string()), "{listed:?}");
+        assert!(!listed.iter().any(|t| t.starts_with('b')), "{listed:?}");
+        assert_eq!(serde_json::to_value(&v).unwrap()["bottled_tickets"], serde_json::json!({ "touches": 3, "relies_on": 1 }));
     }
 }

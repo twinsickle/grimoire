@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { Priority, Ref, ToolAnswers, ToolError } from "./types";
+import type { NodeAnswer, Priority, Ref, ToolAnswers, ToolError } from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly body: ToolError, public readonly status: number) {
@@ -189,7 +189,8 @@ async function callOnce<K extends keyof ToolAnswers>(tool: K, input: unknown): P
 export const api = {
   status: () => call("status"),
   find: (query: string, kinds?: string[], limit = 20) => call("find", { query, kinds, limit }),
-  get: (ref: Ref, ticket?: string) => call("get", ticket ? { ref, ticket } : { ref }),
+  // Given one `ref`, get answers one node; `{refs}` would answer several (req:tool-get).
+  get: (ref: Ref, ticket?: string) => call("get", ticket ? { ref, ticket } : { ref }) as Promise<NodeAnswer>,
   outline: (input: { depth?: number; root?: Ref; pages_only?: boolean; ticket?: string }) => call("outline", input),
   restsOn: (ref: Ref, depth?: number, ticket?: string) => call("rests_on", ticket ? { ref, depth, ticket } : { ref, depth }),
   restsOnMe: (ref: Ref) => call("rests_on_me", { ref }),

@@ -171,17 +171,29 @@ the graph answers "which module owns this behaviour and what does it
 promise", which is the question a change actually asks. The graph does not
 answer "who calls this"; that is grep or the language server, by design.
 `find` locates a node by any text. `get` shows a node with its `in` and `out`
-edges.
+edges, the bottled tickets that touched it counted rather than listed;
+`get` with `refs` reads several in one call.
+
+**Before editing a module, ask what binds it.** `rests_on_me` on the module
+(or a file, or a criterion) answers under `binds` the requirements on its
+own criteria, each with its statement and scenarios: what the edit must
+keep. This is where drift happens, often at a file the plan never named, so
+ask it whenever you open one to change it. The rest of what stands above it
+comes by name under `nodes`; `get` the ones near your change. A
+requirement's decisions are why it says what it says, not what it says:
+read them with `get` when you mean to change that requirement.
 
 ## Sequence: brew a ticket
 
 1. `brew_ticket { "ref": "ticket:<slug>" }`. It moves the ticket to
-   `brewing` and returns the ticket, `rests_on` (the assumptions to
-   challenge, nearest first: what it names directly, every requirement below
-   it with the decisions behind each, and every bottled ticket it relies on),
-   `reaches` (the rest of what is below it, the modules its imports lead to
-   and the like, as a count and references; `rests_on` the tool gives the
-   whole walk with each path), `related` (the gaps
+   `brewing` and returns the ticket, `rests_on` (a map of what binds the
+   work, nearest first: what it names directly with what each says, every
+   requirement below it by its title and how many scenarios and decisions it
+   has, and every bottled ticket it relies on with its decision), `reaches`
+   (the rest of what is below it, the modules its imports lead to and the
+   like, as a count and references; `rests_on` the tool gives the whole walk
+   with each path), `constraints` (what holds whichever part changes, each
+   with what it says), `related` (the gaps
    and questions not yet bottled touching what it touches) and `recipes` (the recipes over
    what it touches, its own modules' and those of the modules importing them,
    each saying whether it is `due`: what the project
@@ -196,26 +208,30 @@ edges.
    `checked_out` is who has the ticket now and since when, you among them;
    if `others` names someone, they have it too: say so before you both work
    it. Nothing refuses the brew.
-2. Read `rests_on` as a list of assumptions. Each node the ticket names
-   itself carries `says`, its text (a page's body, a requirement's statement
-   and scenarios, a module's contract, an answer waiting for this change):
-   that is what the ticket rests on, so read it there rather than from
-   memory. For each requirement with
-   decisions, and each bottled ticket listed, ask whether the decision still
-   holds given what this ticket changes. Name the ones you would challenge,
-   with why, before planning. This is the moment the question is asked;
-   nothing pushes it later. The walk is bounded: a ticket relied on appears
+2. Read `rests_on` as the map of what binds the work. Each node the ticket
+   names itself carries `says`, its text (a page's body, a requirement's
+   statement and scenarios, a module's contract, an answer waiting for this
+   change): that is what the ticket rests on, so read it there rather than
+   from memory. Read each requirement further down by its title, and the
+   `constraints` in full, and ask whether this ticket's change contradicts
+   what one says; `get` a group of them with `refs` to read their scenarios
+   where the change comes near. For a requirement you mean to change, and
+   each bottled ticket listed, `get` the decisions behind it and ask whether
+   they still hold given what this ticket changes. Name the ones you would
+   challenge, with why, before planning. This is the moment the question is
+   asked; nothing pushes it later. The walk is bounded: a ticket relied on appears
    with its decision and is not expanded, and a page appears with its
    requirements and modules but not its child pages. Module imports are
    followed all the way down, since that is the blast radius; what they
    reach comes under `reaches` by reference, to `get` where it matters.
 3. Read `related`. A gap or question that touches the same nodes is context
    for this work and may be bottled by it; say which.
-4. For each module in `touches`, `rests_on_me` shows the blast radius: the
-   requirements, recipes and pages above it and the other tickets not yet bottled
-   reaching it.
-   Then `get` the module for its files and declarations before opening any
-   of them.
+4. For each module in `touches`, `rests_on_me` shows what binds it and the
+   blast radius: the requirements on its own criteria in full, then the
+   requirements, recipes and pages above it by name, and the other tickets
+   not yet bottled reaching it. Ask it again of any other module before you
+   edit it. Then `get` the module for its files and declarations before
+   opening any of them.
 5. Plan the work. Include the grimoire updates in the plan: which pages and
    requirements change, which decisions get recorded, which contracts change.
 
@@ -262,7 +278,8 @@ Read the spec back with `ticket` on the reads, or they show the truth.
    `lint` reports `due-recipe`, is judged now against what it represents: read the recipe
    and its `files` as they are after this work. If it still says truly how
    to use what it represents, `judge_recipe { "ref": "recipe:<id>", "outcome":
-   "held" }`; if not, update the recipe so it does, then `judge_recipe` with
+   "held" }`, or several at once with `judge_recipe { "judgements": [{ "ref",
+   "outcome" }, ...] }`; if not, update the recipe so it does, then `judge_recipe` with
    `"outcome": "updated"`. Judge after the last change to the recipe and its
    files: a judgement holds only of them as they were when it was made, so a
    later edit makes the recipe due again. The judgement is yours or the
