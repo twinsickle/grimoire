@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The TypeScript and JavaScript language adapter, one reading under two language names: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and of imports resolved through the packages the repository holds.","criteria":[{"id":"files","statement":"The typescript language handles .ts, .tsx, .mts and .cts files but declaration files, reading .tsx with the TSX grammar and the rest with TypeScript's; the javascript language handles .js, .jsx, .mjs and .cjs files, reading each with the JavaScript grammar, JSX included; neither handles the other's."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line."},{"id":"identity","statement":"A module's id is its repository-relative path without its extension, any of .ts, .tsx, .mts, .cts, .js, .jsx, .mjs or .cjs, with a terminal /index folded away."},{"id":"coverage","statement":"Every file a language handles under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"declarations","statement":"Function and generator declarations and function signatures are declarations of kind function, an overloaded function once at its first signature, as is a const, let or var whose value is an arrow function or function expression; classes, interfaces, type aliases and enums are of kind type and a class's methods, abstract ones included and an overloaded one once at its first signature, of kind method under its path; any other const is of kind const and let or var of kind variable, one per named declarator; a declaration under TypeScript's declare, exported or not, is read as one without it; each has the line it starts on, and nothing inside a block, a loop, a switch, a function's body or a class's body but its methods is reported."},{"id":"imports-as-candidates","statement":"A relative import specifier resolves against the importing file's own directory, an index file's included, to one candidate module id; a bare specifier whose package part is a package.json name in the repository resolves through that package; any other yields none."},{"id":"package-exports","statement":"A bare specifier into a package of the repository yields, in order: the target its exports gives for the subpath, by exact key or else the matching * pattern with the longest prefix, a conditions object taking the first of import, module, require, node, default and then any other but types whose value matches, nested likewise, a condition naming nothing going on to the next and a null one excluding the subpath, an array by its first entry that names a file; or, with no exports and no subpath, its module and then its main; then for a subpath the subpath under the package's src/ and under the package; then the package's src/ and the package itself; each as a module id, none repeated."},{"id":"require-and-dynamic-import","statement":"Import and export-from declarations, TypeScript's import-equals require, and anywhere in the file a require(...) call or a dynamic import(...) whose one argument is a plain string literal are imports; any other call is none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, after blank lines and a #! line, with the comment markers stripped."}]}
+//! {"purpose":"The TypeScript and JavaScript language adapter, one reading under two language names: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and of imports resolved through the packages the repository holds.","criteria":[{"id":"files","statement":"The typescript language handles .ts, .tsx, .mts and .cts files but declaration files, reading .tsx with the TSX grammar and the rest with TypeScript's; the javascript language handles .js, .jsx, .mjs and .cjs files, reading each with the JavaScript grammar, JSX included; neither handles the other's."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line."},{"id":"identity","statement":"A module's id is its repository-relative path without its extension, any of .ts, .tsx, .mts, .cts, .js, .jsx, .mjs or .cjs, with a terminal /index folded away."},{"id":"coverage","statement":"Every file a language handles under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"declarations","statement":"Function and generator declarations and function signatures are declarations of kind function, an overloaded function once at its first signature, as is a const, let or var whose value is an arrow function or function expression; classes, interfaces, type aliases and enums are of kind type and a class's methods, abstract ones included and an overloaded one once at its first signature, of kind method under its path; any other const is of kind const and let or var of kind variable, one per named declarator; a declaration under TypeScript's declare, exported or not, is read as one without it; each has the line it starts on, and nothing inside a block, a loop, a switch, a function's body or a class's body but its methods is reported."},{"id":"imports-as-candidates","statement":"A relative import specifier resolves against the importing file's own directory, an index file's included, to one candidate module id; a bare specifier whose package part is a package.json name in the repository, outside any nested checkout, resolves through that package; any other yields none."},{"id":"package-exports","statement":"A bare specifier into a package of the repository yields, in order: the target its exports gives for the subpath, by exact key or else the matching * pattern with the longest prefix, a conditions object taking the first of import, module, require, node, default and then any other but types whose value matches, nested likewise, a condition naming nothing going on to the next and a null one excluding the subpath, an array by its first entry that names a file; or, with no exports and no subpath, its module and then its main; then for a subpath the subpath under the package's src/ and under the package; then the package's src/ and the package itself; each as a module id, none repeated."},{"id":"require-and-dynamic-import","statement":"Import and export-from declarations, TypeScript's import-equals require, and anywhere in the file a require(...) call or a dynamic import(...) whose one argument is a plain string literal are imports; any other call is none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, after blank lines and a #! line, with the comment markers stripped."}]}
 //! ```
 
 use std::path::Path;
@@ -105,11 +105,17 @@ impl TypeScriptAdapter {
     }
 
     /// Scan for `package.json` files (never inside `node_modules`, which
-    /// `.gitignore` excludes) and remember each package's name, directory
+    /// `.gitignore` excludes, nor inside a nested checkout) and remember each package's name, directory
     /// and entries.
     pub fn of(dialect: Dialect, root: &Path) -> Self {
         let mut packages = Vec::new();
-        let walker = ignore::WalkBuilder::new(root).hidden(true).git_ignore(true).require_git(false).build();
+        // As the extractor walks: a folder below the root that is a checkout of its own is not this repository's.
+        let walker = ignore::WalkBuilder::new(root)
+            .hidden(true)
+            .git_ignore(true)
+            .require_git(false)
+            .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && crate::is_checkout(e.path())))
+            .build();
         for entry in walker.flatten() {
             if entry.file_name() != "package.json" {
                 continue;
@@ -898,5 +904,28 @@ function pick(a: any) { return a; }
                 ("Store::open".into(), "method".into(), 3)
             ]
         );
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-nested-checkout-adds-no-package", "checks": ["crates/extract/src/typescript#imports-as-candidates"]}
+    /// ```
+    #[test]
+    fn a_nested_checkout_adds_no_package() {
+        let dir = tempfile::Builder::new().prefix("grimoire-ts-").tempdir().unwrap();
+        let file = |rel: &str, text: &str| {
+            let p = dir.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        file("package.json", r#"{"name": "app"}"#);
+        file("vendor/sub/package.json", r#"{"name": "dep"}"#);
+        std::fs::create_dir_all(dir.path().join("vendor/sub/.git")).unwrap();
+        file("libs/other/package.json", r#"{"name": "other"}"#);
+        for a in [TypeScriptAdapter::new(dir.path()), TypeScriptAdapter::of(Dialect::JavaScript, dir.path())] {
+            assert!(a.candidates("dep", "src/a.ts").is_empty(), "dep lies only inside a checkout of its own");
+            assert_eq!(a.candidates("other", "src/a.ts"), ["libs/other/src", "libs/other"]);
+        }
     }
 }
