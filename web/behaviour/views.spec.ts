@@ -111,9 +111,8 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
   await page.goto("/");
   await expect(page.locator(rail)).toBeVisible();
   await expect(page.locator("[data-library]")).toHaveCount(0);
-  await page.locator("header button[aria-label^='Where you are']").click();
-  await expect(page.getByRole("dialog", { name: "Checkouts" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "All projects" })).toHaveCount(0);
+  await expect(page.locator("header button[aria-label^='Where you are']")).toBeVisible();
+  await expect(page.locator("[data-shelf-rail]")).toHaveCount(0);
   // A library of one grimoire is still the Library at /, its one book opening it at its own address.
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.route("**/api/status", async (route) => {
@@ -158,7 +157,9 @@ test("a grimoire of the library is read at its own address, and the header lists
   await expect(panel.getByRole("listitem")).toContainText("ledger no ticket");
   // The header holds this project alone: `repo` is another project, not listed.
   await expect(panel).not.toContainText("repo");
-  await expect(panel.getByRole("link", { name: "All projects" })).toBeVisible();
+  // The way to other projects is the shelf rail, not the header.
+  await expect(panel.getByRole("link")).toHaveCount(3);
+  await expect(panel).not.toContainText("All projects");
   // Escape closes it.
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
@@ -185,14 +186,100 @@ test("a grimoire of the library is read at its own address, and the header lists
  * # Test contract
  *
  * ```json
+ * {"test": "the-shelf-rail-leads-to-every-project", "checks": ["web/src/views/Library#shelf-rail", "web/src/App#three-views"]}
+ * ```
+ */
+test("the shelf rail beside every page of a grimoire leads to the Library and to each project, shelf by shelf", async ({ page }) => {
+  const status = await tool<{ library: { name: string; server: string | null }[] }>(page, "status");
+  const places = [...new Set(status.library.map((g) => g.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
+  const namesAt = (place: string | null) => [...new Set(status.library.filter((g) => g.server === place).map((g) => g.name))].sort();
+  const shelfRail = page.locator("[data-shelf-rail]");
+  // Beside the header and the view on every view of a grimoire, not inside either.
+  for (const path of ["/g/repo/", "/g/repo/n/page%3Agoal", "/g/repo/unplaced", "/g/repo/cauldron", "/g/repo/findings", "/g/repo/n/req%3Aready-needs-commit"]) {
+    await page.goto(path);
+    await expect(shelfRail, path).toBeVisible();
+    await expect(page.locator("header [data-shelf-rail], main [data-shelf-rail]")).toHaveCount(0);
+  }
+  // One shelf per place, this machine first, each titled with its place, its books in name order with their initials.
+  const shelves = shelfRail.locator("[data-shelf]");
+  await expect(shelves).toHaveCount(places.length);
+  for (const [i, place] of places.entries()) {
+    const names = namesAt(place);
+    const label = place === null ? "this machine" : place.replace(/^https?:\/\//, "");
+    await expect(shelves.nth(i)).toHaveAttribute("title", label);
+    // Named for a screen reader as the Library names its stacks.
+    await expect(shelves.nth(i).getByRole("list")).toHaveAccessibleName(place === null ? "On this machine" : `From ${label}`);
+    const books = shelves.nth(i).locator("[data-rail-book]");
+    await expect(books).toHaveText(names.map((n) => n.charAt(0).toUpperCase()));
+    for (const [j, name] of names.entries()) {
+      await expect(books.nth(j)).toHaveAttribute("title", name);
+      await expect(books.nth(j)).toHaveAttribute("href", `/g/${name}/`);
+    }
+  }
+  // The grimoire on screen is ringed and current, and no other.
+  await expect(shelfRail.locator("[aria-current='page']")).toHaveAttribute("title", "repo");
+  await expect(shelfRail.locator("[aria-current='page']")).toHaveClass(/ring-accent/);
+  // A book is in its Library spine's cloth, so it looks the same in both places.
+  const cloth = (el: Element) => getComputedStyle(el).backgroundColor;
+  const railCloth = await shelfRail.locator("[data-rail-book][title='ledger']").evaluate(cloth);
+  // One press opens another project, ringed there.
+  await shelfRail.locator("[data-rail-book][title='ledger']").click();
+  await expect(page).toHaveURL(/\/g\/ledger\/$/);
+  await expect(page.locator("[data-shelf-rail] [aria-current='page']")).toHaveAttribute("title", "ledger");
+  // The mark leads back to the Library, where the same grimoire wears the same cloth.
+  await page.locator("[data-shelf-rail]").getByRole("link", { name: "Library", exact: true }).click();
+  await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
+  expect(await page.locator("[data-spine]", { hasText: "ledger" }).evaluate(cloth)).toBe(railCloth);
+  // The Library is where the rail leads, so it has none of its own.
+  await expect(page.locator("[data-shelf-rail]")).toHaveCount(0);
+  // A book slides out on hover where motion is allowed, and stays still where reduced motion is asked for.
+  await page.goto("/g/repo/cauldron");
+  const ledger = page.locator("[data-rail-book][title='ledger']");
+  const moved = () => ledger.evaluate((el) => getComputedStyle(el).translate);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await ledger.hover();
+  await page.waitForTimeout(300);
+  expect(await moved()).toBe("none");
+  await page.mouse.move(400, 400);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await ledger.hover();
+  await expect.poll(moved).not.toBe("none");
+  // Keyboard focus slides it out too, outlined in the accent colour.
+  await page.mouse.move(400, 400);
+  await expect.poll(moved).toBe("none");
+  await ledger.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(ledger).toBeFocused();
+  await expect.poll(moved).not.toBe("none");
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim());
+  const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+  expect(await ledger.evaluate((el) => getComputedStyle(el).outlineColor)).toBe(rgb(accent));
+  // A library of one grimoire still has the rail, the way back to the Library always there.
+  await page.route("**/api/status", async (route) => {
+    const fetched = await route.fetch().catch(() => null);
+    if (!fetched) return;
+    const answer = await fetched.json();
+    await route.fulfill({ json: { ...answer, library: answer.library.filter((g: { name: string }) => g.name === "repo") } }).catch(() => {});
+  });
+  await page.reload();
+  await expect(page.locator("[data-shelf-rail] [data-shelf]")).toHaveCount(1);
+  await expect(page.locator("[data-shelf-rail] [data-rail-book]")).toHaveCount(1);
+  await expect(page.locator("[data-shelf-rail]").getByRole("link", { name: "Library", exact: true })).toHaveAttribute("href", "/");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
  * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#three-views", "web/src/App#where-you-are"]}
  * ```
  */
 test("the Library stands the machine's grimoires in a stack for each place they come from, each spine opening its grimoire", async ({ page }) => {
-  // The header's way to every project opens the Library.
+  // The shelf rail's mark opens the Library.
   await page.goto("/g/ledger/cauldron");
-  await page.locator("header button[aria-label^='Where you are']").click();
-  await page.getByRole("dialog", { name: "Checkouts" }).getByRole("link", { name: "All projects" }).click();
+  await page.locator("[data-shelf-rail]").getByRole("link", { name: "Library", exact: true }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   // A stack for each place status names, this machine first, each grimoire one spine in name order.
   const status = await tool<{ library: { name: string; server: string | null }[] }>(page, "status");
