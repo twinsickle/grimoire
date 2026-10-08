@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: open and mark each grimoire it holds, find them again every few seconds, serve a checkout a request names, and let one go when it goes or while a command deletes its store; routing each request to its checkout is the module beneath.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store with the same checkout; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, each grimoire with the server it comes from as library::server_of names it, or none for a store of its own, and once stopped, refresh takes nothing."},{"id":"checkout-registered","statement":"A request whose checkout names a directory whose nearest project file names this grimoire, in a checkout not served yet, is answered by that checkout once it is served: one of a store of its own is added to the store's checkouts through the store's writer and served as a view beside the others, sharing their lock; one of a team's grimoire this daemon serves, the same server's, has its copy of the server's intent made and is served, and when that cannot be done the request is refused saying why and what to run there; none is taken for a caller the grimoire's trust step would refuse; one at a time with refresh and with any other such request, so a checkout is opened once, and never while its store is held back; a directory whose project file names a grimoire of that name kept at another store or copied from another server is refused saying the name is served already and to give that grimoire another name in its project file, as library::name_taken words it, one whose project file names no grimoire of that name is refused as before, and nothing is added."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock; a checkout of a store of its own whose other checkouts are still served leaves the marker, and the lock is released once the last of them lets it go."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."},{"id":"deletions","statement":"On a machine, refresh serves no grimoire whose store is queued for deletion in the deletions folder beside its stores, letting go of one it serves and asking the queue again just before it serves one it opened, and a checkout whose store is queued is not taken; after each refresh it carries out the queued deletions, saying once each one kept and why; a team's server has no such folder."}]}
+//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: open and mark each grimoire it holds, find them again every few seconds, serve a checkout a request names, and let one go when it goes or while a command deletes its store; routing each request to its checkout is the module beneath.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store with the same checkout; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, one newly served, by refresh or by a request naming its checkout, before any request reaches it, each grimoire with the server it comes from as library::server_of names it, or none for a store of its own, and once stopped, refresh takes nothing."},{"id":"waits-on-no-state","statement":"Telling the served grimoires the library and their fellows takes no served daemon's state, so while one served daemon holds its state, as a copy does across a fetch while it syncs, refresh still serves a grimoire that appeared and a request to any other grimoire is still answered."},{"id":"checkout-registered","statement":"A request whose checkout names a directory whose nearest project file names this grimoire, in a checkout not served yet, is answered by that checkout once it is served: one of a store of its own is added to the store's checkouts through the store's writer and served as a view beside the others, sharing their lock; one of a team's grimoire this daemon serves, the same server's, has its copy of the server's intent made and is served, and when that cannot be done the request is refused saying why and what to run there; none is taken for a caller the grimoire's trust step would refuse; one at a time with refresh and with any other such request, so a checkout is opened once, and never while its store is held back; a directory whose project file names a grimoire of that name kept at another store or copied from another server is refused saying the name is served already and to give that grimoire another name in its project file, as library::name_taken words it, one whose project file names no grimoire of that name is refused as before, and nothing is added."},{"id":"let-go","statement":"Letting a grimoire go takes it off the routes first, then waits for the requests already being answered by it to finish, up to a bound, before removing its marker and releasing its lock; a checkout of a store of its own whose other checkouts are still served leaves the marker, and the lock is released once the last of them lets it go."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."},{"id":"deletions","statement":"On a machine, refresh serves no grimoire whose store is queued for deletion in the deletions folder beside its stores, letting go of one it serves and asking the queue again just before it serves one it opened, and a checkout whose store is queued is not taken; after each refresh it carries out the queued deletions, saying once each one kept and why; a team's server has no such folder."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -208,7 +208,7 @@ impl Live {
                 .collect();
             (gone, wanted)
         };
-        let mut changed = !gone.is_empty();
+        let gone_any = !gone.is_empty();
         for (name, s) in gone {
             let store_dir = s.store_dir.clone();
             s.let_go();
@@ -233,9 +233,10 @@ impl Live {
             }
             tracing::info!("library: serving `{}` from {} at /g/{}", g.name, self.served_from(&g).display(), g.name);
             held.served.insert((g.name.clone(), g.repo.clone()), shelved);
-            changed = true;
+            // Told before the lock is let go, so no request reaches a daemon that knows no library yet.
+            tell(&held);
         }
-        if changed {
+        if gone_any {
             self.tell();
         }
         self.carry_out_deletions();
@@ -410,8 +411,8 @@ impl Live {
         }
         tracing::info!("library: serving `{name}` from {} at /g/{name}", repo.display());
         held.served.insert((name.to_string(), repo), shelved);
-        drop(held);
-        self.tell();
+        // Told before the lock is let go, so the request that asked finds a daemon that knows its library.
+        tell(&held);
         Took::Served
     }
 
@@ -473,24 +474,7 @@ impl Live {
 
     /// Tell every served grimoire the whole library, for `status`.
     fn tell(&self) {
-        let held = self.held.lock().expect("library lock");
-        let all: Vec<LibraryEntry> = held
-            .served
-            .iter()
-            .map(|((name, _), s)| LibraryEntry {
-                name: name.clone(),
-                repository: store_io::repository_string(&s.daemon.repo).unwrap_or_else(|_| s.daemon.repo.display().to_string()),
-                server: s.server.as_deref().map(super::server_of),
-                // Each checkout's current ticket is added by its daemon as status answers, as it is then.
-                current: None,
-            })
-            .collect();
-        for ((name, _), s) in &held.served {
-            s.daemon.set_library(name, all.clone());
-            // Its grimoire's other checkouts, whose current tickets status names as it answers.
-            let fellows = held.served.iter().filter(|((n, _), o)| n == name && !Arc::ptr_eq(&o.daemon, &s.daemon)).map(|(_, o)| Arc::downgrade(&o.daemon)).collect();
-            s.daemon.set_fellows(fellows);
-        }
+        tell(&self.held.lock().expect("library lock"));
     }
 
     /// Let go of the grimoire whose store is `store_dir`, so a command can delete
@@ -558,6 +542,31 @@ impl Live {
     /// The daemon of the grimoire served by `name` now, if any.
     pub fn daemon_of(&self, name: &str) -> Option<Arc<Daemon>> {
         self.held.lock().expect("library lock").served.iter().find(|((n, _), _)| n == name).map(|(_, s)| s.daemon.clone())
+    }
+}
+
+/// Tell every grimoire `held` serves the whole library, for `status`. Called with the library's lock held, so the
+/// last told is the latest and a daemon is told before any route reaches it, and waiting on no daemon's state:
+/// set_library and set_fellows take locks of their own, since a copy holds its state across a fetch while it
+/// syncs, and every route takes the library's lock (req:machine-library).
+fn tell(held: &Held) {
+    let all: Vec<LibraryEntry> = held
+        .served
+        .iter()
+        .map(|((name, _), s)| LibraryEntry {
+            name: name.clone(),
+            repository: store_io::repository_string(&s.daemon.repo).unwrap_or_else(|_| s.daemon.repo.display().to_string()),
+            server: s.server.as_deref().map(super::server_of),
+            // Each checkout's current ticket is added by its daemon as status answers, as it is then.
+            current: None,
+        })
+        .collect();
+    for ((name, _), s) in &held.served {
+        // Its grimoire's other checkouts, whose current tickets status names as it answers: told before the
+        // listing that names them, so no status lists a checkout whose daemon it was not told of.
+        let fellows = held.served.iter().filter(|((n, _), o)| n == name && !Arc::ptr_eq(&o.daemon, &s.daemon)).map(|(_, o)| Arc::downgrade(&o.daemon)).collect();
+        s.daemon.set_fellows(fellows);
+        s.daemon.set_library(name, all.clone());
     }
 }
 
@@ -737,6 +746,53 @@ mod tests {
             live.refresh();
         }
         assert!(Arc::ptr_eq(&first, &live.daemon_of("shop").unwrap()), "the same daemon serves it throughout: never let go and taken again");
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-busy-grimoire-stalls-no-other", "checks": ["crates/server/src/library/live#waits-on-no-state", "req:machine-library"]}
+    /// ```
+    #[test]
+    fn a_busy_grimoire_stalls_no_other() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let shop = project(root, "shop");
+        project(root, "ledger");
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        live.refresh();
+        assert_eq!(live.names(), ["ledger", "shop"]);
+        // `ledger`'s daemon holds its state, as a copy does across a fetch while it syncs.
+        let busy = live.daemon_of("ledger").unwrap();
+        let held = busy.state.lock().unwrap();
+        // A grimoire appears: refresh serves it and tells the library, waiting on nobody's state.
+        project(root, "audit");
+        let (done, finished) = std::sync::mpsc::channel();
+        let refreshing = live.clone();
+        std::thread::spawn(move || {
+            refreshing.refresh();
+            done.send(()).unwrap();
+        });
+        finished.recv_timeout(Duration::from_secs(20)).expect("refresh finished while a served daemon held its state");
+        assert_eq!(live.names(), ["audit", "ledger", "shop"]);
+        // A request to another grimoire is answered meanwhile, with the library as now told.
+        let (answer, answered) = std::sync::mpsc::channel();
+        let asking = live.clone();
+        std::thread::spawn(move || {
+            let shop = asking.daemon_of("shop").unwrap();
+            answer.send(shop.call("status", serde_json::json!({})).unwrap()).unwrap();
+        });
+        let status = answered.recv_timeout(Duration::from_secs(20)).expect("a request to another grimoire was answered");
+        let names: Vec<&str> = status["library"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["audit", "ledger", "shop"]);
+        // Once free, the busy one names the grimoire it was told of while it was busy.
+        drop(held);
+        let names = busy.call("status", serde_json::json!({})).unwrap()["library"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(names, ["audit", "ledger", "shop"]);
+        drop(busy);
         live.stop();
     }
 

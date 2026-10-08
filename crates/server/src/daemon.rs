@@ -52,6 +52,9 @@ pub struct Daemon {
     /// The daemons a library serves for the other checkouts of the same grimoire, kin or not:
     /// a team's checkouts each keep a copy of their own, so only the library knows them all.
     pub(crate) fellows: Mutex<Vec<Weak<Daemon>>>,
+    /// This grimoire's name in its library and the library, as the library last told it: kept apart from the
+    /// state, which a copy holds across a fetch while it syncs, so telling it never waits (req:machine-library).
+    pub(crate) library: Mutex<Option<(String, Vec<grimoire_core::answer::LibraryEntry>)>>,
     /// Serving the store's main checkout, the only one that prunes its baseline.
     pub main: bool,
     /// The commit and languages whose code the state holds as this checkout's base, and when that was last
@@ -115,6 +118,7 @@ impl Daemon {
             events,
             kin,
             fellows: Mutex::default(),
+            library: Mutex::default(),
             main,
             base: Mutex::new((None, None)),
         }
@@ -152,6 +156,7 @@ impl Daemon {
             events,
             kin: Arc::default(),
             fellows: Mutex::default(),
+            library: Mutex::default(),
             main: true,
             base: Mutex::new((None, None)),
         })
@@ -166,11 +171,6 @@ impl Daemon {
     /// The same, for a daemon listening at `addr`, so a command finds it where it listens.
     pub fn mark_serving_at(&self, addr: std::net::SocketAddr) -> Result<(), StoreIoError> {
         store_io::write_serving_at(&self.store_dir, addr)
-    }
-
-    /// Say this grimoire is served in a library, as `name`, beside the grimoires of `library`.
-    pub fn set_library(&self, name: &str, library: Vec<grimoire_core::answer::LibraryEntry>) {
-        self.state.lock().expect("state lock").set_library(name.to_string(), library);
     }
 
     /// The same, for a grimoire served at `path` in the daemon's library on `port`.
@@ -343,9 +343,9 @@ impl Daemon {
                 None => self.call_through(server, name, input),
             };
         }
-        // status names each checkout's current ticket as it is now, not as the library last listed them.
+        // status names the library as it was last told and each checkout's current ticket as it is now.
         if name == "status" {
-            self.tell_checkout_tickets();
+            self.tell_library();
         }
         // A lint tells this checkout's own work from what landed since its base: the base read first,
         // outside the state's lock, and again only when it moved (req:check-own-work).

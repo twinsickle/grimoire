@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve one store of its own for its several checkouts side by side, each daemon a view of it with that checkout's code and current ticket, their writes taken one at a time and each handed to the others.","criteria":[{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"checkout-tickets","statement":"Before answering status, a daemon tells its state the current ticket of every other checkout of its grimoire, those sharing its store and those its library told it of with set_fellows, a team's checkouts each holding a copy of their own, as that checkout's daemon holds it then, never waiting on a daemon busy with a write or a sync, whose ticket stays as last read, so status names each checkout's as it is and answers at once."}]}
+//! {"purpose":"Serve one store of its own for its several checkouts side by side, each daemon a view of it with that checkout's code and current ticket, their writes taken one at a time and each handed to the others.","criteria":[{"id":"checkouts","statement":"open_for opens a store of its own as one of its checkouts sees it, its repository and its current ticket that checkout's, extracting that checkout's code; sibling opens another checkout's view of the same store beside a daemon already serving it, taking no lock of its own; the daemons serving one store take its writes one at a time, and each write, a pruned baseline included, is handed at once to every other, which keeps its own repository and its current ticket, the latter cleared and persisted when the ticket it named is no longer being worked; after another checkout's write, the main checkout's daemon prunes the baseline and hands it on."},{"id":"checkout-tickets","statement":"set_library keeps the library a daemon is told of apart from its state, taking no lock the daemon's work holds; before answering status, a daemon tells its state that library and the current ticket of every other checkout of its grimoire, those sharing its store and those its library told it of with set_fellows, a team's checkouts each holding a copy of their own, as that checkout's daemon holds it then, never waiting on a daemon busy with a write or a sync, whose ticket stays as last read, so status names each checkout's as it is and answers at once."}]}
 //! ```
 
 use std::path::Path;
@@ -68,11 +68,12 @@ impl Daemon {
         self.kin.members.lock().expect("kin members lock").iter().filter_map(Weak::upgrade).filter(|m| !std::ptr::eq(Arc::as_ptr(m), self)).collect()
     }
 
-    /// Tell this daemon's state the current ticket of every other checkout of its grimoire, its kin and
-    /// the fellows its library told it of, as each holds it now, for `status`. Each state is tried alone
-    /// and never waited for: a fellow mid-sync holds its state across a fetch, and status answers always,
-    /// so one that is busy keeps the ticket it was last read with.
-    pub(super) fn tell_checkout_tickets(&self) {
+    /// Tell this daemon's state, for `status`, the library as set_library last gave it, and the current
+    /// ticket of every other checkout of its grimoire, its kin and the fellows its library told it of, as
+    /// each holds it now. Each other state is tried alone and never waited for: a fellow mid-sync holds its
+    /// state across a fetch, and status answers always, so one that is busy keeps the ticket it was last read with.
+    pub(super) fn tell_library(&self) {
+        let library = self.library.lock().expect("library lock").clone();
         let mut others = self.kin_but_me();
         let fellows: Vec<Arc<Daemon>> = self.fellows.lock().expect("fellows lock").iter().filter_map(Weak::upgrade).collect();
         for f in fellows {
@@ -87,7 +88,18 @@ impl Daemon {
                 Some((store_io::repository_string(&m.repo).unwrap_or_else(|_| m.repo.display().to_string()), ticket))
             })
             .collect();
-        self.state.lock().expect("state lock").tell_checkout_tickets(read);
+        let mut state = self.state.lock().expect("state lock");
+        if let Some((name, library)) = library {
+            state.set_library(name, library);
+        }
+        state.tell_checkout_tickets(read);
+    }
+
+    /// Say this grimoire is served in a library, as `name`, beside the grimoires of `library`. Kept apart
+    /// from the state, which status is handed it from, so the library telling it never waits on this
+    /// daemon's work: a copy holds its state across a fetch while it syncs.
+    pub fn set_library(&self, name: &str, library: Vec<grimoire_core::answer::LibraryEntry>) {
+        *self.library.lock().expect("library lock") = Some((name.to_string(), library));
     }
 
     /// Tell this daemon of the daemons its library serves for the other checkouts of its grimoire.
