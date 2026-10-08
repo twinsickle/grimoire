@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations, and of imports and same-package class uses resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path; methods, constructors and annotation elements are of kind method, and fields and interface constants of kind field, one per declarator; each has the line it starts on, and nothing inside a method, constructor or initializer body is reported."},{"id":"imports-as-candidates","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares, outside any nested checkout, and whose next name is a type file of that package, yields candidates in each directory holding that file, the named member or nested type first, then each enclosing name down to the type, the importing file's own directory first among equals; an on-demand import of such a package itself yields one import per type file of it and one for its package-info; any other import yields none."},{"id":"same-package-references","statement":"Every type name a file uses, every capitalised name qualifying a method call, field access or method reference, and every annotation's name, outside its import and package lines, that is a type file of the file's own package yields once the candidates a single-type import of it from that package would, unless it is the file's own name or a single-type import brings that name in; any other name yields none."}]}
+//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations, and of imports and same-package class uses resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path; methods, constructors and annotation elements are of kind method, and fields and interface constants of kind field, one per declarator; each has the line it starts on, and nothing inside a method, constructor or initializer body is reported."},{"id":"imports-as-candidates","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares, outside any nested checkout and not ignored by the repository's own .gitignore files, read as the extractor's walk reads them, and whose next name is a type file of that package, yields candidates in each directory holding that file, the named member or nested type first, then each enclosing name down to the type, the importing file's own directory first among equals; an on-demand import of such a package itself yields one import per type file of it and one for its package-info; any other import yields none."},{"id":"same-package-references","statement":"Every type name a file uses, every capitalised name qualifying a method call, field access or method reference, and every annotation's name, outside its import and package lines, that is a type file of the file's own package yields once the candidates a single-type import of it from that package would, unless it is the file's own name or a single-type import brings that name in; any other name yields none."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -61,17 +61,13 @@ fn join(dir: &str, rest: &str) -> String {
 
 impl JavaAdapter {
     /// Read the package declaration of every `.java` file under the root,
-    /// honouring `.gitignore` and stopping at nested checkouts, and remember where each package's files sit.
+    /// honouring the repository's own `.gitignore` files alone and stopping at nested checkouts, and remember where each package's files sit.
     /// Reads only the files' text; parses nothing else.
     pub fn new(root: &Path) -> Self {
         let mut files = Vec::new();
-        // As the extractor walks: a folder below the root that is a checkout of its own is not this repository's.
-        let walker = ignore::WalkBuilder::new(root)
-            .hidden(true)
-            .git_ignore(true)
-            .require_git(false)
-            .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && crate::is_checkout(e.path())))
-            .build();
+        // As the extractor walks: by the repository's own .gitignore files alone, and a folder below the root that is a checkout
+        // of its own is not this repository's.
+        let walker = crate::own_ignores(root).hidden(true).filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && crate::is_checkout(e.path()))).build();
         for entry in walker.flatten() {
             if !entry.file_type().is_some_and(|t| t.is_file()) || !entry.file_name().to_string_lossy().ends_with(".java") {
                 continue;
@@ -658,5 +654,30 @@ public class A<T> extends B {
         // The unnamed package and a package of no repository file make no same-package edge.
         assert!(a.parse("class X { B b; }\n", "X").imports.is_empty());
         assert!(a.parse("package z;\nclass X { B b; }\n", "src/main/java/z/X").imports.is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-gitignore-above-the-repository-hides-no-package", "checks": ["crates/extract/src/java#imports-as-candidates", "req:java-imports-as-candidates"]}
+    /// ```
+    #[test]
+    fn a_gitignore_above_the_repository_hides_no_package() {
+        let dir = tempfile::Builder::new().prefix("grimoire-java-").tempdir().unwrap();
+        let file = |rel: &str, text: &str| {
+            let p = dir.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        // A folder above the repository whose .gitignore would hide a package, with a line the ignore library cannot
+        // parse; the repository has no .git, and its own .gitignore still applies.
+        file(".gitignore", "lib/\n{\n");
+        file("repo/.gitignore", "out/\n");
+        file("repo/src/main/java/p/A.java", "package p;\nimport q.B;\nimport r.C;\nclass A {}\n");
+        file("repo/lib/src/main/java/q/B.java", "package q;\nclass B {}\n");
+        file("repo/out/src/main/java/r/C.java", "package r;\nclass C {}\n");
+        let a = JavaAdapter::new(&dir.path().join("repo"));
+        let p = a.parse("package p;\nimport q.B;\nimport r.C;\nclass A {}\n", "src/main/java/p/A");
+        assert_eq!(p.imports, vec![vec!["lib/src/main/java/q/B".to_string()]], "q is read past the .gitignore above; r is ignored by the repository's own");
     }
 }

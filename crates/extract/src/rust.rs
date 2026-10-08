@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, a workspace crate being one whose Cargo.toml lies outside any nested checkout, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"reexports-recorded","statement":"A use declaration with a visibility is also recorded as re-exports of the file's module: each path with the candidates its import has in the scope it sits in and the name it exports, its last segment or its alias, or as a glob for a path ending in *; one with no candidates, of an external crate, is not recorded."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, a workspace crate being one whose Cargo.toml lies outside any nested checkout and is not ignored by the repository's own .gitignore files, read as the extractor's walk reads them, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"reexports-recorded","statement":"A use declaration with a visibility is also recorded as re-exports of the file's module: each path with the candidates its import has in the scope it sits in and the name it exports, its last segment or its alias, or as a glob for a path ending in *; one with no candidates, of an external crate, is not recorded."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
 //! ```
 
 use std::path::Path;
@@ -37,16 +37,13 @@ pub struct RustAdapter {
 
 impl RustAdapter {
     /// Scan the repository for `Cargo.toml` files with a `[package]`, stopping at
-    /// nested checkouts, and remember their names and directories. Reads only manifests.
+    /// nested checkouts and honouring the repository's own `.gitignore` files alone, and remember their names and
+    /// directories. Reads only manifests.
     pub fn new(root: &Path) -> Self {
         let mut crates = Vec::new();
-        // As the extractor walks: a folder below the root that is a checkout of its own is not this repository's.
-        let walker = ignore::WalkBuilder::new(root)
-            .hidden(true)
-            .git_ignore(true)
-            .require_git(false)
-            .filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && crate::is_checkout(e.path())))
-            .build();
+        // As the extractor walks: by the repository's own .gitignore files alone, and a folder below the root that is a checkout
+        // of its own is not this repository's.
+        let walker = crate::own_ignores(root).hidden(true).filter_entry(|e| e.depth() == 0 || !(e.file_type().is_some_and(|t| t.is_dir()) && crate::is_checkout(e.path()))).build();
         for entry in walker.flatten() {
             if entry.file_name() != "Cargo.toml" {
                 continue;
@@ -697,5 +694,34 @@ mod tests { use crate::nope; fn t() {} }
         let p = a.parse("use dep::Thing;\nuse other::Thing;\n", "src");
         let imports: Vec<&Vec<String>> = p.imports.iter().filter(|c| !c.is_empty()).collect();
         assert_eq!(imports, [&vec!["libs/other/src/Thing".to_string(), "libs/other/src".to_string()]], "only the crate outside the nested checkout is a candidate");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-gitignore-above-the-repository-hides-no-crate", "checks": ["crates/extract/src/rust#imports-as-candidates", "req:rust-imports-as-candidates"]}
+    /// ```
+    #[test]
+    fn a_gitignore_above_the_repository_hides_no_crate() {
+        let dir = tempfile::Builder::new().prefix("grimoire-rust-").tempdir().unwrap();
+        let file = |rel: &str, text: &str| {
+            let p = dir.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        let manifest = |name: &str| format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n");
+        // A folder above the repository, as a home folder may be, whose .gitignore would hide its crates, with a line
+        // the ignore library cannot parse; the repository has no .git, and its own .gitignore still applies.
+        file(".gitignore", "libs/\n{\n");
+        file("repo/Cargo.toml", &manifest("app"));
+        file("repo/.gitignore", "out/\n");
+        file("repo/libs/dep/Cargo.toml", &manifest("dep"));
+        file("repo/out/gen/Cargo.toml", &manifest("gen"));
+        let a = RustAdapter::new(&dir.path().join("repo"));
+        let mut names: Vec<&str> = a.crates().iter().map(|c| c.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, ["app", "dep"], "the .gitignore above is not read; the repository's own is");
+        let p = a.parse("use dep::Thing;\n", "src");
+        assert_eq!(p.imports, [vec!["libs/dep/src/Thing".to_string(), "libs/dep/src".to_string()]]);
     }
 }
