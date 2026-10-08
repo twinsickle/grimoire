@@ -1,8 +1,8 @@
-// Every route the UI serves, on the behaviour fixture: the grimoire at the
-// root and at a page, the unplaced modules, the cauldron, one node page of
+// Every route the UI serves, on the behaviour fixture: the fixture's own
+// grimoire, `repo`, at its address /g/repo/ and at a page, the unplaced modules, the cauldron, one node page of
 // each other kind, the grimoire and cauldron of `ledger`, the empty
 // grimoire beside it in the fixture's library, for the empty states, and the
-// Library, the machine's grimoires. The behaviour specs visit them, the visual test
+// Library, the machine's grimoires, at the daemon's own address. The behaviour specs visit them, the visual test
 // screenshots them and the shots capture them, so a route added here
 // is covered by all three.
 
@@ -13,15 +13,17 @@
  */
 export type Route = { name: string; path: string; content: string; press?: string; mask?: string[] };
 
-const node = (ref: string) => `/n/${encodeURIComponent(ref)}`;
+/** Where the fixture's own grimoire, `repo`, is read: the daemon's own address is the Library. */
+const repo = "/g/repo";
+const node = (ref: string) => `${repo}/n/${encodeURIComponent(ref)}`;
 
 export const ROUTES: Route[] = [
-  { name: "grimoire", path: "/", content: "#pages" },
+  { name: "grimoire", path: `${repo}/`, content: "#pages" },
   { name: "grimoire-page", path: node("page:readiness"), content: "#modules" },
-  { name: "unplaced", path: "/unplaced", content: "main h1" },
-  { name: "cauldron", path: "/cauldron", content: "section[id^='band-']" },
+  { name: "unplaced", path: `${repo}/unplaced`, content: "main h1" },
+  { name: "cauldron", path: `${repo}/cauldron`, content: "section[id^='band-']" },
   // The header's pill opened: the project's checkouts, the finding counts and the way to every project.
-  { name: "header-open", path: "/cauldron", content: "section[id^='band-']", press: "header button[aria-label^='Where you are']" },
+  { name: "header-open", path: `${repo}/cauldron`, content: "section[id^='band-']", press: "header button[aria-label^='Where you are']" },
   { name: "node-requirement", path: node("req:ready-needs-commit"), content: "h1" },
   // A requirement the landing ticket repoints at a criterion the code lacks, so other work that may conflict is seen.
   { name: "node-requirement-conflict", path: node("req:ready-writes-nothing"), content: "main h2:has-text('Other work may conflict')" },
@@ -42,5 +44,5 @@ export const ROUTES: Route[] = [
   { name: "empty-grimoire", path: "/g/ledger/", content: "[data-empty-state]" },
   { name: "empty-cauldron", path: "/g/ledger/cauldron", content: "[data-empty-state]" },
   // The Library: `repo`, a copy of the fixture's server, in one stack, and `almanac`, `bestiary` and `ledger`, stores on this machine, in another.
-  { name: "library", path: "/library", content: "[data-stack] [data-spine]", mask: ["[data-port]"] },
+  { name: "library", path: "/", content: "[data-stack] [data-spine]", mask: ["[data-port]"] },
 ];

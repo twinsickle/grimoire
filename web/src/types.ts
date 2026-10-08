@@ -80,14 +80,9 @@ export type Stack = { key: string; server: string | null; label: string; books: 
  * The Library's stacks: the grimoires status lists, one book per grimoire however many
  * checkouts serve it, in name order, stacked by where each comes from, this machine first,
  * then each server in address order, labelled by its address without the scheme unless
- * another differs from it only by that. A daemon serving no library shows its one grimoire,
- * opening at the bare routes.
+ * another differs from it only by that.
  */
-export function libraryStacks(status: Pick<G.StatusAnswer, "grimoire" | "repository" | "server" | "library">): Stack[] {
-  if (status.library.length === 0) {
-    const server = status.server ? serverOf(status.server.address) : null;
-    return [{ key: server ?? "", server, label: server ? bareAddress(server) : "this machine", books: [{ name: status.grimoire ?? folderOf(status.repository), href: "/", checkouts: 1 }] }];
-  }
+export function libraryStacks(status: Pick<G.StatusAnswer, "library">): Stack[] {
   const places = [...new Set(status.library.map((g) => g.server))].sort((a, b) => (a === null ? -1 : b === null ? 1 : a.localeCompare(b)));
   // Two servers that differ only by scheme keep it, so no two labels read alike.
   const label = (place: string) => (places.some((p) => p !== null && p !== place && bareAddress(p) === bareAddress(place)) ? place : bareAddress(place));
@@ -106,11 +101,6 @@ export function libraryStacks(status: Pick<G.StatusAnswer, "grimoire" | "reposit
 /** A server's address without its scheme, as a stack's label shows it. */
 function bareAddress(address: string): string {
   return address.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
-}
-
-/** The server an address of one of its grimoires names: the address without a trailing slash and /g/<name>, as status's library gives it. */
-function serverOf(address: string): string {
-  return address.replace(/\/+$/, "").replace(/\/g\/[^/]+$/, "");
 }
 
 /**

@@ -547,7 +547,7 @@ test("the Library stacks one book per grimoire by where each comes from, this ma
     entry("shop", "C:/code/shop/.claude/worktrees/wt", "http://127.0.0.1:4243"),
     entry("abacus", "C:/code/abacus", "https://teams.example/b"),
   ];
-  const stacks = libraryStacks({ grimoire: "shop", repository: "C:/code/shop", server: null, library });
+  const stacks = libraryStacks({ library });
   expect(stacks.map((s) => [s.label, s.books.map((b) => [b.name, b.href, b.checkouts])])).toEqual([
     ["this machine", [["notes", "/g/notes/", 1]]],
     ["127.0.0.1:4243", [["shop", "/g/shop/", 2]]],
@@ -561,10 +561,8 @@ test("the Library stacks one book per grimoire by where each comes from, this ma
   ]);
   expect(stacks.map((s) => s.server)).toEqual([null, "http://127.0.0.1:4243", "https://teams.example/b"]);
   // Two servers that differ only by scheme keep it, each its own stack.
-  const twins = libraryStacks({ grimoire: "a", repository: "C:/a", server: null, library: [entry("a", "C:/a", "http://team.example"), entry("b", "C:/b", "https://team.example")] });
+  const twins = libraryStacks({ library: [entry("a", "C:/a", "http://team.example"), entry("b", "C:/b", "https://team.example")] });
   expect(twins.map((s) => s.label)).toEqual(["http://team.example", "https://team.example"]);
-  // No library: the one grimoire served, opening at the bare routes, from its server when it is a copy of one.
-  expect(libraryStacks({ grimoire: null, repository: "C:\\code\\notes", server: null, library: [] })).toEqual([{ key: "", server: null, label: "this machine", books: [{ name: "notes", href: "/", checkouts: 1 }] }]);
-  const copy = libraryStacks({ grimoire: null, repository: "C:/code/shop", server: { address: "http://127.0.0.1:4243/g/shop/", fetched: null, reachable: true, refused: false }, library: [] });
-  expect(copy.map((s) => [s.server, s.label])).toEqual([["http://127.0.0.1:4243", "127.0.0.1:4243"]]);
+  // No library, as for a store served alone: nothing to stack.
+  expect(libraryStacks({ library: [] })).toEqual([]);
 });
