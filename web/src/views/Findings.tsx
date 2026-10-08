@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The findings view: every finding, recipe due, advisory and omen of the lint answer in one place, read as a list or as the grimoire's tree marked where trouble is.","criteria":[{"id":"list","statement":"As a list, the view groups the lint answer under New, the findings marksOf calls new, which fail the check; Recipes due; and Other work may conflict, the advisories; each heading with its mark and count, and each group with none saying so in words; beneath them, folded and each with its count, the inherited findings and the omens. Each row is a link to the page of the node it is about, giving the node's kind and id, the check, the reason and, for an advisory, the work it comes from."},{"id":"tree","statement":"As a tree, the view draws the outline answer's roots as nested rows, each with a MarkDot per kind of its node's marks, its kind and title; by default only the nodes troubleOnly keeps, with a pressed Only where there is trouble button that, released, shows the whole outline; then, under Not in the outline, each node outsideOutline gives. Pressing a row selects its node, kept in the address as ?at=<ref>, and the selected node is shown beside the tree with its kind and title, its marks through MarkWords and a link to its page; with none selected, it says to choose one."},{"id":"switch-remembered","statement":"A List | Tree switch, its pressed button the one shown, chooses how the view reads; the view opens on the list unless the browser's storage holds the last choice, which each press writes there; reading or writing the storage failing leaves the list and the switch working as before."}]}
+ * {"purpose":"The findings view: every finding, recipe due, advisory and omen of the lint answer in one place, read as a list or as the grimoire's tree marked where trouble is.","criteria":[{"id":"list","statement":"As a list, the view groups the lint answer under New, the findings marksOf calls new, which fail the check; Recipes due; and Other work may conflict, the advisories; each heading with its mark and count, and each group with none saying so in words; beneath them, folded and each with its count, the inherited findings and the omens. Each row is a link to the page of the node it is about, giving its mark's MarkDot and MarkChip, the node's kind and id, the check, the reason and, for an advisory, the work it comes from."},{"id":"tree","statement":"As a tree, the view draws the outline answer's roots, asked as deep as the grimoire view's rail asks, as nested rows, each with a MarkDot per kind of its node's marks, its kind and title; by default only the nodes troubleOnly keeps, with a pressed Only where there is trouble button that, released, shows the whole outline; then, under Not in the outline, each node outsideOutline gives. Pressing a row selects its node, kept in the address as ?at=<ref>, and the selected node is shown beside the tree with its kind and title, its marks through MarkWords and a link to its page; with none selected, it says to choose one."},{"id":"switch-remembered","statement":"A List | Tree switch, its pressed button the one shown, chooses how the view reads; the view opens on the list unless the browser's storage holds the last choice, which each press writes there; reading or writing the storage failing leaves the list and the switch working as before."}]}
  * ```
  */
 
@@ -13,7 +13,8 @@ import { ErrorBox, KindTag, empty, mono, pressed, rel } from "../components";
 import { MARK_NAME, kindsOf, marksOf, outsideOutline, troubleOnly, type Mark, type MarkKind, type Marks } from "../marks";
 import { useTabTitle } from "../title";
 import { idOf, nodePath, type LintAnswer, type Ref, type Tree } from "../types";
-import { MarkDot, MarkWords } from "./Marks";
+import { MarkChip, MarkDot, MarkWords } from "./Marks";
+import { ALL } from "./Home";
 
 type As = "list" | "tree";
 const AS_KEY = "grimoire.findings.as";
@@ -136,8 +137,13 @@ function Rows({ rows }: { rows: Mark[] }) {
         <li key={`${m.ref} ${m.check} ${i}`}>
           <Link
             to={nodePath(m.ref)}
-            className={`grid grid-cols-[minmax(12em,22em)_9em_1fr] gap-3 items-baseline px-2 py-1 -mx-2 rounded no-underline hover:no-underline hover:bg-bg-2 ${m.kind === "new" ? "text-fg" : "text-fg-dim"}`}
+            data-mark-row={m.kind}
+            className={`grid grid-cols-[7.5em_minmax(12em,22em)_9em_1fr] gap-3 items-baseline px-2 py-1 -mx-2 rounded no-underline hover:no-underline hover:bg-bg-2 ${m.kind === "new" ? "text-fg" : "text-fg-dim"}`}
           >
+            <span className="inline-flex items-center gap-1.5">
+              <MarkDot kind={m.kind} />
+              <MarkChip kind={m.kind} />
+            </span>
             <span className="inline-flex items-center gap-1.5 min-w-0">
               <KindTag ref={m.ref} />
               <span className={`${mono} truncate text-fg`}>{idOf(m.ref)}</span>
@@ -155,7 +161,7 @@ function Rows({ rows }: { rows: Mark[] }) {
 }
 
 function TreeView({ marks }: { marks: Marks }) {
-  const outline = useQuery(() => api.outline({ depth: 20 }), []);
+  const outline = useQuery(() => api.outline({ depth: ALL }), []);
   const [onlyTrouble, setOnlyTrouble] = useState(true);
   const [params, setParams] = useSearchParams();
   const at = params.get("at");

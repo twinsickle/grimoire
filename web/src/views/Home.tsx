@@ -14,7 +14,7 @@ import { DraftNotice } from "./Node";
 import { idOf, kindOf, localId, missingRoot, nodePath, type PageNode, type Ref, type Rollup, type Tree } from "../types";
 
 /** Deep enough to reach every page, so the rail is every page of the outline. */
-const ALL = 64;
+export const ALL = 64;
 
 /** Where the grimoire view stands: the root, one page, or the modules no page links. */
 export type At = { root: true } | { page: Ref } | { unplaced: true };

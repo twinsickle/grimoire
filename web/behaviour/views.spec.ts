@@ -521,6 +521,8 @@ test("a node's page says its own findings under its title, new as a warning and 
   await expect(fresh).toContainText("dangling-edge");
   await expect(fresh).toContainText("criterion:src/ready#names-errors");
   await expect(fresh.getByText("new", { exact: true })).toHaveClass(/text-bad/);
+  // Drawn in the bad colour, not only classed so: the theme's --color-bad.
+  await expect(fresh.getByText("new", { exact: true })).toHaveCSS("color", "rgb(224, 108, 117)");
   // Under the title, before the statement and the graph.
   await expect(page.locator("section[aria-label='Graph']")).toBeVisible();
   const order = await page.locator("main h1, main [aria-label='Trouble here'], main section[aria-label='Graph']").evaluateAll((els) => els.map((e) => e.tagName));
@@ -569,6 +571,20 @@ test("the graph marks each box with its node's trouble, its border in the graves
   await expect(other).toHaveClass(/border-dashed/);
   await expect(other).toHaveAttribute("aria-label", /marked may conflict$/);
   await expect(other.locator("[data-mark='conflict']")).toHaveClass(/border-dashed/);
+  // Each mark in the legend has its own shape and colour.
+  const legend = page.getByRole("region", { name: "Graph" }).getByLabel("Marks");
+  await expect(legend.locator("[data-mark='inherited']")).toHaveClass(/bg-fg-faint/);
+  await expect(legend.locator("[data-mark='due']")).toHaveClass(/bg-recipe/);
+  await expect(legend.locator("[data-mark='due']")).toHaveClass(/outline-recipe/);
+  await expect(legend.locator("[data-mark='omen']")).toHaveClass(/border-fg-dim/);
+  await expect(legend.locator("[data-mark='omen']")).toHaveClass(/skew-x/);
+  // An inherited finding on a box beside the node: a grey dot and a faint border, nothing red.
+  await page.goto(`/g/repo/n/${encodeURIComponent("module:src/ready")}`);
+  const recipe = page.getByRole("region", { name: "Graph" }).locator("[data-graph-node='recipe:commit-rule']");
+  await expect(recipe).toHaveAttribute("data-marks", "inherited");
+  await expect(recipe).toHaveClass(/border-fg-faint/);
+  await expect(recipe.locator("[data-mark='inherited']")).toHaveAttribute("title", /^inherited\n/);
+  await expect(recipe.locator(".bg-bad, .border-bad")).toHaveCount(0);
 });
 
 /**
@@ -579,23 +595,31 @@ test("the graph marks each box with its node's trouble, its border in the graves
  * ```
  */
 test("the findings view lists what fails the check first, then recipes due and other work, with the inherited and omens folded", async ({ page }) => {
-  type F = { ref: string; baselined: boolean; check: string };
+  type F = { ref: string; baselined: boolean; check: string; reason: string };
   const lint = await tool<{ findings: F[]; advisories: unknown[]; omens: unknown[]; new: number }>(page, "lint");
   await page.goto("/g/repo/findings");
   await expect(page.getByRole("group", { name: "Read as" }).getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
   const fresh = page.locator("[data-group='new'] li");
   await expect(fresh).toHaveCount(lint.new);
   for (const f of lint.findings.filter((x) => !x.baselined)) {
-    await expect(page.locator(`[data-group='new'] a[href='/g/repo/n/${encodeURIComponent(f.ref)}']`, { hasText: f.check })).toBeVisible();
+    const row = page.locator(`[data-group='new'] a[href='/g/repo/n/${encodeURIComponent(f.ref)}']`, { hasText: f.check });
+    await expect(row).toHaveAttribute("data-mark-row", "new");
+    await expect(row.locator("[data-mark='new']")).toBeVisible();
+    await expect(row.getByText("new", { exact: true })).toHaveClass(/text-bad/);
+    await expect(row).toContainText(f.reason);
   }
   await expect(page.locator("[data-group='due']")).toContainText("No recipe is due to be judged.");
   const other = page.locator("[data-group='conflict'] li");
   await expect(other).toHaveCount(lint.advisories.length);
   await expect(other.first()).toContainText("ticket 0011");
+  await expect(other.first().locator("a")).toHaveAttribute("data-mark-row", "conflict");
+  await expect(other.first().getByText("may conflict", { exact: true })).not.toHaveClass(/text-bad/);
   // The inherited and the omens are folded, each with its count.
   const inherited = page.locator("details[data-group='inherited']");
   await expect(inherited.locator("summary")).toHaveText(`${lint.findings.length - lint.new} inherited`);
   await expect(inherited).not.toHaveAttribute("open");
+  await inherited.locator("summary").click();
+  await expect(inherited.locator("[data-mark-row='inherited']")).toHaveCount(lint.findings.length - lint.new);
   await expect(page.locator("details[data-group='omen'] summary")).toHaveText(`${lint.omens.length} ${lint.omens.length === 1 ? "omen" : "omens"}`);
   // A row opens its node's page.
   await page.locator("[data-group='new'] a", { hasText: "dangling-edge" }).click();
@@ -636,6 +660,32 @@ test("the findings view reads as the marked tree, cut to where trouble is, and t
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-group='new']")).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-findings-switch-without-storage", "checks": ["web/src/views/Findings#switch-remembered"]}
+ * ```
+ */
+test("the findings view opens on the list and its switch still works when the browser's storage refuses", async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.getItem = () => {
+      throw new Error("storage refused");
+    };
+    Storage.prototype.setItem = () => {
+      throw new Error("storage refused");
+    };
+  });
+  await page.goto("/g/repo/findings");
+  await expect(page.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-group='new']")).toBeVisible();
+  await page.getByRole("button", { name: "Tree" }).click();
+  await expect(page.getByRole("button", { name: "Tree" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("navigation", { name: "Marked outline" })).toBeVisible();
+  await page.getByRole("button", { name: "List" }).click();
   await expect(page.locator("[data-group='new']")).toBeVisible();
 });
 
@@ -2057,6 +2107,7 @@ test("the tab names what is open, then Grimoire, and carries the book", async ({
   const named: [string, string][] = [
     ["/g/repo/", "Grimoire"],
     ["/g/repo/cauldron", "Cauldron · Grimoire"],
+    ["/g/repo/findings", "Findings · Grimoire"],
     ["/g/repo/unplaced", "Unplaced · Grimoire"],
     ["/", "Library · Grimoire"],
     ["/g/repo/n/page%3Areadiness", "Readiness · Grimoire"],
