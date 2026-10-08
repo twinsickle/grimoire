@@ -567,7 +567,7 @@ fn takes_one_write_and_goes(answer: Value) -> String {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server"]}
+/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server", "req:model-status-names"]}
 /// ```
 #[test]
 fn a_write_the_server_took_is_answered_when_the_copy_lags() {
@@ -609,7 +609,8 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
     h.daemon.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
     let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
     let gone = Server::new(&answers_then_goes(vec![intent, json!({ "node": { "ref": "ticket:0002", "status": "simmering" }, "findings": [], "baselined": 0 })]), Some(h.writer.clone()));
-    let close = json!({ "ref": "ticket:0002", "decision": { "text": "Done." }, "when": "bottled" });
+    // Asked by `when`'s name before ticket 0168, `landed`, which is read as `bottled` here too (req:model-status-names).
+    let close = json!({ "ref": "ticket:0002", "decision": { "text": "Done." }, "when": "landed" });
     let (answer, changed) = remote::write_through(&gone, &m.copy, &mut loaded.state, "close_ticket", close, "2026-10-03").unwrap();
     assert_eq!((answer["node"]["status"].clone(), changed.len()), (json!("simmering"), 1));
     let (kept, malformed) = store_io::load(&m.copy).unwrap();
