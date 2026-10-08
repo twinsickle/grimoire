@@ -2,7 +2,7 @@
 // web/behaviour.
 
 import { expect, test } from "vitest";
-import { kindsOf, markBorder, marksOf, outsideOutline, troubleOnly } from "./marks";
+import { countsOf, kindsOf, markBorder, marksOf, outsideOutline, rowsOf, troubleOnly } from "./marks";
 import type { Finding, LintAnswer, Rollup, Tree } from "./types";
 
 function finding(ref: string, check: string, baselined = false, to?: string): Finding {
@@ -86,4 +86,20 @@ test("the outline is cut to marked nodes and those holding one, and the marked n
   expect(troubleOnly(outline, new Map())).toEqual([]);
   // Not in the outline: the recipes and the file, the gravest first; an edge's end alone is read on the node it is about.
   expect(outsideOutline(outline, m)).toEqual(["recipe:x", "recipe:y", "file:a.rs"]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "rows-and-counts-agree-with-the-header", "checks": ["web/src/marks#counts"]}
+ * ```
+ */
+test("each finding is one row on the node it is about, and new counts every failing finding, recipes due among them", () => {
+  const rows = rowsOf(lint);
+  expect(rows.map((r) => `${r.kind} ${r.ref}`).sort()).toEqual(
+    ["conflict req:r", "due recipe:x", "file:a.rs", "inherited module:a", "inherited recipe:y", "new module:a", "new req:r"].map((x) => (x === "file:a.rs" ? "omen file:a.rs" : x)).sort(),
+  );
+  const failing = lint.findings.filter((f) => !f.baselined).length;
+  expect(countsOf(rows)).toEqual({ new: failing, due: 1, conflict: 1, inherited: 2, omen: 1 });
 });

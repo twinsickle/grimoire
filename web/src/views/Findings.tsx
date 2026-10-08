@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"The findings view: every finding, recipe due, advisory and omen of the lint answer in one place, read as a list or as the grimoire's tree marked where trouble is.","criteria":[{"id":"list","statement":"As a list, the view groups the lint answer under New, the findings marksOf calls new, which fail the check; Recipes due; and Other work may conflict, the advisories; each heading with its mark and count, and each group with none saying so in words; beneath them, folded and each with its count, the inherited findings and the omens. Each row is a link to the page of the node it is about, giving its mark's MarkDot and MarkChip, the node's kind and id, the check, the reason and, for an advisory, the work it comes from."},{"id":"tree","statement":"As a tree, the view draws the outline answer's roots, asked as deep as the grimoire view's rail asks, as nested rows, each with a MarkDot per kind of its node's marks, its kind and title; by default only the nodes troubleOnly keeps, with a pressed Only where there is trouble button that, released, shows the whole outline; then, under Not in the outline, each node outsideOutline gives. Pressing a row selects its node, kept in the address as ?at=<ref>, and the selected node is shown beside the tree with its kind and title, its marks through MarkWords and a link to its page; with none selected, it says to choose one."},{"id":"switch-remembered","statement":"A List | Tree switch, its pressed button the one shown, chooses how the view reads; the view opens on the list unless the browser's storage holds the last choice, which each press writes there; reading or writing the storage failing leaves the list and the switch working as before."}]}
+ * {"purpose":"The findings view: every finding, recipe due, advisory and omen of the lint answer in one place, read as a list or as the grimoire's tree marked where trouble is.","criteria":[{"id":"list","statement":"Above either, the view counts what countsOf gives, new in the bad colour when there are any and naming how many of them are recipes due. As a list, the view groups rowsOf the lint answer under New, the findings marksOf calls new, which fail the check; Recipes due; and Other work may conflict, the advisories; each heading with its mark and count, and each group with none saying so in words; beneath them, folded and each with its count, the inherited findings and the omens. Each row is a link to the page of the node it is about, giving its mark's MarkDot and MarkChip, the node's kind and id, the check, the reason and, for an advisory, the work it comes from."},{"id":"tree","statement":"As a tree, the view draws the outline answer's roots, asked as deep as the grimoire view's rail asks, as nested rows, each with a MarkDot per kind of its node's marks, its kind and title; by default only the nodes troubleOnly keeps, with a pressed Only where there is trouble button that, released, shows the whole outline; then, under Not in the outline, each node outsideOutline gives. Pressing a row selects its node, kept in the address as ?at=<ref>, and the selected node is shown beside the tree with its kind and title, its marks through MarkWords and a link to its page; with none selected, it says to choose one."},{"id":"switch-remembered","statement":"A List | Tree switch, its pressed button the one shown, chooses how the view reads; the view opens on the list unless the browser's storage holds the last choice, which each press writes there; reading or writing the storage failing leaves the list and the switch working as before."}]}
  * ```
  */
 
@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, useQuery } from "../api";
 import { ErrorBox, KindTag, empty, mono, pressed, rel } from "../components";
-import { MARK_NAME, kindsOf, marksOf, outsideOutline, troubleOnly, type Mark, type MarkKind, type Marks } from "../marks";
+import { MARK_NAME, countsOf, kindsOf, marksOf, outsideOutline, rowsOf, troubleOnly, type Mark, type MarkKind, type Marks } from "../marks";
 import { useTabTitle } from "../title";
 import { idOf, nodePath, type LintAnswer, type Ref, type Tree } from "../types";
 import { MarkChip, MarkDot, MarkWords } from "./Marks";
@@ -71,20 +71,16 @@ export function FindingsView() {
 
 /** How much of each there is, the new in the bad colour when there are any. */
 function Counts({ lint }: { lint: LintAnswer }) {
-  const rows = rowsOf(lint);
-  const n = (k: MarkKind) => rows.filter((r) => r.kind === k).length;
+  const c = countsOf(rowsOf(lint));
   return (
     <p className="m-0 text-[13px] text-fg-dim">
-      <span className={n("new") > 0 ? "text-bad font-semibold" : ""}>{n("new")} new</span> · {n("due")} {n("due") === 1 ? "recipe" : "recipes"} due · {n("conflict")} may conflict · {n("inherited")} inherited · {n("omen")} {n("omen") === 1 ? "omen" : "omens"}
+      {/* New is what the header promises: every finding that fails the check, the recipes due among them. */}
+      <span data-count="new" className={c.new > 0 ? "text-bad font-semibold" : ""}>
+        {c.new} new
+      </span>
+      {c.due > 0 && ` (${c.due} of them ${c.due === 1 ? "a recipe" : "recipes"} due)`} · {c.conflict} may conflict · {c.inherited} inherited · {c.omen} {c.omen === 1 ? "omen" : "omens"}
     </p>
   );
-}
-
-/** One row of the list: a mark on the node it is about, each finding once. */
-function rowsOf(lint: LintAnswer): Mark[] {
-  const all = marksOf(lint);
-  // marksOf marks an edge's end as well; the list says each once, on the node it is about.
-  return [...all.entries()].flatMap(([on, ms]) => ms.filter((m) => m.ref === on));
 }
 
 const NONE: Record<MarkKind, string> = {

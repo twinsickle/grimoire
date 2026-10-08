@@ -599,9 +599,12 @@ test("the findings view lists what fails the check first, then recipes due and o
   const lint = await tool<{ findings: F[]; advisories: unknown[]; omens: unknown[]; new: number }>(page, "lint");
   await page.goto("/g/repo/findings");
   await expect(page.getByRole("group", { name: "Read as" }).getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+  // The count above is the header's: every finding that fails the check, recipes due among them.
+  await expect(page.locator("[data-count='new']")).toHaveText(`${lint.new} new`);
+  const failing = lint.findings.filter((x) => !x.baselined && x.check !== "due-recipe");
   const fresh = page.locator("[data-group='new'] li");
-  await expect(fresh).toHaveCount(lint.new);
-  for (const f of lint.findings.filter((x) => !x.baselined)) {
+  await expect(fresh).toHaveCount(failing.length);
+  for (const f of failing) {
     const row = page.locator(`[data-group='new'] a[href='/g/repo/n/${encodeURIComponent(f.ref)}']`, { hasText: f.check });
     await expect(row).toHaveAttribute("data-mark-row", "new");
     await expect(row.locator("[data-mark='new']")).toBeVisible();

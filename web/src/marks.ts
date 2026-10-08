@@ -2,7 +2,7 @@
  * # Module contract
  *
  * ```json
- * {"purpose":"Sort the lint answer into marks on the nodes they are about, so every view reads trouble the same way: new, inherited, recipe due, may conflict and omen.","criteria":[{"id":"marks-of","statement":"marksOf gives each node its marks from a lint answer: a finding with the check due-recipe that is not baselined is due, any other finding new when not baselined and inherited when baselined, each advisory may conflict and each omen an omen; a finding and an advisory mark the node they are about and, when they name an edge, its end as well, once each; an omen marks the node it is on."},{"id":"gravest-first","statement":"A node's marks are kept gravest first, in the order new, due, may conflict, inherited, omen, keeping the lint answer's order within a kind, so the first mark gives a marked node its colour: markBorder gives a box's border for its gravest kind in that kind's colour, the bad colour for new, the recipe colour for due, the accent dashed for may conflict, the faint colour for inherited and the dim one for an omen, and the line colour for a node with none."},{"id":"trouble-only","statement":"troubleOnly keeps of an outline the nodes that are marked or hold a marked node beneath them, each with only such children, in the outline's order; outsideOutline gives, in the order of their gravest mark, the nodes an outline does not hold that a finding, advisory or omen is about, not those only named as an edge's end, which may not exist."}]}
+ * {"purpose":"Sort the lint answer into marks on the nodes they are about, so every view reads trouble the same way: new, inherited, recipe due, may conflict and omen.","criteria":[{"id":"marks-of","statement":"marksOf gives each node its marks from a lint answer: a finding with the check due-recipe that is not baselined is due, any other finding new when not baselined and inherited when baselined, each advisory may conflict and each omen an omen; a finding and an advisory mark the node they are about and, when they name an edge, its end as well, once each; an omen marks the node it is on."},{"id":"gravest-first","statement":"A node's marks are kept gravest first, in the order new, due, may conflict, inherited, omen, keeping the lint answer's order within a kind, so the first mark gives a marked node its colour: markBorder gives a box's border for its gravest kind in that kind's colour, the bad colour for new, the recipe colour for due, the accent dashed for may conflict, the faint colour for inherited and the dim one for an omen, and the line colour for a node with none."},{"id":"counts","statement":"rowsOf gives each finding, advisory and omen of a lint answer once, as a mark on the node it is about and not on an edge's end; countsOf counts them by kind, with new counting every finding not baselined, the recipes due among them, so it equals the lint answer's new, the count the header gives."},{"id":"trouble-only","statement":"troubleOnly keeps of an outline the nodes that are marked or hold a marked node beneath them, each with only such children, in the outline's order; outsideOutline gives, in the order of their gravest mark, the nodes an outline does not hold that a finding, advisory or omen is about, not those only named as an edge's end, which may not exist."}]}
  * ```
  */
 
@@ -59,6 +59,18 @@ export function gravestFirst(ms: Mark[]): Mark[] {
 /** The kinds a node's marks hold, gravest first, each once. */
 export function kindsOf(ms: Mark[] | undefined): MarkKind[] {
   return MARK_KINDS.filter((k) => ms?.some((m) => m.kind === k));
+}
+
+/** Each finding, advisory and omen once, as a mark on the node it is about: the list's rows. */
+export function rowsOf(lint: Pick<LintAnswer, "findings" | "advisories" | "omens">): Mark[] {
+  // marksOf marks an edge's end as well; a row is said once, on the node it is about.
+  return [...marksOf(lint).entries()].flatMap(([on, ms]) => ms.filter((m) => m.ref === on));
+}
+
+/** How many of each kind; new is every finding that fails the check, the recipes due among them, as the header counts it. */
+export function countsOf(rows: Mark[]): Record<MarkKind, number> {
+  const n = (k: MarkKind) => rows.filter((r) => r.kind === k).length;
+  return { new: n("new") + n("due"), due: n("due"), conflict: n("conflict"), inherited: n("inherited"), omen: n("omen") };
 }
 
 /** A box's border for its gravest mark, in the mark's colour; written out so Tailwind sees every class. */
