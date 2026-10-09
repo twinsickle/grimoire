@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"ignored-skipped","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores, the nearest deciding and a ! pattern re-including, and anything under .git, never reach the daemon, and no other ignore keeps one out, .git/info/exclude and a .gitignore above the root among them, as the reading of the checkout reads none; a .gitignore that changes applies from the next event."},{"id":"debounced","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds, and each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles, a recipe file among them, marks a nested checkout's boundary, or is a path a held recipe names, lies under one or is a folder holding one, the daemon reading only what the whole checkout's reading would, once, however many events name it."}]}
+//! {"purpose":"Watch the target repository and hand changed source paths to the daemon, debounced and filtered.","criteria":[{"id":"gitignored-paths-never-reach","statement":"Paths that a .gitignore in any directory from the path up to the repository root ignores never reach the daemon."},{"id":"nearest-gitignore-decides","statement":"Of the .gitignore files from a path up to the repository root, the nearest decides, and a ! pattern re-includes."},{"id":"under-git-never-reach","statement":"Anything under .git never reaches the daemon."},{"id":"no-other-ignore-keeps-one-out","statement":"No other ignore keeps a path from the daemon, .git/info/exclude and a .gitignore above the root among them, as the reading of the checkout reads none."},{"id":"changed-gitignore-applies-next-event","statement":"A .gitignore that changes applies from the next event."},{"id":"events-grouped-over-300ms","statement":"File events are grouped by the notify debouncer over a fixed window of 300 milliseconds."},{"id":"group-hands-handled-unignored-paths","statement":"Each group hands the daemon every repository path it names that the repository does not ignore and that is of a kind the extractor handles."},{"id":"recipe-files-handed","statement":"Each group hands the daemon every repository path it names that the repository does not ignore and that is a recipe file."},{"id":"nested-checkout-boundary-handed","statement":"Each group hands the daemon every repository path it names that the repository does not ignore and that marks a nested checkout's boundary."},{"id":"held-recipe-paths-handed","statement":"Each group hands the daemon every repository path it names that the repository does not ignore and that is a path a held recipe names, lies under one or is a folder holding one."},{"id":"daemon-reads-only-what-the-whole-reading-would","statement":"The daemon reads only what the whole checkout's reading would."},{"id":"one-reading-however-many-events","statement":"The daemon reads a path once, however many events name it."}]}
 //! ```
 
 use std::collections::HashMap;
@@ -166,7 +166,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-watcher-hands-on-markers-and-files-of-a-kind-read", "checks": ["crates/server/src/watch#debounced"]}
+    /// {"test": "the-watcher-hands-on-markers-and-files-of-a-kind-read", "checks": ["crates/server/src/watch#group-hands-handled-unignored-paths", "crates/server/src/watch#recipe-files-handed", "crates/server/src/watch#nested-checkout-boundary-handed", "crates/server/src/watch#held-recipe-paths-handed"]}
     /// ```
     #[test]
     fn the_watcher_hands_on_markers_and_files_of_a_kind_read() {
@@ -188,7 +188,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-burst-is-one-reextraction", "checks": ["crates/server/src/watch#debounced"]}
+    /// {"test": "a-burst-is-one-reextraction", "checks": ["crates/server/src/watch#events-grouped-over-300ms", "crates/server/src/watch#group-hands-handled-unignored-paths", "crates/server/src/watch#one-reading-however-many-events"]}
     /// ```
     #[test]
     fn a_burst_for_one_file_is_one_reextraction() {
@@ -209,7 +209,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#ignored-skipped"]}
+    /// {"test": "ignored-paths-never-reach-the-daemon", "checks": ["crates/server/src/watch#gitignored-paths-never-reach", "crates/server/src/watch#nearest-gitignore-decides", "crates/server/src/watch#under-git-never-reach", "crates/server/src/watch#no-other-ignore-keeps-one-out", "crates/server/src/watch#changed-gitignore-applies-next-event"]}
     /// ```
     #[test]
     fn ignored_paths_never_reach_the_daemon() {
@@ -248,5 +248,107 @@ mod tests {
         assert!(i.ignores(&dir.join("web").join("dist").join("x.js")), "read once and kept");
         i.forget(&dir.join("web").join(".gitignore"));
         assert!(!i.ignores(&dir.join("web").join("dist").join("x.js")), "read again after the change");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-daemon-reads-only-what-the-whole-checkout-would", "checks": ["crates/server/src/watch#daemon-reads-only-what-the-whole-reading-would"]}
+    /// ```
+    #[test]
+    fn the_daemon_reads_only_what_the_whole_checkout_would() {
+        use grimoire_core::model::{Scope, StoreConfig};
+        let tmp = tempfile::Builder::new().prefix("grimoire-watch-reads-").tempdir().unwrap();
+        let repo = tmp.path().join("repo");
+        for dir in ["src", "pkg/src", ".hidden"] {
+            std::fs::create_dir_all(repo.join(dir)).unwrap();
+        }
+        std::fs::write(
+            repo.join("Cargo.toml"),
+            "[package]
+name = \"w\"
+version = \"0.1.0\"
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join("src").join("lib.rs"),
+            "pub mod a;
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join("src").join("a.rs"),
+            "pub fn a() {}
+",
+        )
+        .unwrap();
+        // A folder that is a checkout of its own, and a path the repository ignores.
+        std::fs::write(
+            repo.join("pkg").join(".grimoire.toml"),
+            "store = \"elsewhere\"
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join(".gitignore"),
+            "src/ignored.rs
+",
+        )
+        .unwrap();
+        let store = tmp.path().join("store");
+        let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: repo.to_string_lossy().replace('\\', "/"),
+            roots: vec!["overview".into()].into(),
+            languages: vec!["rust".into()],
+            scope: Scope::default(),
+            order: Default::default(),
+            recipe_kinds: Default::default(),
+        };
+        crate::store_io::write_all(&store, &grimoire_core::Store::new(config), false).unwrap();
+        let _lock = crate::store_io::lock(&store).unwrap();
+        let daemon = Arc::new(Daemon::open(&store).unwrap().0);
+        let _watching = start(daemon.clone()).unwrap();
+        // Files the whole reading would leave out are saved, then one it would read: once that one is in, the earlier events were handled.
+        std::fs::write(
+            repo.join("pkg").join("src").join("lib.rs"),
+            "pub fn p() {}
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join(".hidden").join("x.rs"),
+            "pub fn x() {}
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join("src").join("ignored.rs"),
+            "pub fn i() {}
+",
+        )
+        .unwrap();
+        std::thread::sleep(DEBOUNCE * 3);
+        std::fs::write(
+            repo.join("src").join("c.rs"),
+            "pub fn c() {}
+",
+        )
+        .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while !daemon.files.lock().unwrap().contains_key("src/c.rs") {
+            assert!(std::time::Instant::now() < deadline, "the watcher never handed on src/c.rs");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        std::thread::sleep(DEBOUNCE * 3);
+        let held: Vec<String> = daemon.files.lock().unwrap().keys().cloned().collect();
+        assert!(!held.iter().any(|f| f.starts_with("pkg/") || f.starts_with(".hidden/") || f == "src/ignored.rs"), "{held:?}");
+        // The extraction is what a whole reading of the checkout makes.
+        let fresh = Daemon::open(&store).unwrap().0;
+        assert_eq!(held, fresh.files.lock().unwrap().keys().cloned().collect::<Vec<_>>());
     }
 }

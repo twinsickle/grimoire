@@ -196,7 +196,7 @@ fn a_machine_joins_the_servers_intent_with_its_own_code() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-write-goes-to-the-server-and-is-answered-from-the-machine", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/ops#adopt"]}
+/// {"test": "a-write-goes-to-the-server-and-is-answered-from-the-machine", "checks": ["crates/server/src/remote#sent-as-same-call", "crates/server/src/remote#refused-error-answers", "crates/server/src/remote#synced-before-answer", "crates/server/src/remote#answer-machines-own", "crates/server/src/remote#answer-servers-when-behind", "crates/server/src/remote#adopt-with-findings", "crates/core/src/ops#adopt"]}
 /// ```
 #[test]
 fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
@@ -267,7 +267,7 @@ fn a_write_goes_to_the_server_and_is_answered_from_the_machine() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-answer-and-its-change-are-one-write-on-the-server", "checks": ["crates/server/src/remote#writes-through", "req:answer-bottled-with-its-change"]}
+/// {"test": "an-answer-and-its-change-are-one-write-on-the-server", "checks": ["crates/server/src/remote#refused-error-answers", "crates/server/src/remote#synced-before-answer", "req:answer-bottled-with-its-change"]}
 /// ```
 #[test]
 fn an_answer_and_its_change_are_one_write_on_the_server() {
@@ -303,7 +303,7 @@ fn an_answer_and_its_change_are_one_write_on_the_server() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/export#export-judgements", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
+/// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#judgement-sent-with-digest", "crates/server/src/remote#each-of-several-judgements-sent-with-digest", "crates/server/src/remote#unknown-recipe-refused", "crates/core/src/export#export-judgements", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]
 fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
@@ -345,7 +345,7 @@ fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-close-is-judged-with-the-languages-the-server-now-reads", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server"]}
+/// {"test": "a-close-is-judged-with-the-languages-the-server-now-reads", "checks": ["crates/server/src/remote#close-after-sync-and-languages", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]
 fn a_close_is_judged_with_the_languages_the_server_now_reads() {
@@ -575,7 +575,7 @@ fn takes_one_write_and_goes(answer: Value) -> String {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#writes-through", "req:remote-writes-through-the-server", "req:model-status-names"]}
+/// {"test": "a-write-the-server-took-is-answered-when-the-copy-lags", "checks": ["crates/server/src/remote#unsynced-write-answered", "crates/server/src/remote#unsynced-state-reread", "crates/server/src/remote#unsynced-start-kept", "crates/server/src/remote#unsynced-bottled-close-kept", "req:remote-writes-through-the-server", "req:model-status-names"]}
 /// ```
 #[test]
 fn a_write_the_server_took_is_answered_when_the_copy_lags() {
@@ -681,7 +681,7 @@ fn a_take_up_the_copy_cannot_hold_is_read_again_from_the_copy() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote/sync#token-refused-told-apart", "crates/server/src/remote/sync#token-refused-says-so", "crates/server/src/remote/sync#token-refused-stays", "crates/server/src/remote/sync#token-refused-takes-up", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#token-for-the-server", "crates/server/src/daemon#as-the-caller"]}
+/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote/sync#token-refused-told-apart", "crates/server/src/remote/sync#token-refused-says-so", "crates/server/src/remote/sync#token-refused-stays", "crates/server/src/remote/sync#token-refused-takes-up", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#kept-token-read-every-call", "crates/server/src/remote#as-token-another-token", "crates/server/src/remote#other-token-answer-not-the-machines", "crates/server/src/daemon#as-the-caller"]}
 /// ```
 #[test]
 fn a_refused_token_is_not_a_server_that_is_away() {
@@ -731,4 +731,58 @@ fn a_refused_token_is_not_a_server_that_is_away() {
     assert_eq!(code(d.call("board", json!({})).unwrap_err()), "store_unavailable");
     let status = d.call("status", json!({})).unwrap();
     assert_eq!((status["server"]["reachable"].clone(), status["server"]["refused"].clone()), (json!(false), json!(true)));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-copy-that-lagged-behind-a-write-follows-at-the-next-sync", "checks": ["crates/server/src/remote#unsynced-copy-follows"]}
+/// ```
+#[test]
+fn a_copy_that_lagged_behind_a_write_follows_at_the_next_sync() {
+    let h = host();
+    let m = machine();
+    drop(m.open(h.as_writer()));
+    let before = store_io::load(&m.copy).unwrap().0;
+    // The server takes this machine's write, and with a teammate's retitling; the copy cannot be synced after it.
+    h.daemon.call("update_ticket", json!({ "ref": "ticket:0001", "title": "Retitled by a teammate" })).unwrap();
+    h.daemon.call("update_ticket", json!({ "ref": "ticket:0001", "priority": "high" })).unwrap();
+    let served = h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["node"].clone();
+    let gone = Server::new(&takes_one_write_and_goes(json!({ "node": served, "warnings": [], "baselined": 0 })), Some(h.writer.clone()));
+    let mut loaded = grimoire_server::load(&m.copy).unwrap();
+    remote::write_through(&gone, &m.copy, &mut loaded.state, "update_ticket", json!({ "ref": "ticket:0001", "priority": "high" }), "2026-10-03").unwrap();
+    let lagging = store_io::load(&m.copy).unwrap().0;
+    assert_eq!(lagging, before, "the copy has not followed yet");
+    assert_eq!((lagging.tickets["0001"].title.as_str(), lagging.tickets["0001"].priority), ("Ticket 0001", Priority::Later));
+    // The server answers again: the next sync brings the write into the copy.
+    remote::sync(&h.as_writer(), &m.copy, &m.repository(), None).unwrap();
+    let followed = store_io::load(&m.copy).unwrap().0;
+    assert_eq!((followed.tickets["0001"].title.as_str(), followed.tickets["0001"].priority), ("Retitled by a teammate", Priority::High));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "who-has-a-ticket-is-as-the-server-answered", "checks": ["crates/server/src/remote#who-called-is-the-servers"]}
+/// ```
+#[test]
+fn who_has_a_ticket_is_as_the_server_answered() {
+    let h = host();
+    let (ana, ben) = (machine(), machine());
+    let bens = store_io::tokens::add(&h.store, "ben", true).unwrap();
+    let (a, b) = (ana.open(h.as_writer()), ben.open(Server::new(&h.address, Some(bens))));
+    a.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    let anas = h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["checked_out"].clone();
+    // Ben takes up the ticket ana has: his machine knows neither who called nor when, only the server does.
+    let taken = b.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    let held = h.daemon.call("get", json!({ "ref": "ticket:0001" })).unwrap()["checked_out"].clone();
+    assert_eq!(held.as_array().map(Vec::len), Some(2));
+    assert_eq!(taken["checked_out"], held, "who has it, as the server lists them, when each took it included");
+    // The others, each with the warning the server wrote for it.
+    let named = |others: &Value| others.as_array().unwrap().iter().map(|o| (o["by"].clone(), o["since"].clone(), o["warning"].is_string())).collect::<Vec<_>>();
+    assert_eq!(named(&taken["others"]), [(anas[0]["by"].clone(), anas[0]["since"].clone(), true)], "the others are the server's: ana, as it recorded her");
+    assert!(std::fs::read_to_string(ben.copy.join("checked_out.json")).unwrap().contains(anas[0]["since"].as_str().unwrap()), "the copy holds it as the server does");
+    // A close that names someone: the others are the server's answer too.
+    let closed = b.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } })).unwrap();
+    assert_eq!(named(&closed["others"]), [(anas[0]["by"].clone(), anas[0]["since"].clone(), true)], "{closed}");
 }

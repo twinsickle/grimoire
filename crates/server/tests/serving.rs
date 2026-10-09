@@ -234,7 +234,7 @@ fn mcp_keeps_no_session() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "mcp-instructions-carry-the-rules", "checks": ["crates/server/src/mcp#instructions"]}
+/// {"test": "mcp-instructions-carry-the-rules", "checks": ["crates/server/src/mcp#instructions-carry-the-rules", "crates/server/src/mcp#instructions-say-to-pass-checkout", "crates/server/src/mcp#instructions-name-the-statuses", "crates/server/src/mcp#instructions-list-no-pages"]}
 /// ```
 #[test]
 fn mcp_instructions_carry_the_rules() {
@@ -580,4 +580,33 @@ fn a_shared_daemon_admits_by_token_and_serves_no_interface() {
         assert_eq!(code, 200, "{path}");
         assert!(body.contains("shared Grimoire server") && body.contains("no interface"), "{path}: {body}");
     }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-directory-without-shared-is-refused", "checks": ["crates/server/src#library-without-shared-refused"]}
+/// ```
+#[test]
+fn a_library_directory_without_shared_is_refused() {
+    let tmp = tempfile::Builder::new().prefix("grimoire-library-refused-").tempdir().unwrap();
+    let library = tmp.path().join("library");
+    std::fs::create_dir_all(&library).unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let refused = runtime.block_on(grimoire_server::serve(grimoire_server::ServeOptions {
+        store_dir: library.clone(),
+        port: 0,
+        ui_dir: None,
+        shared: false,
+        listen: None,
+        server: None,
+        site: None,
+        library: None,
+        shared_library: Some(library.clone()),
+        site_of: None,
+        checkout: None,
+    }));
+    let why = refused.unwrap_err().to_string();
+    assert!(why.contains("--library") && why.contains("needs --shared"), "{why}");
+    assert_eq!(std::fs::read_dir(&library).unwrap().count(), 0, "nothing was opened or marked");
 }

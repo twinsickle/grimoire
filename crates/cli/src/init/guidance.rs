@@ -72,7 +72,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "guidance-replaces-only-its-own-section", "checks": ["crates/cli/src/init/guidance#replace-or-append", "crates/cli/src/init#guidance-section"]}
+    /// {"test": "guidance-replaces-only-its-own-section", "checks": ["crates/cli/src/init/guidance#replace-or-append", "crates/cli/src/init#section-between-markers", "crates/cli/src/init#replaces-previous-section", "crates/cli/src/init#outside-markers-untouched"]}
     /// ```
     #[test]
     fn guidance_replaces_only_its_own_section() {

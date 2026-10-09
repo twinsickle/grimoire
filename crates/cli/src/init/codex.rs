@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Splice Grimoire's MCP server into a project's .codex/config.toml, and take it out again, every other byte as it was.","criteria":[{"id":"splice","statement":"with_codex_server changes no byte but the grimoire server's url value, or appends init's table after one line ending of the file's own kind, so comments, other tables and keys, a byte-order mark and CRLF or mixed line endings survive; it refuses a shape it cannot set a url in, an mcp_servers or grimoire entry that is not a table or a grimoire server with no url string, and reads its result back before returning it."},{"id":"own-block-only","statement":"without_codex_server takes out only init's own two lines with a loopback url, at /mcp or at a grimoire's /g/<name>/mcp, last in the file and in either line ending, with the one line ending init put before them, leaving every other byte; any other grimoire server, one the person wrote or extended included, is refused with what to do by hand, and a file with none is reported as having none."}]}
+//! {"purpose":"Splice Grimoire's MCP server into a project's .codex/config.toml, and take it out again, every other byte as it was.","criteria":[{"id":"changes-only-the-url-value","statement":"with_codex_server changes no byte but the grimoire server's url value when the file has one."},{"id":"appends-init-table","statement":"with_codex_server appends init's table after one line ending of the file's own kind when the file has no grimoire server."},{"id":"everything-else-survives","statement":"with_codex_server leaves comments, other tables and keys, a byte-order mark and CRLF or mixed line endings as they were."},{"id":"unsettable-shape-refused","statement":"with_codex_server refuses a shape it cannot set a url in, an mcp_servers or grimoire entry that is not a table or a grimoire server with no url string."},{"id":"result-read-back","statement":"with_codex_server reads its result back before returning it."},{"id":"removes-inits-two-lines","statement":"without_codex_server takes out only init's own two lines with a loopback url, at /mcp or at a grimoire's /g/<name>/mcp, last in the file."},{"id":"either-line-ending","statement":"without_codex_server takes out init's own two lines in either line ending, with the one line ending init put before them."},{"id":"leaves-every-other-byte","statement":"without_codex_server leaves every other byte of the file."},{"id":"other-server-refused-by-hand","statement":"without_codex_server refuses any other grimoire server, one the person wrote or extended included, with what to do by hand."},{"id":"no-server-reported-none","statement":"without_codex_server reports a file with no grimoire server as having none."}]}
 //! ```
 
 use toml_edit::Item;
@@ -96,7 +96,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-codex-config-of-the-projects-own-is-kept", "checks": ["crates/cli/src/init/codex#splice", "crates/cli/src/init/codex#own-block-only", "crates/cli/src/init#merge-not-clobber"]}
+    /// {"test": "a-codex-config-of-the-projects-own-is-kept", "checks": ["crates/cli/src/init/codex#changes-only-the-url-value", "crates/cli/src/init/codex#appends-init-table", "crates/cli/src/init/codex#everything-else-survives", "crates/cli/src/init/codex#unsettable-shape-refused", "crates/cli/src/init/codex#removes-inits-two-lines", "crates/cli/src/init/codex#either-line-ending", "crates/cli/src/init/codex#leaves-every-other-byte", "crates/cli/src/init/codex#other-server-refused-by-hand", "crates/cli/src/init/codex#no-server-reported-none", "crates/cli/src/init#codex-config-keeps-every-byte"]}
     /// ```
     #[test]
     fn a_codex_config_of_the_projects_own_is_kept() {
@@ -148,5 +148,24 @@ url = \"http://127.0.0.1:4242/other/mcp\"
         for refused in ["mcp_servers = 1\n", "mcp_servers = { docs = { url = \"x\" } }\n", "[mcp_servers]\ngrimoire = \"x\"\n", "[mcp_servers.grimoire]\ncommand = \"x\"\n"] {
             assert!(with_codex_server(refused, "http://127.0.0.1:4242/mcp").is_err(), "{refused:?}");
         }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-result-that-does-not-read-back-is-refused", "checks": ["crates/cli/src/init/codex#result-read-back"]}
+    /// ```
+    #[test]
+    fn a_result_that_does_not_read_back_is_refused() {
+        // A url that cannot be written as it is: the text would not read back as the url meant.
+        // A quote ends the string early; a backslash escape reads back as another character.
+        for url in ["http://127.0.0.1:4242/\"mcp", "http://127.0.0.1:4242/\\n/mcp"] {
+            for existing in ["", "model = \"o4\"\n", "[mcp_servers.grimoire]\nurl = \"old\"\n"] {
+                let refused = with_codex_server(existing, url).unwrap_err();
+                assert!(refused.contains("could not add its server to this file safely"), "{url} in {existing:?}: {refused}");
+            }
+        }
+        // A url that reads back is returned.
+        assert!(with_codex_server("", "http://127.0.0.1:4242/mcp").is_ok());
     }
 }

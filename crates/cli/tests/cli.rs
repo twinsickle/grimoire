@@ -520,6 +520,38 @@ fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-served-copy-watches-its-checkout-and-follows-its-server", "checks": ["crates/server/src/library/live#machine-grimoire-watched", "crates/server/src/library/live#copy-follows-its-server"]}
+/// ```
+#[test]
+fn a_served_copy_watches_its_checkout_and_follows_its_server() {
+    let t = team_fixture(None);
+    let home = t.checkout.dir.join("home");
+    assert!(team(&t.checkout.repo, &home, None, &["login", "--token", &t.writer]).status.success());
+    assert!(team(&t.checkout.repo, &home, None, &["check"]).status.success());
+    let named = std::fs::read_to_string(t.checkout.repo.join(".grimoire.toml")).unwrap();
+    let name = named.lines().find_map(|l| l.strip_prefix("name = ")).unwrap().trim_matches('"').to_string();
+    let local = bare_repo();
+    assert!(team(&local.repo, &home, None, &["init", "--store", "local", "--name", "local"]).status.success());
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let _daemon = Serving(grimoire().args(["serve", "--port", &port.to_string()]).current_dir(&local.repo).env("GRIMOIRE_HOME", &home).env_remove("GRIMOIRE_TOKEN").spawn().unwrap());
+    let ask = |path: &str, body: &str| post(port, &format!("/g/{name}{path}"), body, "");
+    eventually("the copy is served", || ask("/api/status", "{}").0 == 200);
+    // Watched: code written in the checkout reaches the served grimoire with no request to read it again.
+    let seeking = r#"{"query":"only_after_the_edit","kinds":["decl"]}"#;
+    let found = || serde_json::from_str::<serde_json::Value>(&ask("/api/find", seeking).1).ok().and_then(|a| a["nodes"].as_array().map(Vec::len));
+    assert_eq!(found(), Some(0), "not there before the edit");
+    std::fs::write(t.checkout.repo.join("src").join("lib.rs"), "pub mod a;\npub fn only_after_the_edit() {}\n").unwrap();
+    eventually("the edit reaches the served grimoire", || found() == Some(1));
+    // Following: a teammate's write straight to the server reaches the served copy with no request to sync.
+    let ticket = r#"{"title":"From a teammate","kind":"change","priority":"later","body":"b"}"#;
+    let (code, answer) = post(t.port, "/api/inscribe_ticket", ticket, &format!("Authorization: Bearer {}\r\n", t.writer));
+    assert_eq!(code, 200, "{answer}");
+    eventually("the teammate's ticket reaches the served copy", || ask("/api/board", "{}").1.contains("From a teammate"));
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "init-sets-a-project-up-in-one-command", "checks": ["crates/cli/src/init/command#init-scaffolds", "req:init-scaffolds"]}
 /// ```
 #[test]
@@ -563,7 +595,7 @@ fn init_sets_a_project_up_in_one_command() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-name", "req:server-library", "req:project-names-a-server", "req:project-name"]}
+/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#serves-every-store-in-the-library", "crates/server/src#no-grimoire-on-the-bare-routes", "crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live#opened-under-its-lock", "crates/server/src/library/live#marked-where-the-daemon-listens", "crates/server/src/library/live#team-server-own-tokens", "crates/server/src/library/live#vanished-grimoire-let-go", "crates/server/src/library/live#server-of-each-grimoire", "crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#path-the-routes-expect", "crates/server/src/library/live/routing#unheld-name-not-found", "crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-name", "req:server-library", "req:project-names-a-server", "req:project-name"]}
 /// ```
 #[test]
 fn a_teams_server_serves_its_library() {
@@ -615,6 +647,15 @@ fn a_teams_server_serves_its_library() {
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
     let names: Vec<&str> = status["library"].as_array().unwrap().iter().map(|g| g["name"].as_str().unwrap()).collect();
     assert_eq!((status["grimoire"].as_str(), names), (Some("ledger"), vec!["ledger", "shop"]));
+    // Each grimoire is opened under its lock, held while it is served, and marked at /g/<name> where the daemon listens.
+    for name in ["shop", "ledger"] {
+        let marker: grimoire_server::store_io::Serving = serde_json::from_str(&std::fs::read_to_string(library.join(name).join("serve.json")).unwrap()).unwrap();
+        assert_eq!((marker.path.as_deref(), marker.addr()), (Some(format!("/g/{name}").as_str()), format!("127.0.0.1:{port}").parse().unwrap()), "{name}'s marker");
+        assert!(matches!(grimoire_server::store_io::lock_new(&library.join(name)), Err(grimoire_server::store_io::StoreIoError::Locked(..))), "{name}'s lock is held while it is served");
+    }
+    // A team's server holds its grimoires as stores of their own: none is told a server it comes from.
+    let served: Vec<_> = status["library"].as_array().unwrap().iter().map(|g| (g["name"].as_str().unwrap(), g["server"].is_null())).collect();
+    assert_eq!(served, [("ledger", true), ("shop", true)], "{status}");
     // A store added while it runs is served, with no restart.
     let audit = make("audit");
     eventually("audit is served", || ask("/g/audit/api/status", &audit).0 == 200);
@@ -667,7 +708,30 @@ fn a_teams_server_serves_its_library() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-library-serves-the-site-it-names", "checks": ["crates/server/src#shared-library", "crates/server/src/site#library-site", "crates/cli/src#serve-site-of", "req:server-library"]}
+/// {"test": "a-teams-library-serves-the-shared-page-for-everything-else", "checks": ["crates/server/src#shared-page-for-everything-else"]}
+/// ```
+#[test]
+fn a_teams_library_serves_the_shared_page_for_everything_else() {
+    let tmp = tempfile::Builder::new().prefix("grimoire-library-page-").tempdir().unwrap();
+    let library = tmp.path().join("library");
+    let p = uninitialised();
+    assert!(run(&p.repo, &["init", "--store", &library.join("shop").to_string_lossy()]).status.success());
+    let _server = Serving(grimoire().args(["serve", "--shared", "--library", &library.to_string_lossy(), "--listen", "127.0.0.1:0"]).spawn().unwrap());
+    let port = marked_port(&library.join("shop"));
+    for path in ["/", "/index.html", "/some/other/page", "/g", "/assets/app.js"] {
+        let (code, body) = http(port, &format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
+        assert_eq!(code, 200, "{path}: {body}");
+        assert!(body.contains("This is a shared Grimoire server"), "{path}: {body}");
+    }
+    // The API is not that page.
+    let (_, api) = http(port, &format!("POST /api/status HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 2\r\n\r\n{{}}"));
+    assert!(!api.contains("This is a shared Grimoire server"), "{api}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-serves-the-site-it-names", "checks": ["crates/server/src#site-of-a-named-grimoire", "crates/server/src#site-without-grimoire-refused", "crates/server/src#grimoire-without-site-refused", "crates/server/src/site#library-site", "crates/cli/src#serve-site-of", "req:server-library"]}
 /// ```
 #[test]
 fn a_library_serves_the_site_it_names() {
@@ -736,7 +800,7 @@ Host: 127.0.0.1:{port}
 /// # Test contract
 ///
 /// ```json
-/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-every-checkout", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
+/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-every-checkout", "crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#refused-caller-costs-a-discard", "crates/server/src/library/live/routing#handler-chooses-the-checkout", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
@@ -989,7 +1053,7 @@ fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#lock-delete-holds", "req:machine-library", "req:cli-uninstall"]}
+/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live#opened-under-its-lock", "crates/server/src/library/live#vanished-grimoire-let-go", "crates/server/src/library/live#library-told-after-change", "crates/server/src/library/live/routing#unheld-name-not-found", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src/uninstall#library-asked-to-let-go", "crates/cli/src/uninstall#library-told-when-done", "crates/cli/src/uninstall#default-grimoire-refused", "crates/cli/src/uninstall#store-deleted-when-asked", "crates/cli/src#lock-delete-holds", "req:machine-library", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn the_library_follows_what_the_machine_holds() {
@@ -1141,7 +1205,7 @@ fn bare_repo() -> Project {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/uninstall#uninstall-store", "req:cli-uninstall"]}
+/// {"test": "init-then-uninstall-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/uninstall#store-kept", "crates/cli/src/uninstall#store-deleted-when-asked", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn init_then_uninstall_leaves_the_repository_as_it_was() {
@@ -1190,7 +1254,7 @@ fn init_then_uninstall_leaves_the_repository_as_it_was() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-takes-up-a-store-whose-deletion-is-queued", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/server/src#queued-not-served", "req:store-deletion-queued"]}
+/// {"test": "init-takes-up-a-store-whose-deletion-is-queued", "checks": ["crates/cli/src/uninstall#queues-when-lock-held", "crates/cli/src/uninstall#says-queued-and-when", "crates/cli/src/uninstall#init-cancels-queued", "crates/server/src#queued-not-served", "req:store-deletion-queued"]}
 /// ```
 #[test]
 fn init_takes_up_a_store_whose_deletion_is_queued() {
@@ -1217,7 +1281,7 @@ fn init_takes_up_a_store_whose_deletion_is_queued() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#lock-delete-queues", "req:store-deletion-queued"]}
+/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src/uninstall#queues-when-lock-held", "crates/cli/src/uninstall#integration-and-project-file-removed", "crates/cli/src/uninstall#says-queued-and-when", "crates/cli/src/uninstall#commands-carry-out-queued", "crates/cli/src/uninstall#says-what-became-of-each", "crates/cli/src/uninstall#store-lock-held", "crates/cli/src#lock-delete-queues", "req:store-deletion-queued"]}
 /// ```
 #[test]
 fn a_held_store_is_queued_for_deletion_and_deleted_later() {
@@ -1245,7 +1309,7 @@ fn a_held_store_is_queued_for_deletion_and_deleted_later() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-refused-codex-config-stops-init-before-anything-is-written", "checks": ["crates/cli/src/init#merge-not-clobber"]}
+/// {"test": "a-refused-codex-config-stops-init-before-anything-is-written", "checks": ["crates/cli/src/init#unmergeable-file-refused-first"]}
 /// ```
 #[test]
 fn a_refused_codex_config_stops_init_before_anything_is_written() {
@@ -1266,7 +1330,7 @@ fn a_refused_codex_config_stops_init_before_anything_is_written() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
+/// {"test": "uninstall-refuses-a-store-it-does-not-own-or-that-is-serving", "checks": ["crates/cli/src/uninstall#names-this-repository", "crates/cli/src/uninstall#not-served", "crates/cli/src/uninstall#checked-before-removing"]}
 /// ```
 #[test]
 fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
@@ -1300,7 +1364,7 @@ fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
+/// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src/uninstall#not-the-repository-or-a-root", "crates/cli/src/uninstall#only-a-store", "crates/cli/src/uninstall#checked-before-removing"]}
 /// ```
 #[test]
 fn uninstall_never_deletes_more_than_a_store() {
@@ -1358,6 +1422,303 @@ fn uninstall_finds_the_project_from_below_and_refuses_a_broken_project_file() {
     let out = run(&p.repo, &["uninstall"]);
     assert!(!out.status.success(), "{}", text(&out));
     assert_eq!(files(&p.repo), installed);
+}
+
+/// One request a stand-in daemon answered: what it was, and what was so at that moment.
+struct Asked {
+    what: &'static str,
+    /// The machine's deletion queue was held by another process.
+    queue_held: bool,
+    /// The repository's `.grimoire.toml` was still there.
+    project_file: bool,
+}
+
+/// A stand-in for a daemon serving a store in its machine's library, marking the store as one does. It answers
+/// `status` for the store's repository and logs what it is asked. Asked to let the store go it says it has, and
+/// then answers no more, as a library does, unless `keeps_serving`.
+struct FakeLibrary {
+    asked: std::sync::Arc<std::sync::Mutex<Vec<Asked>>>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Drop for FakeLibrary {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl FakeLibrary {
+    /// What it was asked, in order, `status` left out.
+    fn calls(&self) -> Vec<&'static str> {
+        self.asked.lock().unwrap().iter().map(|a| a.what).filter(|w| *w != "status").collect()
+    }
+}
+
+fn fake_library(p: &Project, keeps_serving: bool) -> FakeLibrary {
+    use std::io::{Read, Write};
+    use std::sync::atomic::Ordering::SeqCst;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    listener.set_nonblocking(true).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p.store.join("grimoire.json")).unwrap()).unwrap();
+    let repository = config["repository"].as_str().unwrap().to_string();
+    std::fs::write(p.store.join("serve.json"), format!(r#"{{"port":{port},"pid":1,"path":"/g/fake"}}"#)).unwrap();
+    let (marker, project, queue) = (p.store.join("serve.json"), p.repo.join(".grimoire.toml"), test_home().join("deletions").join(".lock"));
+    let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (log, halt) = (asked.clone(), stop.clone());
+    std::thread::spawn(move || {
+        let released = std::sync::atomic::AtomicBool::new(false);
+        while !halt.load(SeqCst) {
+            let Ok((mut s, _)) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
+            };
+            s.set_nonblocking(false).unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0u8; 1024];
+            let body = loop {
+                let n = s.read(&mut chunk).unwrap_or(0);
+                request.extend_from_slice(&chunk[..n]);
+                let text = String::from_utf8_lossy(&request).to_string();
+                if let Some((head, rest)) = text.split_once("\r\n\r\n") {
+                    let length = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                    if rest.len() >= length || n == 0 {
+                        break rest.to_string();
+                    }
+                } else if n == 0 {
+                    break String::new();
+                }
+            };
+            let path = String::from_utf8_lossy(&request).lines().next().unwrap_or_default().split_whitespace().nth(1).unwrap_or_default().to_string();
+            let held = std::fs::OpenOptions::new().read(true).write(true).open(&queue).is_ok_and(|f| matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
+            let note = |what| log.lock().unwrap().push(Asked { what, queue_held: held, project_file: project.is_file() });
+            let (code, answer) = if path.ends_with("/library/release") {
+                if body.contains("\"done\":true") {
+                    note("done");
+                } else {
+                    note("release");
+                    released.store(true, SeqCst);
+                    if !keeps_serving {
+                        let _ = std::fs::remove_file(&marker);
+                    }
+                }
+                (200, r#"{"released":true}"#.to_string())
+            } else if path.ends_with("/api/status") {
+                note("status");
+                if released.load(SeqCst) && !keeps_serving {
+                    (404, "{}".to_string())
+                } else {
+                    (200, serde_json::json!({ "repository": repository }).to_string())
+                }
+            } else {
+                (404, "{}".to_string())
+            };
+            let _ = write!(s, "HTTP/1.0 {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{answer}", answer.len());
+        }
+    });
+    FakeLibrary { asked, stop }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-library-is-told-when-uninstall-is-done-with-its-store", "checks": ["crates/cli/src/uninstall#library-told-when-done"]}
+/// ```
+#[test]
+fn a_library_is_told_when_uninstall_is_done_with_its_store() {
+    // Ending with the store deleted: asked to let it go, and told it is done, in that order and once each.
+    let (p, _) = project();
+    let library = fake_library(&p, false);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success() && !p.store.exists(), "{}", text(&out));
+    assert_eq!(library.calls(), ["release", "done"], "{}", text(&out));
+    // Ending in a refusal after the store was released: told all the same, and the store still there.
+    let (q, _) = project();
+    let library = fake_library(&q, true);
+    let out = run(&q.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success() && q.store.join("grimoire.json").is_file(), "{}", text(&out));
+    assert_eq!(library.calls(), ["release", "done"], "{}", text(&out));
+    // Ending with the deletion queued: told too.
+    let (r, _) = project();
+    let library = fake_library(&r, true);
+    let held = grimoire_server::store_io::lock(&r.store).unwrap();
+    let out = run(&r.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success() && text(&out).contains("queued  deletion of store"), "{}", text(&out));
+    assert_eq!(library.calls(), ["release", "done"], "{}", text(&out));
+    drop(held);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-checks-again-just-before-the-deletion", "checks": ["crates/cli/src/uninstall#checked-again-before-deletion"]}
+/// ```
+#[test]
+fn uninstall_checks_again_just_before_the_deletion() {
+    // A daemon that let the store go, as far as the first check could tell, and serves it still at the end:
+    // the first check lets a library's store through, the last does not.
+    let (p, _) = project();
+    let _library = fake_library(&p, true);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("the integration is removed, but not the store") && text(&out).contains("a daemon is serving store"), "{}", text(&out));
+    assert!(p.store.join("grimoire.json").is_file(), "the store is not deleted");
+    assert!(p.repo.join(".grimoire.toml").is_file(), "and the project file stays for a rerun");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-holds-the-queue-while-asking-again", "checks": ["crates/cli/src/uninstall#queue-held-while-asking-served"]}
+/// ```
+#[test]
+fn uninstall_holds_the_queue_while_asking_again() {
+    let (p, _) = project();
+    let library = fake_library(&p, true);
+    // Held by another process, so the deletion is queued.
+    let held = grimoire_server::store_io::lock(&p.store).unwrap();
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success() && text(&out).contains("queued  deletion of store"), "{}", text(&out));
+    drop(held);
+    let asked = library.asked.lock().unwrap();
+    let release = asked.iter().position(|a| a.what == "release").expect("the library was asked to let it go");
+    assert!(asked[..release].iter().all(|a| !a.queue_held), "the queue is not held for the first questions");
+    assert!(asked[release..].iter().any(|a| a.what == "status" && a.queue_held), "asked again, the queue held: the last status was asked with it free");
+    assert!(asked.iter().filter(|a| a.what != "done").all(|a| a.project_file), "nothing was removed before it asked");
+}
+
+/// Hold `file` open so that it cannot be deleted while the returned guard lives.
+#[cfg(windows)]
+fn hold_open(file: &Path) -> std::fs::File {
+    use std::os::windows::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new().read(true).share_mode(1).open(file).unwrap()
+}
+
+/// Hold `file` so that it cannot be deleted while the returned guard lives: its folder made read-only.
+#[cfg(unix)]
+fn hold_open(file: &Path) -> impl Drop {
+    use std::os::unix::fs::PermissionsExt;
+    struct Restore(PathBuf);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+    let dir = file.parent().unwrap().to_path_buf();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    Restore(dir)
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-stopped-deletion-leaves-grimoire-json-and-project", "checks": ["crates/cli/src/uninstall#project-file-last", "crates/cli/src/uninstall#records-first-grimoire-json-last"]}
+/// ```
+#[test]
+fn a_stopped_deletion_leaves_grimoire_json_and_project() {
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    // Something holds a file of the store, so its removal stops part way.
+    let held = hold_open(&p.store.join("baseline.json"));
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success() && text(&out).contains("the store was not fully deleted"), "{}", text(&out));
+    assert!(p.store.join("grimoire.json").is_file(), "grimoire.json goes last");
+    assert!(p.repo.join(".grimoire.toml").is_file(), "and the project file after the store");
+    let status = run(&p.repo, &["tool", "status"]);
+    assert!(status.status.success(), "the store still loads for a rerun: {}", text(&status));
+    // Let go, a rerun finishes.
+    drop(held);
+    let out = run(&p.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!p.store.exists() && !p.repo.join(".grimoire.toml").exists(), "{}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-takes-up-one-store-and-carries-out-the-others-deletions", "checks": ["crates/cli/src/uninstall#init-then-carries-out-others"]}
+/// ```
+#[test]
+fn init_takes_up_one_store_and_carries_out_the_others_deletions() {
+    // Two stores whose deletions are queued, each held when uninstall ran.
+    let ((a, _), (b, _)) = (project(), project());
+    let (held_a, held_b) = (grimoire_server::store_io::lock(&a.store).unwrap(), grimoire_server::store_io::lock(&b.store).unwrap());
+    for p in [&a, &b] {
+        let out = run(&p.repo, &["uninstall", "--delete-store"]);
+        assert!(text(&out).contains("queued  deletion of store"), "{}", text(&out));
+    }
+    drop((held_a, held_b));
+    assert!(a.store.exists() && b.store.exists(), "both wait");
+    // Taking the first up again: its deletion cancelled, and the second's carried out.
+    let out = run(&a.repo, &["init", "--store", &a.store.to_string_lossy()]);
+    assert!(out.status.success() && text(&out).contains("cancelled the queued deletion"), "{}", text(&out));
+    assert!(a.store.join("grimoire.json").is_file(), "the store taken up is kept");
+    assert!(!b.store.exists(), "the other deletion is carried out: {}", text(&out));
+    assert!(text(&out).contains("whose deletion was queued"), "{}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-finds-the-project-above-or-at-repo", "checks": ["crates/cli/src/uninstall#project-found"]}
+/// ```
+#[test]
+fn uninstall_finds_the_project_above_or_at_repo() {
+    let p = bare_repo();
+    let before = files(&p.repo);
+    // From the nearest .grimoire.toml above the working directory.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    let out = run(&p.repo.join("src"), &["uninstall"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
+    // From --repo's own directory, whatever the working directory.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    let out = run(&p.dir, &["uninstall", "--repo", &p.repo.to_string_lossy()]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(files(&p.repo), before);
+    // A --repo directory has none of its own: the one above it is not looked for.
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    let installed = files(&p.repo);
+    let out = run(&p.repo, &["uninstall", "--repo", &p.repo.join("src").to_string_lossy()]);
+    assert!(p.repo.join(".grimoire.toml").is_file() && files(&p.repo) == installed, "{}", text(&out));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-project-that-names-a-server-has-no-store-to-delete", "checks": ["crates/cli/src/uninstall#server-store-not-deleted"]}
+/// ```
+#[test]
+fn a_project_that_names_a_server_has_no_store_to_delete() {
+    let t = team_fixture(None);
+    let (repo, home) = (&t.checkout.repo, t.checkout.dir.join("home"));
+    // The checkout's copy made, as any command does.
+    assert!(team(repo, &home, Some(&t.writer), &["check"]).status.success());
+    let (repo_before, home_before, server_before) = (contents(repo), contents(&home), contents(&t.origin.store));
+    let out = team(repo, &home, Some(&t.writer), &["uninstall", "--delete-store"]);
+    assert!(!out.status.success() && text(&out).contains("names a server") && text(&out).contains("Nothing was removed"), "{}", text(&out));
+    assert_eq!((contents(repo), contents(&home)), (repo_before, home_before), "nothing removed here");
+    assert_eq!(contents(&t.origin.store).len(), server_before.len(), "nor at the server's store");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-refuses-a-malformed-project-file", "checks": ["crates/cli/src/uninstall#malformed-project-refused"]}
+/// ```
+#[test]
+fn uninstall_refuses_a_malformed_project_file() {
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    std::fs::write(p.repo.join(".grimoire.toml"), "store = [not toml").unwrap();
+    let (repo_before, store_before) = (contents(&p.repo), contents(&p.store));
+    for args in [vec!["uninstall"], vec!["uninstall", "--delete-store"]] {
+        let out = run(&p.repo, &args);
+        assert!(!out.status.success() && text(&out).contains(".grimoire.toml"), "{args:?}: {}", text(&out));
+        assert_eq!((contents(&p.repo), contents(&p.store)), (repo_before.clone(), store_before.clone()), "{args:?}: nothing removed");
+    }
 }
 
 /// A daemon serving `p`'s store, once it has marked it.
@@ -1448,7 +1809,7 @@ fn a_cli_writer_beside_a_holder_is_refused() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-inside-the-repository-is-refused", "checks": ["crates/server/src/store_io/location#outside-repository", "req:store-location"]}
+/// {"test": "a-store-inside-the-repository-is-refused", "checks": ["crates/server/src/store_io/location#outside-repository", "crates/cli/src/uninstall#store-inside-repository-refused", "req:store-location"]}
 /// ```
 #[test]
 fn a_store_inside_the_repository_is_refused() {
@@ -1502,7 +1863,7 @@ fn a_store_inside_the_repository_is_refused() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "uninstall-finishes-a-deletion-stopped-part-way", "checks": ["crates/cli/src/uninstall#uninstall-store"]}
+/// {"test": "uninstall-finishes-a-deletion-stopped-part-way", "checks": ["crates/cli/src/uninstall#only-a-store", "crates/cli/src/uninstall#stopped-deletion-finished"]}
 /// ```
 #[test]
 fn uninstall_finishes_a_deletion_stopped_part_way() {
@@ -1875,7 +2236,7 @@ fn a_store_is_served_for_a_team_behind_tokens() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src/uninstall#uninstall-store", "crates/server/src/store_io/tokens#tokens-locked-atomic", "crates/server/src/store_io/tokens#tokens-not-a-store"]}
+/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src/uninstall#tokens-lock-held", "crates/cli/src/uninstall#lock-files-and-folder-last", "crates/server/src/store_io/tokens#tokens-locked-atomic", "crates/server/src/store_io/tokens#tokens-not-a-store"]}
 /// ```
 #[test]
 fn a_store_with_tokens_is_deleted_under_their_lock() {
@@ -1948,7 +2309,7 @@ fn marked_port(store: &Path) -> u16 {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-exclusive", "crates/cli/src/init/command#init-server-bad-address", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#copy-synced-first", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-none-or-refused", "crates/cli/src/team#copy-daemon-asked", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
+/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-exclusive", "crates/cli/src/init/command#init-server-bad-address", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#token-from-flag-else-stdin", "crates/cli/src/team#address-from-project", "crates/cli/src/team#asked-of-the-server-before-kept", "crates/cli/src/team#kept-under-address", "crates/cli/src/team#refused-token-keeps-nothing", "crates/cli/src/team#logout-removes-token", "crates/cli/src/team#logout-says-when-none", "crates/cli/src/team#copy-synced-first", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-none-or-refused", "crates/cli/src/team#copy-daemon-asked", "crates/cli/src/team#runs-on-the-daemon-when-there-is-one", "crates/cli/src/team#read-tool-answers-over-the-copy", "crates/cli/src/team#write-tool-goes-through-the-server", "crates/cli/src/team#write-refused-when-server-away", "crates/cli/src/uninstall#server-copy-kept", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
 /// ```
 #[test]
 fn a_checkout_works_against_a_teams_server() {
@@ -2084,6 +2445,69 @@ fn a_checkout_works_against_a_teams_server() {
     let out = team(&p.repo, &home, None, &["logout", "--server", &address]);
     assert!(out.status.success() && text(&out).contains("signed out") && !std::fs::read_to_string(home.join("credentials.json")).unwrap().contains(&again), "{}", text(&out));
     assert!(text(&team(&p.repo, &home, None, &["logout", "--server", &address])).contains("no token was kept"));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "login-signs-in-to-the-address-given-in-place-of-the-projects", "checks": ["crates/cli/src/team#address-from-server-flag"]}
+/// ```
+#[test]
+fn login_signs_in_to_the_address_given_in_place_of_the_projects() {
+    let t = team_fixture(None);
+    let address = format!("http://127.0.0.1:{}", t.port);
+    // A checkout whose project file names another server, one that is not there.
+    let other = uninitialised();
+    let home = other.dir.join("home");
+    std::fs::write(other.repo.join(".grimoire.toml"), "server = \"http://127.0.0.1:9\"\n").unwrap();
+    let out = team(&other.repo, &home, None, &["login", "--server", &address, "--token", &t.writer]);
+    assert!(out.status.success() && text(&out).contains(&format!("signed in to {address}")), "{}", text(&out));
+    let kept = std::fs::read_to_string(home.join("credentials.json")).unwrap();
+    assert!(kept.contains(&address) && kept.contains(&t.writer), "{kept}");
+    assert!(!kept.contains("127.0.0.1:9\""), "nothing kept for the address the project names: {kept}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "login-keeps-nothing-when-the-token-is-empty-or-the-server-silent", "checks": ["crates/cli/src/team#empty-token-keeps-nothing", "crates/cli/src/team#unanswering-server-keeps-nothing"]}
+/// ```
+#[test]
+fn login_keeps_nothing_when_the_token_is_empty_or_the_server_silent() {
+    let t = team_fixture(None);
+    let (repo, home) = (&t.checkout.repo, t.checkout.dir.join("home"));
+    // An empty token, given or read: fails, and nothing is kept.
+    let given = team(repo, &home, None, &["login", "--token", "  "]);
+    assert!(!given.status.success() && text(&given).contains("no token was given") && text(&given).contains("nothing was kept"), "{}", text(&given));
+    let read = team(repo, &home, None, &["login"]);
+    assert!(!read.status.success() && text(&read).contains("no token was given"), "{}", text(&read));
+    assert!(!home.join("credentials.json").exists());
+    // A server that does not answer: fails, and nothing is kept.
+    let gone = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let silent = team(repo, &home, None, &["login", "--server", &format!("http://127.0.0.1:{gone}"), "--token", &t.writer]);
+    assert!(!silent.status.success() && text(&silent).contains("Nothing was kept"), "{}", text(&silent));
+    assert!(!home.join("credentials.json").exists());
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-write-is-refused-while-another-process-holds-the-copy", "checks": ["crates/cli/src/team#write-refused-while-lock-held"]}
+/// ```
+#[test]
+fn a_write_is_refused_while_another_process_holds_the_copy() {
+    let t = team_fixture(None);
+    let (repo, home) = (&t.checkout.repo, t.checkout.dir.join("home"));
+    assert!(team(repo, &home, Some(&t.writer), &["check"]).status.success(), "the first command makes the copy");
+    let copy = std::fs::read_dir(home.join("copies")).unwrap().flatten().next().unwrap().path();
+    let before = contents(&t.origin.store.join("tickets"));
+    let held = grimoire_server::store_io::lock(&copy).unwrap();
+    let refused = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
+    assert!(!refused.status.success() && text(&refused).contains("another process holds this checkout's copy"), "{}", text(&refused));
+    assert_eq!(contents(&t.origin.store.join("tickets")), before, "nothing reached the server");
+    drop(held);
+    let filed = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
+    assert!(filed.status.success(), "{}", text(&filed));
 }
 
 /// A team's server on a store started as today, with a write token and a

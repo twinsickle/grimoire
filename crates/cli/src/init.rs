@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the bottling. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to brew, specify, finish and inscribe a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's brew sequence reads the recipes brew_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"merge-not-clobber","statement":"An existing .mcp.json keeps its other servers; an existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark; an existing pre-commit or post-commit hook is left alone with a note; a file init cannot merge into is refused before anything is written; only Grimoire's own files are overwritten."},{"id":"bottling-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire bottle, so a commit bottles the ticket simmering on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so; the post-commit hook an earlier release wrote, running grimoire land, is init's own and rewritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"guidance-section","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, replacing a previous section and leaving everything outside the markers as it was, so an agent that never triggers the skill still learns the project is managed; it says how the work is done is in the rites, the grimoire's second root, to be read before working, that a rule of work belongs there and never in the file, and that the rest of the file is the project's own; each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills; of the pre-commit check it says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"skill-one-ticket-per-branch","statement":"The embedded skill says a branch holds one ticket until that ticket is bottled, bottled with grimoire bottle, on a team once the branch has merged to the main line; that work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone is bottled; that work found along the way is inscribed as a ticket of its own; and that brew_ticket answers in waiting each ticket the checkout still carries, never refusing, its brew sequence saying to bottle that one first or move the work to a new branch."}]}
+//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the bottling. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to brew, specify, finish and inscribe a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's brew sequence reads the recipes brew_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"mcp-json-keeps-other-servers","statement":"An existing .mcp.json keeps its other servers."},{"id":"codex-config-keeps-every-byte","statement":"An existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark."},{"id":"existing-hook-left-alone","statement":"An existing pre-commit or post-commit hook is left alone with a note."},{"id":"unmergeable-file-refused-first","statement":"A file init cannot merge into is refused before anything is written."},{"id":"only-own-files-overwritten","statement":"Only Grimoire's own files are overwritten."},{"id":"bottling-hook","statement":"In a git repository init writes a post-commit hook that runs grimoire bottle, so a commit bottles the ticket simmering on it, beside the pre-commit hook that runs the check; each exits 0 with a warning when grimoire is not on the path, and outside a git repository neither is written and the output says so; the post-commit hook an earlier release wrote, running grimoire land, is init's own and rewritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"section-between-markers","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, so an agent that never triggers the skill still learns the project is managed."},{"id":"replaces-previous-section","statement":"The marked section replaces a previous section."},{"id":"outside-markers-untouched","statement":"The marked section leaves everything outside the markers as it was."},{"id":"sends-to-the-rites","statement":"The section says how the work is done is in the rites, the grimoire's second root, to be read before working, and that a rule of work belongs there and never in the file."},{"id":"rest-of-file-is-the-projects","statement":"The section says the rest of the file is the project's own."},{"id":"names-own-harness-skill","statement":"Each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills."},{"id":"check-claim-is-only-unconnected","statement":"Of the pre-commit check the section says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"branch-holds-one-ticket","statement":"The embedded skill says a branch holds one ticket until that ticket is bottled."},{"id":"bottled-with-bottle-once-merged","statement":"The embedded skill says a ticket is bottled with grimoire bottle, on a team once the branch has merged to the main line."},{"id":"helpers-split-into-branches","statement":"The embedded skill says work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone is bottled."},{"id":"found-work-is-its-own-ticket","statement":"The embedded skill says work found along the way is inscribed as a ticket of its own."},{"id":"brew-answers-waiting-never-refuses","statement":"The embedded skill says brew_ticket answers in waiting each ticket the checkout still carries, never refusing."},{"id":"brew-sequence-bottle-first-or-move","statement":"The embedded skill's brew sequence says to bottle the waiting ticket first or move the work to a new branch."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -257,7 +257,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#merge-not-clobber", "crates/cli/src/init#bottling-hook"]}
+    /// {"test": "installs-and-merges", "checks": ["crates/cli/src/init#listed-writes", "crates/cli/src/init#mcp-json-keeps-other-servers", "crates/cli/src/init#bottling-hook"]}
     /// ```
     #[test]
     fn installs_and_merges() {
@@ -311,7 +311,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "each-guidance-file-names-its-own-skill", "checks": ["crates/cli/src/init#guidance-section"]}
+    /// {"test": "each-guidance-file-names-its-own-skill", "checks": ["crates/cli/src/init#names-own-harness-skill"]}
     /// ```
     #[test]
     fn each_guidance_file_names_its_own_skill() {
@@ -360,7 +360,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-refused-file-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/init#merge-not-clobber", "crates/cli/src/init#listed-writes"]}
+    /// {"test": "a-refused-file-leaves-the-repository-as-it-was", "checks": ["crates/cli/src/init#unmergeable-file-refused-first", "crates/cli/src/init#listed-writes"]}
     /// ```
     #[test]
     fn a_refused_file_leaves_the_repository_as_it_was() {
@@ -371,6 +371,46 @@ mod tests {
         let before = walk(repo);
         assert!(matches!(install(repo, 4242, "shop"), Err(InitError::BadToml(..))));
         assert_eq!(walk(repo), before, "nothing is written before every file's text is known");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "only-grimoires-own-files-are-overwritten", "checks": ["crates/cli/src/init#only-own-files-overwritten"]}
+    /// ```
+    #[test]
+    fn only_grimoires_own_files_are_overwritten() {
+        let tmp = temp();
+        let repo = tmp.path();
+        std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
+        // A person's files, some beside init's and one in a folder init writes into.
+        let theirs = [
+            (".git/hooks/pre-commit", "#!/bin/sh\necho mine\n"),
+            (".claude/skills/mine/SKILL.md", "my skill\n"),
+            (".claude/skills/grimoire/notes.md", "my notes\n"),
+            (".agents/skills/grimoire/notes.md", "my notes\n"),
+            (".claude/settings.json", "{\"mine\":true}\n"),
+            ("src/main.rs", "fn main() {}\n"),
+            ("README.md", "# Mine\n"),
+        ];
+        for (rel, text) in theirs {
+            let path = repo.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        // A post-commit hook an earlier release wrote is init's own.
+        std::fs::write(repo.join(BOTTLING_HOOK_REL), former_hook_script(BOTTLING_HOOK_REL).unwrap()).unwrap();
+        let wrote = install(repo, 4343, "shop").unwrap();
+        for (rel, text) in theirs {
+            assert_eq!(std::fs::read_to_string(repo.join(rel)).unwrap(), text, "{rel} is the person's");
+        }
+        assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { path, .. } if path.ends_with(HOOK_REL))), "the person's hook is left with a note");
+        assert_eq!(std::fs::read_to_string(repo.join(BOTTLING_HOOK_REL)).unwrap(), bottling_hook_script(), "its own is rewritten");
+        for harness in &HARNESSES {
+            for (rel, text) in SKILL_FILES {
+                assert_eq!(std::fs::read_to_string(repo.join(format!("{}/{rel}", harness.skill_dir))).unwrap(), text);
+            }
+        }
     }
 
     /// Criterion project-agnostic: what init installs is the same for every
@@ -398,7 +438,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-guidance-says-only-what-the-check-does", "checks": ["crates/cli/src/init#guidance-section"]}
+    /// {"test": "the-guidance-says-only-what-the-check-does", "checks": ["crates/cli/src/init#sends-to-the-rites", "crates/cli/src/init#rest-of-file-is-the-projects", "crates/cli/src/init#check-claim-is-only-unconnected"]}
     /// ```
     #[test]
     fn the_guidance_says_only_what_the_check_does() {
@@ -490,7 +530,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-skill-says-a-branch-holds-one-ticket", "checks": ["crates/cli/src/init#skill-one-ticket-per-branch"]}
+    /// {"test": "the-skill-says-a-branch-holds-one-ticket", "checks": ["crates/cli/src/init#branch-holds-one-ticket", "crates/cli/src/init#bottled-with-bottle-once-merged", "crates/cli/src/init#helpers-split-into-branches", "crates/cli/src/init#found-work-is-its-own-ticket", "crates/cli/src/init#brew-answers-waiting-never-refuses", "crates/cli/src/init#brew-sequence-bottle-first-or-move"]}
     /// ```
     #[test]
     fn the_skill_says_a_branch_holds_one_ticket() {
@@ -525,7 +565,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "leaves-foreign-hook-alone", "checks": ["crates/cli/src/init#merge-not-clobber"]}
+    /// {"test": "leaves-foreign-hook-alone", "checks": ["crates/cli/src/init#existing-hook-left-alone"]}
     /// ```
     #[test]
     fn leaves_foreign_hook_alone() {

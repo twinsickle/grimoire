@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: find its grimoires again every few seconds, serve each one found and let one go when it goes or while a command deletes its store, and tell each the whole library; opening a grimoire and letting it go is the module opening beneath, and routing each request to its checkout, serving one a request names, is the module routing.","criteria":[{"id":"current","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back, under its lock and marked at /g/<name> where the daemon listens, on a machine watched and following its server when it is a copy of one, on a team's server holding intent only and admitting callers by its own tokens, and lets go of every served grimoire, but the default, that find no longer returns by the same name at the same store with the same checkout; one that could not be taken or opened is tried again on the next refresh; after any change every served grimoire is told the whole library, one newly served, by refresh or by a request naming its checkout, before any request reaches it, each grimoire with the server it comes from as library::server_of names it, or none for a store of its own, and once stopped, refresh takes nothing."},{"id":"waits-on-no-state","statement":"Telling the served grimoires the library and their fellows takes no served daemon's state, so while one served daemon holds its state, as a copy does across a fetch while it syncs, refresh still serves a grimoire that appeared and a request to any other grimoire is still answered."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."},{"id":"deletions","statement":"On a machine, refresh serves no grimoire whose store is queued for deletion in the deletions folder beside its stores, letting go of one it serves and asking the queue again just before it serves one it opened, and a checkout whose store is queued is not taken; after each refresh it carries out the queued deletions, saying once each one kept and why; a team's server has no such folder."}]}
+//! {"purpose":"Keep a library served while the daemon runs, a machine's or a team's server's: find its grimoires again every few seconds, serve each one found and let one go when it goes or while a command deletes its store, and tell each the whole library; opening a grimoire and letting it go is the module opening beneath, and routing each request to its checkout, serving one a request names, is the module routing.","criteria":[{"id":"opens-found-grimoires","statement":"refresh opens every grimoire library::find returns, or on a team's server library::find_shared, that is not served or held back."},{"id":"opened-under-its-lock","statement":"refresh opens each grimoire under its lock."},{"id":"marked-where-the-daemon-listens","statement":"refresh marks each grimoire it opens as served at /g/<name> where the daemon listens."},{"id":"machine-grimoire-watched","statement":"On a machine, refresh opens each grimoire watched."},{"id":"copy-follows-its-server","statement":"On a machine, refresh opens a grimoire that is a copy of a server's intent following that server."},{"id":"team-server-holds-intent-only","statement":"On a team's server, refresh opens each grimoire holding intent only."},{"id":"team-server-own-tokens","statement":"On a team's server, refresh opens each grimoire admitting callers by its own tokens."},{"id":"vanished-grimoire-let-go","statement":"refresh lets go of every served grimoire, but the default, that library::find no longer returns by the same name at the same store with the same checkout."},{"id":"failed-open-retried","statement":"A grimoire that could not be taken or opened is tried again on the next refresh."},{"id":"library-told-after-change","statement":"After any change every served grimoire is told the whole library."},{"id":"newly-served-told-first","statement":"A grimoire newly served, by refresh or by a request naming its checkout, is told the whole library before any request reaches it."},{"id":"server-of-each-grimoire","statement":"Each grimoire is told the server it comes from as library::server_of names it, or none for a store of its own."},{"id":"stopped-takes-nothing","statement":"Once stopped, refresh takes nothing."},{"id":"waits-on-no-state","statement":"Telling the served grimoires the library and their fellows takes no served daemon's state, so while one served daemon holds its state, as a copy does across a fetch while it syncs, refresh still serves a grimoire that appeared and a request to any other grimoire is still answered."},{"id":"release","statement":"release lets go of the served grimoire whose store is the one given, every checkout of it, and holds that store back from refresh until restore is called for it or the store is gone; restore lets refresh take it again; release answers false for a store the default grimoire is a checkout of, which it never lets go, and for a store it does not serve."},{"id":"queued-store-not-taken","statement":"On a machine, refresh serves no grimoire whose store is queued for deletion in the deletions folder beside its stores."},{"id":"queued-served-store-let-go","statement":"On a machine, refresh lets go of a grimoire it serves whose store is queued for deletion in the deletions folder beside its stores."},{"id":"queue-asked-again-before-serving","statement":"On a machine, refresh asks the queue again just before it serves a grimoire it opened."},{"id":"queued-checkout-not-taken","statement":"On a machine, a checkout whose store is queued is not taken."},{"id":"queued-deletions-carried-out","statement":"On a machine, after each refresh it carries out the queued deletions."},{"id":"kept-deletion-said-once","statement":"On a machine, after each refresh it says once each queued deletion it kept and why."},{"id":"team-server-has-no-queue","statement":"A team's server has no deletions folder."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -185,6 +185,8 @@ impl Live {
         for g in wanted {
             let Some(shelved) = self.open(&g) else { continue };
             let mut held = self.held.lock().expect("library lock");
+            #[cfg(test)]
+            tests::after_open();
             if self.stopped.load(Ordering::SeqCst)
                 || held.served.values().any(|s| same(&s.store_dir, &g.store_dir) && same_checkout(&s.repo, &g.repo))
                 || held.held_back.iter().any(|r| same(r, &g.store_dir))
@@ -356,6 +358,19 @@ fn canonical(p: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    thread_local! {
+        /// What a test does at the moment a grimoire has been opened, before refresh asks again whether it may be served.
+        static AFTER_OPEN: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    pub(super) fn after_open() {
+        AFTER_OPEN.with(|hook| {
+            if let Some(hook) = &*hook.borrow() {
+                hook();
+            }
+        });
+    }
+
     use super::*;
     use crate::access;
     use grimoire_core::model::{Roots, Scope, StoreConfig};
@@ -387,7 +402,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "letting-go-waits-for-the-requests-under-way", "checks": ["crates/server/src/library/live/opening#let-go", "crates/server/src/library/live#release"]}
+    /// {"test": "letting-go-waits-for-the-requests-under-way", "checks": ["crates/server/src/library/live/opening#let-go", "crates/server/src/library/live#release", "crates/server/src/library/live#marked-where-the-daemon-listens"]}
     /// ```
     #[test]
     fn letting_go_waits_for_the_requests_under_way() {
@@ -427,7 +442,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-queued-store-is-let-go-and-deleted-on-refresh", "checks": ["crates/server/src/library/live#deletions", "req:store-deletion-queued"]}
+    /// {"test": "a-queued-store-is-let-go-and-deleted-on-refresh", "checks": ["crates/server/src/library/live#queued-store-not-taken", "crates/server/src/library/live#queued-served-store-let-go", "crates/server/src/library/live#queued-deletions-carried-out", "req:store-deletion-queued"]}
     /// ```
     #[test]
     fn a_queued_store_is_let_go_and_deleted_on_refresh() {
@@ -447,6 +462,8 @@ mod tests {
         live.refresh();
         assert_eq!(live.names(), ["shop"], "a queued store is let go");
         assert!(ledger.store_dir.exists() && store_io::deletions::is_queued(&deletions, &ledger.store_dir));
+        live.refresh();
+        assert_eq!(live.names(), ["shop"], "and not taken again while it is queued");
         // Its checkout no longer names it: deleted on the next refresh, its record dropped.
         std::fs::remove_file(ledger.repo.join(store_io::PROJECT_FILE)).unwrap();
         live.refresh();
@@ -459,7 +476,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-store-pointed-at-another-checkout-is-served-with-it", "checks": ["crates/server/src/library/live#current"]}
+    /// {"test": "a-store-pointed-at-another-checkout-is-served-with-it", "checks": ["crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live#vanished-grimoire-let-go"]}
     /// ```
     #[test]
     fn a_store_pointed_at_another_checkout_is_served_with_it() {
@@ -489,7 +506,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-teams-server-keeps-serving-what-it-serves", "checks": ["crates/server/src/library/live#current"]}
+    /// {"test": "a-teams-server-keeps-serving-what-it-serves", "checks": ["crates/server/src/library/live#opens-found-grimoires"]}
     /// ```
     #[test]
     fn a_teams_server_keeps_serving_what_it_serves() {
@@ -553,6 +570,214 @@ mod tests {
         live.stop();
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-stopped-library-takes-nothing", "checks": ["crates/server/src/library/live#stopped-takes-nothing"]}
+    /// ```
+    #[test]
+    fn a_stopped_library_takes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (shop, _ledger) = (project(root, "shop"), project(root, "ledger"));
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        live.refresh();
+        assert_eq!(live.names(), ["ledger", "shop"]);
+        live.stop();
+        // A grimoire that appears after the stop is not taken, nor marked.
+        let audit = project(root, "audit");
+        live.refresh();
+        assert_eq!(live.names(), ["ledger", "shop"]);
+        assert!(store_io::read_serving(&audit.store_dir).is_none() && !audit.store_dir.join(store_io::LOCK_FILE).exists(), "not opened, locked or marked");
+        // Nor does one that went get let go: stopped, refresh does nothing at all.
+        std::fs::remove_file(root.join("ledger").join(store_io::PROJECT_FILE)).unwrap();
+        live.refresh();
+        assert_eq!(live.names(), ["ledger", "shop"]);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-grimoire-that-could-not-be-taken-is-tried-again", "checks": ["crates/server/src/library/live#failed-open-retried"]}
+    /// ```
+    #[test]
+    fn a_grimoire_that_could_not_be_taken_is_tried_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (shop, ledger) = (project(root, "shop"), project(root, "ledger"));
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        // Another process holds its store: it cannot be taken, and the others are served.
+        let held = store_io::lock(&ledger.store_dir).unwrap();
+        live.refresh();
+        assert_eq!(live.names(), ["shop"]);
+        live.refresh();
+        assert_eq!(live.names(), ["shop"], "still held, still not taken");
+        // Let go, the next refresh takes it, with nothing else done.
+        drop(held);
+        live.refresh();
+        assert_eq!(live.names(), ["ledger", "shop"]);
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-teams-server-holds-intent-only-and-has-no-queue", "checks": ["crates/server/src/library/live#team-server-holds-intent-only", "crates/server/src/library/live#team-server-has-no-queue"]}
+    /// ```
+    #[test]
+    fn a_teams_server_holds_intent_only_and_has_no_queue() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let shop = project(root, "shop");
+        let live = Live::new_shared(root.join("stores"), SocketAddr::from(([127, 0, 0, 1], 4299)));
+        // A deletion queued for the store where a machine keeps its queue: a team's server does not look there.
+        let queue = root.join("deletions");
+        store_io::deletions::queue(&queue, &shop.store_dir, &store_io::repository_string(&shop.repo).unwrap()).unwrap();
+        assert!(live.deletions().is_none(), "there is no deletions folder");
+        live.refresh();
+        assert_eq!(live.names(), ["shop"], "served whatever a queue says");
+        assert!(shop.store_dir.join(store_io::CONFIG_FILE).is_file() && store_io::deletions::is_queued(&queue, &shop.store_dir), "and nothing deleted or dropped");
+        // Intent only: no code held, nothing watched.
+        let served = live.held.lock().unwrap();
+        assert!(served.served.values().all(|s| s.watcher.is_none()), "nothing is watched");
+        drop(served);
+        let daemon = live.daemon_of("shop").unwrap();
+        assert_eq!(daemon.call("lint", serde_json::json!({})).unwrap()["without_code"], true, "judged without code");
+        assert_eq!(daemon.call("status", serde_json::json!({})).unwrap()["shared"], true);
+        live.stop();
+    }
+
+    /// Every event any test logs, as its message. Installed for the whole process, since a scoped subscriber
+    /// is not seen by a callsite another test thread registered first.
+    static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    struct Capture;
+
+    fn capture_events() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            let _ = tracing::subscriber::set_global_default(Capture);
+        });
+    }
+
+    impl tracing::Subscriber for Capture {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            struct Message(String);
+            impl tracing::field::Visit for Message {
+                fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                    if field.name() == "message" {
+                        self.0 = format!("{value:?}");
+                    }
+                }
+            }
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            EVENTS.lock().unwrap().push(message.0);
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-kept-deletion-is-said-once-with-why", "checks": ["crates/server/src/library/live#kept-deletion-said-once"]}
+    /// ```
+    #[test]
+    fn a_kept_deletion_is_said_once_with_why() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let shop = project(root, "shop");
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        // A store outside the library that holds a file a store does not: its deletion is kept.
+        let foreign = project(&root.join("elsewhere"), "foreign");
+        std::fs::remove_file(foreign.repo.join(store_io::PROJECT_FILE)).unwrap();
+        std::fs::write(foreign.store_dir.join("notes.txt"), "mine").unwrap();
+        store_io::deletions::queue(&root.join("deletions"), &foreign.store_dir, &store_io::repository_string(&foreign.repo).unwrap()).unwrap();
+        capture_events();
+        for _ in 0..3 {
+            live.refresh();
+        }
+        let ours = foreign.store_dir.display().to_string();
+        let said: Vec<String> = EVENTS.lock().unwrap().iter().filter(|e| e.contains("its queued deletion is not carried out") && e.contains(&ours)).cloned().collect();
+        assert_eq!(said.len(), 1, "said once, however many refreshes: {said:?}");
+        assert!(said[0].contains("notes.txt") && said[0].contains("foreign"), "with why: {said:?}");
+        assert!(foreign.store_dir.join(store_io::CONFIG_FILE).is_file() && store_io::deletions::is_queued(&root.join("deletions"), &foreign.store_dir), "kept, and still queued");
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-new-grimoire-is-told-the-library-before-any-request", "checks": ["crates/server/src/library/live#newly-served-told-first"]}
+    /// ```
+    #[test]
+    fn a_new_grimoire_is_told_the_library_before_any_request() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (shop, _ledger) = (project(root, "shop"), project(root, "ledger"));
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        live.refresh();
+        project(root, "audit");
+        // A request reaches a grimoire the moment the routes find it: as soon as it does, it is asked its status.
+        let seen = Arc::new(Mutex::new(None));
+        let (watching, found) = (live.clone(), seen.clone());
+        let poller = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while Instant::now() < deadline {
+                if let Some(daemon) = watching.daemon_of("audit") {
+                    let status = daemon.call("status", serde_json::json!({})).unwrap();
+                    let names: Vec<String> = status["library"].as_array().map(|l| l.iter().map(|e| e["name"].as_str().unwrap().to_string()).collect()).unwrap_or_default();
+                    *found.lock().unwrap() = Some(names);
+                    return;
+                }
+            }
+        });
+        live.refresh();
+        poller.join().unwrap();
+        assert_eq!(*seen.lock().unwrap(), Some(vec!["audit".to_string(), "ledger".to_string(), "shop".to_string()]), "the first request it answered named the whole library");
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-grimoire-queued-while-it-is-opened-is-not-served", "checks": ["crates/server/src/library/live#queue-asked-again-before-serving"]}
+    /// ```
+    #[test]
+    fn a_grimoire_queued_while_it_is_opened_is_not_served() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (shop, ledger) = (project(root, "shop"), project(root, "ledger"));
+        let _shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop.clone(), daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        let (store, repository, queue) = (ledger.store_dir.clone(), store_io::repository_string(&ledger.repo).unwrap(), root.join("deletions"));
+        // Queued the moment the grimoire is opened: after refresh asked the queue, before it serves the grimoire.
+        AFTER_OPEN.with(|hook| *hook.borrow_mut() = Some(Box::new(move || drop(store_io::deletions::queue(&queue, &store, &repository).unwrap()))));
+        live.refresh();
+        AFTER_OPEN.with(|hook| *hook.borrow_mut() = None);
+        assert_eq!(live.names(), ["shop"], "asked again just before serving, it was not served");
+        assert!(store_io::read_serving(&ledger.store_dir).is_none(), "and let go: no marker");
+        drop(store_io::lock(&ledger.store_dir).expect("and its lock is free"));
+        live.stop();
+    }
     #[test]
     fn the_log_names_what_a_grimoire_is_served_from() {
         // A team's server holds no checkouts, so it names the store; a machine names the checkout.
