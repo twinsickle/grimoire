@@ -49,6 +49,7 @@ fn serve_app(app: impl FnOnce(Arc<Daemon>) -> axum::Router) -> Served {
     let store = dir.join("store");
     let config = StoreConfig {
         large_file: None,
+        long_statement: None,
         plain_file: None,
         site: vec![],
         version: StoreConfig::CURRENT_VERSION,
@@ -560,6 +561,7 @@ fn serve_shared() -> (Served, String, String) {
     let store = tmp.path().join("store");
     let config = StoreConfig {
         large_file: None,
+        long_statement: None,
         plain_file: None,
         site: vec![],
         version: StoreConfig::CURRENT_VERSION,

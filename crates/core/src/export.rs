@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"export-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds."},{"id":"export-judgements","statement":"exported gives every recipe's judgements."},{"id":"export-main-line-recipes","statement":"exported gives the recipes the main line last sent when it has sent any."},{"id":"export-checked-out","statement":"exported gives who has each ticket being worked checked out."},{"id":"export-nothing-of-a-machine","statement":"exported gives nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined-intent","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements and the recipes the main line last sent among it, its config's site, line limits and recipe kinds included, and the machine's repository."},{"id":"joined-checked-out","statement":"joined carries who has each ticket checked out among the store a machine keeps."},{"id":"joined-machines-own","statement":"joined keeps of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, brewing or a change simmering."},{"id":"joined-waiting-gap","statement":"joined leaves out a proposal whose ticket is not being worked, so a gap or question waiting, simmering, for its change is no one's current ticket."},{"id":"joined-newer-refused","statement":"joined refuses a store version this build does not write."},{"id":"older-proposals-as-older-keeps","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is."},{"id":"older-proposals-kept-beside","statement":"exported gives the proposals as this build keeps them beside, in kept_proposals, which an older build ignores."},{"id":"older-joined-reads-kept","statement":"joined reads kept_proposals in place of the proposals when it is there."},{"id":"older-joined-reads-written-before","statement":"joined, without kept_proposals, reads the proposals as written before decisions left the record."},{"id":"difference-names","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it."},{"id":"difference-order","statement":"difference orders its changes so as to leave a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it."},{"id":"difference-equal","statement":"difference of two equal stores names nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"export-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site, line and statement limits and recipe kinds."},{"id":"export-judgements","statement":"exported gives every recipe's judgements."},{"id":"export-main-line-recipes","statement":"exported gives the recipes the main line last sent when it has sent any."},{"id":"export-checked-out","statement":"exported gives who has each ticket being worked checked out."},{"id":"export-nothing-of-a-machine","statement":"exported gives nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined-intent","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements and the recipes the main line last sent among it, its config's site, line and statement limits and recipe kinds included, and the machine's repository."},{"id":"joined-checked-out","statement":"joined carries who has each ticket checked out among the store a machine keeps."},{"id":"joined-machines-own","statement":"joined keeps of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, brewing or a change simmering."},{"id":"joined-waiting-gap","statement":"joined leaves out a proposal whose ticket is not being worked, so a gap or question waiting, simmering, for its change is no one's current ticket."},{"id":"joined-newer-refused","statement":"joined refuses a store version this build does not write."},{"id":"older-proposals-as-older-keeps","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is."},{"id":"older-proposals-kept-beside","statement":"exported gives the proposals as this build keeps them beside, in kept_proposals, which an older build ignores."},{"id":"older-joined-reads-kept","statement":"joined reads kept_proposals in place of the proposals when it is there."},{"id":"older-joined-reads-written-before","statement":"joined, without kept_proposals, reads the proposals as written before decisions left the record."},{"id":"difference-names","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it."},{"id":"difference-order","statement":"difference orders its changes so as to leave a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it."},{"id":"difference-equal","statement":"difference of two equal stores names nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,8 @@ pub struct Exported {
     pub site: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub large_file: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long_statement: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plain_file: Option<u32>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -61,6 +63,7 @@ pub fn exported(store: &Store) -> Exported {
         order: store.config.order.clone(),
         site: store.config.site.clone(),
         large_file: store.config.large_file,
+        long_statement: store.config.long_statement,
         plain_file: store.config.plain_file,
         recipe_kinds: store.config.recipe_kinds.clone(),
         pages: store.pages.values().cloned().collect(),
@@ -106,6 +109,7 @@ impl Exported {
         }
         let config = StoreConfig {
             large_file: self.large_file,
+            long_statement: self.long_statement,
             plain_file: self.plain_file,
             version: StoreConfig::CURRENT_VERSION,
             repository: repository.to_string(),
@@ -245,7 +249,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-export-holds-the-intent-and-nothing-of-a-machine", "checks": ["crates/core/src/export#export-intent", "crates/core/src/export#export-judgements", "crates/core/src/export#export-main-line-recipes", "crates/core/src/export#export-nothing-of-a-machine"]}
+    /// {"test": "an-export-holds-the-intent-and-nothing-of-a-machine", "checks": ["crates/core/src/export#export-intent", "crates/core/src/model/config#config-statement-limit", "crates/core/src/export#export-judgements", "crates/core/src/export#export-main-line-recipes", "crates/core/src/export#export-nothing-of-a-machine"]}
     /// ```
     #[test]
     fn an_export_holds_the_intent_and_nothing_of_a_machine() {
@@ -255,10 +259,15 @@ mod tests {
         s.baseline = Some(Baseline { date: "2026-10-03".into(), reason: "adopted".into(), findings: vec![] });
         s.config.site = vec!["overview".into()];
         s.config.large_file = Some(600);
+        s.config.long_statement = Some(200);
         let e = exported(&s);
         assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
         assert_eq!((e.roots.clone(), e.languages.clone(), e.baseline.clone(), e.site.clone()), (s.config.roots.clone(), s.config.languages.clone(), s.baseline.clone(), s.config.site.clone()));
         assert_eq!((e.large_file, e.plain_file), (Some(600), None), "the line limits too");
+        assert_eq!(e.long_statement, Some(200), "and the statement limit");
+        assert_eq!(e.clone().joined(&s, "C:/repo").unwrap().config.long_statement, Some(200), "which a machine keeps");
+        s.config.long_statement = None;
+        assert!(!serde_json::to_string(&exported(&s)).unwrap().contains("long_statement"), "a store without it exports as older builds read it");
         s.config.recipe_kinds.insert("component".into(), RecipeKind { uses: vec![] });
         let e = exported(&s);
         assert_eq!((e.pages.len(), e.requirements.len(), e.tickets.len(), e.proposals.len()), (s.pages.len(), s.requirements.len(), s.tickets.len(), s.proposals.len()));
@@ -318,13 +327,14 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/export#joined-intent", "crates/core/src/export#joined-machines-own", "crates/core/src/export#joined-waiting-gap", "crates/core/src/export#joined-newer-refused"]}
+    /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/model/config#config-statement-limit", "crates/core/src/export#joined-intent", "crates/core/src/export#joined-machines-own", "crates/core/src/export#joined-waiting-gap", "crates/core/src/export#joined-newer-refused"]}
     /// ```
     #[test]
     fn a_machines_store_joins_the_intent_with_its_own() {
         let mut server = store();
         server.config.site = vec!["overview".into()];
         server.config.plain_file = Some(3_000);
+        server.config.long_statement = Some(200);
         server.config.recipe_kinds.insert("quest".into(), RecipeKind { uses: vec!["quest".into()] });
         let live: String = server.tickets.values().find(|t| t.status.is_live()).map(|t| t.slug.clone()).expect("the fixture has a brewing ticket");
         let other: String = server.tickets.values().find(|t| !t.status.is_live()).map(|t| t.slug.clone()).expect("and one that is not");
@@ -334,7 +344,7 @@ mod tests {
         own.starts.insert(other.clone(), start(&other));
         let joined = exported(&server).joined(&own, "C:/checkout").unwrap();
         assert_eq!((joined.config.repository.as_str(), &joined.config.site), ("C:/checkout", &server.config.site), "the machine's checkout, and the server's site");
-        assert_eq!(joined.config.plain_file, Some(3_000), "and its line limits");
+        assert_eq!((joined.config.plain_file, joined.config.long_statement), (Some(3_000), Some(200)), "and its line and statement limits");
         assert_eq!(joined.config.recipe_kinds, server.config.recipe_kinds, "and its recipe kinds");
         let mut judged = server.clone();
         judged.judgements.insert("button".into(), vec![judgement("button")]);

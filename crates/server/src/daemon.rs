@@ -383,6 +383,7 @@ mod tests {
             let store = dir.join("store");
             let config = StoreConfig {
                 large_file: None,
+                long_statement: None,
                 plain_file: None,
                 site: vec![],
                 version: StoreConfig::CURRENT_VERSION,

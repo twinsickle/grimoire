@@ -145,6 +145,8 @@ pub struct Graph {
     pub checked_out: BTreeMap<String, Vec<crate::model::CheckedOut>>,
     /// A file of this many lines or more, its tests aside, is an omen: the config's limit or its default.
     pub large_file: u32,
+    /// A requirement's statement of this many characters or more is an omen: the config's limit or its default.
+    pub long_statement: u32,
     /// A file of more lines than this is shown plain.
     pub plain_file: u32,
 }
@@ -184,6 +186,7 @@ impl Graph {
             drafted: store.ticket_drafts(),
             checked_out: store.checked_out.clone(),
             large_file: store.config.large_file(),
+            long_statement: store.config.long_statement(),
             plain_file: store.config.plain_file(),
             ..Default::default()
         };
@@ -466,6 +469,7 @@ pub(crate) mod fixtures {
     pub fn store() -> Store {
         let mut s = Store::new(StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,

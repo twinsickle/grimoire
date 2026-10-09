@@ -299,6 +299,7 @@ version = \"0.1.0\"
         let store = tmp.path().join("store");
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,

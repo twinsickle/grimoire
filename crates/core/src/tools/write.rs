@@ -672,6 +672,31 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
+    /// {"test": "put-requirement-is-checked-whole-and-warns-of-a-dangling-edge", "checks": ["crates/core/src/ops#validate-first", "crates/core/src/tools/write#answers-warnings", "req:tool-put-requirement"]}
+    /// ```
+    #[test]
+    fn put_requirement_is_checked_whole_and_warns_of_a_dangling_edge() {
+        let mut s = state();
+        let before = s.store().requirements.len();
+        let input = json!({ "slug": "new-rule", "title": "New", "statement": "", "scenarios": [{ "title": "T", "given": "g", "when": "w", "then": "" }], "covered_by": [], "ticket": "later-1" });
+        let err = call(&mut s, "put_requirement", input, "2026-09-27").unwrap_err();
+        assert_eq!(err.code(), "invalid");
+        let ToolError::Invalid { details, .. } = &err else { panic!("{err:?}") };
+        let fields: Vec<&str> = details.iter().map(|d| d.field.as_str()).collect();
+        assert!(fields.contains(&"statement") && fields.iter().any(|f| f.ends_with("then")), "both fields named: {fields:?}");
+        assert_eq!(s.store().requirements.len(), before, "nothing is written");
+        assert!(s.store().proposals.values().all(|p| !p.requirements.contains_key("new-rule")), "nor proposed");
+        let scenario = json!([{ "title": "T", "given": "g", "when": "w", "then": "t" }]);
+        let input =
+            json!({ "slug": "new-rule", "title": "New", "statement": "It SHALL hold.", "scenarios": scenario, "covered_by": ["criterion:crates/nowhere/src/lib#nothing"], "ticket": "later-1" });
+        let out = call(&mut s, "put_requirement", input, "2026-09-27").unwrap();
+        let w = out.output["warnings"].as_array().unwrap();
+        assert!(w.iter().any(|f| f["rule"] == "dangling" && f["ref"] == "req:new-rule"), "the dangling edge: {w:?}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
     /// {"test": "adopt-baselines-what-is-present", "checks": ["crates/core/src/ops#adopt", "crates/core/src/tools/read#status", "crates/core/src/tools/read#lint-tool", "crates/core/src/model#baseline-record", "crates/core/src/tools/write#answers-adopt"]}
     /// ```
     #[test]
@@ -730,7 +755,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "configure-changes-only-what-it-is-given", "checks": ["crates/core/src/ops#configure"]}
+    /// {"test": "configure-changes-only-what-it-is-given", "checks": ["crates/core/src/ops#configure", "crates/core/src/model/config#config-statement-limit"]}
     /// ```
     #[test]
     fn configure_changes_only_what_it_is_given() {
@@ -751,6 +776,9 @@ mod tests {
         assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), None));
         call(&mut s, "configure", json!({ "plain_file": 4000 }), "2026-09-28").unwrap();
         assert_eq!((s.store().config.large_file, s.store().config.plain_file), (Some(600), Some(4000)));
+        // The statement limit is set alone, the line limits left as they were.
+        call(&mut s, "configure", json!({ "long_statement": 200 }), "2026-09-28").unwrap();
+        assert_eq!((s.store().config.long_statement, s.store().config.large_file, s.store().config.plain_file), (Some(200), Some(600), Some(4000)));
         // The recipe kinds are replaced whole, and leave the rest alone.
         call(&mut s, "configure", json!({ "recipe_kinds": { "component": { "uses": ["component", "token"] }, "token": {} } }), "2026-09-28").unwrap();
         assert_eq!(s.store().config.recipe_kinds.keys().collect::<Vec<_>>(), ["component", "token"]);

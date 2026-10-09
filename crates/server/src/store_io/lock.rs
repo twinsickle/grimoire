@@ -92,6 +92,7 @@ mod tests {
         drop(lock_new(&store_dir).unwrap());
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,
@@ -122,6 +123,7 @@ mod tests {
         let inside = repo.join("store");
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,

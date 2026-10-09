@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes, who has the tickets checked out and the config, every violated field rule reported.","criteria":[{"id":"checked-out-rules","statement":"Who has the tickets checked out is valid when each ticket is named by a slug and each holder once, by a non-empty name of one line, with a non-empty time."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a bottled change; on a requirement's decision, or on a gap's, a question's or a ticket that is not bottled, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-title-line","statement":"Titles are one non-empty line."},{"id":"field-required-strings","statement":"Required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key."},{"id":"field-date","statement":"A date is ISO YYYY-MM-DD naming a day the calendar has, leap years included."},{"id":"field-ticket-body","statement":"A ticket body is at most 4000 characters and empty once closed."},{"id":"field-supersedes-once","statement":"A decision supersedes each earlier one once."},{"id":"field-ticket-decision","statement":"A ticket's decision is present exactly when its status is simmering or bottled, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
+//! {"purpose":"Validate each stored record against the schema: pages, requirements, tickets, the baseline, starts, proposals, judgements, the main line's recipes, who has the tickets checked out and the config, every violated field rule reported.","criteria":[{"id":"checked-out-rules","statement":"Who has the tickets checked out is valid when each ticket is named by a slug and each holder once, by a non-empty name of one line, with a non-empty time."},{"id":"scope-rules","statement":"A scope prefix is a non-empty repository-relative path, /-separated, with no . or .. segment, no leading or trailing slash and no drive."},{"id":"withdrawn-decision","statement":"A decision marked withdrawn is valid only as the decision of a bottled change; on a requirement's decision, or on a gap's, a question's or a ticket that is not bottled, it is a violation of the field decision.withdrawn."},{"id":"whole-record","statement":"Validation reports every violated field rule of a record in one pass, not only the first."},{"id":"slug-rule","statement":"A slug matches ^[a-z0-9]+(-[a-z0-9]+)*$, is at most 64 characters, and is unique within its kind."},{"id":"field-title-line","statement":"Titles are one non-empty line."},{"id":"field-required-strings","statement":"Required strings are non-empty and do not begin or end with whitespace, nor does a stored reference as written or a start's key."},{"id":"field-date","statement":"A date is ISO YYYY-MM-DD naming a day the calendar has, leap years included."},{"id":"field-ticket-body","statement":"A ticket body is at most 4000 characters and empty once closed."},{"id":"field-supersedes-once","statement":"A decision supersedes each earlier one once."},{"id":"field-ticket-decision","statement":"A ticket's decision is present exactly when its status is simmering or bottled, and carries no id."},{"id":"config-rules","statement":"The config's repository is a path written as absolute on some platform, a drive, a leading / or a UNC prefix, judged by its spelling the same way everywhere, and its roots and its ticket order are slugs, its languages non-empty trimmed names and its line and statement limits, when given, positive; a relative repository is refused."},{"id":"judgement-rules","statement":"A judgement's recipe and ticket are slugs, its date an ISO date naming a day and its fingerprint sixteen lowercase hexadecimal digits, and a recipe's judgements are all of that recipe; any other is a violation naming the field."},{"id":"recipe-kinds","statement":"Each recipe kind the config declares is named by a slug, and each kind its uses name is a slug the config declares, the kind itself allowed; any other is a violation of the field recipe_kinds naming it."},{"id":"main-line-recipes-rules","statement":"In the main line's recipes each recipe's id is a slug no other recipe of the record has, its kind a slug, its title one non-empty line, each ingredient's id a slug the recipe names once and what it says non-empty, each use a slug and its digest sixteen lowercase hexadecimal digits; its text may be anything; any other is a violation naming the field."}]}
 //! ```
 
 use serde::Serialize;
@@ -442,9 +442,9 @@ pub fn validate_config(c: &StoreConfig) -> Vec<FieldError> {
     for p in &c.site {
         check_slug(&mut e, "site", p);
     }
-    for (field, limit) in [("large_file", c.large_file), ("plain_file", c.plain_file)] {
+    for (field, limit) in [("large_file", c.large_file), ("plain_file", c.plain_file), ("long_statement", c.long_statement)] {
         if limit == Some(0) {
-            e.push(FieldError::new(field, "a line limit is a positive number of lines"));
+            e.push(FieldError::new(field, "a limit is a positive number"));
         }
     }
     for (kind, k) in &c.recipe_kinds {
@@ -607,6 +607,7 @@ b", "t",
             scope: Scope::default(),
             order: Default::default(),
             large_file: None,
+            long_statement: None,
             plain_file: None,
             recipe_kinds: Default::default(),
         };
@@ -637,6 +638,18 @@ b", "t",
     /// # Test contract
     ///
     /// ```json
+    /// {"test": "a-statement-limit-of-zero-is-invalid", "checks": ["crates/core/src/model/config#config-statement-limit", "crates/core/src/store/validate#config-rules", "req:store-config-record"]}
+    /// ```
+    #[test]
+    fn a_statement_limit_of_zero_is_invalid() {
+        let with = |limit: Option<u32>| StoreConfig { long_statement: limit, site: vec![], repository: "C:/repo".into(), roots: vec!["overview".into()].into(), ..Default::default() };
+        assert!(validate_config(&with(Some(200))).is_empty() && validate_config(&with(None)).is_empty());
+        assert_eq!(validate_config(&with(Some(0)))[0].field, "long_statement");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
     /// {"test": "recipe-kinds-name-declared-kinds", "checks": ["crates/core/src/store/validate#recipe-kinds"]}
     /// ```
     #[test]
@@ -652,6 +665,7 @@ b", "t",
                 site: vec![],
                 recipe_kinds: Default::default(),
                 large_file: None,
+                long_statement: None,
                 plain_file: None,
             };
             for (k, uses) in kinds {
@@ -823,6 +837,7 @@ b", "t",
         assert!(" foo.rs".parse::<Reference>().is_err() && "file: foo.rs".parse::<Reference>().is_ok(), "a file named with a leading space still has a reference");
         let order = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: StoreConfig::CURRENT_VERSION,

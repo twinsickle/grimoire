@@ -109,6 +109,7 @@ impl Default for StoreConfig {
             languages: Vec::new(),
             site: Vec::new(),
             large_file: None,
+            long_statement: None,
             plain_file: None,
             recipe_kinds: Default::default(),
         }

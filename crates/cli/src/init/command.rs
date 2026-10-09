@@ -70,6 +70,7 @@ pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>,
     let held = if created && empty {
         let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec![],
             version: grimoire_core::StoreConfig::CURRENT_VERSION,

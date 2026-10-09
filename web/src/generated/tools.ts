@@ -211,7 +211,7 @@ export type StatusAnswer = { repository: string, roots: Roots, languages: Array<
 
 export type StillNamed = { test: Ref, file: string, line: number, };
 
-export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, large_file?: number, plain_file?: number, recipe_kinds?: { [key in string]: RecipeKind }, };
+export type StoreConfig = { version: number, repository: string, roots: Roots, languages: Array<string>, scope?: Scope, order?: Order, site?: Array<string>, large_file?: number, long_statement?: number, plain_file?: number, recipe_kinds?: { [key in string]: RecipeKind }, };
 
 export type Summary = { ref: Ref, title: string, kind?: TicketKind, priority?: Priority, status?: Status, withdrawn?: boolean, };
 

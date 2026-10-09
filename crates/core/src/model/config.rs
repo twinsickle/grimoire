@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the store config: the repository it describes, its two roots, the languages to extract, the contract scope, the board's order, the site, the line limits and the project's recipe kinds.","criteria":[{"id":"config-fields","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, and the page slugs its site shows."},{"id":"config-line-limits","statement":"The store config holds optional large-file and plain-file line limits, 1,000 and 5,000 when absent."},{"id":"config-recipe-kinds","statement":"The store config holds the project's recipe kinds, each with the kinds it may use."},{"id":"config-unknown-version","statement":"A store config version this build does not know is refused."},{"id":"roots-pair","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing."},{"id":"roots-distinct","statement":"A config's two roots are never the same page."},{"id":"roots-read-list","statement":"Roots held as a list of slugs are read with the first as the grimoire and the second as the rites, any further one dropped."},{"id":"roots-written-pair","statement":"Roots are written as the pair, whatever they were read as."},{"id":"roots-list","statement":"list gives the named roots, the grimoire first."},{"id":"roots-rename","statement":"rename renames each named root that matches."}]}
+//! {"purpose":"Define the store config: the repository it describes, its two roots, the languages to extract, the contract scope, the board's order, the site, the line limits and the project's recipe kinds.","criteria":[{"id":"config-fields","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, and the page slugs its site shows."},{"id":"config-line-limits","statement":"The store config holds optional large-file and plain-file line limits, 1,000 and 5,000 when absent."},{"id":"config-statement-limit","statement":"The store config holds an optional long-statement limit in characters, 150 when absent."},{"id":"config-recipe-kinds","statement":"The store config holds the project's recipe kinds, each with the kinds it may use."},{"id":"config-unknown-version","statement":"A store config version this build does not know is refused."},{"id":"roots-pair","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing."},{"id":"roots-distinct","statement":"A config's two roots are never the same page."},{"id":"roots-read-list","statement":"Roots held as a list of slugs are read with the first as the grimoire and the second as the rites, any further one dropped."},{"id":"roots-written-pair","statement":"Roots are written as the pair, whatever they were read as."},{"id":"roots-list","statement":"list gives the named roots, the grimoire first."},{"id":"roots-rename","statement":"rename renames each named root that matches."}]}
 //! ```
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -111,6 +111,10 @@ pub struct StoreConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub large_file: Option<u32>,
+    // A requirement's statement of this many characters or more is an omen; DEFAULT_LONG_STATEMENT when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub long_statement: Option<u32>,
     // A file of more lines than this is shown plain, unhighlighted; DEFAULT_PLAIN_FILE when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
@@ -202,12 +206,19 @@ impl StoreConfig {
     pub const TRIMMED_ON_READ: u32 = 1;
     /// A file of this many lines or more, its tests aside, is an omen when the config names no limit.
     pub const DEFAULT_LARGE_FILE: u32 = 1_000;
+    /// A requirement's statement of this many characters or more is an omen when the config names no limit.
+    pub const DEFAULT_LONG_STATEMENT: u32 = 150;
     /// A file of more lines than this is shown plain when the config names no limit.
     pub const DEFAULT_PLAIN_FILE: u32 = 5_000;
 
     /// The large-file limit in force: the config's, or the default.
     pub fn large_file(&self) -> u32 {
         self.large_file.unwrap_or(Self::DEFAULT_LARGE_FILE)
+    }
+
+    /// The long-statement limit in force: the config's, or the default.
+    pub fn long_statement(&self) -> u32 {
+        self.long_statement.unwrap_or(Self::DEFAULT_LONG_STATEMENT)
     }
 
     /// The plain-file limit in force: the config's, or the default.
@@ -261,6 +272,7 @@ mod tests {
             scope: Scope::default(),
             order: Default::default(),
             large_file: None,
+            long_statement: None,
             plain_file: None,
             recipe_kinds: Default::default(),
         };
@@ -317,5 +329,19 @@ mod tests {
         assert!(!serde_json::to_string(&c).unwrap().contains("_file"), "an absent limit is not written");
         let c: StoreConfig = serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":["rust"],"large_file":600}"#).unwrap();
         assert_eq!((c.large_file(), c.plain_file()), (600, 5_000));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-statement-limit-is-optional-with-a-default", "checks": ["crates/core/src/model/config#config-statement-limit", "req:store-config-record"]}
+    /// ```
+    #[test]
+    fn the_statement_limit_is_optional_with_a_default() {
+        let c: StoreConfig = serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":["rust"]}"#).unwrap();
+        assert_eq!(c.long_statement(), 150);
+        assert!(!serde_json::to_string(&c).unwrap().contains("long_statement"), "an absent limit is not written");
+        let c: StoreConfig = serde_json::from_str(r#"{"version":2,"repository":"C:/repo","roots":["overview"],"languages":["rust"],"long_statement":120}"#).unwrap();
+        assert_eq!(c.long_statement(), 120);
     }
 }

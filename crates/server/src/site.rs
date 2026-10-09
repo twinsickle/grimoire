@@ -480,6 +480,7 @@ mod tests {
         let dir = tmp.path().join("store");
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec!["goal".into()],
             version: StoreConfig::CURRENT_VERSION,
@@ -595,6 +596,7 @@ A button.
         let dir = tmp.path().join("store");
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec!["goal".into()],
             version: StoreConfig::CURRENT_VERSION,
@@ -651,6 +653,7 @@ A button.
         };
         let config = StoreConfig {
             large_file: None,
+            long_statement: None,
             plain_file: None,
             site: vec!["goal".into(), "guarantees".into()],
             version: StoreConfig::CURRENT_VERSION,
