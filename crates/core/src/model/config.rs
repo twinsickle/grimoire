@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the store config: the repository it describes, its two roots, the languages to extract, the contract scope, the board's order, the site, the line limits and the project's recipe kinds.","criteria":[{"id":"config-record","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, the page slugs its site shows, optional large-file and plain-file line limits, 1,000 and 5,000 when absent, and the project's recipe kinds, each with the kinds it may use; a version this build does not know is refused."},{"id":"two-roots","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing, and never the same page; one held as a list of slugs is read with its first as the grimoire and its second as the rites, any further one dropped, and is written as the pair; list gives the named roots, the grimoire first, and rename renames each named root that matches."}]}
+//! {"purpose":"Define the store config: the repository it describes, its two roots, the languages to extract, the contract scope, the board's order, the site, the line limits and the project's recipe kinds.","criteria":[{"id":"config-fields","statement":"The store config is version, the repository's absolute path, its two roots, the languages to extract, an optional contract scope of include and exclude prefixes, and the page slugs its site shows."},{"id":"config-line-limits","statement":"The store config holds optional large-file and plain-file line limits, 1,000 and 5,000 when absent."},{"id":"config-recipe-kinds","statement":"The store config holds the project's recipe kinds, each with the kinds it may use."},{"id":"config-unknown-version","statement":"A store config version this build does not know is refused."},{"id":"roots-pair","statement":"A config's roots are the pair `{grimoire, rites}`, either of which may be missing."},{"id":"roots-distinct","statement":"A config's two roots are never the same page."},{"id":"roots-read-list","statement":"Roots held as a list of slugs are read with the first as the grimoire and the second as the rites, any further one dropped."},{"id":"roots-written-pair","statement":"Roots are written as the pair, whatever they were read as."},{"id":"roots-list","statement":"list gives the named roots, the grimoire first."},{"id":"roots-rename","statement":"rename renames each named root that matches."}]}
 //! ```
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -223,7 +223,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-config-names-two-roots", "checks": ["crates/core/src/model/config#two-roots"]}
+    /// {"test": "a-config-names-two-roots", "checks": ["crates/core/src/model/config#roots-pair", "crates/core/src/model/config#roots-read-list", "crates/core/src/model/config#roots-written-pair", "crates/core/src/model/config#roots-list", "crates/core/src/model/config#roots-rename"]}
     /// ```
     #[test]
     fn a_config_names_two_roots() {
@@ -245,6 +245,33 @@ mod tests {
         assert!(r.contains("craft") && !r.contains("rites"));
     }
 
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-config-never-names-one-page-as-both-roots", "checks": ["crates/core/src/model/config#roots-distinct"]}
+    /// ```
+    #[test]
+    fn a_config_never_names_one_page_as_both_roots() {
+        let config = |roots: Roots| StoreConfig {
+            site: vec![],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: "C:/repo".into(),
+            roots,
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+            large_file: None,
+            plain_file: None,
+            recipe_kinds: Default::default(),
+        };
+        let refused = crate::store::validate_config(&config(Roots::new("overview", "overview")));
+        assert!(refused.iter().any(|e| e.field == "roots" && e.reason.contains("two pages")), "{refused:?}");
+        // Read as the older list too: the same slug twice is the same page.
+        let twice: Roots = vec!["overview".to_string(), "overview".to_string()].into();
+        assert!(!crate::store::validate_config(&config(twice)).is_empty());
+        assert!(crate::store::validate_config(&config(Roots::new("overview", "rites"))).is_empty(), "two pages are accepted");
+    }
+
     #[test]
     fn scope_matches_whole_segments() {
         let s = |inc: &[&str], exc: &[&str]| Scope { include: inc.iter().map(|x| x.to_string()).collect(), exclude: exc.iter().map(|x| x.to_string()).collect() };
@@ -263,7 +290,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-config-without-a-scope-loads", "checks": ["crates/core/src/model/config#config-record"]}
+    /// {"test": "a-config-without-a-scope-loads", "checks": ["crates/core/src/model/config#config-fields", "crates/core/src/model/config#config-recipe-kinds"]}
     /// ```
     #[test]
     fn a_config_without_a_scope_loads() {
@@ -281,7 +308,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "line-limits-are-optional-with-defaults", "checks": ["crates/core/src/model/config#config-record"]}
+    /// {"test": "line-limits-are-optional-with-defaults", "checks": ["crates/core/src/model/config#config-line-limits"]}
     /// ```
     #[test]
     fn line_limits_are_optional_with_defaults() {

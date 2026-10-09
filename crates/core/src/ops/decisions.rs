@@ -194,7 +194,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-adoption-is-described-until-decided", "checks": ["crates/core/src/model#requirement-record", "crates/core/src/ops/decisions#record-decision", "crates/core/src/query/outline#outline-rollup"]}
+    /// {"test": "an-adoption-is-described-until-decided", "checks": ["crates/core/src/model#requirement-decisions", "crates/core/src/model#decision-in-force", "crates/core/src/model#requirement-described", "crates/core/src/ops/decisions#record-decision", "crates/core/src/query/outline#outline-rollup"]}
     /// ```
     #[test]
     fn an_adoption_is_described_until_decided() {

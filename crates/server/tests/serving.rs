@@ -545,7 +545,7 @@ fn serve_shared() -> (Served, String, String) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-shared-daemon-admits-by-token-and-serves-no-interface", "checks": ["crates/server/src/http#shared-page", "crates/server/src/access#token-admits", "crates/server/src/access#writes-need-write"]}
+/// {"test": "a-shared-daemon-admits-by-token-and-serves-no-interface", "checks": ["crates/server/src/http#shared-page", "crates/server/src/access#token-admits", "crates/server/src/access#token-refuses-other", "crates/server/src/access#writes-need-write"]}
 /// ```
 #[test]
 fn a_shared_daemon_admits_by_token_and_serves_no_interface() {

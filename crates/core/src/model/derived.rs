@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Define the records the extraction derives from the repository on every read and never stores: module contracts as written in source, modules, criteria, files, declarations, tests and recipes.","criteria":[{"id":"derived-records","statement":"A module is an id, its files, a purpose, none when its contract is missing or malformed, its criteria and its resolved imports; a criterion is its module, id and statement; a file its path, module, language and declarations; a declaration its path within the file, kind, line and file; and a module contract as written in source is exactly a purpose and criteria, each an id and a statement, a block holding any other field refused."}]}
+//! {"purpose":"Define the records the extraction derives from the repository on every read and never stores: module contracts as written in source, modules, criteria, files, declarations, tests and recipes.","criteria":[{"id":"derived-module","statement":"A module is an id, its files, a purpose, none when its contract is missing or malformed, its criteria and its resolved imports."},{"id":"derived-criterion","statement":"A criterion is its module, id and statement."},{"id":"derived-file","statement":"A file is its path, module, language and declarations."},{"id":"derived-declaration","statement":"A declaration is its path within the file, kind, line and file."},{"id":"derived-contract-grammar","statement":"A module contract as written in source is exactly a purpose and criteria, each an id and a statement, a block holding any other field refused."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -149,7 +149,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "derived-records-carry-what-the-store-page-names", "checks": ["crates/core/src/model/derived#derived-records"]}
+    /// {"test": "derived-records-carry-what-the-store-page-names", "checks": ["crates/core/src/model/derived#derived-module", "crates/core/src/model/derived#derived-criterion", "crates/core/src/model/derived#derived-file", "crates/core/src/model/derived#derived-declaration", "crates/core/src/model/derived#derived-contract-grammar"]}
     /// ```
     #[test]
     fn derived_records_carry_what_the_store_page_names() {

@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Name every node one way: the kinds of node, the reference form kind:id with its parsing and printing, a decision's id, and the relations between nodes.","criteria":[{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"kinds","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived); a criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id, and a decision is of the kind req, its id the requirement's slug, #, d and the decision's id; a criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one, an ingredient's and a decision's at the first, since a recipe id and a slug never hold one, and a decl carries its file, so a # in a file or declaration name never misplaces either part."}]}
+//! {"purpose":"Name every node one way: the kinds of node, the reference form kind:id with its parsing and printing, a decision's id, and the relations between nodes.","criteria":[{"id":"reference-form","statement":"A reference is a string of the form kind:id and parses and prints in exactly that form."},{"id":"kinds-list","statement":"The node kinds are page, req and ticket (stored) and module, criterion, file, decl, test and recipe (derived)."},{"id":"kinds-ids","statement":"A criterion's id is module id, #, criterion id, a decl's is file path, #, declaration path, a test's is file path, #, the name in its test block, a recipe's its id and an ingredient's recipe id, #, ingredient id."},{"id":"kinds-decision","statement":"A decision is of the kind req, its id the requirement's slug, #, d and the decision's id."},{"id":"kinds-split-last","statement":"A criterion's and a test's reference split at the last #, since a criterion id and a test name never hold one."},{"id":"kinds-split-first","statement":"An ingredient's and a decision's reference split at the first #, since a recipe id and a slug never hold one."},{"id":"kinds-decl-file","statement":"A decl carries its file, so a # in a file or declaration name never misplaces either part."}]}
 //! ```
 
 use std::fmt;
@@ -272,7 +272,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "kinds-and-their-ids", "checks": ["crates/core/src/model/reference#kinds"]}
+    /// {"test": "kinds-and-their-ids", "checks": ["crates/core/src/model/reference#kinds-list", "crates/core/src/model/reference#kinds-ids", "crates/core/src/model/reference#kinds-decision", "crates/core/src/model/reference#kinds-split-last", "crates/core/src/model/reference#kinds-split-first"]}
     /// ```
     #[test]
     fn kinds_and_their_ids() {

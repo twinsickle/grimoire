@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep the other checkouts a store of its own serves beside the one it was made for: list them, add one whose project file names the store, and give each its own current ticket, in a file of their own, so a store with one checkout reads as it always did.","criteria":[{"id":"checkouts","statement":"checkouts.json lists, by repository as its canonical path, every checkout of a store of its own but the main one grimoire.json names, each with its own current ticket; a store without it has the main checkout alone. view makes a loaded store the view of one listed checkout, its repository that checkout and its current ticket that checkout's, one naming a ticket neither brewing nor simmering reported malformed and left none; register adds a checkout whose project file names this very store, answering whether it was new, the main one and one already listed being no change, and refuses one whose project file names no store or another, one holding the store and one inside it; set_current writes one checkout's current ticket, leaving the others'; a file that does not load is said as malformed, and the other checkouts are then none."}]}
+//! {"purpose":"Keep the other checkouts a store of its own serves beside the one it was made for: list them, add one whose project file names the store, and give each its own current ticket, in a file of their own, so a store with one checkout reads as it always did.","criteria":[{"id":"checkouts-listed","statement":"checkouts.json lists, by repository as its canonical path, every checkout of a store of its own but the main one grimoire.json names, each with its own current ticket; a store without it has the main checkout alone."},{"id":"checkouts-view","statement":"view makes a loaded store the view of one listed checkout, its repository that checkout and its current ticket that checkout's, one naming a ticket neither brewing nor simmering reported malformed and left none."},{"id":"checkouts-register","statement":"register adds a checkout whose project file names this very store, answering whether it was new, the main one and one already listed being no change."},{"id":"checkouts-register-refuses","statement":"register refuses a checkout whose project file names no store or another, one holding the store and one inside it."},{"id":"checkouts-set-current","statement":"set_current writes one checkout's current ticket, leaving the others'."},{"id":"checkouts-unloadable","statement":"A checkouts.json that does not load is said as malformed, and the other checkouts are then none."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -146,7 +146,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-store-keeps-its-other-checkouts", "checks": ["crates/server/src/store_io/checkouts#checkouts"]}
+    /// {"test": "a-store-keeps-its-other-checkouts", "checks": ["crates/server/src/store_io/checkouts#checkouts-listed", "crates/server/src/store_io/checkouts#checkouts-view", "crates/server/src/store_io/checkouts#checkouts-register", "crates/server/src/store_io/checkouts#checkouts-register-refuses", "crates/server/src/store_io/checkouts#checkouts-set-current", "crates/server/src/store_io/checkouts#checkouts-unloadable"]}
     /// ```
     #[test]
     fn a_store_keeps_its_other_checkouts() {

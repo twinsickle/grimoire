@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hold a store's write lock, so it has one writer at a time, and name who holds it when it is taken.","criteria":[{"id":"exclusive","statement":"lock takes an exclusive operating-system lock on the lock file of an existing store outside its repository, and lock_new on a directory about to hold a store, held for as long as the value returned lives; a directory that is not a store, or a store inside its repository, is refused before any lock file is made; when another process holds the lock, it fails naming the holder, the daemon serve.json names given as likely, since a crashed daemon leaves one, or else another grimoire process, and changes nothing."}]}
+//! {"purpose":"Hold a store's write lock, so it has one writer at a time, and name who holds it when it is taken.","criteria":[{"id":"lock-takes","statement":"lock takes an exclusive operating-system lock on the lock file of an existing store outside its repository, and lock_new on a directory about to hold a store, held for as long as the value returned lives."},{"id":"lock-not-a-store","statement":"lock refuses a directory that is not a store, or a store inside its repository, before any lock file is made."},{"id":"lock-held-names-holder","statement":"When another process holds the lock, lock fails naming the holder, the daemon serve.json names given as likely, since a crashed daemon leaves one, or else another grimoire process, and changes nothing."}]}
 //! ```
 
 use std::path::Path;
@@ -77,7 +77,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "one-lock-holder-at-a-time", "checks": ["crates/server/src/store_io/lock#exclusive"]}
+    /// {"test": "one-lock-holder-at-a-time", "checks": ["crates/server/src/store_io/lock#lock-takes", "crates/server/src/store_io/lock#lock-not-a-store", "crates/server/src/store_io/lock#lock-held-names-holder"]}
     /// ```
     #[test]
     fn one_lock_holder_at_a_time() {

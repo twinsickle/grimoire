@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep the tokens a shared daemon admits, in a file beside its store: for each a name, whether it may write, and a digest of the token, never the token.","criteria":[{"id":"digests-only","statement":"add makes a token from the operating system's random source, returns it once and stores only its name, whether it may write and its SHA-256 digest, the file written atomically and read and rewritten under a lock of its own, tokens.lock, so two changes at once both hold; a name is a slug used once, a directory that is not a store, or stopped being one while the command waited for the lock, is refused and gains no file, and revoke removes a token by name."},{"id":"lookup","statement":"lookup answers the name and access of the token whose digest the file holds and nothing for any other; a store with no tokens file holds none, and a file that does not parse is an error naming it, never read as holding none."}]}
+//! {"purpose":"Keep the tokens a shared daemon admits, in a file beside its store: for each a name, whether it may write, and a digest of the token, never the token.","criteria":[{"id":"tokens-digest-only","statement":"add makes a token from the operating system's random source, returns it once and stores only its name, whether it may write and its SHA-256 digest."},{"id":"tokens-locked-atomic","statement":"The tokens file is written atomically and read and rewritten under a lock of its own, tokens.lock, so two changes at once both hold."},{"id":"tokens-name-slug","statement":"A token's name is a slug used once."},{"id":"tokens-not-a-store","statement":"add refuses a directory that is not a store, or stopped being one while the command waited for the lock, and gains no file."},{"id":"tokens-revoke","statement":"revoke removes a token by name."},{"id":"lookup","statement":"lookup answers the name and access of the token whose digest the file holds and nothing for any other; a store with no tokens file holds none, and a file that does not parse is an error naming it, never read as holding none."}]}
 //! ```
 
 use std::path::Path;
@@ -137,7 +137,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-token-is-returned-once-and-kept-as-a-digest", "checks": ["crates/server/src/store_io/tokens#digests-only"]}
+    /// {"test": "a-token-is-returned-once-and-kept-as-a-digest", "checks": ["crates/server/src/store_io/tokens#tokens-digest-only", "crates/server/src/store_io/tokens#tokens-locked-atomic", "crates/server/src/store_io/tokens#tokens-name-slug", "crates/server/src/store_io/tokens#tokens-not-a-store", "crates/server/src/store_io/tokens#tokens-revoke"]}
     /// ```
     #[test]
     fn a_token_is_returned_once_and_kept_as_a_digest() {

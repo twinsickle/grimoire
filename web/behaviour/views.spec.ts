@@ -1863,7 +1863,7 @@ test("a ticket that rests on nothing, and that nothing rests on, draws no graph"
  * # Test contract
  *
  * ```json
- * {"test": "a-module-outside-the-scope-reads-as-such", "checks": ["web/src/views/Node#out-of-scope-quiet"]}
+ * {"test": "a-module-outside-the-scope-reads-as-such", "checks": ["web/src/views/Node#scope-outside-quiet"]}
  * ```
  */
 test("a module outside the contract scope reads as such on its page, never as a contract error", async ({ page }) => {
@@ -1880,6 +1880,59 @@ test("a module outside the contract scope reads as such on its page, never as a 
   await page.goto("/g/repo/n/module%3Asrc%2Floose");
   await expect(page.locator("main").getByText("Contract: no `# Module contract` block found", { exact: true })).toBeVisible();
   await expect(page.locator("main [data-contract-scope]")).toHaveCount(0);
+});
+
+/** The module page of src/generated, which no contract is asked of, as an answer that changes it would give it. */
+async function generatedAnswered(page: Page, change: (node: Record<string, unknown>) => void) {
+  await page.route("**/api/get", async (route) => {
+    if (route.request().postDataJSON().ref !== "module:src/generated") return route.continue();
+    const answer = await (await route.fetch()).json();
+    change(answer.node);
+    await route.fulfill({ json: answer }).catch(() => {});
+  });
+  await page.goto("/g/repo/n/module%3Asrc%2Fgenerated");
+}
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-module-outside-the-scope-that-carries-a-contract-shows-it", "checks": ["web/src/views/Node#scope-outside-carrying-shown"]}
+ * ```
+ */
+test("a module outside the contract scope that carries a contract shows it as any other", async ({ page }) => {
+  await generatedAnswered(page, (node) => {
+    node.purpose = "Generate the tables.";
+    node.contract_at = ["src/generated.rs", 1];
+    node.contract_error = null;
+    node.criteria = [{ module: "src/generated", id: "makes-tables", statement: "It makes the tables." }];
+  });
+  const main = page.locator("main");
+  await expect(main.getByRole("heading", { name: "Criteria" })).toBeVisible();
+  await expect(main.getByText("It makes the tables.")).toBeVisible();
+  await expect(main.getByText("Contract at")).toBeVisible();
+  await expect(main.locator("[data-contract-scope]")).toHaveCount(0);
+  await expect(main.getByText("Outside the contract scope")).toHaveCount(0);
+  await expect(main.getByText(/^Contract:/)).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-module-outside-the-scope-with-an-unreadable-block-shows-it", "checks": ["web/src/views/Node#scope-unreadable-shows-error"]}
+ * ```
+ */
+test("a module outside the contract scope whose contract block cannot be read shows that error", async ({ page }) => {
+  await generatedAnswered(page, (node) => {
+    node.purpose = null;
+    node.contract_at = ["src/generated.rs", 1];
+    node.contract_error = "src/generated.rs: expected value at line 1 column 1";
+  });
+  const main = page.locator("main");
+  await expect(main.getByText("Contract: src/generated.rs: expected value at line 1 column 1", { exact: true })).toBeVisible();
+  await expect(main.locator("[data-contract-scope]")).toHaveCount(0);
+  await expect(main.getByText("Outside the contract scope")).toHaveCount(0);
 });
 
 /**

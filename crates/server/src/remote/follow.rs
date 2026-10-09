@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a daemon whose intent is a team server's current with that server: follow its event stream, sync on each event, and announce what changed and when the server stops or starts answering.","criteria":[{"id":"follows-the-server","statement":"A daemon on a project that names a server follows the server's event stream: it syncs when the stream opens and on every event, announces on its own stream what a sync changed, and when the stream cannot be opened marks the server unreachable and tries again; whenever the server stops or starts answering, the daemon announces that too, as a change to `server`."}]}
+//! {"purpose":"Keep a daemon whose intent is a team server's current with that server: follow its event stream, sync on each event, and announce what changed and when the server stops or starts answering.","criteria":[{"id":"follow-syncs","statement":"A daemon on a project that names a server follows the server's event stream: it syncs when the stream opens and on every event."},{"id":"follow-announces-sync","statement":"A daemon following the server announces on its own stream what a sync changed."},{"id":"follow-unreachable","statement":"A daemon following the server, when the stream cannot be opened, marks the server unreachable and tries again."},{"id":"follow-announces-server","statement":"A daemon following the server announces, whenever the server stops or starts answering, that too, as a change to `server`."}]}
 //! ```
 
 use std::io::{BufRead, BufReader};

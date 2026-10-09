@@ -108,7 +108,7 @@ fn init_adopts_what_it_finds() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "check-fails-only-on-new-findings", "checks": ["crates/cli/src/check#check-without-daemon"]}
+/// {"test": "check-fails-only-on-new-findings", "checks": ["crates/cli/src/check#check-runs-without-daemon", "crates/cli/src/check#check-exits-on-new", "crates/cli/src/check#check-prunes"]}
 /// ```
 #[test]
 fn check_fails_only_on_new_findings() {
@@ -174,7 +174,7 @@ fn an_omen_is_printed_and_fails_nothing() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-store-is-found-from-anywhere", "checks": ["crates/cli/src#store-resolution"]}
+/// {"test": "the-store-is-found-from-anywhere", "checks": ["crates/cli/src#store-found"]}
 /// ```
 #[test]
 fn the_store_is_found_from_anywhere() {
@@ -483,7 +483,7 @@ fn the_check_names_a_ticket_still_simmering_here() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#library", "crates/server/src/library#named-by-checkouts"]}
+/// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#library", "crates/server/src/library#named-finds"]}
 /// ```
 #[test]
 fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
@@ -563,7 +563,7 @@ fn init_sets_a_project_up_in_one_command() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src/init/command#init-server", "req:server-library", "req:project-names-a-server", "req:project-name"]}
+/// {"test": "a-teams-server-serves-its-library", "checks": ["crates/server/src#shared-library", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-name", "req:server-library", "req:project-names-a-server", "req:project-name"]}
 /// ```
 #[test]
 fn a_teams_server_serves_its_library() {
@@ -736,7 +736,7 @@ Host: 127.0.0.1:{port}
 /// # Test contract
 ///
 /// ```json
-/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-by-checkouts", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
+/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-every-checkout", "crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
@@ -838,7 +838,7 @@ fn store_io_project_file() -> &'static str {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-registered", "req:machine-checkouts"]}
+/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#registered-team", "crates/server/src/library/live/routing#registered-trust", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_teams_worktree_inside_its_checkout_is_its_own() {
@@ -889,7 +889,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live/routing#checkout-registered", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-by-checkouts", "crates/server/src#library", "crates/cli/src/init/command#init-repoints", "crates/cli/src/check#check-without-daemon", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live/routing#registered-store", "crates/server/src/library/live/routing#registered-no-such-grimoire", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-every-checkout", "crates/server/src#library", "crates/cli/src/init/command#repoint-adds-checkout", "crates/cli/src/check#check-adds-checkout", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
@@ -951,7 +951,7 @@ fn a_store_of_its_own_serves_every_checkout() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-worktrees-check-prunes-nothing", "checks": ["crates/cli/src/check#check-without-daemon", "req:store-checkouts"]}
+/// {"test": "a-worktrees-check-prunes-nothing", "checks": ["crates/cli/src/check#check-no-prune-in-worktree", "crates/cli/src/check#check-adds-checkout", "req:store-checkouts"]}
 /// ```
 #[test]
 fn a_worktrees_check_prunes_nothing() {
@@ -989,7 +989,7 @@ fn eventually(what: &str, mut ok: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src/uninstall#uninstall-store", "req:machine-library", "req:cli-uninstall"]}
+/// {"test": "the-library-follows-what-the-machine-holds", "checks": ["crates/server/src/library/live#current", "crates/server/src/library/live/routing#routes", "crates/server/src/library/live#release", "crates/server/src/client#release", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#lock-delete-holds", "req:machine-library", "req:cli-uninstall"]}
 /// ```
 #[test]
 fn the_library_follows_what_the_machine_holds() {
@@ -1217,7 +1217,7 @@ fn init_takes_up_a_store_whose_deletion_is_queued() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#takes-the-lock", "req:store-deletion-queued"]}
+/// {"test": "a-held-store-is-queued-for-deletion-and-deleted-later", "checks": ["crates/cli/src/uninstall#queues-deletion", "crates/cli/src/uninstall#uninstall-store", "crates/cli/src#lock-delete-queues", "req:store-deletion-queued"]}
 /// ```
 #[test]
 fn a_held_store_is_queued_for_deletion_and_deleted_later() {
@@ -1414,7 +1414,7 @@ fn a_second_daemon_is_refused() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-cli-writer-beside-a-holder-is-refused", "checks": ["crates/cli/src#takes-the-lock", "req:store-lock"]}
+/// {"test": "a-cli-writer-beside-a-holder-is-refused", "checks": ["crates/cli/src#lock-writers-hold", "crates/cli/src#lock-refused-writes-nothing", "crates/cli/src#lock-reads-take-none", "crates/cli/src#lock-check-prunes-when-got", "req:store-lock"]}
 /// ```
 #[test]
 fn a_cli_writer_beside_a_holder_is_refused() {
@@ -1542,7 +1542,7 @@ fn uninstall_finishes_a_deletion_stopped_part_way() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-explicit-store-resolves-as-the-project-file-does", "checks": ["crates/server/src/store_io/location#resolution", "crates/cli/src#store-resolution"]}
+/// {"test": "an-explicit-store-resolves-as-the-project-file-does", "checks": ["crates/server/src/store_io/location#resolution-stores-dir", "crates/server/src/store_io/location#resolution-one-way", "crates/cli/src#store-flag-resolved"]}
 /// ```
 #[test]
 fn an_explicit_store_resolves_as_the_project_file_does() {
@@ -1592,7 +1592,7 @@ fn the_daemon_runs_the_local_policy() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-re-points-a-moved-checkout-and-refuses-a-copy", "checks": ["crates/cli/src/init/command#init-repoints", "req:store-config-record"]}
+/// {"test": "init-re-points-a-moved-checkout-and-refuses-a-copy", "checks": ["crates/cli/src/init/command#repoint-moved", "crates/cli/src/init/command#repoint-other-store-refused", "req:store-config-record"]}
 /// ```
 #[test]
 fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
@@ -1639,6 +1639,46 @@ fn init_re_points_a_moved_checkout_and_refuses_a_copy() {
     assert!(!out.status.success() && text(&out).contains("does not name this store"), "{}", text(&out));
 }
 
+/// A link at `link` to the folder `target`: a junction on Windows, which needs no privilege, a symlink elsewhere.
+/// False when none can be made.
+fn make_dir_link(target: &Path, link: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        Command::new("cmd").args(["/C", "mklink", "/J"]).arg(link).arg(target).output().is_ok_and(|o| o.status.success())
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link).is_ok()
+    }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "init-takes-the-same-folder-spelt-differently-for-this-checkout", "checks": ["crates/cli/src/init/command#repoint-same-folder"]}
+/// ```
+#[test]
+fn init_takes_the_same_folder_spelt_differently_for_this_checkout() {
+    let (p, _) = project();
+    let store = p.store.to_string_lossy().to_string();
+    let recorded = std::fs::read(p.store.join("grimoire.json")).unwrap();
+    // The checkout reached through a link: not a copy (the folder still exists) and not a move (nothing is re-pointed).
+    let link = p.dir.join("link");
+    if make_dir_link(&p.repo, &link) {
+        let out = run(&link, &["init", "--store", &store]);
+        assert!(out.status.success() && !text(&out).contains("re-pointed") && !text(&out).contains("still exists") && !text(&out).contains("beside"), "{}", text(&out));
+        assert_eq!(std::fs::read(p.store.join("grimoire.json")).unwrap(), recorded, "the store still names this checkout, as it did");
+    }
+    // And by case, where the file system does not tell them apart.
+    if cfg!(windows) {
+        let upper = PathBuf::from(p.repo.to_string_lossy().to_uppercase());
+        let out = run(&upper, &["init", "--store", &store]);
+        assert!(out.status.success() && !text(&out).contains("re-pointed") && !text(&out).contains("still exists") && !text(&out).contains("beside"), "{}", text(&out));
+        assert_eq!(std::fs::read(p.store.join("grimoire.json")).unwrap(), recorded);
+    }
+    assert!(!files(&p.dir).iter().any(|f| f.contains("checkouts.json")), "no second checkout was added");
+}
+
 /// # Test contract
 ///
 /// ```json
@@ -1662,7 +1702,7 @@ fn init_adopts_only_a_store_it_made() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "init-trims-what-it-is-given", "checks": ["crates/server/src/store_io#whole-store-valid", "req:store-field-rules"]}
+/// {"test": "init-trims-what-it-is-given", "checks": ["crates/server/src/store_io#write-all-validated", "req:store-field-rules"]}
 /// ```
 #[test]
 fn init_trims_what_it_is_given() {
@@ -1776,7 +1816,7 @@ fn a_commit_bottles_the_ticket_simmering_on_it() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-is-served-for-a-team-behind-tokens", "checks": ["crates/server/src#shared-serve", "crates/cli/src#token"]}
+/// {"test": "a-store-is-served-for-a-team-behind-tokens", "checks": ["crates/server/src#shared-serve", "crates/cli/src#token-add", "crates/cli/src#token-revoke", "crates/cli/src#token-list", "crates/cli/src#token-own-lock", "crates/cli/src#token-sent", "crates/cli/src#token-refused-says-so"]}
 /// ```
 #[test]
 fn a_store_is_served_for_a_team_behind_tokens() {
@@ -1835,7 +1875,7 @@ fn a_store_is_served_for_a_team_behind_tokens() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src/uninstall#uninstall-store", "crates/server/src/store_io/tokens#digests-only"]}
+/// {"test": "a-store-with-tokens-is-deleted-under-their-lock", "checks": ["crates/cli/src/uninstall#uninstall-store", "crates/server/src/store_io/tokens#tokens-locked-atomic", "crates/server/src/store_io/tokens#tokens-not-a-store"]}
 /// ```
 #[test]
 fn a_store_with_tokens_is_deleted_under_their_lock() {
@@ -1908,7 +1948,7 @@ fn marked_port(store: &Path) -> u16 {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src/init/command#init-server", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#opens-the-copy", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
+/// {"test": "a-checkout-works-against-a-teams-server", "checks": ["crates/cli/src/init/command#init-server-writes", "crates/cli/src/init/command#init-server-exclusive", "crates/cli/src/init/command#init-server-bad-address", "crates/cli/src#serve-a-server-project", "crates/cli/src/team#login", "crates/cli/src/team#copy-synced-first", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-none-or-refused", "crates/cli/src/team#copy-daemon-asked", "crates/cli/src/team#through-the-server", "crates/server/src#serves-a-server-project", "crates/server/src/http#passes-the-token"]}
 /// ```
 #[test]
 fn a_checkout_works_against_a_teams_server() {
@@ -2180,6 +2220,78 @@ fn the_main_line_prunes_a_teams_baseline() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "a-command-on-a-team-prunes-no-baseline", "checks": ["crates/cli/src/check#check-no-prune-on-server", "crates/cli/src/team#copy-never-prunes"]}
+/// ```
+#[test]
+fn a_command_on_a_team_prunes_no_baseline() {
+    let t = team_fixture(None);
+    let repo = &t.checkout.repo;
+    let home = t.checkout.dir.join("home");
+    let adopted = baseline_count(&t.origin.store);
+    assert!(adopted > 0);
+    // The checkout's first command made its copy of the server's intent, baseline and all.
+    assert!(team(repo, &home, Some(&t.writer), &["check"]).status.success());
+    let copy = std::fs::read_dir(home.join("copies")).unwrap().next().unwrap().unwrap().path();
+    assert_eq!(baseline_count(&copy), adopted);
+    // This checkout fixes the findings of src/a that it was inherited with: its check, and a tool run beside it, prune nothing,
+    // neither the server's baseline nor the copy's.
+    std::fs::remove_file(repo.join("src").join("a.rs")).unwrap();
+    let check = team(repo, &home, Some(&t.writer), &["check"]);
+    assert!(check.status.success() && !text(&check).contains("pruned"), "{}", text(&check));
+    let tool = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
+    assert!(tool.status.success(), "{}", text(&tool));
+    let lint = team(repo, &home, Some(&t.writer), &["tool", "lint", "{}"]);
+    assert!(lint.status.success(), "{}", text(&lint));
+    assert_eq!(baseline_count(&t.origin.store), adopted, "the server's baseline");
+    assert_eq!(baseline_count(&copy), adopted, "and the copy's");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-server-project-keeps-its-store-in-a-copy-and-runs-no-token", "checks": ["crates/cli/src#store-found-server-copy", "crates/cli/src#token-finds-store"]}
+/// ```
+#[test]
+fn a_server_project_keeps_its_store_in_a_copy_and_runs_no_token() {
+    let t = team_fixture(None);
+    let repo = &t.checkout.repo;
+    let home = t.checkout.dir.join("home");
+    let origin = t.origin.store.to_string_lossy().to_string();
+    // A command on the project that names a server: its store is this checkout's copy of the server's intent, in the machine's copies.
+    let checked = team(repo, &home, Some(&t.writer), &["check"]);
+    assert!(checked.status.success(), "{}", text(&checked));
+    let copies: Vec<PathBuf> = std::fs::read_dir(home.join("copies")).unwrap().flatten().map(|e| e.path()).collect();
+    assert_eq!(copies.len(), 1, "{copies:?}");
+    assert!(copies[0].join("grimoire.json").is_file() && copies[0].join("baseline.json").is_file(), "the server's intent, read into the copy");
+    assert!(!repo.join("store").exists() && !repo.join("grimoire.json").exists(), "nothing of it in the repository");
+    // The same store is found from below the project file: the copy is what uninstall says it keeps.
+    let kept = team(&repo.join("src"), &home, None, &["uninstall"]);
+    assert!(kept.status.success() && text(&kept).contains("this checkout's copy") && text(&kept).contains(&copies[0].to_string_lossy().to_string()), "{}", text(&kept));
+    assert!(team(repo, &home, None, &["init", "--server", &format!("http://127.0.0.1:{}", t.port)]).status.success());
+    // The tokens are the host's, kept beside the server's store: each token command refuses, and nothing is made or removed there.
+    let tokens_before = std::fs::read(t.origin.store.join("tokens.json")).unwrap();
+    for args in [vec!["token", "add", "mine"], vec!["token", "revoke", "pipeline"], vec!["token", "list"]] {
+        let out = team(repo, &home, Some(&t.writer), &args);
+        assert!(!out.status.success() && text(&out).contains("this project's grimoire is the server's at") && text(&out).contains("--store"), "{args:?}: {}", text(&out));
+    }
+    assert_eq!(std::fs::read(t.origin.store.join("tokens.json")).unwrap(), tokens_before);
+    // Naming the host's store with --store is allowed, from the same checkout.
+    let listed = team(repo, &home, None, &["token", "list", "--store", &origin]);
+    assert!(listed.status.success() && text(&listed).contains("pipeline"), "{}", text(&listed));
+    // On a project of a store of its own, each finds it as every command does, from below the project file.
+    let (own, _) = project();
+    let below = own.repo.join("src");
+    let made = run(&below, &["token", "add", "ana"]);
+    assert!(made.status.success(), "{}", text(&made));
+    assert!(text(&run(&below, &["token", "list"])).contains("ana"));
+    assert!(own.store.join("tokens.json").is_file(), "kept beside the project's store");
+    assert!(run(&below, &["token", "revoke", "ana"]).status.success());
+    assert!(!text(&run(&below, &["token", "list"])).contains("ana"));
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line", "crates/cli/src/check#bottle", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
 /// ```
 #[test]
@@ -2308,7 +2420,7 @@ fn a_build_that_cannot_read_a_language_does_not_prune() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src/check#check-names-a-ticket", "crates/cli/src/team#opens-the-copy"]}
+/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src/check#check-names-a-ticket", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-named-check-fails"]}
 /// ```
 #[test]
 fn a_pipeline_checks_a_tickets_code_against_its_proposal() {

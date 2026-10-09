@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each brewing or simmering ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks; a record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe, or a proposal or current naming a ticket that is neither brewing nor simmering; a deleted ticket's start and proposal files go with its record."},{"id":"migrates","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost; the first writer to take its lock trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last; in a version 2 store an untrimmed string is malformed, but for the text of the main line's recipes, kept as the recipe file reads."},{"id":"whole-store-valid","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming a brewing or simmering ticket; replacing removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written; the tokens file is not what the store says but who may sign in to it, and is left as it is."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout-files","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each brewing or simmering ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks."},{"id":"layout-malformed","statement":"A record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe."},{"id":"layout-stale-ticket","statement":"A proposal or current file naming a ticket that is neither brewing nor simmering is malformed."},{"id":"layout-ticket-files-go","statement":"A deleted ticket's start and proposal files go with its record."},{"id":"migrates-read-trimmed","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost."},{"id":"migrates-first-writer","statement":"The first writer to take the lock of a version 1 store trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last."},{"id":"migrates-v2-untrimmed-malformed","statement":"In a version 2 store an untrimmed string is malformed."},{"id":"migrates-recipe-text-untrimmed","statement":"In a version 2 store the text of the main line's recipes is kept untrimmed, as the recipe file reads."},{"id":"write-all-validated","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming a brewing or simmering ticket."},{"id":"replacing-removes-the-old","statement":"write_all replacing a store removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written."},{"id":"replacing-leaves-tokens","statement":"write_all replacing a store leaves the tokens file as it is, since it is not what the store says but who may sign in to it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -632,7 +632,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-version-1-store-is-migrated-by-its-first-writer", "checks": ["crates/server/src/store_io#migrates", "req:store-field-rules"]}
+    /// {"test": "a-version-1-store-is-migrated-by-its-first-writer", "checks": ["crates/server/src/store_io#migrates-read-trimmed", "crates/server/src/store_io#migrates-first-writer", "crates/server/src/store_io#migrates-v2-untrimmed-malformed", "req:store-field-rules"]}
     /// ```
     #[test]
     fn a_version_1_store_is_read_trimmed_and_migrated_by_its_first_writer() {
@@ -681,7 +681,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-whole-store-that-would-not-load-is-not-written", "checks": ["crates/server/src/store_io#whole-store-valid"]}
+    /// {"test": "a-whole-store-that-would-not-load-is-not-written", "checks": ["crates/server/src/store_io#write-all-validated", "crates/server/src/store_io#replacing-removes-the-old", "crates/server/src/store_io#replacing-leaves-tokens"]}
     /// ```
     #[test]
     fn a_whole_store_that_would_not_load_is_not_written() {
@@ -923,7 +923,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "round-trip-and-malformed", "checks": ["crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#layout"]}
+    /// {"test": "round-trip-and-malformed", "checks": ["crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#layout-files", "crates/server/src/store_io#layout-malformed", "crates/server/src/store_io#layout-stale-ticket", "crates/server/src/store_io#layout-ticket-files-go"]}
     /// ```
     #[test]
     fn round_trip_and_malformed() {
@@ -1039,7 +1039,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "who-has-the-tickets-is-one-file", "checks": ["crates/server/src/store_io#layout", "crates/server/src/store_io#whole-store-valid"]}
+    /// {"test": "who-has-the-tickets-is-one-file", "checks": ["crates/server/src/store_io#layout-files", "crates/server/src/store_io#layout-malformed", "crates/server/src/store_io#write-all-validated", "crates/server/src/store_io#replacing-removes-the-old"]}
     /// ```
     #[test]
     fn who_has_the_tickets_is_one_file() {
@@ -1071,7 +1071,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-main-lines-recipes-are-one-file-replaced-whole", "checks": ["crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#whole-store-valid", "req:recipe-main-line-snapshot"]}
+    /// {"test": "the-main-lines-recipes-are-one-file-replaced-whole", "checks": ["crates/server/src/store_io#layout-files", "crates/server/src/store_io#layout-malformed", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#write-all-validated", "crates/server/src/store_io#replacing-removes-the-old", "req:recipe-main-line-snapshot"]}
     /// ```
     #[test]
     fn the_main_lines_recipes_are_one_file_replaced_whole() {
@@ -1111,7 +1111,36 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "judgements-are-kept-by-recipe", "checks": ["crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#whole-store-valid", "req:store-judgement-record"]}
+    /// {"test": "a-recipes-text-is-read-untrimmed-in-a-version-2-store", "checks": ["crates/server/src/store_io#migrates-recipe-text-untrimmed"]}
+    /// ```
+    #[test]
+    fn a_recipes_text_is_read_untrimmed_in_a_version_2_store() {
+        let tmp = temp();
+        let dir = tmp.path();
+        let store = Store::new(StoreConfig { repository: "C:/repo".into(), roots: vec!["overview".into()].into(), ..Default::default() });
+        write_all(dir, &store, false).unwrap();
+        assert_eq!(read_config(dir).unwrap().version, StoreConfig::CURRENT_VERSION);
+        let sent = serde_json::json!({"recipes": [{"id": "button", "kind": "component", "title": "BUTTON", "text": "
+  Use it.
+
+", "ingredients": [], "uses": [], "digest": "0123456789abcdef"}]});
+        std::fs::write(dir.join(RECIPES_FILE), serde_json::to_string_pretty(&sent).unwrap()).unwrap();
+        let (loaded, malformed) = load(dir).unwrap();
+        assert!(malformed.is_empty(), "the untrimmed text is not malformed: {malformed:?}");
+        assert_eq!(
+            loaded.main_line_recipes.unwrap().recipes[0].text,
+            "
+  Use it.
+
+",
+            "as the recipe file reads"
+        );
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "judgements-are-kept-by-recipe", "checks": ["crates/server/src/store_io#layout-files", "crates/server/src/store_io#layout-malformed", "crates/server/src/store_io#malformed-collected", "crates/server/src/store_io#write-all-validated", "crates/server/src/store_io#replacing-removes-the-old", "req:store-judgement-record"]}
     /// ```
     #[test]
     fn judgements_are_kept_by_recipe() {
@@ -1165,7 +1194,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "baseline-round-trips-and-a-broken-one-is-collected", "checks": ["crates/core/src/model#baseline-record", "crates/server/src/store_io#layout", "crates/server/src/store_io#malformed-collected"]}
+    /// {"test": "baseline-round-trips-and-a-broken-one-is-collected", "checks": ["crates/core/src/model#baseline-record", "crates/server/src/store_io#layout-files", "crates/server/src/store_io#layout-malformed", "crates/server/src/store_io#malformed-collected"]}
     /// ```
     #[test]
     fn baseline_round_trips_and_a_broken_one_is_collected() {
@@ -1294,7 +1323,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-start-is-written-and-removed", "checks": ["crates/server/src/store_io#layout", "crates/core/src/model#start-record"]}
+    /// {"test": "a-start-is-written-and-removed", "checks": ["crates/server/src/store_io#layout-files", "crates/core/src/model#start-record"]}
     /// ```
     #[test]
     fn a_start_is_written_and_removed() {

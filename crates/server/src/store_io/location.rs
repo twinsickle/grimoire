@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise; a store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"project-name","statement":"A project file's grimoire is named by its `name`, which must be a slug or the file is refused; with none, by its store when that is a bare name, and otherwise by its repository folder's name, each made a slug; init writes the name it is given or that folder name, before the store or server."},{"id":"store-or-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host; a server is kept without its trailing slash, and its project's store is this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one; a person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise. A server's address carries no query or fragment, and names a grimoire of a team's library only last, as /g/<slug>; server_grimoire reads that name from it."}]}
+//! {"purpose":"Say where a project's grimoire lives: resolve a store argument or a project file's entry the one way every command uses, find and write a repository's .grimoire.toml, which names a store or a team's server, say where a checkout's copy of a server's intent and a person's tokens are kept, and refuse a store inside the repository it describes.","criteria":[{"id":"resolution-stores-dir","statement":"A store lives under <data>/grimoire/stores/<name> unless given as a path, <data> being GRIMOIRE_HOME when it is set and the platform's data directory otherwise."},{"id":"resolution-one-way","statement":"A store argument or a repository's .grimoire.toml is resolved one way, an absolute path as it is, a bare name of one plain component under the stores directory, and anything else, . and .. included, as a path relative to the repository."},{"id":"outside-repository","statement":"refuse_inside refuses a store that resolves inside the repository it describes, through . and .. or links, whether or not the store exists yet, and accepts one beside or above it."},{"id":"project-name","statement":"A project file's grimoire is named by its `name`, which must be a slug or the file is refused; with none, by its store when that is a bare name, and otherwise by its repository folder's name, each made a slug; init writes the name it is given or that folder name, before the store or server."},{"id":"store-xor-server","statement":"A .grimoire.toml names `store` or `server` and never both: one naming both or neither is refused as invalid, as is a server that is not an http:// or https:// address with a host."},{"id":"server-without-trailing-slash","statement":"A server in a .grimoire.toml is kept without its trailing slash."},{"id":"server-copy-folder","statement":"A project that names a server has as its store this checkout's copy of the server's intent, under <data>/grimoire/copies, in a folder named for the server and the checkout, so two checkouts or two servers never share one."},{"id":"tokens-credentials-file","statement":"A person's tokens are kept in credentials.json, under GRIMOIRE_HOME when it is set and the platform's configuration directory otherwise."},{"id":"server-address-form","statement":"A server's address carries no query or fragment, and names a grimoire of a team's library only last, as /g/<slug>."},{"id":"server-grimoire-name","statement":"server_grimoire reads the name of a grimoire of a team's library from a server's address."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -297,7 +297,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-store-inside-its-repository-is-refused", "checks": ["crates/server/src/store_io/location#outside-repository", "crates/server/src/store_io/location#resolution"]}
+    /// {"test": "a-store-inside-its-repository-is-refused", "checks": ["crates/server/src/store_io/location#outside-repository", "crates/server/src/store_io/location#resolution-one-way"]}
     /// ```
     #[test]
     fn a_store_inside_its_repository_is_refused() {
@@ -332,7 +332,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "project-file-round-trip", "checks": ["crates/server/src/store_io/location#resolution"]}
+    /// {"test": "project-file-round-trip", "checks": ["crates/server/src/store_io/location#resolution-one-way"]}
     /// ```
     #[test]
     fn project_file_round_trip() {
@@ -406,7 +406,7 @@ store = \"shop\"
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-project-names-a-store-or-a-server", "checks": ["crates/server/src/store_io/location#store-or-server"]}
+    /// {"test": "a-project-names-a-store-or-a-server", "checks": ["crates/server/src/store_io/location#store-xor-server", "crates/server/src/store_io/location#server-without-trailing-slash", "crates/server/src/store_io/location#server-copy-folder", "crates/server/src/store_io/location#tokens-credentials-file", "crates/server/src/store_io/location#server-address-form", "crates/server/src/store_io/location#server-grimoire-name"]}
     /// ```
     #[test]
     fn a_project_names_a_store_or_a_server() {

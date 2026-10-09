@@ -99,7 +99,7 @@ pub(crate) fn uninstall(repo: Option<PathBuf>, delete_store: bool) -> anyhow::Re
             println!("queued  deletion of store {}: {why}. It is deleted once nothing holds it, by the daemon's library or the next grimoire command ({})", store.display(), record.display());
         }
         Some(store) if delete_store => {
-            // Checked again at the last moment, under the lock taken before the first check.
+            // Checked again at the last moment, under the lock taken after the first check and the library's release.
             if let Some(why) = refuse_store_deletion(store, &repo, false)? {
                 bail!("the integration is removed, but not the store: {why}. .grimoire.toml is kept, so running uninstall again finishes the rest");
             }

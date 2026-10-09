@@ -140,7 +140,7 @@ fn eventually(what: &str, mut done: impl FnMut() -> bool) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-machine-joins-the-servers-intent-with-its-own-code", "checks": ["crates/server/src/remote/sync#sync", "crates/server/src/http#export", "crates/server/src/daemon#shared"]}
+/// {"test": "a-machine-joins-the-servers-intent-with-its-own-code", "checks": ["crates/server/src/remote/sync#sync-fetches-joins", "crates/server/src/remote/sync#sync-writes-differences", "crates/server/src/remote/sync#sync-mends", "crates/server/src/remote/sync#sync-notes", "crates/server/src/remote/sync#sync-answers", "crates/server/src/http#export", "crates/server/src/daemon#shared-drops-checkout-own"]}
 /// ```
 #[test]
 fn a_machine_joins_the_servers_intent_with_its_own_code() {
@@ -303,7 +303,7 @@ fn an_answer_and_its_change_are_one_write_on_the_server() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/export#whole-intent", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
+/// {"test": "a-judgement-goes-to-the-server-with-the-machines-fingerprint", "checks": ["crates/server/src/remote#writes-through", "crates/core/src/export#export-judgements", "req:tool-judge-recipe", "req:remote-writes-through-the-server"]}
 /// ```
 #[test]
 fn a_judgement_goes_to_the_server_with_the_machines_fingerprint() {
@@ -376,7 +376,7 @@ fn a_close_is_judged_with_the_languages_the_server_now_reads() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-is-the-checkouts", "crates/server/src/daemon#who-calls", "crates/server/src/http#passes-the-token", "req:ticket-checked-out"]}
+/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-named", "crates/server/src/remote#update-else-as-given", "crates/server/src/remote#bottle-none-here", "crates/server/src/remote#brew-sent", "crates/server/src/remote#current-kept-in-copy", "crates/server/src/remote#current-survives-sync", "crates/server/src/daemon#who-calls", "crates/server/src/http#passes-the-token", "req:ticket-checked-out"]}
 /// ```
 #[test]
 fn the_current_ticket_is_each_checkouts_own() {
@@ -477,7 +477,7 @@ fn a_checkout_is_told_of_a_ticket_it_still_carries() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teammates-write-arrives-without-a-reload", "checks": ["crates/server/src/remote/follow#follows-the-server"]}
+/// {"test": "a-teammates-write-arrives-without-a-reload", "checks": ["crates/server/src/remote/follow#follow-syncs", "crates/server/src/remote/follow#follow-announces-sync", "crates/server/src/remote/follow#follow-unreachable", "crates/server/src/remote/follow#follow-announces-server"]}
 /// ```
 #[test]
 fn a_teammates_write_arrives_without_a_reload() {
@@ -509,7 +509,7 @@ fn a_teammates_write_arrives_without_a_reload() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "offline-a-machine-reads-its-copy-and-writes-nothing", "checks": ["crates/server/src/remote/sync#offline"]}
+/// {"test": "offline-a-machine-reads-its-copy-and-writes-nothing", "checks": ["crates/server/src/remote/sync#offline-reads-copy", "crates/server/src/remote/sync#offline-writes-refused", "crates/server/src/remote/sync#offline-no-copy", "crates/server/src/remote/sync#offline-token-refused"]}
 /// ```
 #[test]
 fn offline_a_machine_reads_its_copy_and_writes_nothing() {
@@ -632,7 +632,7 @@ fn a_write_the_server_took_is_answered_when_the_copy_lags() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "an-older-server-still-lets-a-ticket-be-taken-up", "checks": ["crates/server/src/remote#current-is-the-checkouts"]}
+/// {"test": "an-older-server-still-lets-a-ticket-be-taken-up", "checks": ["crates/server/src/remote#brew-older-server"]}
 /// ```
 #[test]
 fn an_older_server_still_lets_a_ticket_be_taken_up() {
@@ -654,7 +654,34 @@ fn an_older_server_still_lets_a_ticket_be_taken_up() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote/sync#offline", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#token-for-the-server", "crates/server/src/daemon#as-the-caller"]}
+/// {"test": "a-take-up-the-copy-cannot-hold-is-read-again-from-the-copy", "checks": ["crates/server/src/remote#take-up-copy-unwritable"]}
+/// ```
+#[test]
+fn a_take_up_the_copy_cannot_hold_is_read_again_from_the_copy() {
+    let h = host();
+    let m = machine();
+    h.daemon.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    drop(m.open(h.as_writer()));
+    let intent = serde_json::to_value(h.as_writer().export().unwrap()).unwrap();
+    let older = Server::new(&answers_then_goes(vec![intent, json!({ "error": "conflict", "message": "ticket:0002 is brewing, not inscribed" })]), Some(h.writer.clone()));
+    let mut loaded = grimoire_server::load(&m.copy).unwrap();
+    let before = store_io::load(&m.copy).unwrap().0;
+    // A folder where the current ticket's file should be: the copy cannot be written.
+    let current = m.copy.join("current.json");
+    let _ = std::fs::remove_file(&current);
+    std::fs::create_dir_all(current.join("x")).unwrap();
+    let e = remote::write_through(&older, &m.copy, &mut loaded.state, "brew_ticket", json!({ "ref": "ticket:0002" }), "2026-10-08").unwrap_err();
+    assert_eq!(e.code(), "store_unavailable");
+    assert!(e.to_string().contains("could not be written"), "{e}");
+    // Memory holds what the copy does, whatever of the take-up reached it: the current ticket is not the one taken up.
+    assert_eq!(loaded.state.current(), before.current);
+    assert_eq!(*loaded.state.store(), store_io::load(&m.copy).unwrap().0, "read again from the copy");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-refused-token-is-not-a-server-that-is-away", "checks": ["crates/server/src/remote/sync#token-refused-told-apart", "crates/server/src/remote/sync#token-refused-says-so", "crates/server/src/remote/sync#token-refused-stays", "crates/server/src/remote/sync#token-refused-takes-up", "crates/server/src/daemon#refused-reads-nothing", "crates/server/src/remote#token-for-the-server", "crates/server/src/daemon#as-the-caller"]}
 /// ```
 #[test]
 fn a_refused_token_is_not_a_server_that_is_away() {

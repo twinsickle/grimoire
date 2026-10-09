@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"whole-intent","statement":"exported gives every page, requirement, ticket and proposal, every recipe's judgements, the recipes the main line last sent when it has sent any, the baseline, who has each ticket being worked checked out, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds, and nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements, the recipes the main line last sent and who has each ticket checked out among it, its config's site, line limits and recipe kinds included, the machine's repository, and of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, brewing or a change simmering; a proposal whose ticket is not being worked is left out, so a gap or question waiting, simmering, for its change is no one's current ticket, and a store version this build does not write is refused."},{"id":"older-builds","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is, and gives them as this build keeps them beside, in kept_proposals, which an older build ignores; joined reads kept_proposals in their place when it is there, and without it reads the proposals as written before decisions left the record."},{"id":"difference","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it, in an order that leaves a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it; two equal stores differ in nothing."}]}
+//! {"purpose":"Hand a store's intent from a server to a machine: the intent as one value, the store a machine keeps joined from it and what is the machine's own, and what differs between two stores, for the writer of that copy.","criteria":[{"id":"export-intent","statement":"exported gives every page, requirement, ticket and proposal, the baseline, and the config's version, roots, languages, scope, order, site, line limits and recipe kinds."},{"id":"export-judgements","statement":"exported gives every recipe's judgements."},{"id":"export-main-line-recipes","statement":"exported gives the recipes the main line last sent when it has sent any."},{"id":"export-checked-out","statement":"exported gives who has each ticket being worked checked out."},{"id":"export-nothing-of-a-machine","statement":"exported gives nothing that belongs to a machine: no repository path, no current ticket and no start."},{"id":"joined-intent","statement":"joined makes the store a machine keeps: the server's intent, the recipes' judgements and the recipes the main line last sent among it, its config's site, line limits and recipe kinds included, and the machine's repository."},{"id":"joined-checked-out","statement":"joined carries who has each ticket checked out among the store a machine keeps."},{"id":"joined-machines-own","statement":"joined keeps of the machine's own only what still applies, its current ticket and its starts for tickets the server still has being worked, brewing or a change simmering."},{"id":"joined-waiting-gap","statement":"joined leaves out a proposal whose ticket is not being worked, so a gap or question waiting, simmering, for its change is no one's current ticket."},{"id":"joined-newer-refused","statement":"joined refuses a store version this build does not write."},{"id":"older-proposals-as-older-keeps","statement":"exported gives the proposals as a build older than decision ids keeps them, each requirement a proposal holds or adds decisions to held whole, with the truth's decisions, the links it adds added and the decisions it adds after them, each at its position, resting on the truth's whole record when it rests on the truth as it is."},{"id":"older-proposals-kept-beside","statement":"exported gives the proposals as this build keeps them beside, in kept_proposals, which an older build ignores."},{"id":"older-joined-reads-kept","statement":"joined reads kept_proposals in place of the proposals when it is there."},{"id":"older-joined-reads-written-before","statement":"joined, without kept_proposals, reads the proposals as written before decisions left the record."},{"id":"difference-names","statement":"difference names every record, proposal, start, recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket, the baseline and the config that differ between two stores, as changes that persisted over the first leave the second, a deleted ticket's start and proposal going with it."},{"id":"difference-order","statement":"difference orders its changes so as to leave a store that loads wherever it stops: what names a ticket as being worked, the current ticket and a proposal, is removed before the ticket's record changes and written after it."},{"id":"difference-equal","statement":"difference of two equal stores names nothing."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -201,7 +201,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "who-has-a-ticket-travels-with-the-intent", "checks": ["crates/core/src/export#whole-intent", "crates/core/src/export#joined", "crates/core/src/export#difference"]}
+    /// {"test": "who-has-a-ticket-travels-with-the-intent", "checks": ["crates/core/src/export#export-checked-out", "crates/core/src/export#joined-checked-out", "crates/core/src/export#difference-names"]}
     /// ```
     #[test]
     fn who_has_a_ticket_travels_with_the_intent() {
@@ -245,7 +245,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-export-holds-the-intent-and-nothing-of-a-machine", "checks": ["crates/core/src/export#whole-intent"]}
+    /// {"test": "an-export-holds-the-intent-and-nothing-of-a-machine", "checks": ["crates/core/src/export#export-intent", "crates/core/src/export#export-judgements", "crates/core/src/export#export-main-line-recipes", "crates/core/src/export#export-nothing-of-a-machine"]}
     /// ```
     #[test]
     fn an_export_holds_the_intent_and_nothing_of_a_machine() {
@@ -286,7 +286,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-older-build-reads-what-a-server-hands-it", "checks": ["crates/core/src/export#older-builds"]}
+    /// {"test": "an-older-build-reads-what-a-server-hands-it", "checks": ["crates/core/src/export#older-proposals-as-older-keeps", "crates/core/src/export#older-proposals-kept-beside", "crates/core/src/export#older-joined-reads-kept", "crates/core/src/export#older-joined-reads-written-before"]}
     /// ```
     #[test]
     fn an_older_build_reads_what_a_server_hands_it() {
@@ -318,7 +318,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/export#joined"]}
+    /// {"test": "a-machines-store-joins-the-intent-with-its-own", "checks": ["crates/core/src/export#joined-intent", "crates/core/src/export#joined-machines-own", "crates/core/src/export#joined-waiting-gap", "crates/core/src/export#joined-newer-refused"]}
     /// ```
     #[test]
     fn a_machines_store_joins_the_intent_with_its_own() {
@@ -371,7 +371,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-difference-is-what-changed-and-no-more", "checks": ["crates/core/src/export#difference"]}
+    /// {"test": "the-difference-is-what-changed-and-no-more", "checks": ["crates/core/src/export#difference-names", "crates/core/src/export#difference-order", "crates/core/src/export#difference-equal"]}
     /// ```
     #[test]
     fn the_difference_is_what_changed_and_no_more() {
