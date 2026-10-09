@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The TypeScript and JavaScript language adapter, one reading under two language names: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and of imports resolved through the packages the repository holds.","criteria":[{"id":"files","statement":"The typescript language handles .ts, .tsx, .mts and .cts files but declaration files, reading .tsx with the TSX grammar and the rest with TypeScript's; the javascript language handles .js, .jsx, .mjs and .cjs files, reading each with the JavaScript grammar, JSX included; neither handles the other's."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line."},{"id":"identity","statement":"A module's id is its repository-relative path without its extension, any of .ts, .tsx, .mts, .cts, .js, .jsx, .mjs or .cjs, with a terminal /index folded away."},{"id":"coverage","statement":"Every file a language handles under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"declarations","statement":"Function and generator declarations and function signatures are declarations of kind function, an overloaded function once at its first signature, as is a const, let or var whose value is an arrow function or function expression; classes, interfaces, type aliases and enums are of kind type and a class's methods, abstract ones included and an overloaded one once at its first signature, of kind method under its path; any other const is of kind const and let or var of kind variable, one per named declarator; a declaration under TypeScript's declare, exported or not, is read as one without it; each has the line it starts on, and nothing inside a block, a loop, a switch, a function's body or a class's body but its methods is reported."},{"id":"imports-as-candidates","statement":"A relative import specifier resolves against the importing file's own directory, an index file's included, to one candidate module id; a bare specifier whose package part is a package.json name in the repository, outside any nested checkout and not ignored by the repository's own .gitignore files, read as the extractor's walk reads them, resolves through that package; any other yields none."},{"id":"package-exports","statement":"A bare specifier into a package of the repository yields, in order: the target its exports gives for the subpath, by exact key or else the matching * pattern with the longest prefix, a conditions object taking the first of import, module, require, node, default and then any other but types whose value matches, nested likewise, a condition naming nothing going on to the next and a null one excluding the subpath, an array by its first entry that names a file; or, with no exports and no subpath, its module and then its main; then for a subpath the subpath under the package's src/ and under the package; then the package's src/ and the package itself; each as a module id, none repeated."},{"id":"require-and-dynamic-import","statement":"Import and export-from declarations, TypeScript's import-equals require, and anywhere in the file a require(...) call or a dynamic import(...) whose one argument is a plain string literal are imports; any other call is none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, after blank lines and a #! line, with the comment markers stripped."}]}
+//! {"purpose":"The TypeScript and JavaScript language adapter, one reading under two language names: module identity from the file path, which files carry contracts, the leading block comment, and tree-sitter extraction of declarations and of imports resolved through the packages the repository holds.","criteria":[{"id":"files","statement":"The typescript language handles .ts, .tsx, .mts and .cts files but declaration files, reading .tsx with the TSX grammar and the rest with TypeScript's; the javascript language handles .js, .jsx, .mjs and .cjs files, reading each with the JavaScript grammar, JSX included; neither handles the other's."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line."},{"id":"identity","statement":"A module's id is its repository-relative path without its extension, any of .ts, .tsx, .mts, .cts, .js, .jsx, .mjs or .cjs, with a terminal /index folded away."},{"id":"coverage","statement":"Every file a language handles under a package's src/ is expected to carry a contract except test and spec files, declaration files, and files under a __tests__ directory."},{"id":"function-declarations","statement":"Function and generator declarations and function signatures are declarations of kind function, an overloaded function once at its first signature, as is a const, let or var whose value is an arrow function or function expression."},{"id":"type-declarations","statement":"Classes, interfaces, type aliases and enums are declarations of kind type."},{"id":"class-methods","statement":"A class's methods, abstract ones included and an overloaded one once at its first signature, are declarations of kind method under the class's path."},{"id":"const-and-variable-declarations","statement":"Any other const is a declaration of kind const and let or var of kind variable, one per named declarator."},{"id":"declare-read-as-without","statement":"A declaration under TypeScript's declare, exported or not, is read as one without it."},{"id":"declaration-line","statement":"Each declaration has the line it starts on."},{"id":"nothing-inside-bodies","statement":"Nothing inside a block, a loop, a switch, a function's body or a class's body but its methods is reported."},{"id":"relative-import","statement":"A relative import specifier resolves against the importing file's own directory, an index file's included, to one candidate module id."},{"id":"bare-package-import","statement":"A bare specifier whose package part is a package.json name in the repository resolves through that package."},{"id":"repository-package","statement":"A package of the repository is one whose package.json lies outside any nested checkout and is not ignored by the repository's own .gitignore files, read as the extractor's walk reads them."},{"id":"other-specifier-none","statement":"Any other import specifier yields no candidate."},{"id":"package-exports","statement":"A bare specifier into a package of the repository yields, in order: the target its exports gives for the subpath, by exact key or else the matching * pattern with the longest prefix, a conditions object taking the first of import, module, require, node, default and then any other but types whose value matches, nested likewise, a condition naming nothing going on to the next and a null one excluding the subpath, an array by its first entry that names a file; or, with no exports and no subpath, its module and then its main; then for a subpath the subpath under the package's src/ and under the package; then the package's src/ and the package itself; each as a module id, none repeated."},{"id":"require-and-dynamic-import","statement":"Import and export-from declarations, TypeScript's import-equals require, and anywhere in the file a require(...) call or a dynamic import(...) whose one argument is a plain string literal are imports; any other call is none."},{"id":"leading-block-comment","statement":"The leading documentation is the first /** */ or /* */ block or run of // lines at the top of the file, after blank lines and a #! line, with the comment markers stripped."}]}
 //! ```
 
 use std::path::Path;
@@ -574,7 +574,7 @@ const a = 1;
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/typescript#imports-as-candidates"]}
+    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/typescript#relative-import", "crates/extract/src/typescript#other-specifier-none"]}
     /// ```
     #[test]
     fn parses_decls_and_imports() {
@@ -659,7 +659,7 @@ function inner() { const nested = () => 1; }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "package-specifiers", "checks": ["crates/extract/src/typescript#imports-as-candidates", "crates/extract/src/typescript#package-exports"]}
+    /// {"test": "package-specifiers", "checks": ["crates/extract/src/typescript#bare-package-import", "crates/extract/src/typescript#other-specifier-none", "crates/extract/src/typescript#package-exports"]}
     /// ```
     #[test]
     fn package_specifiers() {
@@ -732,7 +732,7 @@ function inner() { const nested = () => 1; }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-index-file-imports-from-its-own-directory", "checks": ["crates/extract/src/typescript#imports-as-candidates", "req:typescript-imports-as-candidates"]}
+    /// {"test": "an-index-file-imports-from-its-own-directory", "checks": ["crates/extract/src/typescript#relative-import", "req:typescript-imports-as-candidates"]}
     /// ```
     #[test]
     fn an_index_file_imports_from_its_own_directory() {
@@ -834,7 +834,7 @@ module.exports = { open };
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "declarations-with-their-lines", "checks": ["crates/extract/src/typescript#declarations", "req:typescript-declarations"]}
+    /// {"test": "declarations-with-their-lines", "checks": ["crates/extract/src/typescript#function-declarations", "crates/extract/src/typescript#type-declarations", "crates/extract/src/typescript#class-methods", "crates/extract/src/typescript#const-and-variable-declarations", "crates/extract/src/typescript#declare-read-as-without", "crates/extract/src/typescript#declaration-line", "crates/extract/src/typescript#nothing-inside-bodies", "req:typescript-declarations"]}
     /// ```
     #[test]
     fn declarations_with_their_lines() {
@@ -905,7 +905,7 @@ function pick(a: any) { return a; }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-nested-checkout-adds-no-package", "checks": ["crates/extract/src/typescript#imports-as-candidates"]}
+    /// {"test": "a-nested-checkout-adds-no-package", "checks": ["crates/extract/src/typescript#bare-package-import", "crates/extract/src/typescript#repository-package"]}
     /// ```
     #[test]
     fn a_nested_checkout_adds_no_package() {
@@ -928,7 +928,7 @@ function pick(a: any) { return a; }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-gitignore-above-the-repository-hides-no-package", "checks": ["crates/extract/src/typescript#imports-as-candidates", "req:typescript-imports-as-candidates"]}
+    /// {"test": "a-gitignore-above-the-repository-hides-no-package", "checks": ["crates/extract/src/typescript#bare-package-import", "crates/extract/src/typescript#repository-package", "req:typescript-imports-as-candidates"]}
     /// ```
     #[test]
     fn a_gitignore_above_the_repository_hides_no_package() {

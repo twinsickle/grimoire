@@ -38,7 +38,7 @@ fn project() -> tempfile::TempDir {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-mixed-project-joins", "checks": ["crates/extract/src/typescript#files", "crates/extract/src/typescript#coverage", "crates/extract/src/typescript#imports-as-candidates", "crates/extract/src/typescript#package-exports", "crates/extract/src/typescript#require-and-dynamic-import", "req:javascript-files"]}
+/// {"test": "a-mixed-project-joins", "checks": ["crates/extract/src/typescript#files", "crates/extract/src/typescript#coverage", "crates/extract/src/typescript#relative-import", "crates/extract/src/typescript#bare-package-import", "crates/extract/src/typescript#other-specifier-none", "crates/extract/src/typescript#package-exports", "crates/extract/src/typescript#require-and-dynamic-import", "req:javascript-files"]}
 /// ```
 #[test]
 fn a_mixed_project_joins() {

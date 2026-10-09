@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"imports-as-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names, a workspace crate being one whose Cargo.toml lies outside any nested checkout and is not ignored by the repository's own .gitignore files, read as the extractor's walk reads them, and from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module; std and any other name yield none, being an external crate."},{"id":"reexports-recorded","statement":"A use declaration with a visibility is also recorded as re-exports of the file's module: each path with the candidates its import has in the scope it sits in and the name it exports, its last segment or its alias, or as a glob for a path ending in *; one with no candidates, of an external crate, is not recorded."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
+//! {"purpose":"The Rust language adapter: canonical module identity, which files carry contracts, the leading //! comment, and tree-sitter extraction of declarations and use paths.","criteria":[{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a tests module."},{"id":"identity","statement":"A module's id is its workspace-relative path without .rs, with a terminal /mod folded away, tests.rs mapped to its directory, X_tests.rs mapped to X, and a crate root mapped to its src directory."},{"id":"coverage","statement":"Every .rs file under a workspace member's src/ is expected to carry a contract except test files and files under a tests directory."},{"id":"use-path-candidates","statement":"A use path becomes an ordered list of candidate module ids resolved from crate, self, super and workspace crate names."},{"id":"workspace-crate","statement":"A workspace crate is one whose Cargo.toml lies outside any nested checkout and is not ignored by the repository's own .gitignore files, read as the extractor's walk reads them."},{"id":"bare-first-name-local-module","statement":"A use path becomes candidate module ids from a bare first name only when the enclosing scope, the file or an inline module in it, declares a module of that name, which is then relative to that scope's module."},{"id":"external-crate-none","statement":"A use path of std or any other name, being an external crate, yields no candidate."},{"id":"reexports-recorded","statement":"A use declaration with a visibility is also recorded as re-exports of the file's module: each path with the candidates its import has in the scope it sits in and the name it exports, its last segment or its alias, or as a glob for a path ending in *; one with no candidates, of an external crate, is not recorded."},{"id":"test-bodies-skipped","statement":"Declarations and imports inside a module named tests are not reported."},{"id":"test-lines","statement":"The file's test lines are those of each item at its top level marked #[cfg(test)], from that attribute to the item's end, a row counted once however many items share it; nothing else counts as test code."}]}
 //! ```
 
 use std::path::Path;
@@ -524,7 +524,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/rust#imports-as-candidates", "crates/extract/src/rust#test-bodies-skipped"]}
+    /// {"test": "parses-decls-and-imports", "checks": ["crates/extract/src/rust#use-path-candidates", "crates/extract/src/rust#bare-first-name-local-module", "crates/extract/src/rust#external-crate-none", "crates/extract/src/rust#test-bodies-skipped"]}
     /// ```
     #[test]
     fn parses_decls_and_imports() {
@@ -671,7 +671,7 @@ mod tests { use crate::nope; fn t() {} }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-nested-checkout-adds-no-crate", "checks": ["crates/extract/src/rust#imports-as-candidates"]}
+    /// {"test": "a-nested-checkout-adds-no-crate", "checks": ["crates/extract/src/rust#use-path-candidates", "crates/extract/src/rust#workspace-crate"]}
     /// ```
     #[test]
     fn a_nested_checkout_adds_no_crate() {
@@ -699,7 +699,7 @@ mod tests { use crate::nope; fn t() {} }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-gitignore-above-the-repository-hides-no-crate", "checks": ["crates/extract/src/rust#imports-as-candidates", "req:rust-imports-as-candidates"]}
+    /// {"test": "a-gitignore-above-the-repository-hides-no-crate", "checks": ["crates/extract/src/rust#use-path-candidates", "crates/extract/src/rust#workspace-crate", "req:rust-imports-as-candidates"]}
     /// ```
     #[test]
     fn a_gitignore_above_the_repository_hides_no_crate() {

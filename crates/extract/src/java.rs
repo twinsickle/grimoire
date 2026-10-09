@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations, and of imports and same-package class uses resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path; methods, constructors and annotation elements are of kind method, and fields and interface constants of kind field, one per declarator; each has the line it starts on, and nothing inside a method, constructor or initializer body is reported."},{"id":"imports-as-candidates","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares, outside any nested checkout and not ignored by the repository's own .gitignore files, read as the extractor's walk reads them, and whose next name is a type file of that package, yields candidates in each directory holding that file, the named member or nested type first, then each enclosing name down to the type, the importing file's own directory first among equals; an on-demand import of such a package itself yields one import per type file of it and one for its package-info; any other import yields none."},{"id":"same-package-references","statement":"Every type name a file uses, every capitalised name qualifying a method call, field access or method reference, and every annotation's name, outside its import and package lines, that is a type file of the file's own package yields once the candidates a single-type import of it from that package would, unless it is the file's own name or a single-type import brings that name in; any other name yields none."}]}
+//! {"purpose":"The Java language adapter: module identity from the file path with a package-info standing for its package, which files carry contracts, the leading Javadoc, and tree-sitter extraction of declarations, and of imports and same-package class uses resolved through the packages the repository declares.","criteria":[{"id":"identity","statement":"A module's id is its repository-relative path without .java, with a package-info.java mapped to its directory."},{"id":"coverage","statement":"Every .java file under a src/main/java directory is expected to carry a contract except package-info.java and module-info.java; no other file is."},{"id":"leading-javadoc","statement":"The leading documentation is the first /** */ comment at the file's top level, outside every type's body, that holds a # Module contract heading, else the first such comment, with the markers stripped and the line it starts on; a /* */ or // comment is never it."},{"id":"comments","statement":"Every comment in the file, line comments merged into runs and block comments, is handed over with its markers stripped and its first line, including those inside a type's or a method's body."},{"id":"type-declarations","statement":"Classes, interfaces, enums, records and annotation types are declarations of kind type, a nested one under its enclosing type's path."},{"id":"method-declarations","statement":"Methods, constructors and annotation elements are declarations of kind method."},{"id":"field-declarations","statement":"Fields and interface constants are declarations of kind field, one per declarator."},{"id":"declaration-line","statement":"Each declaration has the line it starts on."},{"id":"nothing-in-bodies","statement":"Nothing inside a method, constructor or initializer body is reported."},{"id":"import-resolves-to-type-file","statement":"An import, single-type, on-demand or static, whose longest leading run of names is a package a repository file declares and whose next name is a type file of that package yields candidates in each directory holding that file, the importing file's own directory first among equals."},{"id":"member-first-order","statement":"The candidates of such an import have the named member or nested type first, then each enclosing name down to the type."},{"id":"declared-package","statement":"A package a repository file declares is one declared outside any nested checkout and not ignored by the repository's own .gitignore files, read as the extractor's walk reads them."},{"id":"on-demand-import-per-type-file","statement":"An on-demand import of such a package itself yields one import per type file of it and one for its package-info."},{"id":"library-import-none","statement":"Any other import yields none."},{"id":"same-package-references","statement":"Every type name a file uses, every capitalised name qualifying a method call, field access or method reference, and every annotation's name, outside its import and package lines, that is a type file of the file's own package yields once the candidates a single-type import of it from that package would, unless it is the file's own name or a single-type import brings that name in; any other name yields none."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -463,7 +463,7 @@ class B {}
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "declarations-with-their-lines", "checks": ["crates/extract/src/java#declarations"]}
+    /// {"test": "declarations-with-their-lines", "checks": ["crates/extract/src/java#type-declarations", "crates/extract/src/java#method-declarations", "crates/extract/src/java#field-declarations", "crates/extract/src/java#declaration-line", "crates/extract/src/java#nothing-in-bodies"]}
     /// ```
     #[test]
     fn declarations_with_their_lines() {
@@ -512,7 +512,7 @@ record Pair(int a, int b) { Pair { } }
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-nested-checkout-declares-nothing-here", "checks": ["crates/extract/src/java#imports-as-candidates"]}
+    /// {"test": "a-nested-checkout-declares-nothing-here", "checks": ["crates/extract/src/java#import-resolves-to-type-file", "crates/extract/src/java#declared-package"]}
     /// ```
     #[test]
     fn a_nested_checkout_declares_nothing_here() {
@@ -558,7 +558,7 @@ class A {}
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "imports-resolve-through-declared-packages", "checks": ["crates/extract/src/java#imports-as-candidates"]}
+    /// {"test": "imports-resolve-through-declared-packages", "checks": ["crates/extract/src/java#import-resolves-to-type-file", "crates/extract/src/java#member-first-order", "crates/extract/src/java#on-demand-import-per-type-file", "crates/extract/src/java#library-import-none"]}
     /// ```
     #[test]
     fn imports_resolve_through_declared_packages() {
@@ -659,7 +659,7 @@ public class A<T> extends B {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-gitignore-above-the-repository-hides-no-package", "checks": ["crates/extract/src/java#imports-as-candidates", "req:java-imports-as-candidates"]}
+    /// {"test": "a-gitignore-above-the-repository-hides-no-package", "checks": ["crates/extract/src/java#import-resolves-to-type-file", "crates/extract/src/java#declared-package", "req:java-imports-as-candidates"]}
     /// ```
     #[test]
     fn a_gitignore_above_the_repository_hides_no_package() {

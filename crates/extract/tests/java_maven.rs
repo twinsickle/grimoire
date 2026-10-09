@@ -16,7 +16,7 @@ const CORE: &str = "core/src/main/java/com/example/core";
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-maven-build-joins", "checks": ["crates/extract/src/java#identity", "crates/extract/src/java#coverage", "crates/extract/src/java#imports-as-candidates", "crates/extract/src/java#same-package-references", "crates/extract/src/java#leading-javadoc"]}
+/// {"test": "a-maven-build-joins", "checks": ["crates/extract/src/java#identity", "crates/extract/src/java#coverage", "crates/extract/src/java#import-resolves-to-type-file", "crates/extract/src/java#on-demand-import-per-type-file", "crates/extract/src/java#library-import-none", "crates/extract/src/java#same-package-references", "crates/extract/src/java#leading-javadoc"]}
 /// ```
 #[test]
 fn a_maven_build_joins() {
