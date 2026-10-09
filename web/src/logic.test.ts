@@ -308,7 +308,7 @@ test("an answer to a request on its way when the daemon went away does not say i
  * # Test contract
  *
  * ```json
- * {"test": "every-call-names-the-pages-checkout", "checks": ["web/src/api#names-its-checkout"]}
+ * {"test": "every-call-names-the-pages-checkout", "checks": ["web/src/api#checkout-from-the-first-status", "web/src/api#event-stream-names-it", "web/src/api#learned-before-any-other-call", "web/src/api#status-names-it-once-known"]}
  * ```
  */
 test("every call names the checkout the first status answered for, learned before any other call goes", async () => {
@@ -345,7 +345,7 @@ test("every call names the checkout the first status answered for, learned befor
  * # Test contract
  *
  * ```json
- * {"test": "a-checkout-no-longer-served-is-learned-again", "checks": ["web/src/api#names-its-checkout"]}
+ * {"test": "a-checkout-no-longer-served-is-learned-again", "checks": ["web/src/api#refused-checkout-learned-again-and-resent"]}
  * ```
  */
 test("a call refused for the checkout it names forgets it, learns it again and is sent once more", async () => {
@@ -599,4 +599,59 @@ test("a badge carries one colour: each tone its own, the plain one dim, and the 
   const base = components.match(/export function Badge[\s\S]*?className=\{`([^$`]*)\$\{BADGE_TONE\[tone\]\}`\}/)?.[1] ?? "";
   expect(base, "the base classes are read").toContain("rounded");
   expect(base.split(/\s+/).filter((c) => /^(text|border)-(?!\[)/.test(c) && !/^border$/.test(c)), "no colour in the base").toEqual([]);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-names-the-checkout-its-address-names", "checks": ["web/src/api#checkout-from-the-address"]}
+ * ```
+ */
+test("a page opened with ?checkout= names it in every call from the first, and keeps it for the tab", async () => {
+  const kept = new Map<string, string>();
+  vi.stubGlobal("sessionStorage", {
+    getItem: (k: string) => kept.get(k) ?? null,
+    setItem: (k: string, v: string) => void kept.set(k, v),
+    removeItem: (k: string) => void kept.delete(k),
+  });
+  const opened = (search: string) => vi.stubGlobal("window", { location: { pathname: "/g/shop/", search } });
+  opened("?checkout=C%3A%2Fshop%2Fwt");
+  const api = await freshApi();
+  try {
+    const sent: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: { body: string }) => {
+        sent.push({ url, body: JSON.parse(init.body) as Record<string, unknown> });
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    // Known from the address, so no status goes first to learn it, and every call names it.
+    expect(api.currentCheckout()).toBe("C:/shop/wt");
+    await api.call("lint");
+    await api.call("find", { query: "x" });
+    await api.call("status");
+    expect(sent.map((s) => [s.url, s.body.checkout])).toEqual([
+      ["/g/shop/api/lint", "C:/shop/wt"],
+      ["/g/shop/api/find", "C:/shop/wt"],
+      ["/g/shop/api/status", "C:/shop/wt"],
+    ]);
+    expect(sent[1].body.query).toBe("x");
+    // The event stream names it too.
+    api.onEvent(() => {});
+    expect(FakeStream.made.at(-1)?.url).toBe("/g/shop/api/events?checkout=C%3A%2Fshop%2Fwt");
+    // Kept for the tab: a page of this tab opened later without one still names it, at the same grimoire.
+    expect(kept.get("grimoire.checkout:/g/shop")).toBe("C:/shop/wt");
+    opened("");
+    const later = await freshApi();
+    expect(later.currentCheckout()).toBe("C:/shop/wt");
+    // The address wins over what the tab kept, and is kept in its place.
+    opened("?checkout=C%3A%2Fshop%2Fother");
+    const newer = await freshApi();
+    expect(newer.currentCheckout()).toBe("C:/shop/other");
+    expect(kept.get("grimoire.checkout:/g/shop")).toBe("C:/shop/other");
+  } finally {
+    vi.useRealTimers();
+  }
 });

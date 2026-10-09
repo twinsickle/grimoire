@@ -786,3 +786,110 @@ fn who_has_a_ticket_is_as_the_server_answered() {
     let closed = b.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } })).unwrap();
     assert_eq!(named(&closed["others"]), [(anas[0]["by"].clone(), anas[0]["since"].clone(), true)], "{closed}");
 }
+
+/// The server at `upstream`, reached through a tunnel that holds a request to close a ticket until it has the whole of it
+/// (headers, and the body by its content-length), calls `before_close`, and only then passes it on. So a test sees what the
+/// machine had done before the first byte of that write left it: the machine is waiting for the answer while `before_close`
+/// runs, and can have done nothing more. Every other request passes as it comes whole. Its address is `http://127.0.0.1:<port>`.
+fn tunnel_telling_before_a_close(upstream: &str, before_close: impl Fn() + Send + Sync + 'static) -> String {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    let upstream = upstream.trim_start_matches("http://").to_string();
+    let before_close = Arc::new(before_close);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        for client in listener.incoming().flatten() {
+            let (upstream, before_close) = (upstream.clone(), before_close.clone());
+            std::thread::spawn(move || {
+                let Ok(server) = TcpStream::connect(&upstream) else { return };
+                let (mut from_server, mut to_client) = (server.try_clone().unwrap(), client.try_clone().unwrap());
+                std::thread::spawn(move || {
+                    let _ = std::io::copy(&mut from_server, &mut to_client);
+                    let _ = to_client.shutdown(std::net::Shutdown::Both);
+                });
+                let (mut from_client, mut to_server) = (client, server);
+                let mut chunk = [0u8; 16384];
+                let mut held: Vec<u8> = Vec::new();
+                'conn: while let Ok(n) = from_client.read(&mut chunk) {
+                    if n == 0 {
+                        break;
+                    }
+                    held.extend_from_slice(&chunk[..n]);
+                    // Pass on each request once it is in hand whole.
+                    while let Some(head_end) = held.windows(4).position(|w| w == b"\r\n\r\n").map(|at| at + 4) {
+                        let head = String::from_utf8_lossy(&held[..head_end]).to_ascii_lowercase();
+                        let length = head.lines().find_map(|l| l.strip_prefix("content-length:")).and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0);
+                        if held.len() < head_end + length {
+                            break;
+                        }
+                        let request: Vec<u8> = held.drain(..head_end + length).collect();
+                        if request.starts_with(b"POST /api/close_ticket") {
+                            before_close();
+                        }
+                        if to_server.write_all(&request).is_err() {
+                            break 'conn;
+                        }
+                    }
+                }
+                let _ = to_server.shutdown(std::net::Shutdown::Both);
+            });
+        }
+    });
+    address
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-write-to-the-server-is-sent-after-the-checkout-is-read-again", "checks": ["crates/server/src/daemon/extraction#before-a-write-to-a-teams-server"]}
+/// ```
+#[test]
+fn a_write_to_the_server_is_sent_after_the_checkout_is_read_again() {
+    let h = host();
+    let m = machine();
+    // The machine reaches the server through a tunnel that holds a close, looks at what the machine has announced so far, and only then sends it.
+    let announced: Arc<std::sync::Mutex<Option<Vec<Vec<String>>>>> = Arc::new(std::sync::Mutex::new(None));
+    let events = Arc::new(std::sync::Mutex::new(None::<tokio::sync::broadcast::Receiver<Event>>));
+    let (seen, listening) = (announced.clone(), events.clone());
+    let address = tunnel_telling_before_a_close(&h.address, move || {
+        let mut rx = listening.lock().unwrap();
+        let Some(rx) = rx.as_mut() else { return };
+        let mut graphs = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            if let Event::Graph { changed } = event {
+                graphs.push(changed);
+            }
+        }
+        *seen.lock().unwrap() = Some(graphs);
+    });
+    let d = m.open(Server::new(&address, Some(h.writer.clone())));
+    d.call("brew_ticket", json!({ "ref": "ticket:0001" })).unwrap();
+    *events.lock().unwrap() = Some(d.subscribe());
+    // The checkout changes under the daemon, which has no watcher here to say so: a file rewritten, one added, one removed.
+    std::fs::write(m.repo.join("src").join("a.rs"), CONTRACTED.replace("It says a.", "It says a, merged.")).unwrap();
+    std::fs::write(m.repo.join("src").join("c.rs"), "pub fn c() {}\n").unwrap();
+    std::fs::write(m.repo.join("src").join("lib.rs"), "pub mod a;\npub mod c;\n").unwrap();
+    assert!(d.call("get", json!({ "ref": "file:src/c.rs" })).is_err(), "not read yet");
+    // The close goes to the server, and is judged over the checkout as it is on disk now.
+    let closed = d.call("close_ticket", json!({ "ref": "ticket:0001", "decision": { "text": "Done." } })).unwrap();
+    assert_eq!(closed["node"]["status"], "bottled", "{closed}");
+    // Before the close was sent, the daemon had read the checkout again and said which files changed: sent after, the machine would still be waiting on the server's answer here, with nothing announced.
+    let announced = announced.lock().unwrap().clone().expect("the close reached the server");
+    let mut changed: Vec<String> = announced.into_iter().flatten().collect();
+    changed.sort();
+    changed.dedup();
+    assert_eq!(changed, ["src/a.rs", "src/c.rs", "src/lib.rs"], "read again before the close was sent");
+    assert_eq!(d.call("get", json!({ "ref": "criterion:src/a#says" })).unwrap()["node"]["statement"], "It says a, merged.");
+    assert!(d.call("get", json!({ "ref": "file:src/c.rs" })).is_ok());
+    // The extraction is what reading the whole checkout makes it: a daemon opened now holds the same files.
+    std::fs::remove_file(m.repo.join("src").join("c.rs")).unwrap();
+    std::fs::write(m.repo.join("src").join("lib.rs"), "pub mod a;\n").unwrap();
+    d.call("brew_ticket", json!({ "ref": "ticket:0002" })).unwrap();
+    d.call("close_ticket", json!({ "ref": "ticket:0002", "decision": { "text": "Done." } })).unwrap();
+    assert!(d.call("get", json!({ "ref": "file:src/c.rs" })).is_err(), "removed with the file");
+    let fresh = m.open(h.as_writer());
+    for file in ["file:src/a.rs", "file:src/lib.rs", "file:src/c.rs"] {
+        assert_eq!(d.call("get", json!({ "ref": file })).ok(), fresh.call("get", json!({ "ref": file })).ok(), "{file}");
+    }
+}

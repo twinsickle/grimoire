@@ -483,7 +483,7 @@ fn the_check_names_a_ticket_still_simmering_here() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#library", "crates/server/src/library#named-finds"]}
+/// {"test": "a-library-serves-a-checkouts-copy-of-a-servers-intent", "checks": ["crates/server/src#serves-the-machines-library", "crates/server/src/library#named-finds"]}
 /// ```
 #[test]
 fn a_library_serves_a_checkouts_copy_of_a_servers_intent() {
@@ -800,7 +800,7 @@ Host: 127.0.0.1:{port}
 /// # Test contract
 ///
 /// ```json
-/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-every-checkout", "crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#refused-caller-costs-a-discard", "crates/server/src/library/live/routing#handler-chooses-the-checkout", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src#library", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
+/// {"test": "two-checkouts-of-a-teams-grimoire-are-served-side-by-side", "checks": ["crates/server/src/library#named-every-checkout", "crates/server/src/library/live#opens-found-grimoires", "crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#refused-caller-costs-a-discard", "crates/server/src/library/live/routing#handler-chooses-the-checkout", "crates/server/src/library/live/routing#nearest-project-file", "crates/server/src/library/live/routing#default-answers-when-none-named", "crates/server/src/library/live/routing#none-named-for-several-refused", "crates/server/src/library/live/routing#directory-no-checkout-holds-refused", "crates/server/src/library/live/routing#refused-after-the-trust-step", "crates/server/src/library/live/routing#refused-over-the-api-as-invalid", "crates/server/src/library/live/routing#refused-over-mcp-as-tool-error", "crates/server/src/library/live/routing#refusal-lists-checkouts-and-says-to-name-yours", "crates/server/src#bare-routes-by-named-checkout", "crates/server/src/client#names-its-checkout", "req:machine-library", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn two_checkouts_of_a_teams_grimoire_are_served_side_by_side() {
@@ -902,7 +902,7 @@ fn store_io_project_file() -> &'static str {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#registered-team", "crates/server/src/library/live/routing#registered-trust", "req:machine-checkouts"]}
+/// {"test": "a-teams-worktree-inside-its-checkout-is-its-own", "checks": ["crates/server/src/library/live/routing#nearest-project-file", "crates/server/src/library/live/routing#nested-checkout-is-its-own", "crates/server/src/library/live/routing#registered-team", "crates/server/src/library/live/routing#registered-trust", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_teams_worktree_inside_its_checkout_is_its_own() {
@@ -953,7 +953,7 @@ fn a_teams_worktree_inside_its_checkout_is_its_own() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live/routing#registered-store", "crates/server/src/library/live/routing#registered-no-such-grimoire", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library#named-every-checkout", "crates/server/src#library", "crates/cli/src/init/command#repoint-adds-checkout", "crates/cli/src/check#check-adds-checkout", "req:store-checkouts", "req:machine-checkouts"]}
+/// {"test": "a-store-of-its-own-serves-every-checkout", "checks": ["crates/server/src/library/live/routing#registered-store", "crates/server/src/library/live/routing#registered-no-such-grimoire", "crates/server/src/library/live/routing#none-named-for-several-refused", "crates/server/src/library/live/routing#directory-no-checkout-holds-refused", "crates/server/src/library/live/routing#refusal-lists-checkouts-and-says-to-name-yours", "crates/server/src/library#named-every-checkout", "crates/server/src#serves-its-own-grimoire", "crates/cli/src/init/command#repoint-adds-checkout", "crates/cli/src/check#check-adds-checkout", "req:store-checkouts", "req:machine-checkouts"]}
 /// ```
 #[test]
 fn a_store_of_its_own_serves_every_checkout() {
@@ -1128,7 +1128,7 @@ fn post(port: u16, path: &str, body: &str, extra_headers: &str) -> (u16, String)
 /// # Test contract
 ///
 /// ```json
-/// {"test": "one-daemon-serves-the-machines-library", "checks": ["crates/server/src#library", "req:project-name", "req:tool-status"]}
+/// {"test": "one-daemon-serves-the-machines-library", "checks": ["crates/server/src#serves-its-own-grimoire", "crates/server/src#marked-at-its-path", "crates/server/src#serves-the-machines-library", "req:project-name", "req:tool-status"]}
 /// ```
 #[test]
 fn one_daemon_serves_the_machines_library() {
@@ -2096,7 +2096,7 @@ fn init_adopts_a_scaffolded_store() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-commit-bottles-the-ticket-simmering-on-it", "checks": ["crates/cli/src/check#bottle", "crates/cli/src/init#bottling-hook"]}
+/// {"test": "a-commit-bottles-the-ticket-simmering-on-it", "checks": ["crates/cli/src/check#bottles-the-given-or-current-simmering-ticket", "crates/cli/src/check#land-still-runs-it-and-no-help-lists-it", "crates/cli/src/check#prints-what-was-bottled", "crates/cli/src/check#says-no-ticket-was-simmering", "crates/cli/src/check#exits-non-zero-when-refused", "crates/cli/src/check#exits-non-zero-when-the-store-is-unreachable", "crates/cli/src/check#exits-zero-when-no-ticket-was-simmering", "crates/cli/src/init#post-commit-hook-runs-bottle"]}
 /// ```
 #[test]
 fn a_commit_bottles_the_ticket_simmering_on_it() {
@@ -2172,6 +2172,70 @@ fn a_commit_bottles_the_ticket_simmering_on_it() {
     assert_eq!(status(&second), "simmering", "a merge runs no post-commit hook: {}", text(&merge));
     let by_hand = run(&p.repo, &["bottle"]);
     assert!(by_hand.status.success() && text(&by_hand).contains(&format!("bottled {second}")), "{}", text(&by_hand));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-bottling-that-cannot-load-or-write-its-store-exits-non-zero", "checks": ["crates/cli/src/check#exits-non-zero-when-the-store-is-unreachable", "req:cli-bottle"]}
+/// ```
+#[test]
+fn a_bottling_that_cannot_load_or_write_its_store_exits_non_zero() {
+    let p = uninitialised();
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    let tool = |name: &str, input: &str| -> serde_json::Value {
+        let o = run(&p.repo, &["tool", name, input]);
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    let ticket = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#));
+    let status = || tool("get", &format!(r#"{{"ref":"{ticket}"}}"#))["node"]["status"].as_str().unwrap().to_string();
+    assert_eq!(status(), "simmering");
+    let before = files(&p.store);
+    // A store whose manifest is malformed is not loaded: the command says why, exits non-zero and bottles nothing.
+    let manifest = p.store.join("grimoire.json");
+    let good = std::fs::read(&manifest).unwrap();
+    std::fs::write(&manifest, b"{ not json").unwrap();
+    let malformed = run(&p.repo, &["bottle", "--store", &p.store.to_string_lossy()]);
+    assert!(!malformed.status.success(), "{}", text(&malformed));
+    assert!(text(&malformed).contains("grimoire.json is invalid") && !text(&malformed).contains("bottled "), "{}", text(&malformed));
+    assert_eq!(std::fs::read(&manifest).unwrap(), b"{ not json", "nothing was written");
+    std::fs::write(&manifest, &good).unwrap();
+    assert_eq!(files(&p.store), before, "nothing was bottled");
+    assert_eq!(status(), "simmering");
+    // A store whose files cannot be written, so the bottling cannot be kept. The store writes a record through a
+    // temporary file renamed over it: on Windows a read-only record refuses the rename; elsewhere the rename needs
+    // only the folder, so the tickets folder is made read-only, which root alone can still write into.
+    let record = p.store.join("tickets").join(ticket.trim_start_matches("ticket:")).with_extension("json");
+    let name = record.file_name().unwrap().to_string_lossy().to_string();
+    let kept = std::fs::read(&record).unwrap();
+    #[cfg(windows)]
+    let locked = record.clone();
+    #[cfg(not(windows))]
+    let locked = record.parent().unwrap().to_path_buf();
+    let mut permissions = std::fs::metadata(&locked).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&locked, permissions.clone()).unwrap();
+    let probe = locked.parent().unwrap().join("tickets").join(".probe");
+    if !cfg!(windows) && std::fs::write(&probe, "").is_ok() {
+        let _ = std::fs::remove_file(&probe);
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&locked, permissions).unwrap();
+        eprintln!("skipped the unwritable store: this user writes into a read-only folder, as root does");
+        return;
+    }
+    let unwritable = run(&p.repo, &["bottle", &ticket, "--store", &p.store.to_string_lossy()]);
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(&locked, permissions).unwrap();
+    assert!(!unwritable.status.success(), "{}", text(&unwritable));
+    assert!(text(&unwritable).contains(&name) && !text(&unwritable).contains(&format!("bottled {ticket}")), "{}", text(&unwritable));
+    assert_eq!(std::fs::read(&record).unwrap(), kept, "the record is as it was");
+    assert_eq!(status(), "simmering", "the ticket was not bottled");
 }
 
 /// # Test contract
@@ -2548,7 +2612,7 @@ fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line-judges-the-truth", "crates/cli/src/check#check-main-line-refused-beside-ticket", "crates/cli/src/check#check-main-line-prunes-the-server", "crates/cli/src/check#check-main-line-prints-findings", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#check-main-line-own-store", "crates/cli/src/check#bottle", "crates/cli/src/team#prune-sends-findings-with-digest", "crates/cli/src/team#prune-answers-what-it-judged", "crates/cli/src/team#prune-refused-says-why", "crates/cli/src/team#prune-fails-outright-only-when-intent-unreadable", "crates/cli/src/team#read-now", "crates/server/src/http#prune-route-prunes", "crates/server/src/http#prune-conflict-when-intent-moved", "crates/server/src/http#prune-refused-to-reader", "crates/server/src/http#prune-refused-non-json", "crates/server/src/http#prune-invalid-body", "crates/server/src/http#prune-conflict-on-code-daemon", "crates/server/src/http#prune-route-not-tool", "crates/server/src/remote#intent-digest-names-intent"]}
+/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line-judges-the-truth", "crates/cli/src/check#check-main-line-refused-beside-ticket", "crates/cli/src/check#check-main-line-prunes-the-server", "crates/cli/src/check#check-main-line-prints-findings", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#check-main-line-own-store", "crates/cli/src/check#bottles-the-given-or-current-simmering-ticket", "crates/cli/src/check#prints-what-was-bottled", "crates/cli/src/check#prunes-a-teams-baseline-after-bottling", "crates/cli/src/check#says-how-many-entries-went", "crates/cli/src/team#prune-sends-findings-with-digest", "crates/cli/src/team#prune-answers-what-it-judged", "crates/cli/src/team#prune-refused-says-why", "crates/cli/src/team#prune-fails-outright-only-when-intent-unreadable", "crates/cli/src/team#read-now", "crates/server/src/http#prune-route-prunes", "crates/server/src/http#prune-conflict-when-intent-moved", "crates/server/src/http#prune-refused-to-reader", "crates/server/src/http#prune-refused-non-json", "crates/server/src/http#prune-invalid-body", "crates/server/src/http#prune-conflict-on-code-daemon", "crates/server/src/http#prune-route-not-tool", "crates/server/src/remote#intent-digest-names-intent"]}
 /// ```
 #[test]
 fn the_main_line_prunes_a_teams_baseline() {
@@ -2732,7 +2796,7 @@ fn a_server_project_keeps_its_store_in_a_copy_and_runs_no_token() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line-sends-recipes", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-says-recipes-not-taken", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#bottle", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
+/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line-sends-recipes", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-says-recipes-not-taken", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#warns-why-recipes-were-not-taken", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
 /// ```
 #[test]
 fn the_main_line_sends_its_recipes_to_a_teams_site() {
@@ -2886,7 +2950,7 @@ fn http(port: u16, request: &str) -> (u16, String) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prune-unreadable-language-sends-nothing", "crates/cli/src/check#bottle"]}
+/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prune-unreadable-language-sends-nothing", "crates/cli/src/check#exits-non-zero-when-the-prune-fails"]}
 /// ```
 #[test]
 fn a_build_that_cannot_read_a_language_does_not_prune() {
@@ -3005,4 +3069,164 @@ fn a_pipeline_checks_a_tickets_code_against_its_proposal() {
     assert!(!away.status.success() && text(&away).contains("cannot be reached") && text(&away).contains("never a copy fetched before") && !text(&away).contains("req:proposed"), "{}", text(&away));
     let plain = check(&[]);
     assert!(plain.status.success() && text(&plain).contains("as of"), "with no ticket named the copy is read, as for a person offline: {}", text(&plain));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "bottle-names-what-still-simmers-and-what-moved", "checks": ["crates/cli/src/check#names-the-tickets-still-simmering", "crates/cli/src/check#prints-the-records-that-moved"]}
+/// ```
+#[test]
+fn bottle_names_what_still_simmers_and_what_moved() {
+    let (p, _) = project();
+    let tool = |name: &str, input: &str| -> serde_json::Value {
+        let o = run(&p.repo, &["tool", name, input]);
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        serde_json::from_slice(&o.stdout).unwrap()
+    };
+    // A change that proposes a page and waits to be bottled.
+    let waits = |title: &str, page: &str, body: &str| -> String {
+        let filed = tool("inscribe_ticket", &format!(r#"{{"title":"{title}","kind":"change","priority":"later","body":"b"}}"#));
+        let ticket = filed["node"]["ref"].as_str().unwrap().to_string();
+        tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+        tool("put_page", &format!(r#"{{"slug":"{page}","title":"{page}","body":"{body}","links":[]}}"#));
+        tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#));
+        ticket
+    };
+    // Two simmering: bottling the first names the second, and only the second.
+    let (first, second) = (waits("first one", "one", "1"), waits("second one", "two", "2"));
+    let bottled = run(&p.repo, &["bottle", first.trim_start_matches("ticket:")]);
+    assert!(bottled.status.success() && text(&bottled).contains(&format!("bottled {first}")), "{}", text(&bottled));
+    let out = String::from_utf8_lossy(&bottled.stdout).to_string();
+    assert!(out.contains(&format!("still simmering: {second} (second one);")) && !out.contains(&format!("still simmering: {first}")), "{out}");
+    // A page one ticket waits to change, moved under it by another ticket bottled first.
+    let keeps = waits("keeps a page", "shared", "v1");
+    assert!(run(&p.repo, &["bottle", keeps.trim_start_matches("ticket:")]).status.success());
+    let late = waits("late change", "shared", "v2");
+    let filed = tool("inscribe_ticket", r#"{"title":"early change","kind":"change","priority":"later","body":"b"}"#);
+    let early = filed["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{early}"}}"#));
+    tool("put_page", r#"{"slug":"shared","title":"shared","body":"v3","links":[]}"#);
+    tool("close_ticket", &format!(r#"{{"ref":"{early}","decision":{{"text":"Done."}}}}"#));
+    let refused = run(&p.repo, &["bottle", late.trim_start_matches("ticket:")]);
+    let err = String::from_utf8_lossy(&refused.stderr).to_string();
+    assert!(!refused.status.success() && err.contains("bottling refused") && err.contains("  page:shared: "), "{}", text(&refused));
+    assert_eq!(tool("get", &format!(r#"{{"ref":"{late}"}}"#))["node"]["status"], "simmering", "nothing bottled");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-teams-bottling-sends-the-recipes-after-the-prune", "checks": ["crates/cli/src/check#team-without-a-ticket-says-the-main-line-bottles", "crates/cli/src/check#sends-the-recipes-after-the-prune", "crates/cli/src/check#says-how-many-recipes-the-server-holds"]}
+/// ```
+#[test]
+fn a_teams_bottling_sends_the_recipes_after_the_prune() {
+    let t = team_fixture(None);
+    let repo = &t.checkout.repo;
+    let (home, ci) = (t.checkout.dir.join("home"), t.checkout.dir.join("pipeline-home"));
+    let recipe = |id: &str| format!("# {id}\n\nHow to use {id}.\n\n## Recipe\n\n```json\n{{\"id\":\"{id}\",\"kind\":\"component\",\"files\":[\"src/a.rs\"]}}\n```\n");
+    std::fs::create_dir_all(repo.join("ui")).unwrap();
+    std::fs::write(repo.join("ui").join("button.recipe.md"), recipe("button")).unwrap();
+    std::fs::write(repo.join("ui").join("icon.recipe.md"), recipe("icon")).unwrap();
+    let tool = |name: &str, input: &str| team(repo, &home, Some(&t.writer), &["tool", name, input]);
+    let ticket = serde_json::from_slice::<serde_json::Value>(&tool("inscribe_ticket", A_TICKET).stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)).status.success());
+    assert!(tool("close_ticket", &format!(r#"{{"ref":"{ticket}","decision":{{"text":"Done."}},"when":"bottled"}}"#)).status.success());
+    let held = || -> Vec<String> {
+        let record: serde_json::Value = std::fs::read_to_string(t.origin.store.join("recipes.json")).map(|s| serde_json::from_str(&s).unwrap()).unwrap_or_default();
+        record["recipes"].as_array().into_iter().flatten().map(|r| r["id"].as_str().unwrap().to_string()).collect()
+    };
+    // With no ticket given, nothing is bottled and the output says a ticket is bottled on the main line; no recipe is sent.
+    let unnamed = team(repo, &ci, Some(&t.writer), &["bottle"]);
+    assert!(unnamed.status.success(), "{}", text(&unnamed));
+    assert!(
+        String::from_utf8_lossy(&unnamed.stdout).contains("nothing bottled: this project names a server: a ticket is bottled on the main line, by name, once its change has merged"),
+        "{}",
+        text(&unnamed)
+    );
+    assert!(held().is_empty() && !text(&unnamed).contains("sent the server"), "{}", text(&unnamed));
+    // Named, the ticket is bottled, the baseline pruned, and then the recipes sent: the server holds them, and the output says how many.
+    let bottled = team(repo, &ci, Some(&t.writer), &["bottle", ticket.trim_start_matches("ticket:")]);
+    assert!(bottled.status.success(), "{}", text(&bottled));
+    let out = String::from_utf8_lossy(&bottled.stdout).to_string();
+    let (pruned, sent) = (out.find("pruned "), out.find("sent the server the main line's recipes: it holds 2"));
+    assert!(pruned.is_some() && sent.is_some() && pruned < sent, "{out}");
+    assert_eq!(held(), ["button", "icon"]);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "outside-git-init-writes-no-hook-and-says-so", "checks": ["crates/cli/src/init#outside-git-writes-no-hook-and-says-so"]}
+/// ```
+#[test]
+fn outside_git_init_writes_no_hook_and_says_so() {
+    let p = uninitialised();
+    assert!(!p.repo.join(".git").exists());
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    let out = String::from_utf8_lossy(&init.stdout).to_string();
+    for hook in ["pre-commit", "post-commit"] {
+        assert!(!p.repo.join(".git").join("hooks").join(hook).exists(), "{hook} written");
+        assert!(out.lines().any(|l| l.starts_with("skipped ") && l.contains(hook) && l.contains("not a git repository")), "{hook} not said: {out}");
+    }
+    assert!(!p.repo.join(".git").exists(), "no repository made for the hooks");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-hooks-exit-zero-when-grimoire-is-not-on-the-path", "checks": ["crates/cli/src/init#hooks-exit-zero-when-grimoire-is-missing"]}
+/// ```
+#[test]
+fn the_hooks_exit_zero_when_grimoire_is_not_on_the_path() {
+    let p = uninitialised();
+    std::fs::create_dir_all(p.repo.join(".git").join("hooks")).unwrap();
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success(), "{}", text(&init));
+    // The shell, found on this machine's path before the hooks are given a path without grimoire.
+    let sh = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).flat_map(|d| [d.join("sh"), d.join("sh.exe")]).find(|c| c.is_file()).expect("this test needs a sh");
+    let empty = p.dir.join("empty-path");
+    std::fs::create_dir_all(&empty).unwrap();
+    for (hook, warning) in [("pre-commit", "pre-commit: grimoire is not on PATH"), ("post-commit", "post-commit: grimoire is not on PATH")] {
+        let script = p.repo.join(".git").join("hooks").join(hook);
+        assert!(script.is_file(), "init wrote {hook}");
+        let ran = Command::new(&sh).arg(&script).current_dir(&p.repo).env("PATH", &empty).output().unwrap();
+        assert!(ran.status.success(), "{hook} exits 0: {}", text(&ran));
+        assert!(String::from_utf8_lossy(&ran.stderr).contains(warning), "{hook} warns: {}", text(&ran));
+    }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-daemon-started-in-a-worktree-adds-it-to-the-store", "checks": ["crates/server/src#adds-its-checkout"]}
+/// ```
+#[test]
+fn a_daemon_started_in_a_worktree_adds_it_to_the_store() {
+    let p = bare_repo();
+    assert!(run(&p.repo, &["init", "--store", "solo-three", "--name", "solo-three"]).status.success());
+    let store = test_home().join("stores").join("solo-three");
+    let at = |r: &Path| grimoire_server::store_io::repository_string(r).unwrap();
+    let listed = || -> serde_json::Value { serde_json::from_str(&std::fs::read_to_string(store.join("checkouts.json")).unwrap_or_else(|_| "{}".into())).unwrap() };
+    let wt = worktree_of(&p, "wt");
+    assert!(listed()["checkouts"].get(at(&wt)).is_none(), "the worktree is not a checkout of the store yet");
+    // Started in the store's main checkout, it adds nothing.
+    {
+        let _main = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&p.repo).spawn().unwrap());
+        marked_port(&store);
+        assert!(listed()["checkouts"].get(at(&p.repo)).is_none() && listed()["checkouts"].get(at(&wt)).is_none(), "{}", listed());
+    }
+    // A killed daemon leaves its marker, which is not the next one's.
+    let _ = std::fs::remove_file(store.join("serve.json"));
+    // Started in the worktree, it adds it before it serves, and a second start finds it there already.
+    for _ in 0..2 {
+        let _daemon = Serving(grimoire().args(["serve", "--port", "0"]).current_dir(&wt).spawn().unwrap());
+        let marker = store.join("serve.json");
+        eventually("the daemon marks the store", || marker.is_file());
+        assert!(listed()["checkouts"].get(at(&wt)).is_some(), "{}", listed());
+        assert_eq!(listed()["checkouts"].as_object().map(|o| o.len()), Some(1), "added once: {}", listed());
+        drop(_daemon);
+        let _ = std::fs::remove_file(&marker);
+    }
 }

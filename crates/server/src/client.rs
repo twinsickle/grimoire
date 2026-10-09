@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself; and ask a daemon's library to let a store go for deletion, and to take it again after.","criteria":[{"id":"defers-to-daemon","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository; a marker nobody answers, or one answered for another repository, is ignored; a daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon; the daemon is asked at the address its marker records, and at the path of the store's grimoire in its library when the marker records one, both to probe and to call, the loopback of the same family when it listens on every address; and a call carries GRIMOIRE_TOKEN as a bearer token when it is set."},{"id":"names-its-checkout","statement":"A call to the daemon serving a store, the probe's status included, names as `checkout` the repository the store records, unless its input already names one, so a daemon serving several checkouts of the grimoire answers from that one; a call to a daemon's bare routes by port or address names none."},{"id":"release","statement":"release asks the daemon at an address to let a store go from its library and answers whether it did; release_done tells it the command is done with the store, so its library may take it again."}]}
+//! {"purpose":"Find the daemon serving a store and send it a tool call, so a command run beside a daemon defers to it instead of writing the store itself; and ask a daemon's library to let a store go for deletion, and to take it again after.","criteria":[{"id":"serving-when-it-answers-for-the-repository","statement":"A daemon counts as serving a store only when the port named in the store's serve.json answers status for the same repository."},{"id":"stale-marker-ignored","statement":"A marker nobody answers is ignored."},{"id":"other-repository-ignored","statement":"A marker answered for another repository is ignored."},{"id":"refusing-daemon-reported","statement":"A daemon that answers by refusing the question at its trust step is reported as serving and refusing, with its reason, never taken for no daemon."},{"id":"asked-at-marker-address","statement":"The daemon is asked at the address its marker records, both to probe and to call, the loopback of the same family when it listens on every address."},{"id":"asked-at-library-path","statement":"The daemon is asked at the path of the store's grimoire in its library when the marker records one, both to probe and to call."},{"id":"call-carries-token","statement":"A call carries GRIMOIRE_TOKEN as a bearer token when it is set."},{"id":"names-its-checkout","statement":"A call to the daemon serving a store, the probe's status included, names as `checkout` the repository the store records, unless its input already names one, so a daemon serving several checkouts of the grimoire answers from that one; a call to a daemon's bare routes by port or address names none."},{"id":"release","statement":"release asks the daemon at an address to let a store go from its library and answers whether it did; release_done tells it the command is done with the store, so its library may take it again."}]}
 //! ```
 
 use std::io::{Read, Write};
@@ -174,7 +174,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-grimoire-in-a-library-is-asked-at-its-path", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// {"test": "a-grimoire-in-a-library-is-asked-at-its-path", "checks": ["crates/server/src/client#asked-at-library-path", "crates/server/src/client#serving-when-it-answers-for-the-repository"]}
     /// ```
     #[test]
     fn a_grimoire_in_a_library_is_asked_at_its_path() {
@@ -238,7 +238,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "serving-when-the-daemon-answers-for-this-repository", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// {"test": "serving-when-the-daemon-answers-for-this-repository", "checks": ["crates/server/src/client#serving-when-it-answers-for-the-repository"]}
     /// ```
     #[test]
     fn serving_when_the_daemon_answers_for_this_repository() {
@@ -252,7 +252,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "another-repository-is-not-this-store", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// {"test": "another-repository-is-not-this-store", "checks": ["crates/server/src/client#other-repository-ignored"]}
     /// ```
     #[test]
     fn another_repository_is_not_this_store() {
@@ -266,7 +266,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-stale-marker-is-ignored", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// {"test": "a-stale-marker-is-ignored", "checks": ["crates/server/src/client#stale-marker-ignored"]}
     /// ```
     #[test]
     fn a_stale_marker_is_ignored() {
@@ -290,7 +290,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-daemon-that-refuses-is-not-no-daemon", "checks": ["crates/server/src/client#defers-to-daemon"]}
+    /// {"test": "a-daemon-that-refuses-is-not-no-daemon", "checks": ["crates/server/src/client#refusing-daemon-reported", "crates/server/src/client#asked-at-marker-address"]}
     /// ```
     #[test]
     fn a_daemon_that_refuses_is_not_no_daemon() {
@@ -314,6 +314,71 @@ mod tests {
         {
             store_io::write_serving_at(dir, bound.parse().unwrap()).unwrap();
             assert_eq!(store_io::read_serving(dir).unwrap().addr(), reached.parse().unwrap(), "{bound}");
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-probe-and-the-call-reach-the-address-the-marker-records", "checks": ["crates/server/src/client#asked-at-marker-address"]}
+    /// ```
+    #[test]
+    fn the_probe_and_the_call_reach_the_address_the_marker_records() {
+        // A daemon stand-in listening on `ip`, answering for the repository and counting what reaches it.
+        let listening_on = |ip: &str, port: u16| -> Option<(u16, std::sync::mpsc::Receiver<String>)> {
+            let listener = TcpListener::bind((ip, port)).ok()?;
+            let port = listener.local_addr().unwrap().port();
+            let (sent, seen) = std::sync::mpsc::channel::<String>();
+            std::thread::spawn(move || {
+                for mut s in listener.incoming().flatten() {
+                    let mut buf = [0u8; 4096];
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    let _ = sent.send(String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or_default().to_string());
+                    let body = r#"{"repository":"C:/repo"}"#;
+                    let _ = write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}", body.len());
+                }
+            });
+            Some((port, seen))
+        };
+        let listening = |ip: &str| listening_on(ip, 0);
+        let reached = |seen: &std::sync::mpsc::Receiver<String>| seen.recv_timeout(Duration::from_secs(5)).unwrap();
+        let tmp = temp_store();
+        let dir = tmp.path();
+        // A daemon listening on every IPv4 address is asked on the loopback; the marker records that, not 0.0.0.0.
+        let (port, seen) = listening("127.0.0.1").unwrap();
+        store_io::write_serving_at(dir, SocketAddr::from(([0, 0, 0, 0], port))).unwrap();
+        let at = serving(dir, "C:/repo").unwrap_or_else(|| panic!("probed at the loopback: {:?}", probe(dir, "C:/repo")));
+        assert_eq!(at.addr, SocketAddr::from(([127, 0, 0, 1], port)));
+        assert!(reached(&seen).starts_with("POST /api/status"), "the probe arrived");
+        assert!(call_to(&at, "lint", &serde_json::json!({})).unwrap().0);
+        assert!(reached(&seen).starts_with("POST /api/lint"), "and the call");
+        // A daemon on another loopback address, 127.0.0.2, with a decoy on the same port of 127.0.0.1: the marker's own
+        // address is the one asked, not the usual loopback. Every 127/8 address is this machine's on Windows and Linux.
+        match listening("127.0.0.2") {
+            Some((port, seen)) => {
+                // The port may be taken on 127.0.0.1 by something else; then the decoy is left out.
+                let decoy = listening_on("127.0.0.1", port).map(|(_, seen)| seen);
+                store_io::write_serving_at(dir, SocketAddr::from(([127, 0, 0, 2], port))).unwrap();
+                let at = serving(dir, "C:/repo").unwrap_or_else(|| panic!("probed at 127.0.0.2: {:?}", probe(dir, "C:/repo")));
+                assert_eq!(at.addr, SocketAddr::from(([127, 0, 0, 2], port)));
+                assert!(reached(&seen).starts_with("POST /api/status"), "the probe reached the recorded address");
+                assert!(call_to(&at, "lint", &serde_json::json!({})).unwrap().0);
+                assert!(reached(&seen).starts_with("POST /api/lint"), "and the call");
+                if let Some(decoy) = decoy {
+                    assert!(decoy.try_recv().is_err(), "nothing reached 127.0.0.1 on that port");
+                }
+            }
+            None => println!("skipped: this machine does not bind 127.0.0.2"),
+        }
+        // Listening on the IPv6 loopback alone, where there is one: the family of the address it records, for the probe and the call.
+        let Some((port, seen)) = listening("::1") else { return };
+        for bound in [SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port)), SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, port))] {
+            store_io::write_serving_at(dir, bound).unwrap();
+            let at = serving(dir, "C:/repo").unwrap_or_else(|| panic!("probed at the IPv6 loopback for {bound}"));
+            assert_eq!(at.addr, SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port)));
+            assert!(reached(&seen).starts_with("POST /api/status"), "the probe arrived for {bound}");
+            assert!(call_to(&at, "lint", &serde_json::json!({})).unwrap().0);
+            assert!(reached(&seen).starts_with("POST /api/lint"), "and the call for {bound}");
         }
     }
 }

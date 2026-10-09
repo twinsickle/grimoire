@@ -284,7 +284,7 @@ fn one_answer_whichever_transport() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "other-sites-are-refused-on-every-route", "checks": ["crates/server/src/http#same-origin"]}
+/// {"test": "other-sites-are-refused-on-every-route", "checks": ["crates/server/src/http#foreign-origin-refused", "crates/server/src/http#non-json-post-refused", "crates/server/src/http#ui-files-to-any-navigation"]}
 /// ```
 #[test]
 fn other_sites_are_refused_on_every_route() {
@@ -324,6 +324,46 @@ fn other_sites_are_refused_on_every_route() {
     assert_eq!(code, 200);
     assert!(!head.to_ascii_lowercase().contains("access-control-allow"), "no CORS headers on an answer either: {head}");
     assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:overview", "ticket": "work" }))).0, 200);
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "no-route-family-sends-cors-headers", "checks": ["crates/server/src/http#no-cors-headers"]}
+/// ```
+#[test]
+fn no_route_family_sends_cors_headers() {
+    let tmp = tempfile::Builder::new().prefix("grimoire-ui-").tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
+    std::fs::write(dir.join("index.html"), "<div></div>").unwrap();
+    let s = serve_with(http::Ui::Dir(dir));
+    let own = format!("127.0.0.1:{}", s.port);
+    // Asked as a page of the daemon's own origin would, and as a page elsewhere would, which a browser would let read a CORS answer.
+    let same = format!("Origin: http://{own}\r\nSec-Fetch-Site: same-origin\r\n");
+    let elsewhere = "Origin: https://example.com\r\n".to_string();
+    for origin in [same, elsewhere] {
+        let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} });
+        let status = json!({});
+        for (family, method, path, body) in
+            [("the API", "POST", "/api/status", Some(&status)), ("MCP", "POST", "/mcp", Some(&init)), ("the UI's files", "GET", "/", None), ("a preflight", "OPTIONS", "/api/status", None)]
+        {
+            let (_, head, _) = request_as(s.port, method, path, body, &own, &origin);
+            assert!(!head.to_ascii_lowercase().contains("access-control-"), "{family} with {origin:?}: {head}");
+        }
+        // The event stream never ends: its head alone is read.
+        let mut stream = TcpStream::connect(("127.0.0.1", s.port)).unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        write!(stream, "GET /api/events HTTP/1.0\r\nHost: {own}\r\n{origin}\r\n").unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            stream.read_exact(&mut byte).unwrap();
+            head.push(byte[0]);
+        }
+        let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+        assert!(origin.contains("example.com") || head.contains(" 200 "), "the stream is served to its own origin: {head}");
+        assert!(!head.contains("access-control-"), "the event stream with {origin:?}: {head}");
+    }
 }
 
 /// # Test contract
@@ -609,4 +649,177 @@ fn a_library_directory_without_shared_is_refused() {
     let why = refused.unwrap_err().to_string();
     assert!(why.contains("--library") && why.contains("needs --shared"), "{why}");
     assert_eq!(std::fs::read_dir(&library).unwrap().count(), 0, "nothing was opened or marked");
+}
+
+/// A request answered with its head alone: the status code and the head, for a stream that never ends.
+fn head_of(port: u16, path: &str) -> (u16, String) {
+    let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    write!(s, "GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        s.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    let head = String::from_utf8_lossy(&head).to_string();
+    (head.split_whitespace().nth(1).unwrap().parse().unwrap(), head)
+}
+
+/// The checkout and leniency of every call an answerer was asked for.
+type Asked = Arc<std::sync::Mutex<Vec<(Option<String>, bool)>>>;
+
+/// An answerer that keeps the checkout and leniency of every call it is asked for, and answers with one daemon.
+struct Recording {
+    daemon: Arc<Daemon>,
+    asked: Asked,
+}
+
+impl http::Answerer for Recording {
+    fn daemon(&self, checkout: Option<&str>, lenient: bool) -> Result<Arc<Daemon>, grimoire_core::ToolError> {
+        self.asked.lock().unwrap().push((checkout.map(str::to_string), lenient));
+        Ok(self.daemon.clone())
+    }
+}
+
+/// The routes of a daemon whose answerer is recorded.
+fn serve_recorded() -> (Served, Asked) {
+    let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let kept = asked.clone();
+    let s = serve_app(move |daemon| http::api_over(Arc::new(Recording { daemon, asked: kept }), Arc::new(grimoire_server::access::Local)));
+    (s, asked)
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-checkout-of-prune-recipes-stream-export-is-in-the-query", "checks": ["crates/server/src/http#checkout-from-the-prune-and-recipes-query", "crates/server/src/http#checkout-from-the-stream-and-export-query"]}
+/// ```
+#[test]
+fn the_checkout_of_prune_recipes_stream_export_is_in_the_query() {
+    let (s, asked) = serve_recorded();
+    let last = || asked.lock().unwrap().last().cloned().unwrap();
+    let count = || asked.lock().unwrap().len();
+    // The prune and the recipes: the checkout in the query chooses the daemon, and the body names only what it carries.
+    let prune = json!({ "present": [], "intent": "0000" });
+    request(s.port, "POST", "/api/prune?checkout=C%3A%2Fwt", Some(&prune));
+    assert_eq!(last(), (Some("C:/wt".to_string()), true));
+    request(s.port, "POST", "/api/prune", Some(&prune));
+    assert_eq!(last(), (None, true), "none named, none asked for");
+    request(s.port, "POST", "/api/recipes?checkout=C%3A%2Fwt", Some(&json!({ "recipes": [] })));
+    assert_eq!(last(), (Some("C:/wt".to_string()), true));
+    // A checkout in either body is no part of it: refused, and no daemon is chosen for it.
+    let before = count();
+    let (code, body) = request(s.port, "POST", "/api/prune", Some(&json!({ "present": [], "intent": "0000", "checkout": "C:/wt" })));
+    assert_eq!((code, json(&body)["error"].clone()), (400, json!("invalid")), "{body}");
+    let (code, body) = request(s.port, "POST", "/api/recipes", Some(&json!({ "recipes": [], "checkout": "C:/wt" })));
+    assert_eq!((code, json(&body)["error"].clone()), (400, json!("invalid")), "{body}");
+    assert_eq!(count(), before);
+    // The export and the event stream, which have no body at all.
+    let (code, _) = request(s.port, "GET", "/api/export?checkout=C%3A%2Fwt", None);
+    assert_eq!(code, 200);
+    assert_eq!(last(), (Some("C:/wt".to_string()), true));
+    let (code, head) = head_of(s.port, "/api/events?checkout=C%3A%2Fother");
+    assert_eq!(code, 200, "{head}");
+    assert_eq!(last(), (Some("C:/other".to_string()), true));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "the-tools-list-asks-no-daemon", "checks": ["crates/server/src/http#tools-list-needs-no-daemon"]}
+/// ```
+#[test]
+fn the_tools_list_asks_no_daemon() {
+    struct NoDaemon;
+    impl http::Answerer for NoDaemon {
+        fn daemon(&self, _: Option<&str>, _: bool) -> Result<Arc<Daemon>, grimoire_core::ToolError> {
+            panic!("the tools list asked for a daemon")
+        }
+    }
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = http::api_over(Arc::new(NoDaemon), Arc::new(grimoire_server::access::Local));
+    runtime.spawn(async move { axum::serve(listener, app).await });
+    let (code, body) = request(port, "GET", "/api/tools", None);
+    assert_eq!(code, 200, "{body}");
+    let tools = json(&body)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert!(tools.iter().any(|t| t == "status") && tools.iter().any(|t| t == "lint"), "{tools:?}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "one-daemon-answers-whatever-checkout-is-named", "checks": ["crates/server/src/http#one-daemon-answers-whatever-is-named"]}
+/// ```
+#[test]
+fn one_daemon_answers_whatever_checkout_is_named() {
+    let s = serve();
+    let (code, plain) = request(s.port, "POST", "/api/status", Some(&json!({})));
+    assert_eq!(code, 200, "{plain}");
+    // A checkout that is none of the daemon's, in the input of a call and in the query of the routes without a body.
+    let (code, named) = request(s.port, "POST", "/api/status", Some(&json!({ "checkout": "C:/no/such/checkout" })));
+    assert_eq!(code, 200, "{named}");
+    assert_eq!(json(&named)["repository"], json(&plain)["repository"]);
+    assert_eq!(request(s.port, "GET", "/api/export?checkout=C%3A%2Fno%2Fsuch%2Fcheckout", None).0, 200);
+    assert_eq!(head_of(s.port, "/api/events?checkout=C%3A%2Fno%2Fsuch%2Fcheckout").0, 200);
+    let (code, answer) = request(s.port, "GET", "/api/board?checkout=C%3A%2Fno%2Fsuch%2Fcheckout", None);
+    assert_eq!(code, 200, "{answer}");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-page-on-another-site-is-refused-under-the-token-policy-too", "checks": ["crates/server/src/http#foreign-origin-refused"]}
+/// ```
+#[test]
+fn a_page_on_another_site_is_refused_under_the_token_policy_too() {
+    let (s, writer, _) = serve_shared();
+    let own = format!("127.0.0.1:{}", s.port);
+    let bearer = format!("Authorization: Bearer {writer}\r\n");
+    let ticket = json!({ "title": "Forged", "kind": "gap", "priority": "later", "body": "b" });
+    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} });
+    // A valid token carried by a page on another site: refused on the API, the event stream and MCP, with the error object.
+    for foreign in ["Origin: https://example.com\r\n", "Origin: http://127.0.0.1:1\r\n", "Sec-Fetch-Site: cross-site\r\n", "Sec-Fetch-Site: same-site\r\n"] {
+        let extra = format!("{bearer}{foreign}");
+        for (method, path, body) in [("POST", "/api/inscribe_ticket", Some(&ticket)), ("GET", "/api/events", None), ("POST", "/mcp", Some(&init))] {
+            let (code, _, answer) = request_as(s.port, method, path, body, &own, &extra);
+            assert_eq!(code, 403, "{method} {path} with {foreign:?}: {answer}");
+            let refusal = json(&answer);
+            assert!(refusal["error"] == "invalid" && refusal["message"].as_str().is_some_and(|m| !m.is_empty()), "{method} {path}: {answer}");
+        }
+    }
+    assert_eq!(s.daemon.call("board", json!({ "kinds": ["gap"] })).unwrap()["unattached"].as_array().unwrap().len(), 0, "nothing was written");
+    // The daemon's own origin, over http or behind a proxy over https, and a caller sending neither header, are served.
+    for own_origin in [format!("Origin: http://{own}\r\n"), format!("Origin: https://{own}\r\nSec-Fetch-Site: same-origin\r\n"), String::new()] {
+        let (code, _, answer) = request_as(s.port, "POST", "/api/status", Some(&json!({})), &own, &format!("{bearer}{own_origin}"));
+        assert_eq!(code, 200, "{own_origin:?}: {answer}");
+    }
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-rebound-host-is-refused-on-every-route-under-the-local-policy", "checks": ["crates/server/src/http#foreign-host-refused"]}
+/// ```
+#[test]
+fn a_rebound_host_is_refused_on_every_route_under_the_local_policy() {
+    let s = serve();
+    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {} });
+    let page = json!({ "slug": "rebound", "title": "Rebound", "body": "b", "links": [] });
+    for host in [format!("evil.example:{}", s.port), format!("127.0.0.2:{}", s.port), "localhost.evil.example".to_string(), String::new()] {
+        for (method, path, body) in [("POST", "/api/put_page", Some(&page)), ("GET", "/api/events", None), ("POST", "/mcp", Some(&init))] {
+            let (code, _, answer) = request_as(s.port, method, path, body, &host, "");
+            assert_eq!(code, 403, "{method} {path} as {host:?}: {answer}");
+            let refusal = json(&answer);
+            assert!(refusal["error"] == "invalid" && refusal["message"].as_str().is_some_and(|m| m.contains("loopback")), "{method} {path} as {host:?}: {answer}");
+        }
+    }
+    assert_eq!(request(s.port, "POST", "/api/get", Some(&json!({ "ref": "page:rebound", "ticket": "work" }))).0, 404, "nothing was written");
+    // Only the loopback names are answered.
+    for host in [format!("localhost:{}", s.port), format!("LOCALHOST:{}", s.port), format!("127.0.0.1:{}", s.port), format!("[::1]:{}", s.port), "localhost".to_string()] {
+        let (code, _, answer) = request_as(s.port, "POST", "/api/status", Some(&json!({})), &host, "");
+        assert_eq!(code, 200, "{host}: {answer}");
+    }
 }

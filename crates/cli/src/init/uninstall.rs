@@ -357,7 +357,7 @@ model = \"o4\"
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-earlier-releases-post-commit-hook-is-inits-own", "checks": ["crates/cli/src/init/uninstall#hooks-only-when-unedited", "crates/cli/src/init/uninstall#earlier-release-post-commit-hook", "crates/cli/src/init#bottling-hook"]}
+    /// {"test": "an-earlier-releases-post-commit-hook-is-inits-own", "checks": ["crates/cli/src/init/uninstall#hooks-only-when-unedited", "crates/cli/src/init/uninstall#earlier-release-post-commit-hook", "crates/cli/src/init#earlier-releases-hook-is-rewritten"]}
     /// ```
     #[test]
     fn an_earlier_releases_post_commit_hook_is_inits_own() {

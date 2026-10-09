@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a daemon's reading of its checkout's code current: one changed file at a time as the watcher reports it, the whole checkout before anything is judged over it, and every recipe whose files changed.","criteria":[{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up","statement":"Before close_ticket, bottle_ticket or judge_recipe, on a daemon that holds code and before a write is sent to a team's server, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher: it walks what that reading would read, its ignore rules and nested checkouts heeded, keeps each held source file whose text's digest matches, extracts each that differs or appeared and every recipe file whatever its digest, and removes every other held file, one no longer readable as text among them; then re-joins the graph and announces what changed; with nothing changed it extracts nothing and announces nothing; a checkout that cannot be walked refuses the close, bottling or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."}]}
+//! {"purpose":"Keep a daemon's reading of its checkout's code current: one changed file at a time as the watcher reports it, the whole checkout before anything is judged over it, and every recipe whose files changed.","criteria":[{"id":"one-file-reextract","statement":"A changed source file is re-extracted alone and the extraction re-joined; unchanged files are not re-read; a file the extractor no longer reads, as one in a folder that became a checkout of its own, is removed from the extraction, and a nested checkout's marker appearing or going reads the whole checkout again."},{"id":"catches-up-before-a-close","statement":"Before close_ticket, on a daemon that holds code, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher."},{"id":"catches-up-before-a-bottling","statement":"Before bottle_ticket, on a daemon that holds code, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher."},{"id":"catches-up-before-a-judgement","statement":"Before judge_recipe, on a daemon that holds code, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher."},{"id":"before-a-write-to-a-teams-server","statement":"Before a close, a bottling or a judgement is sent to a team's server, on a daemon that holds code, catch_up makes the extraction what reading the whole checkout would make it, without waiting for the watcher; other writes are sent as they are."},{"id":"walks-what-a-whole-reading-reads","statement":"catch_up walks what reading the whole checkout would read, its ignore rules and nested checkouts heeded."},{"id":"keeps-files-whose-digest-matches","statement":"catch_up keeps each held source file whose text's digest matches."},{"id":"extracts-changed-and-new-files","statement":"catch_up extracts each source file whose text differs or that appeared."},{"id":"extracts-every-recipe-whatever-its-digest","statement":"catch_up extracts every recipe file whatever its digest."},{"id":"removes-other-held-files","statement":"catch_up removes every other held file."},{"id":"removes-a-file-no-longer-readable-as-text","statement":"catch_up removes a held file no longer readable as text."},{"id":"rejoins-and-announces-what-changed","statement":"After extracting and removing, catch_up re-joins the graph and announces what changed."},{"id":"nothing-changed-extracts-and-announces-nothing","statement":"With nothing changed, catch_up extracts nothing and announces nothing."},{"id":"unwalkable-checkout-refuses","statement":"A checkout that cannot be walked refuses the close, bottling or judgement as store_unavailable, judging nothing."},{"id":"recipes-follow-files","statement":"When the paths handed to reextract include a path a held recipe's files name, or a folder holding one or held by one, that recipe's file is read again with them, so a named file appearing, changing or going is seen in what the recipe found without a save to the recipe; recipe_paths gives every path the held recipes name, for the watcher."}]}
 //! ```
 
 use std::path::Path;
@@ -227,7 +227,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-close-catches-up-with-the-files-on-disk", "checks": ["crates/server/src/daemon/extraction#catches-up", "req:daemon-catches-up-before-judging"]}
+    /// {"test": "a-close-catches-up-with-the-files-on-disk", "checks": ["crates/server/src/daemon/extraction#catches-up-before-a-close", "crates/server/src/daemon/extraction#extracts-changed-and-new-files", "crates/server/src/daemon/extraction#removes-other-held-files", "crates/server/src/daemon/extraction#rejoins-and-announces-what-changed", "crates/server/src/daemon/extraction#nothing-changed-extracts-and-announces-nothing", "req:daemon-catches-up-before-judging"]}
     /// ```
     #[test]
     fn a_close_catches_up_with_the_files_on_disk() {
@@ -259,7 +259,43 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "catching-up-reads-what-the-whole-checkout-would", "checks": ["crates/server/src/daemon/extraction#catches-up", "req:daemon-catches-up-before-judging"]}
+    /// {"test": "a-bottling-catches-up-with-the-files-on-disk", "checks": ["crates/server/src/daemon/extraction#catches-up-before-a-bottling", "req:daemon-catches-up-before-judging"]}
+    /// ```
+    #[test]
+    fn a_bottling_catches_up_with_the_files_on_disk() {
+        let h = Harness::new();
+        let d = h.open();
+        // A close that waits for the main line leaves the ticket simmering, to be bottled.
+        let simmering = d.call("close_ticket", json!({ "ref": "ticket:work", "decision": { "text": "Done." }, "when": "bottled" })).unwrap();
+        assert_eq!(simmering["node"]["status"], "simmering", "{simmering}");
+        let mut rx = d.subscribe();
+        // A merge rewrites one file, removes one and adds one, and no watcher has said so.
+        std::fs::write(h.repo.join("src").join("a.rs"), CONTRACTED.replace("It says a.", "It says a, merged.")).unwrap();
+        std::fs::remove_file(h.repo.join("src").join("b.rs")).unwrap();
+        std::fs::write(
+            h.repo.join("src").join("c.rs"),
+            "pub fn c() {}
+",
+        )
+        .unwrap();
+        let bottled = d.call("bottle_ticket", json!({ "ref": "ticket:work" })).unwrap();
+        assert_eq!(bottled["bottled"], true, "{bottled}");
+        match rx.try_recv().unwrap() {
+            Event::Graph { mut changed } => {
+                changed.sort();
+                assert_eq!(changed, ["src/a.rs", "src/b.rs", "src/c.rs"]);
+            }
+            other => panic!("expected the catch-up's rebuild first, got {other:?}"),
+        }
+        assert_eq!(d.call("get", json!({ "ref": "criterion:src/a#says" })).unwrap()["node"]["statement"], "It says a, merged.");
+        assert_eq!(d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap_err().code(), "not_found");
+        assert!(d.call("get", json!({ "ref": "file:src/c.rs" })).is_ok());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "catching-up-reads-what-the-whole-checkout-would", "checks": ["crates/server/src/daemon/extraction#walks-what-a-whole-reading-reads", "crates/server/src/daemon/extraction#removes-other-held-files", "req:daemon-catches-up-before-judging"]}
     /// ```
     #[test]
     fn catching_up_reads_what_the_whole_checkout_would() {
@@ -314,7 +350,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-recipe-follows-the-files-it-names", "checks": ["crates/server/src/daemon/extraction#recipes-follow-files", "crates/server/src/daemon/extraction#catches-up", "req:recipe-read", "req:daemon-catches-up-before-judging"]}
+    /// {"test": "a-recipe-follows-the-files-it-names", "checks": ["crates/server/src/daemon/extraction#recipes-follow-files", "crates/server/src/daemon/extraction#catches-up-before-a-judgement", "crates/server/src/daemon/extraction#extracts-every-recipe-whatever-its-digest", "req:recipe-read", "req:daemon-catches-up-before-judging"]}
     /// ```
     #[test]
     fn a_recipe_follows_the_files_it_names() {
@@ -355,5 +391,82 @@ mod tests {
         assert_ne!(judged["judged"][0]["judgement"]["fingerprint"], before, "not the digest the watcher last reported");
         assert_eq!(judged["judged"][0]["judgement"]["fingerprint"], digest(&d));
         assert_eq!(judged["judged"][0]["due"], false);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "catching-up-keeps-same-digest-rereads-recipe", "checks": ["crates/server/src/daemon/extraction#keeps-files-whose-digest-matches", "crates/server/src/daemon/extraction#extracts-every-recipe-whatever-its-digest"]}
+    /// ```
+    #[test]
+    fn catching_up_keeps_same_digest_rereads_recipe() {
+        let h = Harness::new();
+        std::fs::create_dir_all(h.repo.join("ui")).unwrap();
+        std::fs::write(h.repo.join("ui").join("button.recipe.md"), "# Button\n\n## Recipe\n\n```json\n{\"id\":\"button\",\"kind\":\"component\",\"files\":[\"src/a.rs\"]}\n```\n").unwrap();
+        let d = h.open();
+        let held = |rel: &str| d.files.lock().unwrap()[rel].clone();
+        let (source, recipe) = (held("src/b.rs"), held("ui/button.recipe.md"));
+        assert!(recipe.recipe.is_some() && !source.digest.is_empty() && !recipe.digest.is_empty());
+        // Both held entries are made to differ from what extracting their text gives, their digests being the files' own.
+        for rel in ["src/b.rs", "ui/button.recipe.md"] {
+            d.files.lock().unwrap().get_mut(rel).unwrap().module = "tampered".to_string();
+        }
+        let mut rx = d.subscribe();
+        d.catch_up().unwrap();
+        // The source file's text has the digest held, so the entry is kept as it is, not read again.
+        assert_eq!(held("src/b.rs").module, "tampered");
+        // The recipe file has the same digest and is read again: what it finds is other files.
+        assert_eq!(held("ui/button.recipe.md"), recipe);
+        match rx.try_recv().unwrap() {
+            Event::Graph { changed } => assert_eq!(changed, ["ui/button.recipe.md"]),
+            other => panic!("expected the rebuild, got {other:?}"),
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "catching-up-drops-a-file-no-longer-text", "checks": ["crates/server/src/daemon/extraction#removes-a-file-no-longer-readable-as-text"]}
+    /// ```
+    #[test]
+    fn catching_up_drops_a_file_no_longer_text() {
+        let h = Harness::new();
+        let d = h.open();
+        assert!(d.files.lock().unwrap().contains_key("src/b.rs"));
+        // The file is still there and still walked, but its bytes are not UTF-8 any more.
+        std::fs::write(h.repo.join("src").join("b.rs"), [0x70u8, 0xff, 0xfe, 0x00, 0x80]).unwrap();
+        d.catch_up().unwrap();
+        assert!(!d.files.lock().unwrap().contains_key("src/b.rs"), "left out, as a whole reading leaves it out");
+        assert_eq!(d.call("get", json!({ "ref": "file:src/b.rs" })).unwrap_err().code(), "not_found");
+        let fresh = Daemon::open(&h.store).unwrap().0;
+        assert_eq!(d.files.lock().unwrap().keys().collect::<Vec<_>>(), fresh.files.lock().unwrap().keys().collect::<Vec<_>>(), "as a whole reading has it");
+        assert!(d.files.lock().unwrap().contains_key("src/a.rs"), "the others stay");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-checkout-that-cannot-be-walked-judges-nothing", "checks": ["crates/server/src/daemon/extraction#unwalkable-checkout-refuses"]}
+    /// ```
+    #[test]
+    fn a_checkout_that_cannot_be_walked_judges_nothing() {
+        let h = Harness::new();
+        let d = h.open();
+        let status = |d: &Daemon| d.call("get", json!({ "ref": "ticket:work" })).unwrap()["node"]["status"].clone();
+        assert_eq!(status(&d), "brewing");
+        let before = d.files.lock().unwrap().clone();
+        // The checkout is gone from under the daemon.
+        std::fs::remove_dir_all(&h.repo).unwrap();
+        for (tool, input) in [
+            ("close_ticket", json!({ "ref": "ticket:work", "decision": { "text": "Done." } })),
+            ("bottle_ticket", json!({ "ref": "ticket:work" })),
+            ("judge_recipe", json!({ "ref": "recipe:button", "outcome": "held" })),
+        ] {
+            let refused = d.call(tool, input).unwrap_err();
+            assert_eq!(refused.code(), "store_unavailable", "{tool}: {refused}");
+            assert!(refused.to_string().contains("nothing was judged"), "{tool}: {refused}");
+        }
+        assert_eq!(status(&d), "brewing", "nothing was closed");
+        assert_eq!(*d.files.lock().unwrap(), before, "and nothing was changed in what is held");
     }
 }

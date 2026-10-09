@@ -175,7 +175,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-local-policy-admits-this-machine-only", "checks": ["crates/server/src/access#local-policy", "crates/server/src/http#same-origin"]}
+    /// {"test": "the-local-policy-admits-this-machine-only", "checks": ["crates/server/src/access#local-policy"]}
     /// ```
     #[test]
     fn the_local_policy_admits_this_machine_only() {

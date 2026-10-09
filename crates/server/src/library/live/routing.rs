@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Route a request to the library's grimoires: each one's API and MCP at /g/<name>/, and the daemon's own on the bare routes, handed unread to that grimoire's routes, which answer each call from the checkout it names; and the release a command asks for; and serve a checkout a call names that is not served yet.","criteria":[{"id":"handed-to-the-grimoires-routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp, or to the bare routes for the daemon's own grimoire, is handed to that grimoire's routes as the request arrives, behind its trust step."},{"id":"path-the-routes-expect","statement":"A request is handed on with the path the grimoire's own routes expect and none of the library's own path parameters."},{"id":"body-passed-on-unread","statement":"The library neither reads nor parses a request's body, passing it on unread."},{"id":"refused-caller-costs-a-discard","statement":"A caller the trust step refuses costs the library no more than its body's discard."},{"id":"handler-chooses-the-checkout","statement":"The handler that parses the call chooses its checkout."},{"id":"unheld-name-not-found","statement":"A request naming a grimoire the library does not hold is answered not_found."},{"id":"checkout-chosen","statement":"The checkout a call is answered by is the one the `checkout` its handler parsed names: the served checkout whose project file is nearest above that directory, found from the directory as the system resolves it, a directory that does not exist as its nearest existing folder's, and naming this grimoire at the store or copy that checkout is served from, so a checkout kept inside another is its own and the outer one never answers for it, and the project file is looked up before the library is held; with none named, the grimoire's one checkout, or, for status, the event stream, the export and the prune, the default's when it is a checkout of the grimoire and else the first."},{"id":"checkout-refused","statement":"A call naming no checkout to a grimoire served for several, but those answered without one, and a call naming a directory no served checkout of the grimoire is or holds, are refused once the trust step has admitted the caller, as a tool's own invalid error is, its details naming `checkout`, over the API as that error and over MCP as a tool-level error result; the message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`, and, for a call naming none, that tools offering no such field are a list the client kept from before it, which a new session fetches again and a reconnect may not, and that the HTTP API at /g/<name>/api/<tool> takes `checkout` until then."},{"id":"registered-store","statement":"A request whose checkout names a directory whose nearest project file names this grimoire, in a checkout not served yet, is answered by that checkout once it is served: one of a store of its own is added to the store's checkouts through the store's writer and served as a view beside the others, sharing their lock."},{"id":"registered-team","statement":"A request whose checkout names a directory, in a checkout not served yet, of a team's grimoire this daemon serves, the same server's, has that checkout's copy of the server's intent made and is served; when that cannot be done the request is refused saying why and what to run there."},{"id":"registered-trust","statement":"No such checkout is taken for a caller the grimoire's trust step would refuse."},{"id":"registered-once","statement":"A checkout is taken one at a time with refresh and with any other such request, so it is opened once, and never while its store is held back."},{"id":"registered-name-taken","statement":"A request whose checkout names a directory whose project file names a grimoire of that name kept at another store or copied from another server is refused saying the name is served already and to give that grimoire another name in its project file, as library::name_taken words it."},{"id":"registered-no-such-grimoire","statement":"A request whose checkout names a directory whose project file names no grimoire of that name is refused as before, and nothing is added."}]}
+//! {"purpose":"Route a request to the library's grimoires: each one's API and MCP at /g/<name>/, and the daemon's own on the bare routes, handed unread to that grimoire's routes, which answer each call from the checkout it names; and the release a command asks for; and serve a checkout a call names that is not served yet.","criteria":[{"id":"handed-to-the-grimoires-routes","statement":"A request to /g/<name>/api/... or /g/<name>/mcp, or to the bare routes for the daemon's own grimoire, is handed to that grimoire's routes as the request arrives, behind its trust step."},{"id":"path-the-routes-expect","statement":"A request is handed on with the path the grimoire's own routes expect and none of the library's own path parameters."},{"id":"body-passed-on-unread","statement":"The library neither reads nor parses a request's body, passing it on unread."},{"id":"refused-caller-costs-a-discard","statement":"A caller the trust step refuses costs the library no more than its body's discard."},{"id":"handler-chooses-the-checkout","statement":"The handler that parses the call chooses its checkout."},{"id":"unheld-name-not-found","statement":"A request naming a grimoire the library does not hold is answered not_found."},{"id":"nearest-project-file","statement":"The checkout a call is answered by is the one the `checkout` its handler parsed names: the served checkout whose project file is nearest above that directory, and naming this grimoire at the store or copy that checkout is served from."},{"id":"nested-checkout-is-its-own","statement":"A checkout kept inside another is its own, and the outer one never answers for it."},{"id":"resolved-as-the-system-does","statement":"The checkout a call names is found from the directory as the system resolves it."},{"id":"missing-directory-is-its-nearest-existing","statement":"A call naming a directory that does not exist is answered by the checkout of its nearest existing folder."},{"id":"project-file-looked-up-before-library-held","statement":"The project file is looked up before the library is held."},{"id":"one-checkout-needs-no-naming","statement":"A call naming no checkout is answered by the grimoire's one checkout."},{"id":"default-answers-when-none-named","statement":"A call naming no checkout, for status, the event stream, the export and the prune, is answered by the default's checkout when it is a checkout of the grimoire."},{"id":"first-answers-when-default-is-not-ours","statement":"A call naming no checkout, for status, the event stream, the export and the prune, is answered by the grimoire's first checkout when the default's is not one of the grimoire."},{"id":"none-named-for-several-refused","statement":"A call naming no checkout to a grimoire served for several, but those answered without one, is refused."},{"id":"directory-no-checkout-holds-refused","statement":"A call naming a directory no served checkout of the grimoire is or holds is refused."},{"id":"refused-after-the-trust-step","statement":"Such a refusal is made once the trust step has admitted the caller."},{"id":"refused-over-the-api-as-invalid","statement":"Such a refusal is, over the API, a tool's own invalid error, its details naming `checkout`."},{"id":"refused-over-mcp-as-tool-error","statement":"Such a refusal is, over MCP, a tool-level error result."},{"id":"refusal-lists-checkouts-and-says-to-name-yours","statement":"The refusal's message lists the grimoire's checkouts and says to name the caller's working directory as `checkout`."},{"id":"refusal-explains-a-kept-tool-list","statement":"The refusal of a call naming no checkout also says that tools offering no such field are a list the client kept from before it, which a new session fetches again and a reconnect may not, and that the HTTP API at /g/<name>/api/<tool> takes `checkout` until then."},{"id":"registered-store","statement":"A request whose checkout names a directory whose nearest project file names this grimoire, in a checkout not served yet, is answered by that checkout once it is served: one of a store of its own is added to the store's checkouts through the store's writer and served as a view beside the others, sharing their lock."},{"id":"registered-team","statement":"A request whose checkout names a directory, in a checkout not served yet, of a team's grimoire this daemon serves, the same server's, has that checkout's copy of the server's intent made and is served; when that cannot be done the request is refused saying why and what to run there."},{"id":"registered-trust","statement":"No such checkout is taken for a caller the grimoire's trust step would refuse."},{"id":"registered-once","statement":"A checkout is taken one at a time with refresh and with any other such request, so it is opened once, and never while its store is held back."},{"id":"registered-name-taken","statement":"A request whose checkout names a directory whose project file names a grimoire of that name kept at another store or copied from another server is refused saying the name is served already and to give that grimoire another name in its project file, as library::name_taken words it."},{"id":"registered-no-such-grimoire","statement":"A request whose checkout names a directory whose project file names no grimoire of that name is refused as before, and nothing is added."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -112,7 +112,13 @@ impl Live {
         // The checkout a directory is in: its nearest project file, found from the directory as the
         // system resolves it, so a link into a checkout is that checkout's; looked up before the
         // library is held, so a slow path holds up no other call.
-        let nearest = checkout.and_then(|dir| store_io::find_named(&canonical(Path::new(dir))).ok()).map(|(root, home, named)| (canonical(&root), home, named));
+        let nearest = checkout
+            .and_then(|dir| {
+                #[cfg(test)]
+                tests::while_looking_up();
+                store_io::find_named(&canonical(Path::new(dir))).ok()
+            })
+            .map(|(root, home, named)| (canonical(&root), home, named));
         let held = self.held.lock().expect("library lock");
         let ours: Vec<(&Key, &Shelved)> = held.served.iter().filter(|((n, _), _)| n == name).collect();
         let Some(&(first_key, _)) = ours.first() else {
@@ -303,6 +309,19 @@ mod tests {
     use crate::library::live::tests::project;
     use crate::library::Grimoire;
 
+    thread_local! {
+        /// What a test does at the moment a call's project file is being looked up.
+        static WHILE_LOOKING_UP: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    pub(super) fn while_looking_up() {
+        WHILE_LOOKING_UP.with(|hook| {
+            if let Some(hook) = &*hook.borrow() {
+                hook();
+            }
+        });
+    }
+
     /// Answer `status` at `routes`, for the repository it names.
     async fn repository_of(routes: Router, checkout: Option<&str>) -> String {
         let body = match checkout {
@@ -318,7 +337,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-call-is-answered-by-the-checkout-it-names", "checks": ["crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/library/live/routing#checkout-refused", "crates/server/src/library/live/routing#registered-no-such-grimoire", "crates/server/src/library/live/routing#registered-name-taken"]}
+    /// {"test": "a-call-is-answered-by-the-checkout-it-names", "checks": ["crates/server/src/library/live/routing#nearest-project-file", "crates/server/src/library/live/routing#nested-checkout-is-its-own", "crates/server/src/library/live/routing#resolved-as-the-system-does", "crates/server/src/library/live/routing#missing-directory-is-its-nearest-existing", "crates/server/src/library/live/routing#one-checkout-needs-no-naming", "crates/server/src/library/live/routing#default-answers-when-none-named", "crates/server/src/library/live/routing#none-named-for-several-refused", "crates/server/src/library/live/routing#directory-no-checkout-holds-refused", "crates/server/src/library/live/routing#refusal-lists-checkouts-and-says-to-name-yours", "crates/server/src/library/live/routing#refusal-explains-a-kept-tool-list", "crates/server/src/library/live/routing#registered-no-such-grimoire", "crates/server/src/library/live/routing#registered-name-taken"]}
     /// ```
     #[tokio::test]
     async fn a_call_is_answered_by_the_checkout_it_names() {
@@ -472,7 +491,7 @@ server = \"https://elsewhere.example/g/ledger\"
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-library-hands-a-call-on-unread", "checks": ["crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#path-the-routes-expect", "crates/server/src/library/live/routing#body-passed-on-unread", "crates/server/src/library/live/routing#refused-caller-costs-a-discard", "crates/server/src/library/live/routing#handler-chooses-the-checkout", "crates/server/src/library/live/routing#unheld-name-not-found", "crates/server/src/library/live/routing#checkout-chosen", "crates/server/src/http#checkout-from-the-parse", "crates/server/src/mcp#checkout-from-arguments"]}
+    /// {"test": "a-library-hands-a-call-on-unread", "checks": ["crates/server/src/library/live/routing#handed-to-the-grimoires-routes", "crates/server/src/library/live/routing#path-the-routes-expect", "crates/server/src/library/live/routing#body-passed-on-unread", "crates/server/src/library/live/routing#refused-caller-costs-a-discard", "crates/server/src/library/live/routing#handler-chooses-the-checkout", "crates/server/src/library/live/routing#unheld-name-not-found", "crates/server/src/library/live/routing#nearest-project-file", "crates/server/src/http#parsed-once-after-the-trust-step", "crates/server/src/http#checkout-from-the-post-input", "crates/server/src/http#checkout-from-the-get-query", "crates/server/src/http#refusal-answered-as-a-tools-own-error", "crates/server/src/mcp#checkout-from-arguments"]}
     /// ```
     #[tokio::test]
     async fn a_library_hands_a_call_on_unread_and_its_handler_chooses_the_checkout() {
@@ -671,6 +690,72 @@ store = {}
         assert!(matches!(live.take_checkout("ledger", &second.to_string_lossy()), Took::Served));
         poller.join().unwrap();
         assert_eq!(*seen.lock().unwrap(), Some(vec!["ledger".to_string(), "ledger".to_string(), "shop".to_string()]), "the first request it answered named the whole library");
+        live.stop();
+    }
+
+    /// `shop`, the daemon's own, and the two checkouts of `ledger` the library finds and is asked to serve.
+    fn shop_and_two_ledgers(root: &Path) -> (Arc<Live>, Grimoire, PathBuf, store_io::StoreLock) {
+        let (shop, ledger) = (project(root, "shop"), project(root, "ledger"));
+        let shop_lock = store_io::lock(&shop.store_dir).unwrap();
+        let daemon = Arc::new(Daemon::open(&shop.store_dir).unwrap().0);
+        let live = Live::new(shop, daemon, 4299, Arc::new(access::Local), root.join("stores"), root.join("copies"));
+        live.refresh();
+        let second = second_checkout(root, "ledger-two", &ledger);
+        assert!(matches!(live.take_checkout("ledger", &second.to_string_lossy()), Took::Served));
+        (live, ledger, second, shop_lock)
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "no-checkout-named-first-answers-when-default-not-ours", "checks": ["crates/server/src/library/live/routing#first-answers-when-default-is-not-ours"]}
+    /// ```
+    #[tokio::test]
+    async fn no_checkout_named_first_answers_when_default_not_ours() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (live, ledger, second, _shop_lock) = shop_and_two_ledgers(root);
+        let first = store_io::repository_string(&ledger.repo).unwrap();
+        let other = store_io::repository_string(&second).unwrap();
+        assert_ne!(first, other);
+        // The daemon was started for `shop`, so no checkout of `ledger` is its default: the first of them answers.
+        let keyed = live.choose("ledger", None, true).ok().unwrap();
+        assert_eq!(keyed.1, ledger.repo);
+        // The routes that answer without a checkout name one this way: the status, and the stream, export and prune.
+        let routes = routes(live.clone());
+        let (status, _, v) = answer(&routes, post("/g/ledger/api/status", "127.0.0.1", "{}")).await;
+        assert_eq!((status, v["repository"].as_str()), (StatusCode::OK, Some(first.as_str())), "{v}");
+        let answerer = InLibrary { live: live.clone(), name: "ledger".into() };
+        assert_eq!(http::Answerer::daemon(&answerer, None, true).unwrap().repo, ledger.repo, "as the stream, the export and the prune ask");
+        // A call that is not answered without one is still refused for naming none, the two checkouts being served.
+        assert!(matches!(live.choose("ledger", None, false), Err(Refusal::Invalid(_))));
+        let (status, _, v) = answer(&routes, post("/g/ledger/api/lint", "127.0.0.1", "{}")).await;
+        assert_eq!((status, v["details"][0]["field"].as_str()), (StatusCode::BAD_REQUEST, Some("checkout")), "{v}");
+        live.stop();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-project-file-is-looked-up-with-the-library-free", "checks": ["crates/server/src/library/live/routing#project-file-looked-up-before-library-held"]}
+    /// ```
+    #[test]
+    fn the_project_file_is_looked_up_with_the_library_free() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let (live, ledger, second, _shop_lock) = shop_and_two_ledgers(root);
+        // At the moment the lookup is made, the library's lock is asked for: free means no other call waits on a slow path.
+        let free = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (watching, seen) = (live.clone(), free.clone());
+        WHILE_LOOKING_UP.with(|hook| *hook.borrow_mut() = Some(Box::new(move || seen.lock().unwrap().push(watching.held.try_lock().is_ok()))));
+        let chosen = live.choose("ledger", Some(&second.to_string_lossy()), false);
+        WHILE_LOOKING_UP.with(|hook| *hook.borrow_mut() = None);
+        assert_eq!(chosen.ok().unwrap().1, second, "and the lookup answered");
+        assert_eq!(*free.lock().unwrap(), [true], "looked up once, with the library not held");
+        // A call naming no checkout looks nothing up.
+        WHILE_LOOKING_UP.with(|hook| *hook.borrow_mut() = Some(Box::new(|| panic!("a call naming no checkout looked a project file up"))));
+        assert_eq!(live.choose("ledger", None, true).ok().unwrap().1, ledger.repo);
+        WHILE_LOOKING_UP.with(|hook| *hook.borrow_mut() = None);
         live.stop();
     }
 }
