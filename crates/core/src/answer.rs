@@ -454,7 +454,7 @@ answers! {
     SourceLocation => ["module_source"],
     SourceAnswer => ["source"],
     StatusAnswer => ["status"],
-    Written => ["put_page", "patch_page", "put_requirement", "record_decision", "supersede", "inscribe_ticket", "update_ticket", "retire_node"],
+    Written => ["put_page", "patch_page", "put_requirement", "patch_requirement", "record_decision", "supersede", "inscribe_ticket", "update_ticket", "retire_node"],
     Brewed => ["brew_ticket"],
     Closed => ["close_ticket"],
     Bottled => ["bottle_ticket"],

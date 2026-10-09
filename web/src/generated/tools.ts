@@ -269,6 +269,7 @@ export type ToolAnswers = {
   put_page: Written;
   patch_page: Written;
   put_requirement: Written;
+  patch_requirement: Written;
   record_decision: Written;
   supersede: Written;
   inscribe_ticket: Written;

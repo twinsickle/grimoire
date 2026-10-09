@@ -86,8 +86,9 @@ it created in `warnings`. Every warning is work to do now.
   never deleted: `delete_node` refuses one with decisions, and a bottled
   ticket.
 - **A write that changes intent goes into a ticket's proposal**, not in the
-  truth: `put_page`, `patch_page`, `put_requirement`, `record_decision`,
-  `supersede`, `retire_node` and `delete_node` of a page or requirement take
+  truth: `put_page`, `patch_page`, `put_requirement`, `patch_requirement`,
+  `record_decision`, `supersede`, `retire_node` and `delete_node` of a page
+  or requirement take
   `ticket` (a slug or `ticket:` reference); absent, they go into the store's
   current ticket, the one last brewed (on a team, last brewed in this
   checkout); with neither they are refused.
@@ -141,8 +142,12 @@ it created in `warnings`. Every warning is work to do now.
   a page's links, `patch_page`; it touches nothing else. To change part of
   a page's body or a ticket's, `patch_page` or `update_ticket` with `append`
   (a paragraph at the end) or `replace` (`{old, new}`, `old` matching the
-  body exactly once), not the whole body sent back. For a requirement,
-  `get` first and send the whole thing back; existing decisions are kept.
+  body exactly once), not the whole body sent back. To change part of a
+  requirement, `patch_requirement`: a new statement or title,
+  `put_scenarios` (each replacing the scenario of its title, or added at
+  the end), `remove_scenarios` by title, `add_covered_by` and
+  `remove_covered_by`; its decisions are kept. `put_requirement` is for a
+  new requirement, or one rewritten whole.
 - Module contracts are a JSON block under `# Module contract` in a file's
   leading doc comment. Renaming or removing a criterion leaves the
   requirements naming it dangling; the lint says so. Format per language:
@@ -246,9 +251,10 @@ goes into it as the current one, and the truth is untouched until the close.
 Read the spec back with `ticket` on the reads, or they show the truth.
 
 1. For each node in the ticket's `touches`: `get` it. For a page,
-   `put_page` with the new intent and links. For a requirement,
-   `put_requirement` with the new statement, a one-line heading, a
-   scenario for each rule it makes, and `covered_by`. For a
+   `put_page` with the new intent and links, or `patch_page` for part of
+   it. For a new requirement, `put_requirement` with its statement, a
+   one-line heading, a scenario for each rule it makes, and `covered_by`;
+   for a change to one, `patch_requirement` with only what changes. For a
    new requirement, also `patch_page` the page that covers its area with
    `add_links`, or it is `uncovered`.
 2. For every choice made while writing, `record_decision` on the requirement

@@ -76,7 +76,7 @@ fn to_value<T: serde::Serialize>(v: &T) -> Value {
     serde_json::to_value(v).expect("serialisable")
 }
 
-pub const TOOL_NAMES: [&str; 30] = [
+pub const TOOL_NAMES: [&str; 31] = [
     "find",
     "get",
     "outline",
@@ -91,6 +91,7 @@ pub const TOOL_NAMES: [&str; 30] = [
     "put_page",
     "patch_page",
     "put_requirement",
+    "patch_requirement",
     "record_decision",
     "supersede",
     "retire_node",
@@ -120,7 +121,7 @@ pub fn canonical(name: &str) -> &str {
 
 /// The writes that change intent and so go into a ticket's proposal; they, and the reads, take `ticket`.
 pub fn proposes(name: &str) -> bool {
-    matches!(name, "put_page" | "patch_page" | "put_requirement" | "record_decision" | "supersede" | "retire_node" | "delete_node")
+    matches!(name, "put_page" | "patch_page" | "put_requirement" | "patch_requirement" | "record_decision" | "supersede" | "retire_node" | "delete_node")
 }
 
 /// The writes that take `ticket`: those that change intent, update_ticket,
@@ -136,6 +137,7 @@ pub fn is_write(name: &str) -> bool {
         "put_page"
             | "patch_page"
             | "put_requirement"
+            | "patch_requirement"
             | "record_decision"
             | "supersede"
             | "retire_node"

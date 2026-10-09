@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not bottled, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a bottled one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-fields","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"patch-body","statement":"patch_page edits a body in part as BodyEdit does: replace swaps the one passage old for new, refused as invalid when old is empty, absent or present more than once, saying which and how many times; append adds its text after the body's trailing whitespace is dropped and a blank line, or alone on an empty body, the replace applied first; and either given beside a whole body is invalid."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not bottled, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a bottled ticket and a gap or question waiting, simmering, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
+//! {"purpose":"Apply the write tools to a store value: put pages and requirements and patch pages, reorder the board, delete a node, adopt a baseline and configure the store; proposals, a ticket's life, rename and a requirement's decisions each have a module beneath.","criteria":[{"id":"reorder","statement":"Reordering replaces one band's order list with the given tickets, each a ticket of that priority that is not bottled, named once, and refuses any other as invalid."},{"id":"configure","statement":"Configuring changes only the roots, languages, scope, site, line limits and recipe kinds it is given, a list of roots naming both and a pair only the roots it gives, the recipe kinds replaced whole, refuses a language the build cannot extract and a site naming a page that does not exist, validates the whole config, and never changes the repository."},{"id":"adopt","statement":"Adopting replaces the baseline with the given findings, dated, with a required reason, and reports how many the previous baseline held."},{"id":"judge","statement":"Judging appends a judgement to its recipe's judgements, after validating them whole, refusing a ticket the store does not hold as not_found and a bottled one as a conflict, and changes nothing else."},{"id":"validate-first","statement":"A write validates the whole resulting record before changing the store, and an invalid record changes nothing."},{"id":"never-fails-on-lint","statement":"A write that creates a finding (a dangling edge, or a requirement with no scenario) succeeds; the lint result is the caller's to report."},{"id":"patch-fields","statement":"patch_page changes only the fields given: added links go at the end without duplicates, removing an absent link is not an error, every other field stays as it was, and adding a link to a retired requirement is refused as invalid."},{"id":"patch-body","statement":"patch_page edits a body in part as BodyEdit does: replace swaps the one passage old for new, refused as invalid when old is empty, absent or present more than once, saying which and how many times; append adds its text after the body's trailing whitespace is dropped and a blank line, or alone on an empty body, the replace applied first; and either given beside a whole body is invalid."},{"id":"patch-requirement-fields","statement":"patch_requirement changes only the fields given of a requirement, a new title or statement replacing the old, its decisions untouched, the whole record checked before it is kept; a reference that is not a requirement is invalid, one the store lacks not_found, and a retired requirement invalid."},{"id":"patch-requirement-scenarios","statement":"patch_requirement removes each scenario titled in remove_scenarios, refusing as invalid a title the requirement does not have, and then puts each scenario of put_scenarios, replacing in place the one of its title or else adding it at the end, refusing as invalid two of one title, and refuses as invalid a title the requirement already holds more than once; a refusal changes nothing."},{"id":"patch-requirement-covered-by","statement":"patch_requirement removes from covered_by each reference remove_covered_by names, an absent one being no error, then adds each of add_covered_by at the end, never twice."},{"id":"put-page","statement":"put_page creates or replaces a page by slug; replacing is not a conflict; a link to a retired requirement is refused as invalid, since no page links one."},{"id":"put-requirement","statement":"put_requirement creates or replaces a requirement by slug, ignoring decisions and retired on input and preserving the existing ones; a retired requirement is refused as invalid."},{"id":"delete-node","statement":"delete_node removes a page, a requirement with no decision, or a ticket that is not bottled, a ticket's start and proposal going with it and the current ticket cleared when it was that one; a requirement with decisions (retire it instead), a bottled ticket and a gap or question waiting, simmering, for the change that applies its answer are invalid, derived kinds are invalid and a missing node is not_found."}]}
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -331,6 +331,72 @@ pub fn patch_page(store: &mut Store, r: &Reference, patch: PagePatch) -> Result<
     Ok((page, Changed::Page(r.id.clone())))
 }
 
+/// A partial change to a requirement (req:tool-patch-requirement). Only given fields change;
+/// scenarios are named by their titles, and covered_by edited as a page's links are.
+#[derive(Default)]
+pub struct RequirementPatch {
+    pub title: Option<String>,
+    pub statement: Option<String>,
+    pub put_scenarios: Vec<Scenario>,
+    pub remove_scenarios: Vec<String>,
+    pub add_covered_by: Vec<Reference>,
+    pub remove_covered_by: Vec<Reference>,
+}
+
+pub fn patch_requirement(store: &mut Store, r: &Reference, patch: RequirementPatch) -> Result<(Requirement, Changed), ToolError> {
+    if r.kind != Kind::Req || r.id.contains('#') {
+        return Err(ToolError::invalid(format!("{r} is not a requirement"), vec![]));
+    }
+    let existing = store.requirements.get(&r.id).ok_or_else(|| ToolError::not_found(r))?;
+    if existing.retired {
+        return Err(ToolError::invalid(format!("{r} is retired: it no longer holds and is not rewritten"), vec![]));
+    }
+    let mut req = existing.clone();
+    if let Some(t) = patch.title {
+        req.title = t;
+    }
+    if let Some(s) = patch.statement {
+        req.statement = s;
+    }
+    // A title names one scenario: one the record holds twice cannot be edited by it.
+    let named = patch.remove_scenarios.iter().map(|t| ("remove_scenarios", t)).chain(patch.put_scenarios.iter().map(|c| ("put_scenarios", &c.title)));
+    for (field, title) in named {
+        if req.scenarios.iter().filter(|c| &c.title == title).count() > 1 {
+            return Err(ToolError::invalid(
+                format!("{r} has more than one scenario titled `{title}`, so the title names none of them: rewrite it whole with put_requirement"),
+                vec![FieldError::new(field, format!("`{title}` is held more than once"))],
+            ));
+        }
+    }
+    // Removed first, so a scenario removed and put again goes to the end.
+    for title in &patch.remove_scenarios {
+        let before = req.scenarios.len();
+        req.scenarios.retain(|c| &c.title != title);
+        if req.scenarios.len() == before {
+            return Err(ToolError::invalid(format!("{r} has no scenario titled `{title}`"), vec![FieldError::new("remove_scenarios", format!("no scenario titled `{title}`"))]));
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    for c in patch.put_scenarios {
+        if !seen.insert(c.title.clone()) {
+            return Err(ToolError::invalid(format!("two scenarios put are titled `{}`: a title names one scenario", c.title), vec![FieldError::new("put_scenarios", format!("`{}` twice", c.title))]));
+        }
+        match req.scenarios.iter_mut().find(|x| x.title == c.title) {
+            Some(x) => *x = c,
+            None => req.scenarios.push(c),
+        }
+    }
+    req.covered_by.retain(|x| !patch.remove_covered_by.contains(x));
+    for x in patch.add_covered_by {
+        if !req.covered_by.contains(&x) {
+            req.covered_by.push(x);
+        }
+    }
+    invalid_if(validate_requirement(&req), "requirement")?;
+    store.requirements.insert(req.slug.clone(), req.clone());
+    Ok((req, Changed::Requirement(r.id.clone())))
+}
+
 /// `decisions` on the input is ignored; the existing ones are kept.
 pub fn put_requirement(store: &mut Store, mut req: Requirement) -> Result<(Requirement, Changed), ToolError> {
     if store.requirements.get(&req.slug).is_some_and(|r| r.retired) {
@@ -397,6 +463,74 @@ mod tests {
         let (again, _) = put_page(&mut s, page("second")).unwrap();
         assert_eq!(again.body, "second", "replacing by slug is not a conflict");
         assert_eq!(s.pages["glossary"].body, "second");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "patch-requirement-is-partial", "checks": ["crates/core/src/ops#patch-requirement-fields"]}
+    /// ```
+    #[test]
+    fn patch_requirement_is_partial() {
+        let r = Reference::req("ready-only-with-commit");
+        let mut s = store();
+        let before = s.requirements["ready-only-with-commit"].clone();
+        // A new statement; the rest and the decisions as they were.
+        patch_requirement(&mut s, &r, RequirementPatch { statement: Some("It SHALL be ready.".into()), ..Default::default() }).unwrap();
+        let after = &s.requirements["ready-only-with-commit"];
+        assert_eq!((after.statement.as_str(), &after.scenarios, &after.decisions, &after.title), ("It SHALL be ready.", &before.scenarios, &before.decisions, &before.title));
+        // A new title; the statement given before kept.
+        patch_requirement(&mut s, &r, RequirementPatch { title: Some("Ready".into()), ..Default::default() }).unwrap();
+        let after = &s.requirements["ready-only-with-commit"];
+        assert_eq!((after.title.as_str(), after.statement.as_str()), ("Ready", "It SHALL be ready."));
+        assert_eq!(patch_requirement(&mut s, &Reference::page("goal"), RequirementPatch::default()).unwrap_err().code(), "invalid");
+        assert_eq!(patch_requirement(&mut s, &Reference::req("nope"), RequirementPatch::default()).unwrap_err().code(), "not_found");
+        // Checked whole: an empty statement is refused, changing nothing.
+        let held = s.clone();
+        assert_eq!(patch_requirement(&mut s, &r, RequirementPatch { statement: Some(String::new()), ..Default::default() }).unwrap_err().code(), "invalid");
+        assert_eq!(s, held);
+        s.requirements.get_mut("ready-only-with-commit").unwrap().retired = true;
+        assert_eq!(patch_requirement(&mut s, &r, RequirementPatch::default()).unwrap_err().code(), "invalid", "a retired requirement is not rewritten");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "patch-requirement-scenarios-by-title", "checks": ["crates/core/src/ops#patch-requirement-scenarios", "crates/core/src/ops#patch-requirement-covered-by"]}
+    /// ```
+    #[test]
+    fn patch_requirement_scenarios_by_title() {
+        let r = Reference::req("ready-only-with-commit");
+        let case = |t: &str, then: &str| Scenario { title: t.into(), given: "g".into(), when: "w".into(), then: then.into() };
+        let mut s = store();
+        let first = s.requirements["ready-only-with-commit"].scenarios[0].title.clone();
+        let cases = |s: &Store| s.requirements["ready-only-with-commit"].scenarios.iter().map(|c| (c.title.clone(), c.then.clone())).collect::<Vec<_>>();
+        // Put: one added at the end, one replaced in place.
+        patch_requirement(&mut s, &r, RequirementPatch { put_scenarios: vec![case("Another", "a"), case(&first, "changed")], ..Default::default() }).unwrap();
+        assert_eq!(cases(&s), [(first.clone(), "changed".to_string()), ("Another".to_string(), "a".to_string())]);
+        // Removed first, then put: it goes to the end.
+        patch_requirement(&mut s, &r, RequirementPatch { remove_scenarios: vec![first.clone()], put_scenarios: vec![case(&first, "again")], ..Default::default() }).unwrap();
+        assert_eq!(cases(&s), [("Another".to_string(), "a".to_string()), (first.clone(), "again".to_string())]);
+        // A title not there, and two of one title, are refused, changing nothing.
+        let held = s.clone();
+        let e = patch_requirement(&mut s, &r, RequirementPatch { remove_scenarios: vec!["Nowhere".into()], ..Default::default() }).unwrap_err();
+        assert!(e.code() == "invalid" && e.to_string().contains("Nowhere"), "{e}");
+        let e = patch_requirement(&mut s, &r, RequirementPatch { put_scenarios: vec![case("Twice", "1"), case("Twice", "2")], ..Default::default() }).unwrap_err();
+        assert!(e.code() == "invalid" && e.to_string().contains("Twice"), "{e}");
+        assert_eq!(s, held);
+        // A title the record already holds twice names neither: refused, changing nothing.
+        s.requirements.get_mut("ready-only-with-commit").unwrap().scenarios.push(case("Another", "b"));
+        let held = s.clone();
+        let e = patch_requirement(&mut s, &r, RequirementPatch { put_scenarios: vec![case("Another", "c")], ..Default::default() }).unwrap_err();
+        assert!(e.code() == "invalid" && e.to_string().contains("more than one"), "{e}");
+        let e = patch_requirement(&mut s, &r, RequirementPatch { remove_scenarios: vec!["Another".into()], ..Default::default() }).unwrap_err();
+        assert_eq!((e.code(), serde_json::to_value(&e).unwrap()["details"][0]["field"].clone()), ("invalid", serde_json::json!("remove_scenarios")), "named by the field it came from");
+        assert_eq!(s, held);
+        // covered_by: removed, then added at the end once; an absent one is no error.
+        let c = |id: &str| Reference::criterion("src/a/ready", id);
+        s.requirements.get_mut("ready-only-with-commit").unwrap().covered_by = vec![c("a"), c("b")];
+        patch_requirement(&mut s, &r, RequirementPatch { remove_covered_by: vec![c("a"), c("z")], add_covered_by: vec![c("c"), c("b")], ..Default::default() }).unwrap();
+        assert_eq!(s.requirements["ready-only-with-commit"].covered_by, [c("b"), c("c")]);
     }
 
     /// # Test contract
