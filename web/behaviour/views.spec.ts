@@ -131,7 +131,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * # Test contract
  *
  * ```json
- * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#links-stay-under-the-grimoire", "web/src/App#where-you-are", "web/src/api#grimoire-base"]}
+ * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#links-stay-under-the-grimoire", "web/src/App#header-shows-no-node-counts", "web/src/App#pill-names-grimoire", "web/src/App#pill-names-checkout-of-several", "web/src/App#pill-shows-current-ticket", "web/src/App#panel-opens-with-shadow", "web/src/App#panel-closes-on-escape", "web/src/App#panel-shows-server-state", "web/src/App#panel-lists-this-grimoires-checkouts", "web/src/App#panel-checkout-line", "web/src/App#panel-marks-checkout-on-screen", "web/src/App#panel-has-no-link-to-other-projects", "web/src/api#grimoire-base"]}
  * ```
  */
 test("a grimoire of the library is read at its own address, and the header lists its checkouts alone", async ({ page }) => {
@@ -186,7 +186,7 @@ test("a grimoire of the library is read at its own address, and the header lists
  * # Test contract
  *
  * ```json
- * {"test": "the-shelf-rail-leads-to-every-project", "checks": ["web/src/views/Library#shelf-rail", "web/src/App#views-beside-the-shelf-rail"]}
+ * {"test": "the-shelf-rail-leads-to-every-project", "checks": ["web/src/views/Library#rail-mark-links-to-library", "web/src/views/Library#rail-shelves-by-place", "web/src/views/Library#rail-shelf-titled-with-place", "web/src/views/Library#rail-shelf-named-for-screen-reader", "web/src/views/Library#rail-book-per-grimoire-in-name-order", "web/src/views/Library#rail-book-shows-initial", "web/src/views/Library#rail-book-titled-with-name", "web/src/views/Library#rail-book-cloth-of-spine", "web/src/views/Library#rail-book-opens-grimoire", "web/src/views/Library#rail-current-book-ringed", "web/src/views/Library#rail-current-book-marked-current", "web/src/views/Library#rail-book-slides-on-hover", "web/src/views/Library#rail-book-slides-on-focus", "web/src/views/Library#rail-focus-outlined", "web/src/App#views-beside-the-shelf-rail"]}
  * ```
  */
 test("the shelf rail beside every page of a grimoire leads to the Library and to each project, shelf by shelf", async ({ page }) => {
@@ -273,7 +273,7 @@ test("the shelf rail beside every page of a grimoire leads to the Library and to
  * # Test contract
  *
  * ```json
- * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#own-address-is-the-library", "web/src/App#where-you-are"]}
+ * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks-by-place", "web/src/views/Library#stack-labelled-with-place", "web/src/views/Library#stack-spine-per-grimoire", "web/src/views/Library#spine-marked-with-checkouts", "web/src/views/Library#library-header-holds-book-and-name", "web/src/views/Library#library-header-has-no-project-parts", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#own-address-is-the-library"]}
  * ```
  */
 test("the Library stands the machine's grimoires in a stack for each place they come from, each spine opening its grimoire", async ({ page }) => {
@@ -294,6 +294,18 @@ test("the Library stands the machine's grimoires in a stack for each place they 
   await expect(page.locator("[data-spine]")).toHaveText(places.flatMap((p) => [...new Set(status.library.filter((g) => g.server === p).map((g) => g.name))].sort()));
   // Grimoire's own page: no project's pill, tabs or search, and the jingle beneath the stacks.
   await expect(page.locator("header")).toContainText("Grimoire");
+  // The book mark beside the name: the one figure in the header, drawn as the book icon, to the name's left.
+  const mark = page.locator("header svg");
+  await expect(mark).toHaveCount(1);
+  const [markBox, nameBox] = await Promise.all([mark.boundingBox(), page.locator("header").getByText("Grimoire", { exact: true }).boundingBox()]);
+  expect(markBox!.x + markBox!.width, "the book beside the name, before it").toBeLessThanOrEqual(nameBox!.x + 1);
+  expect(markBox!.y, "level with the name").toBeLessThan(nameBox!.y + nameBox!.height);
+  expect(markBox!.y + markBox!.height, "level with the name").toBeGreaterThan(nameBox!.y);
+  const libraryBook = await mark.evaluate((el) => el.innerHTML);
+  await page.goto("/g/repo/");
+  expect(libraryBook, "the book icon the tabs draw").toBe(await page.locator("header nav a").first().locator("svg").evaluate((el) => el.innerHTML));
+  await page.goBack();
+  await expect(page.locator("[data-stack]").first()).toBeVisible();
   await expect(page.locator("header button, header nav, header input")).toHaveCount(0);
   await expect(page.getByText("It's almost magic.", { exact: true })).toHaveCount(1);
   // The glint beside it twinkles where motion is allowed, and is still where reduced motion is asked for.
@@ -370,7 +382,7 @@ test("the application is mounted into #root, and the page holds nothing else", a
  * # Test contract
  *
  * ```json
- * {"test": "almost-magic-only-where-nothing-is-yet", "checks": ["web/src/components#empty-state", "web/src/views/Home#empty-grimoire", "web/src/views/Board#empty-cauldron"]}
+ * {"test": "almost-magic-only-where-nothing-is-yet", "checks": ["web/src/components#empty-state-icon-large", "web/src/components#empty-state-glint-beside-icon", "web/src/components#empty-state-glint-twinkles-with-motion", "web/src/components#empty-state-shows-direction", "web/src/components#empty-state-backticks-as-code", "web/src/components#empty-state-jingle-beneath", "web/src/components#jingle-drawn-only-by-empty-states-and-library", "web/src/components#jingle-in-accent-colour", "web/src/views/Home#empty-grimoire", "web/src/views/Board#empty-cauldron"]}
  * ```
  */
 test("\"It's almost magic\" shows where a whole view has nothing yet, and nowhere else", async ({ page }) => {
@@ -1414,7 +1426,7 @@ test("a page lists each module it links once, with its criteria beneath it", asy
  * # Test contract
  *
  * ```json
- * {"test": "rail-is-the-outline", "checks": ["web/src/views/Home#outline-driven"]}
+ * {"test": "rail-is-the-outline", "checks": ["web/src/views/Home#rail-reads-pages-only-outline", "web/src/views/Home#rail-lists-every-root", "web/src/views/Home#pane-drawn-from-outline-rooted-at-page"]}
  * ```
  */
 test("the rail is the outline's pages, ending with the unplaced modules", async ({ page }) => {
@@ -1466,7 +1478,7 @@ test("the rail is the outline's pages, ending with the unplaced modules", async 
  * # Test contract
  *
  * ```json
- * {"test": "a-page-under-a-later-root-opens-from-it", "checks": ["web/src/views/Home#outline-driven"]}
+ * {"test": "a-page-under-a-later-root-opens-from-it", "checks": ["web/src/views/Home#page-opens-with-breadcrumb-from-its-root"]}
  * ```
  */
 test("a page under a later root opens beside the rail, its breadcrumb from that root", async ({ page }) => {
@@ -1487,7 +1499,7 @@ test("a page under a later root opens beside the rail, its breadcrumb from that 
  * # Test contract
  *
  * ```json
- * {"test": "a-root-or-a-page-reached-twice-is-one-entry", "checks": ["web/src/views/Home#outline-driven"]}
+ * {"test": "a-root-or-a-page-reached-twice-is-one-entry", "checks": ["web/src/views/Home#rail-lists-every-root", "web/src/views/Home#page-opens-with-breadcrumb-from-its-root"]}
  * ```
  */
 test("a root linked from another root opens as a root, and a page reached twice marks one entry", async ({ page }) => {
@@ -1523,7 +1535,7 @@ test("a root linked from another root opens as a root, and a page reached twice 
  * # Test contract
  *
  * ```json
- * {"test": "a-page-pane-never-shows-another-page", "checks": ["web/src/views/Home#outline-driven"]}
+ * {"test": "a-page-pane-never-shows-another-page", "checks": ["web/src/views/Home#pane-drawn-from-outline-rooted-at-page"]}
  * ```
  */
 test("going from one page to another never shows the first under the second", async ({ page }) => {
@@ -2343,7 +2355,7 @@ test("a simmering ticket shows its decision as waiting to be bottled, on its pag
  * # Test contract
  *
  * ```json
- * {"test": "the-tab-names-what-is-open", "checks": ["web/src/title#tab-title"]}
+ * {"test": "the-tab-names-what-is-open", "checks": ["web/src/title#tab-title-names-what-is-open", "web/src/title#tab-title-grimoire-alone-when-nothing-named", "web/src/title#node-name-is-title-or-id", "web/src/title#use-tab-title-sets-document-title", "web/src/title#root-view-has-no-name", "web/src/title#unplaced-view-named-unplaced", "web/src/title#library-view-named-library", "web/src/title#page-view-named-by-its-title-as-read", "web/src/title#node-view-named-by-node-name", "web/src/title#cauldron-view-named-cauldron", "web/src/title#findings-view-named-findings"]}
  * ```
  */
 test("the tab names what is open, then Grimoire, and carries the book", async ({ page, request }) => {
@@ -2496,7 +2508,7 @@ test("a stream the browser closed is opened again, and the page is current once 
  * # Test contract
  *
  * ```json
- * {"test": "the-page-says-the-daemon-is-not-answering", "checks": ["web/src/api#errors-typed", "web/src/api#away-keeps-data", "web/src/App#header-away", "req:web-daemon-away"]}
+ * {"test": "the-page-says-the-daemon-is-not-answering", "checks": ["web/src/api#unreachable-when-daemon-away", "web/src/api#no-answer-is-json-syntax-error", "web/src/api#away-on-unreachable-call", "web/src/api#away-ends-on-newer-answer", "web/src/api#away-keeps-last-data", "web/src/App#header-away", "req:web-daemon-away"]}
  * ```
  */
 test("while the daemon is away the page says so, keeps what it showed, and recovers", async ({ page }) => {
@@ -2525,7 +2537,7 @@ test("while the daemon is away the page says so, keeps what it showed, and recov
  * # Test contract
  *
  * ```json
- * {"test": "a-page-opened-with-no-daemon-says-so", "checks": ["web/src/api#errors-typed", "web/src/api#away-keeps-data", "req:web-daemon-away"]}
+ * {"test": "a-page-opened-with-no-daemon-says-so", "checks": ["web/src/api#unreachable-when-daemon-away", "web/src/api#no-answer-is-json-syntax-error", "web/src/api#away-on-unreachable-call", "web/src/api#away-reports-unreachable-without-data", "req:web-daemon-away"]}
  * ```
  */
 test("a page opened while the daemon cannot be reached says so in each of its views, never a JSON error", async ({ page }) => {
@@ -3023,6 +3035,528 @@ test("a file keeps its last lines while changed text is highlighted", async ({ p
   await expect(region).toContainText("text-changed-meanwhile");
   await expect(region.locator("tr#L7")).toContainText("pub fn ready() -> bool");
   expect(await page.evaluate(() => (window as unknown as { __gaps: number }).__gaps), "the lines were gone for a moment").toBe(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+const pillOf = (page: Page) => page.locator("header button[aria-label^='Where you are']");
+
+/** The colour a theme token resolves to, as the browser computes it. */
+async function tokenColour(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = `var(${name})`;
+    document.body.appendChild(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }, token);
+}
+
+/** Add checkouts to the library status lists, the page's own answer otherwise. */
+async function withLibrary(page: Page, extra: { name: string; repository: string; server: string | null }[], onlyHere = false) {
+  await page.route("**/api/status", async (route) => {
+    const fetched = await route.fetch().catch(() => null);
+    if (!fetched) return;
+    const answer = await fetched.json();
+    await route.fulfill({ json: { ...answer, library: [...(onlyHere ? answer.library.filter((g: { server: string | null }) => g.server === null) : answer.library), ...extra.map((e) => ({ ...e, current: null }))] } }).catch(() => {});
+  });
+}
+
+/** The Library's own hash of a name, so a test can tell which cloth and offset a name is given. */
+function hashOf(name: string): number {
+  let h = 2166136261;
+  for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+const CLOTH_TOKENS = ["--color-syn-keyword", "--color-syn-string", "--color-syn-number", "--color-syn-type", "--color-syn-meta"];
+const SPINE_OFFSETS = [-20, -12, -5, 4, 11, 19];
+const RAIL_OFFSETS = [-4, -3, -1, 1, 3, 4];
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-header-is-pill-tabs-search", "checks": ["web/src/App#header-three-parts"]}
+ * ```
+ */
+test("the header holds the pill left, the tabs centred, the search right", async ({ page }) => {
+  await page.goto("/g/repo/cauldron");
+  const header = page.locator("header");
+  const search = page.getByLabel("Find");
+  await expect(pillOf(page)).toBeVisible();
+  const [h, p, n, s] = await Promise.all([header.boundingBox(), pillOf(page).boundingBox(), header.locator("nav").boundingBox(), search.boundingBox()]);
+  expect(p!.x + p!.width, "the pill ends before the tabs begin").toBeLessThanOrEqual(n!.x);
+  expect(n!.x + n!.width, "the tabs end before the search begins").toBeLessThanOrEqual(s!.x);
+  // The pill at the left edge, the search at the right, the tabs on the header's middle.
+  expect(p!.x - h!.x).toBeLessThan(24);
+  expect(h!.x + h!.width - (s!.x + s!.width)).toBeLessThan(24);
+  expect(Math.abs(n!.x + n!.width / 2 - (h!.x + h!.width / 2))).toBeLessThan(2);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-pill-has-a-chevron", "checks": ["web/src/App#pill-has-chevron"]}
+ * ```
+ */
+test("the pill holds a chevron after what it names", async ({ page }) => {
+  await page.goto("/g/repo/cauldron");
+  const chevron = pillOf(page).locator("svg");
+  await expect(chevron).toHaveCount(1);
+  await expect(chevron).toBeVisible();
+  const [named, mark] = await Promise.all([pillOf(page).locator(".font-bold").boundingBox(), chevron.boundingBox()]);
+  expect(mark!.x, "to the right of the name").toBeGreaterThan(named!.x + named!.width);
+  // A chevron: one open stroke down to a point and up again, not a filled shape.
+  const stroke = chevron.locator("path");
+  await expect(stroke).toHaveCount(1);
+  await expect(stroke).toHaveAttribute("d", "M2 3.5 5 6.5 8 3.5");
+  await expect(stroke).toHaveAttribute("fill", "none");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-pill-names-the-checkout-of-several", "checks": ["web/src/App#pill-names-checkout-of-several"]}
+ * ```
+ */
+test("the pill names the checkout on screen after the project when several", async ({ page }) => {
+  const status = await tool<{ repository: string; grimoire: string }>(page, "status");
+  const folder = status.repository.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!;
+  await withLibrary(page, [{ name: status.grimoire, repository: `${status.repository}-second`, server: null }]);
+  await page.goto("/g/repo/cauldron");
+  await expect(pillOf(page).locator(".font-bold").first()).toHaveText(status.grimoire);
+  // After the grimoire's name: a slash, then the folder of the checkout on screen, not the other.
+  await expect(pillOf(page).locator("span.text-fg-faint", { hasText: "/" })).toHaveCount(1);
+  await expect(pillOf(page)).toContainText(`${status.grimoire} / ${folder}`);
+  await expect(pillOf(page)).not.toContainText(`${folder}-second`);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-pill-dot-is-bad-when-it-should-be", "checks": ["web/src/App#pill-dot-colour"]}
+ * ```
+ */
+test("the pill's dot is ok, and bad for a lost server, a failed status or an absent daemon", async ({ page }) => {
+  const status = await tool<{ repository: string }>(page, "status");
+  const dot = () => pillOf(page).locator("span.rounded-full").first();
+  const colour = () => dot().evaluate((el) => getComputedStyle(el).backgroundColor);
+  // The checkout is named in the address, so that status failing leaves the other calls as they were.
+  await page.goto(`/g/repo/cauldron?checkout=${encodeURIComponent(status.repository)}`);
+  await expect(pillOf(page).locator(".font-bold")).toBeVisible();
+  const ok = await tokenColour(page, "--color-ok");
+  const bad = await tokenColour(page, "--color-bad");
+  expect(ok).not.toBe(bad);
+  expect(await colour()).toBe(ok);
+  // A server that did not answer.
+  await page.route("**/api/status", async (route) => {
+    const fetched = await route.fetch().catch(() => null);
+    if (!fetched) return;
+    await route.fulfill({ json: { ...(await fetched.json()), server: { address: "http://10.0.0.9:4242", fetched: null, reachable: false, refused: false } } }).catch(() => {});
+  });
+  await page.reload();
+  await expect(pillOf(page)).toHaveAttribute("title", "server unreachable");
+  expect(await colour()).toBe(bad);
+  // A status that fails.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.route("**/api/status", (route) => route.fulfill({ status: 404, contentType: "text/plain", body: "gone" }));
+  await page.reload();
+  await expect(pillOf(page)).toContainText("status answered 404");
+  expect(await colour()).toBe(bad);
+  // A daemon that is away.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+  await page.reload();
+  await expect(pillOf(page)).toContainText("daemon not answering");
+  expect(await colour()).toBe(bad);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-panel-shows-the-finding-counts", "checks": ["web/src/App#panel-shows-finding-counts"]}
+ * ```
+ */
+test("the pill's panel gives the new, inherited and may-conflict counts", async ({ page }) => {
+  const lint = await tool<{ findings: unknown[]; advisories: unknown[]; new: number }>(page, "lint");
+  await page.goto("/g/repo/cauldron");
+  await pillOf(page).click();
+  const panel = page.getByRole("dialog", { name: "Checkouts" });
+  await expect(panel.getByText(`${lint.new} new`, { exact: true })).toBeVisible();
+  await expect(panel.getByText(`${lint.findings.length - lint.new} inherited`, { exact: true })).toBeVisible();
+  await expect(panel.getByText(`${lint.advisories.length} may conflict`, { exact: true })).toBeVisible();
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-panel-lists-each-checkout-with-its-ticket-and-link", "checks": ["web/src/App#panel-checkout-line", "web/src/App#panel-checkout-links"]}
+ * ```
+ */
+test("the pill's panel shows each checkout's folder and ticket, the others linking to their own page", async ({ page }) => {
+  const status = await tool<{ repository: string; grimoire: string }>(page, "status");
+  const mine = status.repository.replace(/[/\\]+$/, "").split(/[/\\]/).pop()!;
+  await page.route("**/api/status", async (route) => {
+    const fetched = await route.fetch().catch(() => null);
+    if (!fetched) return;
+    const answer = await fetched.json();
+    const others = [
+      { name: answer.grimoire, repository: "/srv/other", server: null, current: { id: "0001", title: "Another ticket" } },
+      { name: answer.grimoire, repository: "/srv/idle", server: null, current: null },
+    ];
+    const library = [...answer.library.filter((g: { name: string }) => g.name !== answer.grimoire), { name: answer.grimoire, repository: answer.repository, server: null, current: null }, ...others];
+    await route.fulfill({ json: { ...answer, current: { id: "0003", title: "On screen ticket" }, library } }).catch(() => {});
+  });
+  await page.goto("/g/repo/cauldron");
+  await pillOf(page).click();
+  const items = page.getByRole("dialog", { name: "Checkouts" }).locator("li");
+  await expect(items).toHaveCount(3);
+  // Each line: the checkout's folder, then its current ticket's id and title, or no ticket.
+  const here = items.filter({ has: page.locator("[aria-current]") });
+  await expect(here).toHaveText(`${mine} 0003 On screen ticket`);
+  await expect(items.filter({ hasText: "other" })).toHaveText("other 0001 Another ticket");
+  await expect(items.filter({ hasText: "idle" })).toHaveText("idle no ticket");
+  // The one on screen is no link; each other is, to the grimoire's page for that checkout, as a page of its own.
+  await expect(here.locator("a")).toHaveCount(0);
+  const link = (folder: string) => items.filter({ hasText: folder }).locator("a");
+  await expect(link("other")).toHaveAttribute("href", `/g/${status.grimoire}/?checkout=${encodeURIComponent("/srv/other")}`);
+  await expect(link("idle")).toHaveAttribute("href", `/g/${status.grimoire}/?checkout=${encodeURIComponent("/srv/idle")}`);
+  await expect(link("other")).not.toHaveAttribute("target", /./);
+  await page.evaluate(() => ((window as unknown as { __kept: boolean }).__kept = true));
+  await link("other").click();
+  await expect(page).toHaveURL((url) => url.pathname.startsWith(`/g/${status.grimoire}`) && url.searchParams.get("checkout") === "/srv/other");
+  expect(await page.evaluate(() => (window as unknown as { __kept?: boolean }).__kept), "a new page, not a route inside the old").toBeUndefined();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-panel-closes-on-a-second-press", "checks": ["web/src/App#panel-closes-on-second-press"]}
+ * ```
+ */
+test("pressing the pill again closes its panel", async ({ page }) => {
+  await page.goto("/g/repo/cauldron");
+  const panel = page.getByRole("dialog", { name: "Checkouts" });
+  await pillOf(page).click();
+  await expect(panel).toBeVisible();
+  await expect(pillOf(page)).toHaveAttribute("aria-expanded", "true");
+  await pillOf(page).click();
+  await expect(panel).toHaveCount(0);
+  await expect(pillOf(page)).toHaveAttribute("aria-expanded", "false");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-panel-closes-on-an-outside-click", "checks": ["web/src/App#panel-closes-on-outside-click"]}
+ * ```
+ */
+test("a click outside the pill's panel closes it, and one inside does not", async ({ page }) => {
+  await page.goto("/g/repo/cauldron");
+  const panel = page.getByRole("dialog", { name: "Checkouts" });
+  await pillOf(page).click();
+  await expect(panel).toBeVisible();
+  // Inside the panel, on text that is no link: it stays.
+  await panel.getByRole("heading", { name: "Checkouts of this project" }).click();
+  await expect(panel).toBeVisible();
+  // Outside it, in the header's own margin.
+  await page.locator("header").click({ position: { x: 3, y: 3 } });
+  await expect(panel).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-stream-error-is-away-until-it-opens", "checks": ["web/src/api#away-on-stream-error", "web/src/api#away-ends-on-opened-stream"]}
+ * ```
+ */
+test("an error on the event stream is away until the stream is opened", async ({ page }) => {
+  test.setTimeout(60_000);
+  const status = await tool<{ repository: string }>(page, "status");
+  let open = false;
+  let held = 0;
+  // The stream is refused as a proxy does while the daemon restarts; every call is held, so that only the stream can end it.
+  await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/api/events")) {
+      return open ? route.continue() : route.fulfill({ status: 500, contentType: "text/plain", body: "" });
+    }
+    held++;
+    await new Promise(() => {});
+  });
+  await page.goto(`/g/repo/cauldron?checkout=${encodeURIComponent(status.repository)}`);
+  const header = page.locator("header");
+  await expect(header).toContainText("daemon not answering · retrying");
+  // The page asks again on its retry, and nothing answers: still away.
+  const asked = held;
+  await expect.poll(() => held, { timeout: 15_000 }).toBeGreaterThan(asked);
+  await expect(header).toContainText("daemon not answering · retrying");
+  // The stream is opened again: away ends, though no call has been answered.
+  open = true;
+  await expect(header).not.toContainText("not answering", { timeout: 30_000 });
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "bars-and-counts-are-the-outlines-own", "checks": ["web/src/views/Home#bars-and-counts-are-the-outlines"]}
+ * ```
+ */
+test("a page's bars and finding counts are those its outline answers", async ({ page }) => {
+  // The outline's answer with numbers of its own, so nothing else can be where they come from.
+  await page.route("**/api/outline", async (route) => {
+    const answer = (await (await route.fetch()).json()) as Outline;
+    const root = answer.roots[0];
+    Object.assign(root.rollup, { modules: 7, contracted: 3, criteria: 11, tested: 5, requirements: 9, held: 4, described: 2, decided: 1 });
+    root.findings = 6;
+    root.baselined = 2;
+    await route.fulfill({ json: answer }).catch(() => {});
+  });
+  await page.goto("/g/repo/");
+  const head = page.locator("main header").first();
+  const bars = head.locator("dl");
+  for (const [label, n, of] of [["Contracted", 3, 7], ["Criteria tested", 5, 11], ["Requirements held", 4, 9], ["Requirements decided", 1, 9]] as const) {
+    const meter = bars.getByRole("meter", { name: label });
+    await expect(meter).toHaveAttribute("aria-valuenow", String(n));
+    await expect(meter).toHaveAttribute("aria-valuemax", String(of));
+    await expect(bars.getByText(`${n} of ${of}`, { exact: true })).toBeVisible();
+  }
+  // Six findings, two of them inherited: four new.
+  await expect(head.getByText("4 new", { exact: true })).toBeVisible();
+  await expect(head.getByText("2 inherited", { exact: true })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-rail-ends-with-unplaced-only-when-some", "checks": ["web/src/views/Home#rail-ends-with-unplaced-only-when-some"]}
+ * ```
+ */
+test("the rail has Unplaced last when modules are unplaced, and not otherwise", async ({ page }) => {
+  await page.route("**/api/outline", async (route) => {
+    const answer = (await (await route.fetch()).json()) as Outline;
+    answer.unplaced = [];
+    await route.fulfill({ json: answer }).catch(() => {});
+  });
+  await page.goto("/g/repo/");
+  await expect(page.locator(rail).locator("li a").first()).toBeVisible();
+  await expect(page.locator(rail).getByRole("link", { name: /Unplaced/ })).toHaveCount(0);
+  await expect(page.locator(rail).getByText("Unplaced")).toHaveCount(0);
+  // The outline's own unplaced modules: the entry comes last in the rail, after every page.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.reload();
+  const last = page.locator(`${rail} > :last-child`);
+  await expect(last).toHaveText(/Unplaced/);
+  await expect(last).toHaveAttribute("href", "/g/repo/unplaced");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-library-stands-spines-in-cloth-and-offset", "checks": ["web/src/views/Library#spine-band-colour-by-name", "web/src/views/Library#spine-offset-sideways"]}
+ * ```
+ */
+test("each spine's bands and offset follow from its name alone, on every visit and in any order", async ({ page }) => {
+  // Several more names on this machine, so that a stack has spines enough to differ.
+  const extra = ["quill", "vellum", "lantern", "sextant", "orrery", "bestiary", "herbal"].map((name) => ({ name, repository: `/srv/${name}`, server: null }));
+  const reordered = async (reverse: boolean) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route("**/api/status", async (route) => {
+      const fetched = await route.fetch().catch(() => null);
+      if (!fetched) return;
+      const answer = await fetched.json();
+      const library = [...answer.library, ...extra.map((e) => ({ ...e, current: null }))];
+      await route.fulfill({ json: { ...answer, library: reverse ? library.reverse() : library } }).catch(() => {});
+    });
+  };
+  const measure = () =>
+    page.locator("[data-spine]").evaluateAll((spines) =>
+      spines.map((a) => {
+        const own = a.getBoundingClientRect();
+        const slot = (a.parentElement as HTMLElement).getBoundingClientRect();
+        return {
+          name: a.getAttribute("title") ?? "",
+          stack: [...(a.closest("[data-stack]")?.querySelectorAll("[data-spine]") ?? [])].indexOf(a) + "@" + [...document.querySelectorAll("[data-stack]")].indexOf(a.closest("[data-stack]")!),
+          bands: [...a.querySelectorAll(":scope > span[aria-hidden]")].map((b) => getComputedStyle(b).backgroundColor),
+          left: getComputedStyle(a).left,
+          shifted: Math.round(own.left - slot.left),
+        };
+      }),
+    );
+  const byName = (spines: Awaited<ReturnType<typeof measure>>) => new Map(spines.map((s) => [s.name, { bands: s.bands, left: s.left, shifted: s.shifted }]));
+  await reordered(false);
+  await page.goto("/");
+  await expect(page.locator("[data-spine]", { hasText: "herbal" })).toBeVisible();
+  const first = await measure();
+  expect(first.length).toBeGreaterThan(extra.length);
+  // Cloths are the theme's own colours, each spine's four bands one cloth.
+  const cloths = new Set<string>();
+  for (const token of CLOTH_TOKENS) cloths.add(await tokenColour(page, token));
+  for (const spine of first) {
+    expect(spine.bands, spine.name).toHaveLength(4);
+    expect(new Set(spine.bands).size, spine.name).toBe(1);
+    expect(cloths.has(spine.bands[0]), `${spine.name}'s cloth is a token colour`).toBe(true);
+    // Sideways from the spine beneath it: a shift its own offset names.
+    expect(spine.shifted, spine.name).not.toBe(0);
+    expect(spine.left, spine.name).toBe(`${spine.shifted}px`);
+  }
+  // Names differ, so the spines do: more than one cloth and offset among them, and neighbours in a stack not all alike.
+  expect(new Set(first.map((s) => s.bands[0])).size).toBeGreaterThan(1);
+  expect(new Set(first.map((s) => s.left)).size).toBeGreaterThan(1);
+  const stackOf = (s: (typeof first)[number]) => s.stack.split("@")[1];
+  expect(first.some((s, i) => i > 0 && stackOf(first[i - 1]) === stackOf(s) && first[i - 1].left !== s.left), "adjacent spines offset from each other").toBe(true);
+  // The same on another visit.
+  await page.reload();
+  await expect(page.locator("[data-spine]", { hasText: "herbal" })).toBeVisible();
+  expect(byName(await measure())).toEqual(byName(first));
+  // And with the library listed the other way round, each name keeps its cloth and offset.
+  await reordered(true);
+  await page.reload();
+  await expect(page.locator("[data-spine]", { hasText: "herbal" })).toBeVisible();
+  const reversed = await measure();
+  expect(reversed.map((s) => s.name).sort()).toEqual(first.map((s) => s.name).sort());
+  expect(byName(reversed)).toEqual(byName(first));
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-rail-book-is-offset-like-its-spine", "checks": ["web/src/views/Library#rail-book-offset-like-spine"]}
+ * ```
+ */
+test("each rail book is offset by the same hash as the spine of that name", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("[data-spine]").first()).toBeVisible();
+  const spines = await page.locator("[data-spine]").evaluateAll((as) => as.map((a) => [a.getAttribute("title") ?? "", getComputedStyle(a).left]));
+  await page.goto("/g/repo/");
+  await expect(page.locator("[data-rail-book]").first()).toBeVisible();
+  const books = new Map(await page.locator("[data-rail-book]").evaluateAll((as) => as.map((a): [string, string] => [a.getAttribute("title") ?? "", getComputedStyle(a).left])));
+  expect(books.size).toBe(spines.length);
+  for (const [name, left] of spines) {
+    const i = SPINE_OFFSETS.indexOf(parseInt(left, 10));
+    expect(i, `${name}'s spine offset`).toBeGreaterThanOrEqual(0);
+    expect(i).toBe((hashOf(name) >>> 14) % SPINE_OFFSETS.length);
+    expect(books.get(name), name).toBe(`${RAIL_OFFSETS[i]}px`);
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-rail-mark-is-three-books", "checks": ["web/src/views/Library#rail-mark-is-three-books"]}
+ * ```
+ */
+test("the rail's mark is three flat books in the band colours", async ({ page }) => {
+  await page.goto("/g/repo/");
+  const mark = page.locator("[data-shelf-rail] a[title='Library']");
+  await expect(mark).toBeVisible();
+  const books = mark.locator("> span > span");
+  await expect(books).toHaveCount(3);
+  const shown = await books.evaluateAll((els) =>
+    els.map((b) => {
+      const box = b.getBoundingClientRect();
+      return { w: Math.round(box.width), h: Math.round(box.height), top: box.top, bands: [...b.children].map((c) => getComputedStyle(c).backgroundColor) };
+    }),
+  );
+  // Flat: wider than tall; stacked top to bottom; the bands of the keyword, type and string cloths.
+  expect(shown.map((b) => [b.w, b.h])).toEqual([[20, 7], [26, 7], [23, 7]]);
+  expect(shown[0].top).toBeLessThan(shown[1].top);
+  expect(shown[1].top).toBeLessThan(shown[2].top);
+  for (const [i, token] of ["--color-syn-keyword", "--color-syn-type", "--color-syn-string"].entries()) {
+    const c = await tokenColour(page, token);
+    expect(shown[i].bands, token).toEqual([c, c]);
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-rail-shelf-is-flat-books-on-a-plank", "checks": ["web/src/views/Library#rail-shelf-is-books-on-a-plank"]}
+ * ```
+ */
+test("a rail shelf is a stack of small flat books on a plank beneath them", async ({ page }) => {
+  await page.goto("/g/repo/");
+  const shelves = page.locator("[data-shelf-rail] [data-shelf]");
+  await expect(shelves.first()).toBeVisible();
+  const plank = await tokenColour(page, "--color-bg-3");
+  for (const shelf of await shelves.all()) {
+    const books = await shelf.locator("[data-rail-book]").evaluateAll((as) => as.map((a) => { const b = a.getBoundingClientRect(); return { w: b.width, h: b.height, top: b.top, bottom: b.bottom }; }));
+    expect(books.length).toBeGreaterThan(0);
+    for (const b of books) {
+      expect(b.h, "flat").toBe(18);
+      expect(b.w, "small").toBeGreaterThanOrEqual(28);
+      expect(b.w).toBeLessThanOrEqual(36);
+    }
+    // Stacked one above the next.
+    for (let i = 1; i < books.length; i++) expect(books[i].top).toBeGreaterThanOrEqual(books[i - 1].bottom);
+    const board = await shelf.locator(":scope > div").evaluate((d) => { const b = d.getBoundingClientRect(); return { top: b.top, w: b.width, h: b.height, bg: getComputedStyle(d).backgroundColor }; });
+    expect(board.top, "the plank under the last book").toBeGreaterThanOrEqual(books[books.length - 1].bottom);
+    expect([board.w, board.h, board.bg]).toEqual([42, 4, plank]);
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-library-stacks-stand-side-by-side", "checks": ["web/src/views/Library#stacks-side-by-side"]}
+ * ```
+ */
+test("the Library's stacks stand beside each other on one shelf", async ({ page }) => {
+  await withLibrary(page, [{ name: "tower", repository: "/srv/tower", server: "http://10.0.0.7:4242" }], true);
+  await page.goto("/");
+  const stacks = page.locator("[data-stack]");
+  await expect(stacks).toHaveCount(2);
+  const [a, b] = await stacks.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); const plank = e.querySelector(":scope > div")!.getBoundingClientRect(); return { left: r.left, right: r.right, plank: plank.bottom }; }));
+  expect(b.left, "side by side, not above").toBeGreaterThanOrEqual(a.right);
+  expect(Math.abs(a.plank - b.plank), "on one shelf").toBeLessThan(3);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-stack-label-sets-the-port-apart", "checks": ["web/src/views/Library#stack-label-sets-port-apart"]}
+ * ```
+ */
+test("a server's port in a stack's label is set apart, in the same width whatever it is", async ({ page }) => {
+  await withLibrary(page, [
+    { name: "tower", repository: "/srv/tower", server: "http://10.0.0.7:4242" },
+    { name: "vault", repository: "/srv/vault", server: "http://10.0.0.8:80" },
+  ]);
+  await page.goto("/");
+  const captions = page.locator("[data-stack] figcaption");
+  await expect(captions.filter({ hasText: "10.0.0.8" })).toHaveCount(1);
+  const long = captions.filter({ hasText: "10.0.0.7" });
+  const short = captions.filter({ hasText: "10.0.0.8" });
+  await expect(long.locator("[data-port]")).toHaveText(":4242");
+  await expect(short.locator("[data-port]")).toHaveText(":80");
+  await expect(long).toHaveText("10.0.0.7:4242");
+  // The host stands in the same place whatever the port: the port's slot is as wide for either.
+  const width = (c: Locator) => c.locator("[data-port]").evaluate((p) => p.getBoundingClientRect().width);
+  expect(await width(long)).toBe(await width(short));
+  // This machine's stack has no port to set apart.
+  await expect(captions.filter({ hasText: "this machine" }).locator("[data-port]")).toHaveCount(0);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 

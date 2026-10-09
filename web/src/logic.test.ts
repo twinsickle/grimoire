@@ -107,7 +107,7 @@ test("a machine whose server did not answer says so, with when its copy was fetc
  * # Test contract
  *
  * ```json
- * {"test": "tool-errors-keep-their-code", "checks": ["web/src/api#errors-typed"]}
+ * {"test": "tool-errors-keep-their-code", "checks": ["web/src/api#tool-error-is-api-error"]}
  * ```
  */
 test("a tool error is thrown with its code and message", async () => {
@@ -124,7 +124,7 @@ test("a tool error is thrown with its code and message", async () => {
  * # Test contract
  *
  * ```json
- * {"test": "every-answer-is-told-for-what-it-is", "checks": ["web/src/api#errors-typed"]}
+ * {"test": "every-answer-is-told-for-what-it-is", "checks": ["web/src/api#tool-error-is-api-error", "web/src/api#unreachable-when-daemon-away", "web/src/api#non-json-answer-names-status", "web/src/api#no-answer-is-json-syntax-error"]}
  * ```
  */
 test("every answer and failure is told for what it is, never as a JSON syntax error", async () => {
@@ -243,7 +243,7 @@ test("a stream closed for good is opened again after one second doubling to ten,
  * # Test contract
  *
  * ```json
- * {"test": "the-page-asks-again-while-the-daemon-is-away", "checks": ["web/src/api#retries-while-away", "web/src/api#away-keeps-data"]}
+ * {"test": "the-page-asks-again-while-the-daemon-is-away", "checks": ["web/src/api#retries-while-away", "web/src/api#away-on-unreachable-call", "web/src/api#away-ends-on-newer-answer"]}
  * ```
  */
 test("while the daemon is away every listener is told every two seconds, and no longer once it answers", async () => {
@@ -272,7 +272,7 @@ test("while the daemon is away every listener is told every two seconds, and no 
  * # Test contract
  *
  * ```json
- * {"test": "a-late-answer-from-before-does-not-say-the-daemon-is-back", "checks": ["web/src/api#away-keeps-data", "web/src/api#retries-while-away"]}
+ * {"test": "a-late-answer-from-before-does-not-say-the-daemon-is-back", "checks": ["web/src/api#away-on-unreachable-call", "web/src/api#away-ends-on-newer-answer", "web/src/api#late-answer-leaves-away", "web/src/api#retries-while-away"]}
  * ```
  */
 test("an answer to a request on its way when the daemon went away does not say it is back; a newer one does", async () => {
@@ -379,7 +379,7 @@ test("a call refused for the checkout it names forgets it, learns it again and i
  * # Test contract
  *
  * ```json
- * {"test": "the-header-lists-this-projects-checkouts", "checks": ["web/src/App#where-you-are"]}
+ * {"test": "the-header-lists-this-projects-checkouts", "checks": ["web/src/App#panel-lists-this-grimoires-checkouts", "web/src/App#panel-marks-checkout-on-screen"]}
  * ```
  */
 test("the header lists the checkouts of the grimoire on screen alone, each with its ticket, the one on screen marked", () => {
@@ -408,7 +408,7 @@ test("the header lists the checkouts of the grimoire on screen alone, each with 
  * # Test contract
  *
  * ```json
- * {"test": "the-header-says-where-the-grimoire-is-kept", "checks": ["web/src/App#where-you-are"]}
+ * {"test": "the-header-says-where-the-grimoire-is-kept", "checks": ["web/src/App#panel-shows-server-state"]}
  * ```
  */
 test("the header says where the grimoire is kept, and whether that is trouble", () => {
@@ -520,7 +520,7 @@ test("a ticket's next step is a line for the agent, and an answer waiting or a b
  * # Test contract
  *
  * ```json
- * {"test": "the-jingle-is-written-once", "checks": ["web/src/components#empty-state"]}
+ * {"test": "the-jingle-is-written-once", "checks": ["web/src/components#jingle-written-once", "web/src/components#jingle-drawn-only-by-empty-states-and-library"]}
  * ```
  */
 test("the jingle is written once, drawn by Jingle, and only the empty states and the Library draw it", () => {
@@ -536,7 +536,7 @@ test("the jingle is written once, drawn by Jingle, and only the empty states and
  * # Test contract
  *
  * ```json
- * {"test": "the-library-stacks-by-where-each-comes-from", "checks": ["web/src/views/Library#stacks"]}
+ * {"test": "the-library-stacks-by-where-each-comes-from", "checks": ["web/src/views/Library#stacks-by-place", "web/src/views/Library#stack-labelled-with-place", "web/src/views/Library#stack-spine-per-grimoire", "web/src/views/Library#spine-marked-with-checkouts"]}
  * ```
  */
 test("the Library stacks one book per grimoire by where each comes from, this machine first, then each server by its address", () => {
