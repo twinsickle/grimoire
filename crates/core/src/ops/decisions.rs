@@ -159,7 +159,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "retire-supersedes-everything-and-unlinks", "checks": ["crates/core/src/ops/decisions#retire", "crates/core/src/ops#put-page", "crates/core/src/ops#patch-is-partial"]}
+    /// {"test": "retire-supersedes-everything-and-unlinks", "checks": ["crates/core/src/ops/decisions#retire", "crates/core/src/ops#put-page", "crates/core/src/ops#patch-fields"]}
     /// ```
     #[test]
     fn retire_supersedes_everything_and_unlinks() {
@@ -194,7 +194,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-adoption-is-described-until-decided", "checks": ["crates/core/src/model#requirement-record", "crates/core/src/ops/decisions#record-decision", "crates/core/src/query/outline#outline"]}
+    /// {"test": "an-adoption-is-described-until-decided", "checks": ["crates/core/src/model#requirement-record", "crates/core/src/ops/decisions#record-decision", "crates/core/src/query/outline#outline-rollup"]}
     /// ```
     #[test]
     fn an_adoption_is_described_until_decided() {

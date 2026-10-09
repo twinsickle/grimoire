@@ -117,7 +117,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "ticket-is-offered-where-it-is-taken", "checks": ["crates/core/src/tools/write#ticket-named", "crates/core/src/tools/read#ticket-view"]}
+    /// {"test": "ticket-is-offered-where-it-is-taken", "checks": ["crates/core/src/tools/write#ticket-taken-where", "crates/core/src/tools/read#ticket-view"]}
     /// ```
     #[test]
     fn ticket_is_offered_where_it_is_taken() {

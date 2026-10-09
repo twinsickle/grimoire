@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the gaps and questions not yet bottled that share a ticket's nodes.","criteria":[{"id":"board","statement":"board returns inscribed, brewing and simmering change tickets by default, filterable by status, kind, priority and a touched node, ordered next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not bottled that it relies on, then simmering before brewing before inscribed, then title, a loop broken by that same rule. Each change carries waits_on, the gaps and questions it relies on with their status, a simmering one being answered and waiting for the change; unattached lists the gaps and questions not bottled that no change not bottled relies on, ordered as the changes are, by band and then by the band's order list; bottled lists the requested number of most recently decided bottled tickets, each bottled gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does; a ticket in tickets or bottled whose references the proposal of a brewing or simmering ticket would change carries drafts, those tickets, its own references staying the truth's; each ticket being worked, brewing or a change simmering, carries checked_out, who has it checked out as the graph holds it, empty when none is held, and every other ticket none; unattached lists its gaps and questions as rows of the same shape as tickets."},{"id":"related-tickets","statement":"related_tickets returns the gaps and questions not yet bottled whose touches or relies_on share a reference with the given ticket's touches."}]}
+//! {"purpose":"Answer board and related_tickets: the tickets to work on in order, with what each waits on, and the gaps and questions not yet bottled that share a ticket's nodes.","criteria":[{"id":"board-default-and-filters","statement":"board returns inscribed, brewing and simmering change tickets by default, filterable by status, kind, priority and a touched node."},{"id":"board-order","statement":"board orders change tickets next, high, later; within a band the tickets its order list names come first in that order, then the rest with each after any ticket not bottled that it relies on, then simmering before brewing before inscribed, then title, a loop broken by that same rule."},{"id":"board-waits-on","statement":"Each change on the board carries waits_on, the gaps and questions it relies on with their status, a simmering one being answered and waiting for the change."},{"id":"board-unattached","statement":"board's unattached lists the gaps and questions not bottled that no change not bottled relies on, ordered as the changes are, by band and then by the band's order list, as rows of the same shape as tickets."},{"id":"board-bottled","statement":"board's bottled lists the requested number of most recently decided bottled tickets, each bottled gap or question among them carrying followed_by, the change tickets of any status that rely on it in id order, empty when none does."},{"id":"board-drafts","statement":"A ticket in board's tickets or bottled whose references the proposal of a brewing or simmering ticket would change carries drafts, those tickets, its own references staying the truth's."},{"id":"board-checked-out","statement":"Each ticket on the board being worked, brewing or a change simmering, carries checked_out, who has it checked out as the graph holds it, empty when none is held, and every other ticket none."},{"id":"related-tickets","statement":"related_tickets returns the gaps and questions not yet bottled whose touches or relies_on share a reference with the given ticket's touches."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -187,7 +187,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-band-is-ordered-by-list-then-dependency", "checks": ["crates/core/src/query/board#board"]}
+    /// {"test": "a-band-is-ordered-by-list-then-dependency", "checks": ["crates/core/src/query/board#board-order"]}
     /// ```
     #[test]
     fn a_band_is_ordered_by_list_then_dependency() {
@@ -206,7 +206,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "board-orders-and-filters", "checks": ["crates/core/src/query/board#board"]}
+    /// {"test": "board-orders-and-filters", "checks": ["crates/core/src/query/board#board-default-and-filters", "crates/core/src/query/board#board-order"]}
     /// ```
     #[test]
     fn board_orders_and_filters() {
@@ -224,7 +224,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-change-waits-on-its-gaps-and-questions", "checks": ["crates/core/src/query/board#board"]}
+    /// {"test": "a-change-waits-on-its-gaps-and-questions", "checks": ["crates/core/src/query/board#board-waits-on", "crates/core/src/query/board#board-unattached"]}
     /// ```
     #[test]
     fn a_change_waits_on_its_gaps_and_questions() {
@@ -273,7 +273,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-most-recently-bottled-first", "checks": ["crates/core/src/query/board#board"]}
+    /// {"test": "the-most-recently-bottled-first", "checks": ["crates/core/src/query/board#board-bottled"]}
     /// ```
     #[test]
     fn the_most_recently_bottled_first() {
@@ -294,7 +294,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-answer-carries-the-changes-that-followed-it", "checks": ["crates/core/src/query/board#board"]}
+    /// {"test": "an-answer-carries-the-changes-that-followed-it", "checks": ["crates/core/src/query/board#board-bottled"]}
     /// ```
     #[test]
     fn an_answer_carries_the_changes_that_followed_it() {

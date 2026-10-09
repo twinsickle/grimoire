@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline","statement":"outline returns the grimoire as a tree from the root pages, the grimoire's and then the rites' (or a given page), to a depth, each node with its coverage, its count of lint findings on or below it and how many of those are baselined, its count of omens on or below it, a file's omen counted on its module, the checks of the findings on the node itself, how many tests check it, and its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither; and apart, the modules of the grimoire no page links; a retired requirement, if one is reached, has no children and counts toward no rollup; and each node is marked rites when it is under the rites and not under the grimoire."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, omens, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
+//! {"purpose":"Answer outline: the grimoire as a tree from its roots, each node with its coverage, findings, tests and adoption rollup, and the modules no page links.","criteria":[{"id":"outline-tree","statement":"outline returns the grimoire as a tree from the root pages, the grimoire's and then the rites' (or a given page), to a depth."},{"id":"outline-counts","statement":"Each outline node carries its coverage, its count of lint findings on or below it and how many of those are baselined, its count of omens on or below it, a file's omen counted on its module, the checks of the findings on the node itself, and how many tests check it."},{"id":"outline-rollup","statement":"Each outline node carries its rollup over the whole subtree, each node counted once: the grimoire's modules and how many carry a contract, their criteria and how many are tested, the requirements, how many are held, how many are described and how many are decided, having a decision in force that is not an adoption, one with no decision being neither."},{"id":"outline-unplaced","statement":"outline lists apart the modules of the grimoire no page links."},{"id":"outline-retired","statement":"A retired requirement an outline reaches has no children and counts toward no rollup."},{"id":"outline-rites","statement":"Each outline node is marked rites when it is under the rites and not under the grimoire."},{"id":"pages-only","statement":"Asked for pages only, the trees hold pages alone, each page with the same findings, baselined count, omens, checks, coverage and rollup it has in the full outline, and the unplaced modules are unchanged."}]}
 //! ```
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -250,7 +250,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "outline-names-the-checks-on-each-node", "checks": ["crates/core/src/query/outline#outline"]}
+    /// {"test": "outline-names-the-checks-on-each-node", "checks": ["crates/core/src/query/outline#outline-counts"]}
     /// ```
     #[test]
     fn outline_names_the_checks_on_each_node() {
@@ -266,7 +266,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "outline-rolls-up-adoption", "checks": ["crates/core/src/query/outline#outline"]}
+    /// {"test": "outline-rolls-up-adoption", "checks": ["crates/core/src/query/outline#outline-rollup", "crates/core/src/query/outline#outline-unplaced"]}
     /// ```
     #[test]
     fn outline_rolls_up_adoption() {
@@ -296,7 +296,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-page-linked-twice-counts-once", "checks": ["crates/core/src/query/outline#outline"]}
+    /// {"test": "a-page-linked-twice-counts-once", "checks": ["crates/core/src/query/outline#outline-rollup"]}
     /// ```
     #[test]
     fn a_page_linked_twice_counts_once() {
@@ -311,7 +311,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "outline-from-roots", "checks": ["crates/core/src/query/outline#outline"]}
+    /// {"test": "outline-from-roots", "checks": ["crates/core/src/query/outline#outline-tree", "crates/core/src/query/outline#outline-rites", "crates/core/src/query/outline#outline-counts"]}
     /// ```
     #[test]
     fn outline_from_roots() {
@@ -336,7 +336,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "omens-are-counted-apart-on-the-files-module", "checks": ["crates/core/src/query/outline#outline", "crates/core/src/query/outline#pages-only"]}
+    /// {"test": "omens-are-counted-apart-on-the-files-module", "checks": ["crates/core/src/query/outline#outline-counts", "crates/core/src/query/outline#pages-only"]}
     /// ```
     #[test]
     fn omens_are_counted_apart_on_the_files_module() {

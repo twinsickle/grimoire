@@ -818,7 +818,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-retired-requirement-covers-nothing-and-is-not-reported", "checks": ["crates/core/src/lint#retired-exempt", "crates/core/src/graph#retired-covers-nothing", "crates/core/src/query/outline#outline"]}
+    /// {"test": "a-retired-requirement-covers-nothing-and-is-not-reported", "checks": ["crates/core/src/lint#retired-exempt", "crates/core/src/graph#retired-covers-nothing", "crates/core/src/query/outline#outline-retired"]}
     /// ```
     #[test]
     fn a_retired_requirement_covers_nothing_and_is_not_reported() {

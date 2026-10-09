@@ -396,7 +396,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-edit-to-a-ticket-is-proposed-moved-renamed-and-applied", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/rename#rename"]}
+    /// {"test": "an-edit-to-a-ticket-is-proposed-moved-renamed-and-applied", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/rename#rename-proposals"]}
     /// ```
     #[test]
     fn an_edit_to_a_ticket_is_proposed_moved_renamed_and_applied() {

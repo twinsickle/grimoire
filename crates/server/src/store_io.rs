@@ -796,7 +796,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-rename-stopped-anywhere-is-valid-and-completes", "checks": ["crates/core/src/ops/rename#rename", "req:store-io-atomic-writes"]}
+    /// {"test": "a-rename-stopped-anywhere-is-valid-and-completes", "checks": ["crates/core/src/ops/rename#rename-completes", "req:store-io-atomic-writes"]}
     /// ```
     #[test]
     fn a_rename_stopped_anywhere_is_valid_and_completes() {

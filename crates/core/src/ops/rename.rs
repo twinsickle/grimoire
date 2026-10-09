@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact and rewrites the references the store holds to it, and to a requirement's decisions (page links, tickets that are not bottled, roots, the pages the site shows, baseline entries, start snapshots, and every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted), a list that already named the new reference keeping it once, leaving bottled tickets as they were; a new slug that a proposal already holds a record under is a conflict naming the ticket; it persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
+//! {"purpose":"Rename a page or requirement and rewrite every reference the store holds to it: the truth's records, the proposals, the baseline and the starts.","criteria":[{"id":"rename-moves","statement":"Renaming moves a page or requirement to a new slug with every field and decision intact."},{"id":"rename-rewrites","statement":"Renaming rewrites the references the store holds to the record, and to a requirement's decisions, in page links, tickets that are not bottled, roots, the pages the site shows, baseline entries and start snapshots, a list that already named the new reference keeping it once, and leaves bottled tickets as they were."},{"id":"rename-proposals","statement":"Renaming rewrites every proposal: the copy it holds of the record moves with it, its base following when it rested on the truth's old record, its links, marks and edits to other tickets' references are rewritten, and an edit's base follows its ticket when it rested on that ticket's lists before the rename rewrote them, each changed proposal persisted; a new slug that a proposal already holds a record under is a conflict naming the ticket."},{"id":"rename-completes","statement":"Renaming persists the new record first and removes the old one last, and a rename to a slug held by the very record being renamed, equal in every field but its slug once its own links to itself are moved too, which a rename that failed part way leaves, completes it."}]}
 //! ```
 
 use super::*;
@@ -238,7 +238,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-rename-and-a-ticket-deletion-reach-proposals", "checks": ["crates/core/src/ops/rename#rename", "crates/core/src/ops#delete-node"]}
+    /// {"test": "a-rename-and-a-ticket-deletion-reach-proposals", "checks": ["crates/core/src/ops/rename#rename-proposals", "crates/core/src/ops#delete-node"]}
     /// ```
     #[test]
     fn a_rename_and_a_ticket_deletion_reach_proposals() {
@@ -306,7 +306,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-simmering-ticket-is-renamed-and-reordered-like-a-brewing-one", "checks": ["crates/core/src/ops/rename#rename", "crates/core/src/ops#reorder", "crates/core/src/ops#delete-node"]}
+    /// {"test": "a-simmering-ticket-is-renamed-and-reordered-like-a-brewing-one", "checks": ["crates/core/src/ops/rename#rename-proposals", "crates/core/src/ops#reorder", "crates/core/src/ops#delete-node"]}
     /// ```
     #[test]
     fn a_simmering_ticket_is_renamed_and_reordered_like_a_brewing_one() {
@@ -330,7 +330,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-rename-takes-a-requirements-decisions-with-it", "checks": ["crates/core/src/ops/rename#rename"]}
+    /// {"test": "a-rename-takes-a-requirements-decisions-with-it", "checks": ["crates/core/src/ops/rename#rename-moves"]}
     /// ```
     #[test]
     fn a_rename_takes_a_requirements_decisions_with_it() {
