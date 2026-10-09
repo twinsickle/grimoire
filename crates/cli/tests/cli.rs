@@ -1364,6 +1364,32 @@ fn uninstall_refuses_to_delete_a_store_it_does_not_own_or_that_is_serving() {
 /// # Test contract
 ///
 /// ```json
+/// {"test": "uninstall-deletes-past-a-dead-daemons-marker", "checks": ["crates/cli/src/uninstall#not-served", "req:cli-uninstall"]}
+/// ```
+#[test]
+fn uninstall_deletes_past_a_dead_daemons_marker() {
+    // A marker naming a daemon that is starting, holding the store's lock but not answering yet: refused.
+    let (a, _) = project();
+    let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    std::fs::write(a.store.join("serve.json"), format!(r#"{{"port":{port},"pid":1}}"#)).unwrap();
+    let starting = grimoire_server::store_io::lock(&a.store).unwrap();
+    let before = files(&a.repo);
+    let out = run(&a.repo, &["uninstall", "--delete-store"]);
+    assert!(!out.status.success());
+    assert!(text(&out).contains("is marked as served"), "{}", text(&out));
+    assert_eq!(files(&a.repo), before, "nothing removed");
+    assert!(a.store.join("grimoire.json").is_file());
+    // The daemon killed: its marker left behind, nothing answering, the lock free. The store goes, marker and all.
+    drop(starting);
+    let out = run(&a.repo, &["uninstall", "--delete-store"]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!a.store.exists(), "{}", text(&out));
+    assert!(!a.repo.join(".grimoire.toml").exists());
+}
+
+/// # Test contract
+///
+/// ```json
 /// {"test": "uninstall-never-deletes-more-than-a-store", "checks": ["crates/cli/src/uninstall#not-the-repository-or-a-root", "crates/cli/src/uninstall#only-a-store", "crates/cli/src/uninstall#checked-before-removing"]}
 /// ```
 #[test]
