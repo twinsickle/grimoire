@@ -460,6 +460,25 @@ Code that will never carry a contract (generated, vendored) is a scope
 question: propose `configure` with an `exclude` to the person. Never run
 `scaffold` on an existing store; it replaces the whole store.
 
+### Scenarios
+
+For requirements that carry no scenario, as `init` scaffolds them from the
+contracts already in the code: each statement is a heading, and the rules
+are still to be read off the code.
+
+1. `lint {"kinds":["unspecified"]}`, grouped by area, the page linking each
+   requirement; the person picks the next area.
+2. For each requirement, `get` it and the criteria its `covered_by` names,
+   and read the code they belong to. Keep the statement a one-line SHALL
+   heading, and draft a scenario (given, when, then) for each rule the code
+   holds of that criterion. Describe what the code does now, not what it
+   should do.
+3. Show the batch; write only what the person approves with
+   `put_requirement`, and on each requirement `record_decision` with
+   `adopted: true`.
+4. `lint`. The batch's `unspecified` findings are gone and pruned from the
+   baseline, and nothing new appears.
+
 ### Tests
 
 For an area whose contracts are in, its criteria that no test checks.

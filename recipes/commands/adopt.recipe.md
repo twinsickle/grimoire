@@ -10,7 +10,7 @@ grimoire adopt --reason "adopted at the start: contracts come area by area"
 
 **You rarely need it.** `init` adopts a new store once, with the reason "adopted at init", so the hook it installs passes on the next commit. The baseline then only shrinks: whatever the code no longer produces is pruned from it.
 
-**When not to.** Never to make a failing check pass: that turns a finding your work created into inherited work nobody owns. It is the person's call, made with a reason. To bring adopted code in, contracts first and then tests, a batch at a time, follow the skill's adopt sequence.
+**When not to.** Never to make a failing check pass: that turns a finding your work created into inherited work nobody owns. It is the person's call, made with a reason. To bring adopted code in, contracts first, then the scenarios of the requirements init scaffolded, then tests, a batch at a time, follow the skill's adopt sequence.
 
 ## Recipe
 

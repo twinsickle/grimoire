@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture and constraints pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture; and the rites root, a page rites linked from nothing, says what the rites are for, that the grimoire is what the project is and must do and the rites how its people work on it, and that a rule of work is put there, and links a conventions page whose prompt says it holds how things are written, naming, pages and decisions, contracts, commits and code style, that a convention a tool checks stays there, and that a rule about what the code must do or how it is built belongs in the grimoire, under constraints when it holds whichever part is changed, with both roots named in the config."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
+//! {"purpose":"Build the existing-state skeleton of a store from module contracts alone: the story pages, a page per module group, a requirement per criterion, all linked.","criteria":[{"id":"contracts-only","statement":"The skeleton is a function of the extraction and a fixed story outline; it carries no intent the contracts did not, only the places intent goes."},{"id":"story-outline","statement":"The root page links, in reading order, to goal, guarantees, glossary, architecture and constraints pages seeded with prompting text, the goal's prompt naming it the shallowest depth and the guarantees' saying a guarantee may be unheld, and the module-group pages hang under architecture; and the rites root, a page rites linked from nothing, says what the rites are for, that the grimoire is what the project is and must do and the rites how its people work on it, and that a rule of work is put there, and links a conventions page whose prompt says it holds how things are written, naming, pages and decisions, contracts, commits and code style, that a convention a tool checks stays there, and that a rule about what the code must do or how it is built belongs in the grimoire, under constraints when it holds whichever part is changed, with both roots named in the config."},{"id":"requirement-heading","statement":"A requirement's statement is its criterion's module id in backticks, SHALL hold its criterion, and the criterion's id in words, with no scenarios and no decisions, never the criterion's text."},{"id":"lint-clean","statement":"The skeleton passes the dangling lint and leaves no contracted module or criterion without a page or requirement; its requirements carry no scenarios and its criteria no tests, so each is reported as unspecified or untested."},{"id":"requirement-slugs","statement":"A requirement's slug is the last segment of its module's id that is not src, then its criterion's id, so a crate root crates/cli/src names its requirements cli-…; a slug already taken gets -2, -3 and on."}]}
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -202,8 +202,8 @@ pub fn scaffold(x: &Extraction, repository: &str, languages: &[String]) -> Store
             let req = Requirement {
                 slug: slug.clone(),
                 title: title_of(&c.id),
-                // Trimmed as every stored string is: a contract may hold a stray space.
-                statement: c.statement.trim().to_string(),
+                // A heading, its rules left for adoption to read off the code as scenarios (req:scaffold-contracts-only).
+                statement: format!("`{}` SHALL hold its criterion {}.", m.id, title_of(&c.id)),
                 scenarios: Vec::new(),
                 covered_by: vec![Reference::criterion(&c.module, &c.id)],
                 decisions: Vec::new(),
@@ -244,18 +244,18 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-skeleton-carries-only-what-the-contracts-say", "checks": ["crates/core/src/scaffold#contracts-only"]}
+    /// {"test": "the-skeleton-carries-only-what-the-contracts-say", "checks": ["crates/core/src/scaffold#contracts-only", "crates/core/src/scaffold#requirement-heading"]}
     /// ```
     #[test]
     fn the_skeleton_carries_only_what_the_contracts_say() {
         let x = extraction();
         let s = scaffold(&x, "C:/repo", &["rust".into()]);
-        // Each requirement states its criterion verbatim, with no case and no decision.
+        // Each requirement is a heading naming its criterion, with no case and no decision: its rules are adoption's to write.
         for r in s.requirements.values() {
             let c = &r.covered_by[0];
             let (module, id) = c.split_hash().expect("covered_by names a criterion");
-            let criterion = x.modules[module].criteria.iter().find(|k| k.id == id).expect("the criterion exists");
-            assert_eq!(r.statement, criterion.statement);
+            assert!(x.modules[module].criteria.iter().any(|k| k.id == id), "the criterion exists");
+            assert_eq!(r.statement, format!("`{module}` SHALL hold its criterion {}.", title_of(id)));
             assert!(r.scenarios.is_empty() && r.decisions.is_empty());
         }
         assert_eq!(scaffold(&x, "C:/repo", &["rust".into()]), s, "a function of the extraction and nothing else");

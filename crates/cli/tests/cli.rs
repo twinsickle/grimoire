@@ -539,7 +539,7 @@ fn init_sets_a_project_up_in_one_command() {
     assert_eq!(root["ref"], "page:overview", "{outline}");
     let story: Vec<&str> = root["children"].as_array().unwrap().iter().map(|c| c["ref"].as_str().unwrap()).collect();
     assert_eq!(story, ["page:goal", "page:guarantees", "page:glossary", "page:architecture", "page:constraints"]);
-    let req: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "find", r#"{"query":"exports a function named","kinds":["req"]}"#]).stdout).unwrap();
+    let req: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "find", r#"{"query":"SHALL hold its criterion Exports","kinds":["req"]}"#]).stdout).unwrap();
     assert_eq!(req["nodes"].as_array().unwrap().len(), 2, "a requirement for each module's criterion: {req}");
     // The module's group has a page of its own, under architecture.
     let architecture: serde_json::Value = serde_json::from_slice(&run(&p.repo, &["tool", "get", r#"{"ref":"page:architecture"}"#]).stdout).unwrap();
