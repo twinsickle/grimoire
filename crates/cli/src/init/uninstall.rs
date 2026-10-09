@@ -1,14 +1,14 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Take Grimoire's integration back out of a repository: plan what happens to every path of it before changing any, then carry the plan out.","criteria":[{"id":"plans-before-changing","statement":"uninstall plans every path of the integration before changing any."},{"id":"skill-files-removed","statement":"uninstall removes both harnesses' skill files and their folders only when left empty."},{"id":"section-only-when-one-pair","statement":"uninstall removes Grimoire's section from CLAUDE.md and AGENTS.md only when its marker lines form exactly one pair."},{"id":"section-cut-out-byte-for-byte","statement":"uninstall cuts Grimoire's section out byte for byte, so line endings, a byte-order mark and the person's text survive."},{"id":"guidance-file-removed-when-empty","statement":"uninstall removes CLAUDE.md or AGENTS.md only when nothing else is left in it."},{"id":"mcp-json-entry-removed","statement":"uninstall removes the grimoire entry from .mcp.json with the other servers and keys kept."},{"id":"codex-server-only-as-init-wrote-it","statement":"uninstall removes the grimoire server from .codex/config.toml only when it is as init wrote it, last in the file, with every other byte kept, otherwise leaving it with a note."},{"id":"hooks-only-when-unedited","statement":"uninstall removes the pre-commit and post-commit hooks, each only when it is init's script unedited, as this release wrote it."},{"id":"earlier-release-post-commit-hook","statement":"uninstall removes the post-commit hook also when it is init's script unedited as the release before bottling was named wrote it."},{"id":"one-result-per-file","statement":"Every file of the integration gets one uninstall result, removed, changed, left with why, or absent."},{"id":"emptied-folders-reported","statement":"uninstall reports each folder init made when it is removed empty."},{"id":"failure-stops-and-reports-done","statement":"A failure part way through uninstall stops at once and returns what was already done."}]}
+//! {"purpose":"Take Grimoire's integration back out of a repository: plan what happens to every path of it before changing any, then carry the plan out.","criteria":[{"id":"plans-before-changing","statement":"uninstall plans every path of the integration before changing any."},{"id":"skill-files-removed","statement":"uninstall removes both harnesses' skill files and their folders only when left empty."},{"id":"section-only-when-one-pair","statement":"uninstall removes Grimoire's section from CLAUDE.md and AGENTS.md only when its marker lines form exactly one pair."},{"id":"section-cut-out-byte-for-byte","statement":"uninstall cuts Grimoire's section out byte for byte, so line endings, a byte-order mark and the person's text survive."},{"id":"guidance-file-removed-when-empty","statement":"uninstall removes CLAUDE.md or AGENTS.md only when nothing else is left in it."},{"id":"mcp-json-entry-removed","statement":"uninstall removes the grimoire entry from .mcp.json with the other servers and keys kept."},{"id":"codex-server-only-as-init-wrote-it","statement":"uninstall removes the grimoire server from .codex/config.toml only when it is as init wrote it, last in the file, with every other byte kept, otherwise leaving it with a note."},{"id":"hooks-only-when-unedited","statement":"uninstall removes the pre-commit and post-commit hooks, each only when it is init's script unedited, as this release wrote it."},{"id":"hooks-removed-where-git-runs-them","statement":"uninstall removes init's hooks from the folder git runs hooks from for the checkout, by the same rule: a folder within a repository never touches that repository's hooks."},{"id":"earlier-release-post-commit-hook","statement":"uninstall removes the post-commit hook also when it is init's script unedited as the release before bottling was named wrote it."},{"id":"one-result-per-file","statement":"Every file of the integration gets one uninstall result, removed, changed, left with why, or absent."},{"id":"emptied-folders-reported","statement":"uninstall reports each folder init made when it is removed empty."},{"id":"failure-stops-and-reports-done","statement":"A failure part way through uninstall stops at once and returns what was already done."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::{former_hook_script, guidance::without_guidance, hooks, io, without_codex_server, write, InitError, CODEX_REL, HARNESSES, MCP_REL, SKILL_FILES};
+use super::{former_hook_script, guidance::without_guidance, hooks, hooks_dir, io, without_codex_server, write, InitError, CODEX_REL, HARNESSES, MCP_REL, SKILL_FILES};
 
 /// What uninstall did, or will do, to one path of the integration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,8 +137,10 @@ pub fn plan_uninstall(repo: &Path) -> Plan {
     });
 
     // The hooks: each only when it is init's own script, unedited, as this release or an earlier one wrote it.
+    // They are in the folder git runs hooks from; outside git there are none to find.
+    let dir = hooks_dir(repo).unwrap_or_else(|| repo.join(".git").join("hooks"));
     for (rel, script, command) in hooks() {
-        let hook = repo.join(rel);
+        let hook = dir.join(rel);
         steps.push(if !hook.is_file() {
             (Undone::Absent(hook), None)
         } else {
@@ -203,8 +205,8 @@ impl Plan {
 mod tests {
     use super::*;
     use crate::init::install;
-    use crate::init::tests::{temp, walk};
-    use crate::init::{hook_script, BOTTLING_HOOK_REL, HOOK_REL};
+    use crate::init::tests::{hook_at, temp, walk};
+    use crate::init::{hook_script, BOTTLING_HOOK_FILE, HOOK_FILE};
     use serde_json::json;
 
     fn uninstall(repo: &Path) -> Vec<Undone> {
@@ -237,7 +239,7 @@ model = \"o4\"
         assert!(!repo.join("AGENTS.md").exists(), "a file init created holds nothing else, so it goes");
         let mcp: Value = serde_json::from_str(&std::fs::read_to_string(repo.join(".mcp.json")).unwrap()).unwrap();
         assert_eq!(mcp, json!({ "mcpServers": { "other": { "type": "stdio", "command": "x" } }, "z": 1 }), "other servers and keys are kept");
-        assert!(!repo.join(HOOK_REL).exists(), "init's own hook goes");
+        assert!(!hook_at(repo, HOOK_FILE).exists(), "init's own hook goes");
         assert!(!repo.join(".claude/skills/grimoire").exists());
         assert!(repo.join(".claude/skills/mine/SKILL.md").is_file(), "a person's skill and its folders stay");
         assert_eq!(std::fs::read_to_string(repo.join(CODEX_REL)).unwrap(), codex_own, "a person's Codex config is back exactly");
@@ -249,8 +251,8 @@ model = \"o4\"
             Undone::Removed(repo.join("AGENTS.md")),
             Undone::Changed(repo.join(".mcp.json")),
             Undone::Changed(repo.join(CODEX_REL)),
-            Undone::Removed(repo.join(HOOK_REL)),
-            Undone::Removed(repo.join(BOTTLING_HOOK_REL)),
+            Undone::Removed(hook_at(repo, HOOK_FILE)),
+            Undone::Removed(hook_at(repo, BOTTLING_HOOK_FILE)),
             Undone::Removed(repo.join(".claude/skills/grimoire/references")),
             Undone::Removed(repo.join(".claude/skills/grimoire")),
             Undone::Removed(repo.join(".agents/skills/grimoire/references")),
@@ -271,18 +273,18 @@ model = \"o4\"
             let tmp = temp();
             let repo = tmp.path();
             std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-            std::fs::write(repo.join(HOOK_REL), &own).unwrap();
+            std::fs::write(hook_at(repo, HOOK_FILE), &own).unwrap();
             let undone = uninstall(repo);
-            assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), own, "an edited hook stays, even with init's marker in it");
+            assert_eq!(std::fs::read_to_string(hook_at(repo, HOOK_FILE)).unwrap(), own, "an edited hook stays, even with init's marker in it");
             assert!(undone.iter().any(|u| matches!(u, Undone::Left { path, note } if path.ends_with("pre-commit") && note.contains("grimoire check"))), "{undone:?}");
         }
         // init's script, even with Windows line endings, is init's.
         let tmp = temp();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        std::fs::write(repo.join(HOOK_REL), hook_script().replace('\n', "\r\n")).unwrap();
+        std::fs::write(hook_at(repo, HOOK_FILE), hook_script().replace('\n', "\r\n")).unwrap();
         uninstall(repo);
-        assert!(!repo.join(HOOK_REL).exists());
+        assert!(!hook_at(repo, HOOK_FILE).exists());
     }
 
     /// # Test contract
@@ -298,23 +300,23 @@ model = \"o4\"
         install(repo, 4242, "shop").unwrap();
         // The check before a commit edited by a line; the bottling after it left as init wrote it.
         let edited = hook_script().replace("exec grimoire check", "echo before\nexec grimoire check");
-        std::fs::write(repo.join(HOOK_REL), &edited).unwrap();
+        std::fs::write(hook_at(repo, HOOK_FILE), &edited).unwrap();
         let undone = uninstall(repo);
-        assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), edited, "the edited hook is kept, byte for byte");
+        assert_eq!(std::fs::read_to_string(hook_at(repo, HOOK_FILE)).unwrap(), edited, "the edited hook is kept, byte for byte");
         assert!(undone.iter().any(|u| matches!(u, Undone::Left { path, .. } if path.ends_with("pre-commit"))), "{undone:?}");
-        assert!(undone.contains(&Undone::Removed(repo.join(BOTTLING_HOOK_REL))) && !repo.join(BOTTLING_HOOK_REL).exists(), "the unedited one goes: {undone:?}");
+        assert!(undone.contains(&Undone::Removed(hook_at(repo, BOTTLING_HOOK_FILE))) && !hook_at(repo, BOTTLING_HOOK_FILE).exists(), "the unedited one goes: {undone:?}");
         // The other way round: the bottling hook edited, the check left as init wrote it.
-        std::fs::write(repo.join(HOOK_REL), hook_script()).unwrap();
+        std::fs::write(hook_at(repo, HOOK_FILE), hook_script()).unwrap();
         let edited = crate::init::bottling_hook_script().replace("exec grimoire bottle", "exec grimoire bottle --quiet");
-        std::fs::write(repo.join(BOTTLING_HOOK_REL), &edited).unwrap();
+        std::fs::write(hook_at(repo, BOTTLING_HOOK_FILE), &edited).unwrap();
         let undone = uninstall(repo);
-        assert_eq!(std::fs::read_to_string(repo.join(BOTTLING_HOOK_REL)).unwrap(), edited, "kept, byte for byte");
+        assert_eq!(std::fs::read_to_string(hook_at(repo, BOTTLING_HOOK_FILE)).unwrap(), edited, "kept, byte for byte");
         assert!(undone.iter().any(|u| matches!(u, Undone::Left { path, .. } if path.ends_with("post-commit"))), "{undone:?}");
-        assert!(undone.contains(&Undone::Removed(repo.join(HOOK_REL))) && !repo.join(HOOK_REL).exists());
+        assert!(undone.contains(&Undone::Removed(hook_at(repo, HOOK_FILE))) && !hook_at(repo, HOOK_FILE).exists());
         // A hook of the person's own, with nothing of init's in it, is kept too.
-        std::fs::write(repo.join(HOOK_REL), "#!/bin/sh\necho mine\n").unwrap();
+        std::fs::write(hook_at(repo, HOOK_FILE), "#!/bin/sh\necho mine\n").unwrap();
         uninstall(repo);
-        assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), "#!/bin/sh\necho mine\n");
+        assert_eq!(std::fs::read_to_string(hook_at(repo, HOOK_FILE)).unwrap(), "#!/bin/sh\necho mine\n");
     }
 
     /// # Test contract
@@ -361,19 +363,19 @@ model = \"o4\"
     /// ```
     #[test]
     fn an_earlier_releases_post_commit_hook_is_inits_own() {
-        let former = crate::init::former_hook_script(BOTTLING_HOOK_REL).expect("the post-commit hook had a former script");
+        let former = crate::init::former_hook_script(BOTTLING_HOOK_FILE).expect("the post-commit hook had a former script");
         assert!(former.contains("exec grimoire land"));
         // Installed before landing was renamed bottling: init rewrites it to run `grimoire bottle`.
         let tmp = temp();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        std::fs::write(repo.join(BOTTLING_HOOK_REL), &former).unwrap();
+        std::fs::write(hook_at(repo, BOTTLING_HOOK_FILE), &former).unwrap();
         install(repo, 4242, "shop").unwrap();
-        assert_eq!(std::fs::read_to_string(repo.join(BOTTLING_HOOK_REL)).unwrap(), crate::init::bottling_hook_script());
+        assert_eq!(std::fs::read_to_string(hook_at(repo, BOTTLING_HOOK_FILE)).unwrap(), crate::init::bottling_hook_script());
         // And uninstall takes it out as it was installed, even never rewritten.
-        std::fs::write(repo.join(BOTTLING_HOOK_REL), former.replace('\n', "\r\n")).unwrap();
+        std::fs::write(hook_at(repo, BOTTLING_HOOK_FILE), former.replace('\n', "\r\n")).unwrap();
         uninstall(repo);
-        assert!(!repo.join(BOTTLING_HOOK_REL).exists());
+        assert!(!hook_at(repo, BOTTLING_HOOK_FILE).exists());
     }
 
     #[test]

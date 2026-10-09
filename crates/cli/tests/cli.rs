@@ -3183,7 +3183,7 @@ fn a_teams_bottling_sends_the_recipes_after_the_prune() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "outside-git-init-writes-no-hook-and-says-so", "checks": ["crates/cli/src/init#outside-git-writes-no-hook-and-says-so"]}
+/// {"test": "outside-git-init-writes-no-hook-and-says-so", "checks": ["crates/cli/src/init#outside-git-writes-no-hook-and-says-so", "crates/cli/src/init#hooks-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
 /// ```
 #[test]
 fn outside_git_init_writes_no_hook_and_says_so() {
@@ -3255,4 +3255,190 @@ fn a_daemon_started_in_a_worktree_adds_it_to_the_store() {
         drop(_daemon);
         let _ = std::fs::remove_file(&marker);
     }
+}
+
+/// Run git in `dir` the way a person's commit does: hooks as the repository configures them, with the
+/// binary on the path so a hook finds `grimoire`.
+fn git_as_person(dir: &Path, args: &[&str]) -> Output {
+    let path = std::env::join_paths(Path::new(BIN).parent().map(Path::to_path_buf).into_iter().chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()))).unwrap();
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"])
+        .args(args)
+        .env("PATH", path)
+        .env("GRIMOIRE_HOME", test_home())
+        .output()
+        .unwrap()
+}
+
+/// A git repository of the uninitialised project, with its code committed.
+fn committed() -> Project {
+    let p = uninitialised();
+    git(&p.repo, &["init", "-q", "-b", "main"]);
+    git(&p.repo, &["add", "-A"]);
+    git(&p.repo, &["commit", "-q", "-m", "start"]);
+    p
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "hooks-go-where-core-hooks-path-says", "checks": ["crates/cli/src/init#hooks-where-git-runs-them", "crates/cli/src/init#existing-hook-left-alone", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn hooks_go_where_core_hooks_path_says() {
+    let p = committed();
+    git(&p.repo, &["config", "core.hooksPath", ".husky"]);
+    let init = run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success() && !text(&init).contains("not a git repository"), "{}", text(&init));
+    assert!(p.repo.join(".husky/pre-commit").is_file() && p.repo.join(".husky/post-commit").is_file(), "the hooks are where core.hooksPath names");
+    assert!(!p.repo.join(".git/hooks/pre-commit").exists() && !p.repo.join(".git/hooks/post-commit").exists(), "none in .git/hooks");
+    // Git runs them: the check passes on the adopted state, and a commit that breaks a claim is refused.
+    let add = git_as_person(&p.repo, &["add", "-A"]);
+    assert!(add.status.success(), "{}", text(&add));
+    let first = git_as_person(&p.repo, &["commit", "-q", "-m", "init"]);
+    assert!(first.status.success(), "{}", text(&first));
+    assert!(text(&first).contains("no ticket was simmering"), "the post-commit hook ran: {}", text(&first));
+    std::fs::write(p.repo.join("src").join("b.rs"), "pub fn b() {}\n").unwrap();
+    std::fs::write(p.repo.join("src").join("lib.rs"), "pub mod a;\npub mod b;\n").unwrap();
+    git(&p.repo, &["add", "-A"]);
+    let refused = git_as_person(&p.repo, &["commit", "-q", "-m", "breaks a claim"]);
+    assert!(!refused.status.success() && text(&refused).contains("module:src/b"), "the pre-commit check ran and refused: {}", text(&refused));
+
+    // A pre-commit hook of the project's own there is left as it was, with a note; uninstall removes only init's.
+    let own = uninitialised();
+    std::fs::create_dir_all(own.repo.join(".husky")).unwrap();
+    std::fs::write(own.repo.join(".husky/pre-commit"), "#!/bin/sh\nnpx lint-staged\n").unwrap();
+    git(&own.repo, &["init", "-q", "-b", "main"]);
+    git(&own.repo, &["config", "core.hooksPath", ".husky"]);
+    let init = run(&own.repo, &["init", "--store", &own.store.to_string_lossy()]);
+    let out = text(&init);
+    assert!(init.status.success() && out.lines().any(|l| l.starts_with("skipped ") && l.contains("pre-commit")), "{out}");
+    assert_eq!(std::fs::read_to_string(own.repo.join(".husky/pre-commit")).unwrap(), "#!/bin/sh\nnpx lint-staged\n");
+    assert!(own.repo.join(".husky/post-commit").is_file());
+    let un = run(&own.repo, &["uninstall"]);
+    assert!(un.status.success(), "{}", text(&un));
+    assert!(!own.repo.join(".husky/post-commit").exists(), "init's hook is taken out of .husky");
+    assert_eq!(std::fs::read_to_string(own.repo.join(".husky/pre-commit")).unwrap(), "#!/bin/sh\nnpx lint-staged\n", "the project's own stays");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-takes-the-hooks-out-of-hooks-path", "checks": ["crates/cli/src/init/uninstall#hooks-removed-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn uninstall_takes_the_hooks_out_of_hooks_path() {
+    let p = committed();
+    git(&p.repo, &["config", "core.hooksPath", ".husky"]);
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    assert!(p.repo.join(".husky/pre-commit").is_file());
+    let un = run(&p.repo, &["uninstall"]);
+    assert!(un.status.success(), "{}", text(&un));
+    assert!(!p.repo.join(".husky/pre-commit").exists() && !p.repo.join(".husky/post-commit").exists(), "{}", text(&un));
+    // A plain repository, where git answers `.git/hooks` with a `/` the verbatim path would take for part of a name.
+    let q = committed();
+    assert!(run(&q.repo, &["init", "--store", &q.store.to_string_lossy()]).status.success());
+    assert!(q.repo.join(".git/hooks/pre-commit").is_file() && q.repo.join(".git/hooks/post-commit").is_file());
+    let canonical = q.repo.canonicalize().unwrap();
+    let un = run(&q.dir, &["uninstall", "--repo", &canonical.to_string_lossy()]);
+    assert!(un.status.success(), "{}", text(&un));
+    assert!(!q.repo.join(".git/hooks/pre-commit").exists() && !q.repo.join(".git/hooks/post-commit").exists(), "{}", text(&un));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-worktree-gets-the-shared-hooks", "checks": ["crates/cli/src/init#hooks-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn a_worktree_gets_the_shared_hooks() {
+    let p = committed();
+    let wt = p.dir.join("wt");
+    git(&p.repo, &["worktree", "add", "-q", &wt.to_string_lossy(), "-b", "wt"]);
+    assert!(wt.join(".git").is_file(), "a worktree's .git is a file");
+    let init = run(&wt, &["init", "--store", &p.store.to_string_lossy()]);
+    assert!(init.status.success() && !text(&init).contains("not a git repository"), "{}", text(&init));
+    assert!(p.repo.join(".git/hooks/pre-commit").is_file() && p.repo.join(".git/hooks/post-commit").is_file(), "the hooks are in the shared hooks folder");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-submodule-gets-its-own-hooks", "checks": ["crates/cli/src/init#hooks-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn a_submodule_gets_its_own_hooks() {
+    let p = committed();
+    let outer = uninitialised();
+    git(&outer.repo, &["init", "-q", "-b", "main"]);
+    git(&outer.repo, &["add", "-A"]);
+    git(&outer.repo, &["commit", "-q", "-m", "start"]);
+    git(&outer.repo, &["-c", "protocol.file.allow=always", "submodule", "add", "-q", &p.repo.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"), "sub"]);
+    let sub = outer.repo.join("sub");
+    assert!(sub.join(".git").is_file(), "a submodule's .git is a file");
+    let init = run(&sub, &["init", "--store", &outer.store.to_string_lossy()]);
+    assert!(init.status.success() && !text(&init).contains("not a git repository"), "{}", text(&init));
+    assert!(outer.repo.join(".git/modules/sub/hooks/pre-commit").is_file() && outer.repo.join(".git/modules/sub/hooks/post-commit").is_file(), "the submodule's own hooks folder");
+    assert!(!outer.repo.join(".git/hooks/pre-commit").exists(), "not the parent's");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "uninstall-with-a-canonicalised-repo-finds-the-hooks", "checks": ["crates/cli/src/init/uninstall#hooks-removed-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn uninstall_with_a_canonicalised_repo_finds_the_hooks() {
+    let p = committed();
+    git(&p.repo, &["config", "core.hooksPath", ".husky"]);
+    assert!(run(&p.repo, &["init", "--store", &p.store.to_string_lossy()]).status.success());
+    assert!(p.repo.join(".husky/pre-commit").is_file() && p.repo.join(".husky/post-commit").is_file());
+    // On Windows the canonical path is the verbatim \\?\C:\..., which git cannot change into.
+    let canonical = p.repo.canonicalize().unwrap();
+    let un = run(&p.dir, &["uninstall", "--repo", &canonical.to_string_lossy()]);
+    assert!(un.status.success(), "{}", text(&un));
+    assert!(!p.repo.join(".husky/pre-commit").exists() && !p.repo.join(".husky/post-commit").exists(), "{}", text(&un));
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-folder-within-a-repository-gets-no-hooks", "checks": ["crates/cli/src/init#hooks-where-git-runs-them", "crates/cli/src/init/uninstall#hooks-removed-where-git-runs-them", "req:init-hooks-where-git-runs-them"]}
+/// ```
+#[test]
+fn a_folder_within_a_repository_gets_no_hooks() {
+    let top = committed();
+    let pkg = top.repo.join("pkg");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("Cargo.toml"),
+        "[package]
+name = \"p\"
+version = \"0.1.0\"
+",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("src").join("lib.rs"),
+        "pub fn p() {}
+",
+    )
+    .unwrap();
+    let pkg_store = top.dir.join("pkg-store");
+    let init = run(&pkg, &["init", "--store", &pkg_store.to_string_lossy()]);
+    let out = text(&init);
+    assert!(init.status.success(), "{out}");
+    for hook in ["pre-commit", "post-commit"] {
+        assert!(out.lines().any(|l| l.starts_with("skipped ") && l.contains(hook) && l.contains("is inside the git repository at") && l.contains("grimoire check")), "{hook} not said: {out}");
+        assert!(!top.repo.join(".git/hooks").join(hook).exists(), "{hook} written in the enclosing repository");
+        assert!(!pkg.join(".git").exists());
+    }
+    // The enclosing repository's own hooks are not touched by uninstalling the folder within it.
+    assert!(run(&top.repo, &["init", "--store", &top.store.to_string_lossy()]).status.success());
+    assert!(top.repo.join(".git/hooks/pre-commit").is_file() && top.repo.join(".git/hooks/post-commit").is_file());
+    let un = run(&top.dir, &["uninstall", "--repo", &pkg.to_string_lossy()]);
+    assert!(un.status.success(), "{}", text(&un));
+    assert!(top.repo.join(".git/hooks/pre-commit").is_file() && top.repo.join(".git/hooks/post-commit").is_file(), "{}", text(&un));
 }

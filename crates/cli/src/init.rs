@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the bottling. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to brew, specify, finish and inscribe a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's brew sequence reads the recipes brew_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"mcp-json-keeps-other-servers","statement":"An existing .mcp.json keeps its other servers."},{"id":"codex-config-keeps-every-byte","statement":"An existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark."},{"id":"existing-hook-left-alone","statement":"An existing pre-commit or post-commit hook is left alone with a note."},{"id":"unmergeable-file-refused-first","statement":"A file init cannot merge into is refused before anything is written."},{"id":"only-own-files-overwritten","statement":"Only Grimoire's own files are overwritten."},{"id":"post-commit-hook-runs-bottle","statement":"In a git repository init writes a post-commit hook that runs grimoire bottle, so a commit bottles the ticket simmering on it."},{"id":"pre-commit-check-beside-it","statement":"In a git repository init writes the post-commit hook beside the pre-commit hook that runs the check."},{"id":"hooks-exit-zero-when-grimoire-is-missing","statement":"Each of the two hooks exits 0 with a warning when grimoire is not on the path."},{"id":"outside-git-writes-no-hook-and-says-so","statement":"Outside a git repository init writes neither hook and its output says so."},{"id":"earlier-releases-hook-is-rewritten","statement":"The post-commit hook an earlier release wrote, running grimoire land, is init's own and rewritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"section-between-markers","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, so an agent that never triggers the skill still learns the project is managed."},{"id":"replaces-previous-section","statement":"The marked section replaces a previous section."},{"id":"outside-markers-untouched","statement":"The marked section leaves everything outside the markers as it was."},{"id":"sends-to-the-rites","statement":"The section says how the work is done is in the rites, the grimoire's second root, to be read before working, and that a rule of work belongs there and never in the file."},{"id":"rest-of-file-is-the-projects","statement":"The section says the rest of the file is the project's own."},{"id":"names-own-harness-skill","statement":"Each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills."},{"id":"check-claim-is-only-unconnected","statement":"Of the pre-commit check the section says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"branch-holds-one-ticket","statement":"The embedded skill says a branch holds one ticket until that ticket is bottled."},{"id":"bottled-with-bottle-once-merged","statement":"The embedded skill says a ticket is bottled with grimoire bottle, on a team once the branch has merged to the main line."},{"id":"helpers-split-into-branches","statement":"The embedded skill says work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone is bottled."},{"id":"found-work-is-its-own-ticket","statement":"The embedded skill says work found along the way is inscribed as a ticket of its own."},{"id":"brew-answers-waiting-never-refuses","statement":"The embedded skill says brew_ticket answers in waiting each ticket the checkout still carries, never refusing."},{"id":"brew-sequence-bottle-first-or-move","statement":"The embedded skill's brew sequence says to bottle the waiting ticket first or move the work to a new branch."}]}
+//! {"purpose":"Install Grimoire's integration into a repository for Claude Code and Codex alike, and remove it again: the project file naming the store, the agent skill with its references in each harness's place, the always-loaded guidance section, the MCP entry pointing at the daemon in each harness's configuration, a pre-commit hook running the check and a post-commit hook running the bottling. The guidance section, the Codex configuration, the uninstall plan and the init command's own work each have a module beneath.","criteria":[{"id":"skill-sequences","statement":"The embedded skill holds a sequence to brew, specify, finish and inscribe a ticket, to resolve a gap or question with the person, and to adopt existing code and its tests, each under its own heading."},{"id":"skill-judges-recipes","statement":"The embedded skill's brew sequence reads the recipes brew_ticket names, and its finish sequence judges, before close_ticket, each recipe due over what the ticket touched, and any other the check reports due, only those, with judge_recipe, held when it still says truly how to use what it represents and updated once changed to say so, after the last change to the recipe and its files."},{"id":"listed-writes","statement":"Every path init writes or would have written, with what a written path still needs of the person, and every path uninstall removes, changes or leaves, is returned, so each command can print exactly what it did."},{"id":"mcp-json-keeps-other-servers","statement":"An existing .mcp.json keeps its other servers."},{"id":"codex-config-keeps-every-byte","statement":"An existing .codex/config.toml keeps every byte but the grimoire server's url value, or init's table appended after it, including comments, line endings and a byte-order mark."},{"id":"existing-hook-left-alone","statement":"An existing pre-commit or post-commit hook is left alone with a note."},{"id":"unmergeable-file-refused-first","statement":"A file init cannot merge into is refused before anything is written."},{"id":"only-own-files-overwritten","statement":"Only Grimoire's own files are overwritten."},{"id":"post-commit-hook-runs-bottle","statement":"In a git repository init writes a post-commit hook that runs grimoire bottle, so a commit bottles the ticket simmering on it."},{"id":"pre-commit-check-beside-it","statement":"In a git repository init writes the post-commit hook beside the pre-commit hook that runs the check."},{"id":"hooks-exit-zero-when-grimoire-is-missing","statement":"Each of the two hooks exits 0 with a warning when grimoire is not on the path."},{"id":"hooks-where-git-runs-them","statement":"init writes its hooks in the folder `git rev-parse --git-path hooks` names for the checkout: the repository's own, a worktree's shared one, a submodule's own, or core.hooksPath's; outside git, and in a folder within a repository, none."},{"id":"outside-git-writes-no-hook-and-says-so","statement":"Outside a git repository init writes neither hook and its output says so."},{"id":"earlier-releases-hook-is-rewritten","statement":"The post-commit hook an earlier release wrote, running grimoire land, is init's own and rewritten."},{"id":"every-harness","statement":"init writes the same embedded skill and references to .claude/skills/grimoire/ and .agents/skills/grimoire/, and the grimoire server at the URL of the project's grimoire in the daemon's library, http://127.0.0.1:<port>/g/<name>/mcp, to both .mcp.json and .codex/config.toml, always, with no flag or detection."},{"id":"codex-trust","statement":"init writes no agent configuration outside the repository, and returns .codex/config.toml with the note that Codex reads it only once the project is trusted in the person's own Codex configuration."},{"id":"skill-is-the-source","statement":"The installed skill and its reference files are the ones in this repository's .claude/skills, embedded at build time, so there is one copy to maintain."},{"id":"section-between-markers","statement":"A marked section between <!-- grimoire --> and <!-- /grimoire --> is written into CLAUDE.md and AGENTS.md, so an agent that never triggers the skill still learns the project is managed."},{"id":"replaces-previous-section","statement":"The marked section replaces a previous section."},{"id":"outside-markers-untouched","statement":"The marked section leaves everything outside the markers as it was."},{"id":"sends-to-the-rites","statement":"The section says how the work is done is in the rites, the grimoire's second root, to be read before working, and that a rule of work belongs there and never in the file."},{"id":"rest-of-file-is-the-projects","statement":"The section says the rest of the file is the project's own."},{"id":"names-own-harness-skill","statement":"Each file's section names its own harness's copy of the skill, CLAUDE.md the one under .claude/skills and AGENTS.md the one under .agents/skills."},{"id":"check-claim-is-only-unconnected","statement":"Of the pre-commit check the section says only that it finds what is left unconnected, never that it checks the grimoire and the code agree, since the check judges no meaning."},{"id":"skill-checkout","statement":"The embedded skill tells an agent to pass `checkout`, its working directory, with every call, and says that a new tool or a changed field may reach a client only in a new session, a reconnect bringing changed instructions but not always changed tools, and to call over HTTP until then."},{"id":"project-agnostic","statement":"The embedded skill, references and guidance section name no project and list no grimoire's pages: a test fails the build if any of them mentions Grimoire's own crates, web package, npm scripts or dev loop, or names the story pages as a list, since they are installed verbatim into every repository and each root page's links are its reading order."},{"id":"branch-holds-one-ticket","statement":"The embedded skill says a branch holds one ticket until that ticket is bottled."},{"id":"bottled-with-bottle-once-merged","statement":"The embedded skill says a ticket is bottled with grimoire bottle, on a team once the branch has merged to the main line."},{"id":"helpers-split-into-branches","statement":"The embedded skill says work too big for one checkout is split into branches of the ticket's branch, each taking the same ticket up and merging back into it, which alone is bottled."},{"id":"found-work-is-its-own-ticket","statement":"The embedded skill says work found along the way is inscribed as a ticket of its own."},{"id":"brew-answers-waiting-never-refuses","statement":"The embedded skill says brew_ticket answers in waiting each ticket the checkout still carries, never refusing."},{"id":"brew-sequence-bottle-first-or-move","statement":"The embedded skill's brew sequence says to bottle the waiting ticket first or move the work to a new branch."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -44,8 +44,77 @@ pub const MCP_REL: &str = ".mcp.json";
 pub const CODEX_REL: &str = ".codex/config.toml";
 /// What `.codex/config.toml` still needs of the person.
 pub const CODEX_TRUST: &str = "Codex reads this only once the project is trusted in your own Codex configuration (~/.codex/config.toml); init leaves that to you";
-pub const HOOK_REL: &str = ".git/hooks/pre-commit";
-pub const BOTTLING_HOOK_REL: &str = ".git/hooks/post-commit";
+/// The names of init's two hooks, in the folder git runs hooks from.
+pub const HOOK_FILE: &str = "pre-commit";
+pub const BOTTLING_HOOK_FILE: &str = "post-commit";
+
+/// Where git runs hooks for the folder `repo` is given as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HooksPlace {
+    /// The folder git runs the hooks of this checkout from.
+    Dir(PathBuf),
+    /// `repo` is a folder within the git repository whose top is this path: its hooks are that repository's.
+    Within(PathBuf),
+    /// Not in a git repository.
+    NoGit,
+}
+
+/// `path` without the verbatim prefix Windows canonicalisation adds, which git cannot change into:
+/// `\\?\C:\x` is `C:\x` and `\\?\UNC\server\share` is `\\server\share`. Any other path is as it was.
+pub fn without_verbatim(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{unc}"))
+    } else if let Some(plain) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(plain)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+/// What `git` prints for `args` run in `repo`, asked of that folder alone: the variables that would point git
+/// at another repository are not passed on.
+fn git_says(repo: &Path, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(without_verbatim(repo))
+        .args(args)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|d| !d.is_empty())
+}
+
+/// Where git runs hooks for the checkout at `repo`: what `git rev-parse --git-path hooks` names (a relative
+/// answer is relative to `repo`), which follows `core.hooksPath`, a worktree's shared folder and a submodule's
+/// own; but only when `repo` is the top of its repository, since a folder within one is checked from that
+/// repository's own hook. When git cannot say, `.git/hooks` if `.git` is a folder; outside git, none.
+pub fn hooks_place(repo: &Path) -> HooksPlace {
+    let Some(dir) = git_says(repo, &["rev-parse", "--git-path", "hooks"]) else {
+        return if repo.join(".git").is_dir() { HooksPlace::Dir(repo.join(".git").join("hooks")) } else { HooksPlace::NoGit };
+    };
+    if let Some(top) = git_says(repo, &["rev-parse", "--show-toplevel"]) {
+        let canon = |p: &Path| p.canonicalize().map(|c| without_verbatim(&c)).unwrap_or_else(|_| without_verbatim(p));
+        if canon(Path::new(&top)) != canon(repo) {
+            return HooksPlace::Within(PathBuf::from(top));
+        }
+    }
+    // Git answers with `/`; a verbatim base takes `/` for part of a name, so the folder is built from a plain
+    // base and git's answer read component by component.
+    HooksPlace::Dir(without_verbatim(repo).join(Path::new(&dir).components().collect::<PathBuf>()))
+}
+
+/// The folder init's hooks are in for the checkout at `repo`, if there is one.
+pub fn hooks_dir(repo: &Path) -> Option<PathBuf> {
+    match hooks_place(repo) {
+        HooksPlace::Dir(d) => Some(d),
+        _ => None,
+    }
+}
 
 /// The guidance section for one harness, naming its copy of the skill.
 pub fn section(harness: &Harness) -> String {
@@ -101,12 +170,12 @@ pub fn bottling_hook_script() -> String {
 /// The script an earlier release installed at `rel`, before ticket 0168 renamed landing to bottling:
 /// still init's own, so uninstall takes it out unedited and init rewrites it.
 pub fn former_hook_script(rel: &str) -> Option<String> {
-    (rel == BOTTLING_HOOK_REL).then(|| "#!/bin/sh\n# Installed by `grimoire init`. Lands the ticket waiting on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was landed\" >&2\n  exit 0\nfi\nexec grimoire land\n".to_string())
+    (rel == BOTTLING_HOOK_FILE).then(|| "#!/bin/sh\n# Installed by `grimoire init`. Lands the ticket waiting on this commit.\nif ! command -v grimoire >/dev/null 2>&1; then\n  echo \"post-commit: grimoire is not on PATH; no ticket was landed\" >&2\n  exit 0\nfi\nexec grimoire land\n".to_string())
 }
 
-/// init's hooks: where each goes, its script, and the command it runs.
+/// init's hooks: the file name of each, its script, and the command it runs.
 pub fn hooks() -> [(&'static str, String, &'static str); 2] {
-    [(HOOK_REL, hook_script(), "grimoire check"), (BOTTLING_HOOK_REL, bottling_hook_script(), "grimoire bottle")]
+    [(HOOK_FILE, hook_script(), "grimoire check"), (BOTTLING_HOOK_FILE, bottling_hook_script(), "grimoire bottle")]
 }
 
 /// Write the integration into `repo`: `plan_install`, then apply it.
@@ -177,12 +246,23 @@ impl Install {
         }
 
         // The hooks, the check before a commit and the bottling after it: only
-        // when the repository is a git checkout, and each only where there is none.
-        let git = repo.join(".git");
-        for (rel, script, command) in hooks() {
-            let hook = repo.join(rel);
-            let kind = rel.rsplit('/').next().unwrap_or(rel);
-            if !git.is_dir() {
+        // when the repository is a git checkout, in the folder git runs hooks from,
+        // and each only where there is none.
+        let place = hooks_place(repo);
+        let dir = match &place {
+            HooksPlace::Dir(d) => Some(d.clone()),
+            _ => None,
+        };
+        for (kind, script, command) in hooks() {
+            let hook = dir.as_deref().map_or_else(|| repo.join(".git").join("hooks").join(kind), |d| d.join(kind));
+            if let HooksPlace::Within(top) = &place {
+                let note = format!(
+                    "{} is inside the git repository at {}; init writes no hooks for a folder within a repository: run `grimoire check` from that repository's own hook",
+                    repo.display(),
+                    top.display()
+                );
+                out.push(Wrote::Skipped { path: repo.join(kind), note });
+            } else if dir.is_none() {
                 out.push(Wrote::Skipped { path: hook, note: format!("not a git repository; run `{command}` from your own hook or CI") });
             } else if hook.exists() {
                 let existing = std::fs::read_to_string(&hook).unwrap_or_default();
@@ -254,6 +334,23 @@ mod tests {
         tempfile::Builder::new().prefix("grimoire-init-").tempdir().unwrap()
     }
 
+    /// Where a hook of this name is for the checkout at `repo`.
+    pub(super) fn hook_at(repo: &Path, name: &str) -> PathBuf {
+        hooks_dir(repo).unwrap().join(name)
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "verbatim-prefixes-are-stripped-for-git", "checks": ["crates/cli/src/init#hooks-where-git-runs-them"]}
+    /// ```
+    #[test]
+    fn verbatim_prefixes_are_stripped_for_git() {
+        for (given, plain) in [(r"\\?\C:\x\y", r"C:\x\y"), (r"\\?\UNC\srv\share\x", r"\\srv\share\x"), (r"C:\x", r"C:\x"), ("/a/b", "/a/b")] {
+            assert_eq!(without_verbatim(Path::new(given)), PathBuf::from(plain), "{given}");
+        }
+    }
+
     /// # Test contract
     ///
     /// ```json
@@ -273,7 +370,7 @@ mod tests {
         assert_eq!(wrote.len(), 12);
         // The check before a commit and the bottling after it, each quiet when grimoire is not on the path.
         for (rel, _, command) in hooks() {
-            let hook = std::fs::read_to_string(repo.join(rel)).unwrap();
+            let hook = std::fs::read_to_string(hook_at(repo, rel)).unwrap();
             assert!(hook.contains(HOOK_MARK) && hook.ends_with(&format!("exec {command}\n")) && hook.contains("exit 0"), "{rel}: {hook}");
         }
         assert!(bottling_hook_script().contains("exec grimoire bottle"));
@@ -297,7 +394,7 @@ mod tests {
         assert_eq!(mcp["mcpServers"]["other"]["command"], "x");
         assert_eq!(mcp["mcpServers"]["grimoire"]["url"], "http://127.0.0.1:4343/g/shop/mcp");
 
-        let hook = std::fs::read_to_string(repo.join(HOOK_REL)).unwrap();
+        let hook = std::fs::read_to_string(hook_at(repo, HOOK_FILE)).unwrap();
         assert!(hook.contains("exec grimoire check"));
 
         // Second run: idempotent, hook recognised as ours, one section not two.
@@ -399,13 +496,13 @@ mod tests {
             std::fs::write(path, text).unwrap();
         }
         // A post-commit hook an earlier release wrote is init's own.
-        std::fs::write(repo.join(BOTTLING_HOOK_REL), former_hook_script(BOTTLING_HOOK_REL).unwrap()).unwrap();
+        std::fs::write(hook_at(repo, BOTTLING_HOOK_FILE), former_hook_script(BOTTLING_HOOK_FILE).unwrap()).unwrap();
         let wrote = install(repo, 4343, "shop").unwrap();
         for (rel, text) in theirs {
             assert_eq!(std::fs::read_to_string(repo.join(rel)).unwrap(), text, "{rel} is the person's");
         }
-        assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { path, .. } if path.ends_with(HOOK_REL))), "the person's hook is left with a note");
-        assert_eq!(std::fs::read_to_string(repo.join(BOTTLING_HOOK_REL)).unwrap(), bottling_hook_script(), "its own is rewritten");
+        assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { path, .. } if path.ends_with(HOOK_FILE))), "the person's hook is left with a note");
+        assert_eq!(std::fs::read_to_string(hook_at(repo, BOTTLING_HOOK_FILE)).unwrap(), bottling_hook_script(), "its own is rewritten");
         for harness in &HARNESSES {
             for (rel, text) in SKILL_FILES {
                 assert_eq!(std::fs::read_to_string(repo.join(format!("{}/{rel}", harness.skill_dir))).unwrap(), text);
@@ -572,10 +669,10 @@ mod tests {
         let tmp = temp();
         let repo = tmp.path();
         std::fs::create_dir_all(repo.join(".git").join("hooks")).unwrap();
-        std::fs::write(repo.join(HOOK_REL), "#!/bin/sh\nnpm test\n").unwrap();
+        std::fs::write(hook_at(repo, HOOK_FILE), "#!/bin/sh\nnpm test\n").unwrap();
         let wrote = install(repo, 4242, "shop").unwrap();
         assert!(wrote.iter().any(|w| matches!(w, Wrote::Skipped { .. })));
-        assert_eq!(std::fs::read_to_string(repo.join(HOOK_REL)).unwrap(), "#!/bin/sh\nnpm test\n");
+        assert_eq!(std::fs::read_to_string(hook_at(repo, HOOK_FILE)).unwrap(), "#!/bin/sh\nnpm test\n");
     }
 
     #[test]

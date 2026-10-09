@@ -73,7 +73,8 @@ the integration: `.grimoire.toml`, the agent skill and its references (in
 `.claude/skills/grimoire/`, and in `.agents/skills/grimoire/` for Codex), a marked
 section in `CLAUDE.md` and `AGENTS.md`, the `grimoire` entry in `.mcp.json` and
 `.codex/config.toml`, a pre-commit hook running `grimoire check` and a
-post-commit hook running `grimoire bottle`. Outside git it writes no hooks, and
+post-commit hook running `grimoire bottle` (in the folder git runs hooks from:
+`core.hooksPath` when set). Outside git it writes no hooks, and
 says so. `uninstall` removes exactly that, leaving everything of yours as it was.
 
 ### For a team
