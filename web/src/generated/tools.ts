@@ -69,6 +69,8 @@ export type Deleted = { deleted: Ref, warnings: Array<Finding>, baselined: numbe
 
 export type Draft = { ref: Ref, title: string, new: boolean, differs: Array<string>, };
 
+export type Drafted = { change: Summary, note: string, };
+
 export type EdgeView = { ref: Ref, relation: Relation, title: string | null, };
 
 export type FieldError = { field: string, reason: string, };
@@ -250,7 +252,7 @@ export type WaitingHere = { ticket: string, title: string, warning: string, };
 
 export type Withdrawn = { node: Summary, settled: Array<Summary>, reopened: Array<Summary>, };
 
-export type Written = { node: Summary, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, };
+export type Written = { node: Summary, warnings: Array<Finding>, baselined: number, settled?: Array<Summary>, reopened?: Array<Summary>, reprioritised?: Array<Summary>, drafted?: Drafted, };
 
 /** Each tool's answer, by tool name. */
 export type ToolAnswers = {

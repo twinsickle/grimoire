@@ -115,7 +115,8 @@ it created in `warnings`. Every warning is work to do now.
   once. An edit `update_ticket` makes to *another* ticket's `touches` or
   `relies_on` under a change being worked (named in `ticket`, else the
   current one) waits in that change's proposal, shown on the other ticket
-  as a draft, and reaches it when the change is bottled; under a gap, a question
+  as a draft, and reaches it when the change is bottled, the answer's
+  `drafted` naming that change; under a gap, a question
   or no ticket it applies at once. Title, priority and body always apply at
   once.
 - A **ticket**: `touches` (what it changes), `relies_on` (what it assumes

@@ -184,7 +184,7 @@ pub(super) fn close(state: &mut State, name: &str, input: Value, today: &str) ->
             let reprioritised = super::summaries_of(state, &moved);
             let (warnings, baselined) = super::ticket_warnings(state, None, &r);
             let node = query::summary_at(state.graph(), &r).expect("just filed");
-            Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised) }
+            Written { node, warnings, baselined, settled: None, reopened: None, reprioritised: Some(reprioritised), drafted: None }
         });
         // What the check before the bottling will see: the truth with this ticket's proposal on it.
         let (code, start) = (!state.without_code(), state.store.starts.get(&i.r#ref.id).cloned());

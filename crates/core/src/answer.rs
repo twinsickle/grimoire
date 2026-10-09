@@ -221,6 +221,18 @@ pub struct Written {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub reprioritised: Option<Vec<Summary>>,
+    // An edit to another ticket's references that waits in a change's proposal says where it went (req:tool-update-ticket).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub drafted: Option<Drafted>,
+}
+
+/// Where an edit to another ticket's references went: the change whose proposal holds it, and when it applies.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Drafted {
+    pub change: Summary,
+    pub note: String,
 }
 
 /// `brew_ticket`: the ticket, what it rests on, and the gaps and questions near it.
