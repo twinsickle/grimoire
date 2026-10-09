@@ -2,7 +2,7 @@
   "name": "@grimoire/web",
   "version": "0.0.0",
   "private": true,
-  "description": "React/Vite UI: the map, the board, node pages. Dark only. Built by Node at build time into web/dist, which the daemon serves with --ui-dir.",
+  "description": "React/Vite UI: the grimoire, the cauldron, the findings, node pages and the Library. Dark only. Built into web/dist, which a release build embeds and the daemon serves with --ui-dir.",
   "type": "module",
   "scripts": {
     "dev": "vite",

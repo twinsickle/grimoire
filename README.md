@@ -22,8 +22,8 @@ A Cargo workspace and one web package.
 - `crates/core` — domain model, store, graph and queries, lints, scaffold, and the tool dispatcher. No I/O.
 - `crates/extract` — code extractor: tree-sitter parsing, module contracts, language adapters (Rust, TypeScript and JavaScript, Java) and a comment table for the languages read by their comments alone.
 - `crates/server` — the `grimoire serve` daemon: store I/O, watcher, JSON API, MCP over streamable HTTP, SSE.
-- `crates/cli` — the `grimoire` binary: `serve`, `check`, `scaffold`, `init`, `tool`.
-- `web` — React/Vite UI: the map, the board, node pages. Dark only. `npm run build` writes `web/dist`, which `serve --ui-dir web/dist` serves.
+- `crates/cli` — the `grimoire` binary: `init`, `uninstall`, `serve`, `check`, `bottle`, `adopt`, `scaffold`, `tool`, and for a team `token`, `login` and `logout`.
+- `web` — React/Vite UI: the grimoire, the cauldron of tickets, the findings, a page for every node, and the Library of a machine's grimoires. Dark only. `npm run build` writes `web/dist`, which a release build embeds and `serve --ui-dir web/dist` serves.
 - `examples/` — per-project notes: what each target repository has, and how it is migrated.
 
 ## Building and testing
@@ -39,20 +39,42 @@ A release binary carries the web UI inside it: `sh scripts/release` builds it.
 
 ## Using it on a project
 
+### Installing
+
+You need Rust 1.89 or later, Node.js, and a POSIX shell with `curl` (Git Bash
+on Windows). Build a release binary with the web UI inside it, then put it on
+your `PATH`:
+
+```
+sh scripts/release            # builds web/dist, then target/release/grimoire with the UI inside, and checks it serves the UI
+```
+
+`cargo install --path crates/cli` works too, but embeds the UI only when
+`web/dist` already exists: run `npm ci && npm run build` in `web/` first.
+Without it the build warns, and `grimoire serve` shows a plain page in place
+of the UI; the tools, MCP and the check are unaffected.
+
+### Commands
+
 ```
 grimoire init --repo <path> --store <name>       # make the store (a skeleton from the module contracts) and install the integration
 grimoire scaffold --repo <path> --store <name>   # build a skeleton store on its own, before init; --force rebuilds one, replacing it
 grimoire uninstall [--delete-store]              # remove exactly what init wrote; keep the store unless asked
 grimoire check                                   # the lints, for hooks and CI; exit 1 on findings
 grimoire serve --port 4242                       # the daemon: the UI, /api/<tool>, /mcp, /api/events
-grimoire tool <name> '<json>'                    # one tool against the store, no daemon
+grimoire bottle [<ticket>]                       # a change is on the main line: bottle its ticket (the post-commit hook runs it)
+grimoire adopt --reason <text>                   # accept the present findings as inherited, so the check fails only on new ones
+grimoire tool <name> '<json>'                    # one tool against the store: on the daemon serving it, else directly
 ```
 
 A store lives under the platform data directory (`<data>/grimoire/stores/<name>`)
 unless `--store` is given a path. Only `init` writes into a repository, and only
-the integration: `.grimoire.toml`, the agent skill, a marked section in
-`CLAUDE.md` and `AGENTS.md`, the `grimoire` entry in `.mcp.json` and a pre-commit
-hook. `uninstall` removes exactly that, leaving everything of yours as it was.
+the integration: `.grimoire.toml`, the agent skill and its references (in
+`.claude/skills/grimoire/`, and in `.agents/skills/grimoire/` for Codex), a marked
+section in `CLAUDE.md` and `AGENTS.md`, the `grimoire` entry in `.mcp.json` and
+`.codex/config.toml`, a pre-commit hook running `grimoire check` and a
+post-commit hook running `grimoire bottle`. Outside git it writes no hooks, and
+says so. `uninstall` removes exactly that, leaving everything of yours as it was.
 
 ### For a team
 
@@ -140,6 +162,5 @@ cargo run -- init --repo . --store grimoire
 cargo run -- check
 ```
 
-Status: core, extractor, CLI, daemon and a first web UI implemented. Not yet
-done: embedding the UI in the release binary, generating the UI's types from
-the Rust model, and a graph view on the ticket page.
+What Grimoire does now, and what is meant to change, is in its own grimoire:
+the pages and requirements say what holds, and the cauldron the work under way.
