@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."},{"id":"site-listener","statement":"serve, shared or not, given a site address binds it beside the daemon's own and serves the site's router alone there for as long as the daemon serves, refusing to start when the address cannot be bound; given none, it opens no further address."},{"id":"serves-its-own-grimoire","statement":"serve given a library name serves its own grimoire on the bare routes, as the checkout it was started in sees it."},{"id":"adds-its-checkout","statement":"serve given a library name adds the checkout it was started in to a store of its own's checkouts if it is not its main one or one already."},{"id":"marked-at-its-path","statement":"serve given a library name marks its own grimoire as served at /g/<name>."},{"id":"bare-routes-by-named-checkout","statement":"serve given a library name answers the bare routes through library::live as /g/<name>/ is, by the checkout a call names."},{"id":"serves-the-machines-library","statement":"serve given a library name keeps the machine's library served beside its own grimoire through library::live."},{"id":"library-found-before-first-request","statement":"serve given a library name finds the machine's library once before the daemon answers a request."},{"id":"library-found-again-every-few-seconds","statement":"serve given a library name finds the machine's library again every few seconds after."},{"id":"markers-removed-on-stop","statement":"serve removes every marker it wrote when it stops."},{"id":"serves-its-own-store-alone","statement":"serve given no library name serves its own store alone."},{"id":"serves-every-store-in-the-library","statement":"serve with shared and a library directory serves every store under it through library::live, each grimoire at /g/<name> where it listens, behind its own tokens."},{"id":"shared-page-for-everything-else","statement":"serve with shared and a library directory serves the shared page for everything else."},{"id":"no-grimoire-on-the-bare-routes","statement":"serve with shared and a library directory serves no grimoire on the bare routes."},{"id":"library-without-shared-refused","statement":"serve refuses a library directory without shared."},{"id":"site-of-a-named-grimoire","statement":"Given a site address and the name of a grimoire, serve serves that grimoire's site there through site::router_in."},{"id":"site-without-grimoire-refused","statement":"serve refuses a site that names no grimoire."},{"id":"grimoire-without-site-refused","statement":"serve refuses a grimoire named with no site."},{"id":"graceful-stop","statement":"serve stops on Ctrl+C and, where the system has one, on SIGTERM, as docker stop sends: it finishes the requests it is answering and removes every marker it wrote before it exits."},{"id":"queued-not-served","statement":"serve, once it has marked the store it serves, a store of its own, asks the deletions queue under its lock and refuses a store whose deletion is queued, its marker taken away; uninstall asks for the marker under the same lock before it queues, so a store is never both queued and served however the two start."}]}
+//! {"purpose":"Run the daemon that owns the store, keeps the graph current, and serves the web UI, the JSON API and MCP from one port.","criteria":[{"id":"no-repository-writes","statement":"The daemon never writes an index, cache or marker into the target repository."},{"id":"holds-the-lock","statement":"serve takes the store's lock, or on a project that names a server the lock of the checkout's copy, before it opens the store and holds it until it has stopped serving, so a second daemon on the store is refused before it writes anything."},{"id":"shared-serve","statement":"serve with shared opens the store with no repository, starts no watcher, serves no interface, puts its router behind the token policy and listens on the address given or else the loopback port, under the store's lock like any daemon; an address to listen on without shared is refused before anything is opened."},{"id":"local-policy-installed","statement":"serve puts its router behind the local policy unless it is shared, on a project that names a server as on any other, so the daemon a person runs admits callers on this machine to read and write and refuses a request another site makes."},{"id":"serves-a-server-project","statement":"serve given a server opens the checkout's copy of that server's intent with the checkout's code, watches the repository, serves the interface, the API and MCP on the loopback port as for any project, and follows the server; given with shared it is refused before anything is opened."},{"id":"site-listener","statement":"serve, shared or not, given a site address binds it beside the daemon's own and serves the site's router alone there for as long as the daemon serves, refusing to start when the address cannot be bound; given none, it opens no further address."},{"id":"serves-its-own-grimoire","statement":"serve given a library name serves its own grimoire on the bare routes, as the checkout it was started in sees it."},{"id":"adds-its-checkout","statement":"serve given a library name adds the checkout it was started in to a store of its own's checkouts if it is not its main one or one already."},{"id":"marked-at-its-path","statement":"serve given a library name marks its own grimoire as served at /g/<name>."},{"id":"bare-routes-by-named-checkout","statement":"serve given a library name answers the bare routes through library::live as /g/<name>/ is, by the checkout a call names."},{"id":"serves-the-machines-library","statement":"serve given a library name keeps the machine's library served beside its own grimoire through library::live."},{"id":"library-found-before-first-request","statement":"serve given a library name finds the machine's library once before the daemon answers a request."},{"id":"library-found-again-every-few-seconds","statement":"serve given a library name finds the machine's library again every few seconds after."},{"id":"markers-removed-on-stop","statement":"serve removes every marker it wrote when it stops."},{"id":"serves-its-own-store-alone","statement":"serve given no library name serves its own store alone."},{"id":"serves-every-store-in-the-library","statement":"serve with shared and a library directory serves every store under it through library::live, each grimoire at /g/<name> where it listens, behind its own tokens."},{"id":"shared-page-for-everything-else","statement":"serve with shared and a library directory serves the shared page for everything else."},{"id":"no-grimoire-on-the-bare-routes","statement":"serve with shared and a library directory serves no grimoire on the bare routes."},{"id":"library-without-shared-refused","statement":"serve refuses a library directory without shared."},{"id":"site-of-a-named-grimoire","statement":"Given a site address and the name of a grimoire, serve serves that grimoire's site there through site::router_in."},{"id":"site-without-grimoire-refused","statement":"serve refuses a site that names no grimoire."},{"id":"grimoire-without-site-refused","statement":"serve refuses a grimoire named with no site."},{"id":"graceful-stop","statement":"serve stops on Ctrl+C and, where the system has one, on SIGTERM, as docker stop sends: it finishes the requests it is answering and removes every marker it wrote before it exits."},{"id":"queued-not-served","statement":"serve, once it has marked the store it serves, a store of its own, asks the deletions queue under its lock and refuses a store whose deletion is queued, its marker taken away; uninstall asks for the marker under the same lock before it queues, so a store is never both queued and served however the two start."},{"id":"address-taken-named","statement":"Every listener serve opens, the daemon's, a shared daemon's, a library's and a site's, that cannot take its address fails naming the address and the system's reason, and, when another program holds it, saying to choose another with the option that set it: --port, --listen or --site."}]}
 //! ```
 
 pub mod access;
@@ -47,9 +47,18 @@ pub struct ServeOptions {
     pub checkout: Option<PathBuf>,
 }
 
+/// Listen on `addr`, or say which address could not be taken and why: when
+/// another program holds it, to choose another with `flag`, the option that set it.
+async fn bind(addr: SocketAddr, flag: &str) -> anyhow::Result<tokio::net::TcpListener> {
+    tokio::net::TcpListener::bind(addr).await.map_err(|e| match e.kind() {
+        std::io::ErrorKind::AddrInUse => anyhow::anyhow!("cannot listen on {addr}: another program is listening there; choose another with {flag}"),
+        _ => anyhow::anyhow!("cannot listen on {addr}: {e}"),
+    })
+}
+
 /// Serve a site's router on its own address beside the daemon, until the process stops.
 async fn serve_site(app: axum::Router, addr: SocketAddr) -> anyhow::Result<SocketAddr> {
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = bind(addr, "--site").await?;
     let addr = listener.local_addr()?;
     tracing::info!("site on http://{addr}: how the project is meant to be used, with no sign-in; who may reach it is the deployment's to decide");
     tokio::spawn(async move {
@@ -130,7 +139,7 @@ pub async fn serve(mut opts: ServeOptions) -> anyhow::Result<()> {
     let ui = opts.ui_dir.clone().map_or(http::Ui::Embedded, http::Ui::Dir);
     // Bound first, so every grimoire is marked with the port it is really served on before it gets a route.
     let addr = SocketAddr::from(([127, 0, 0, 1], opts.port));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = bind(addr, "--port").await?;
     // The port the listener got, which is not the one asked for when it was left to the system.
     let addr = listener.local_addr()?;
     // Every marker this daemon writes is taken away when it stops, on any path out.
@@ -226,7 +235,7 @@ async fn serve_shared(opts: ServeOptions) -> anyhow::Result<()> {
     let policy = Arc::new(access::Tokens { store_dir: opts.store_dir.clone() });
     let app = http::router(daemon.clone(), http::Ui::Shared, policy);
     let addr = opts.listen.unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], opts.port)));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = bind(addr, if opts.listen.is_some() { "--listen" } else { "--port" }).await?;
     // The address the listener got, which is not the one asked for when the port was left to the system.
     let addr = listener.local_addr()?;
     daemon.mark_serving_at(addr)?;
@@ -252,7 +261,7 @@ async fn serve_shared_library(dir: PathBuf, opts: ServeOptions) -> anyhow::Resul
         anyhow::bail!("the library directory {} does not exist", dir.display());
     }
     let addr = opts.listen.unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], opts.port)));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = bind(addr, if opts.listen.is_some() { "--listen" } else { "--port" }).await?;
     // The address the listener got, which is not the one asked for when the port was left to the system.
     let addr = listener.local_addr()?;
     let live = library::live::Live::new_shared(dir.clone(), addr);
@@ -500,5 +509,23 @@ mod tests {
         }
         assert!(store_io::read_serving(&ledger).is_none());
         stop(child);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-address-in-use-is-named-with-the-flag-to-change", "checks": ["crates/server/src#address-taken-named", "req:serve-address-taken"]}
+    /// ```
+    #[tokio::test]
+    async fn an_address_in_use_is_named_with_the_flag_to_change() {
+        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = held.local_addr().unwrap();
+        for flag in ["--port", "--listen", "--site"] {
+            let e = bind(addr, flag).await.unwrap_err().to_string();
+            assert_eq!(e, format!("cannot listen on {addr}: another program is listening there; choose another with {flag}"));
+        }
+        drop(held);
+        // Free again, it is taken.
+        assert_eq!(bind(addr, "--port").await.unwrap().local_addr().unwrap(), addr);
     }
 }

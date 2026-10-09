@@ -825,3 +825,77 @@ fn a_rebound_host_is_refused_on_every_route_under_the_local_policy() {
         assert_eq!(code, 200, "{host}: {answer}");
     }
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "every-listener-names-an-address-in-use", "checks": ["crates/server/src#address-taken-named", "req:serve-address-taken"]}
+/// ```
+#[test]
+fn every_listener_names_an_address_in_use() {
+    let tmp = tempfile::Builder::new().prefix("grimoire-address-").tempdir().unwrap();
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::write(repo.join("Cargo.toml"), "[package]\nname = \"s\"\nversion = \"0.1.0\"\n").unwrap();
+    std::fs::write(repo.join("src").join("lib.rs"), "pub fn s() {}\n").unwrap();
+    let config = |repository: String| StoreConfig {
+        large_file: None,
+        long_statement: None,
+        plain_file: None,
+        site: vec!["overview".into()],
+        version: StoreConfig::CURRENT_VERSION,
+        repository,
+        roots: vec!["overview".into()].into(),
+        languages: vec!["rust".into()],
+        scope: Scope::default(),
+        order: Default::default(),
+        recipe_kinds: Default::default(),
+    };
+    let own = tmp.path().join("own");
+    store_io::write_all(&own, &Store::new(config(repo.to_string_lossy().replace('\\', "/"))), false).unwrap();
+    let team = tmp.path().join("library").join("team");
+    store_io::write_all(&team, &Store::new(config("C:/a/checkout/elsewhere".into())), false).unwrap();
+    let options = |store_dir: &std::path::Path| grimoire_server::ServeOptions {
+        store_dir: store_dir.to_path_buf(),
+        port: 0,
+        ui_dir: None,
+        shared: false,
+        listen: None,
+        server: None,
+        site: None,
+        library: None,
+        shared_library: None,
+        site_of: None,
+        checkout: None,
+    };
+    // An address another program holds.
+    let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let taken = held.local_addr().unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let refused = |opts: grimoire_server::ServeOptions| {
+        let ended = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(30), grimoire_server::serve(opts)).await });
+        ended.expect("serve stops at once on an address it cannot take").unwrap_err().to_string()
+    };
+    let named = |flag: &str| format!("cannot listen on {taken}: another program is listening there; choose another with {flag}");
+    // The daemon on its port.
+    assert_eq!(refused(grimoire_server::ServeOptions { port: taken.port(), ..options(&own) }), named("--port"));
+    // Its site, on an address of its own, the daemon's port free.
+    assert_eq!(refused(grimoire_server::ServeOptions { site: Some(taken), ..options(&own) }), named("--site"));
+    // A shared daemon, by --listen and by its port.
+    assert_eq!(refused(grimoire_server::ServeOptions { shared: true, listen: Some(taken), ..options(&team) }), named("--listen"));
+    assert_eq!(refused(grimoire_server::ServeOptions { shared: true, port: taken.port(), ..options(&team) }), named("--port"));
+    // A team's library, by --listen.
+    let library = tmp.path().join("library");
+    assert_eq!(refused(grimoire_server::ServeOptions { shared: true, listen: Some(taken), shared_library: Some(library.clone()), ..options(&library) }), named("--listen"));
+    assert_eq!(refused(grimoire_server::ServeOptions { shared: true, port: taken.port(), shared_library: Some(library.clone()), ..options(&library) }), named("--port"));
+    // Any other refusal names the address and the system's reason: an address this machine does not hold,
+    // when it does not (a host may own it, or let a program take an address it does not hold).
+    let foreign: std::net::SocketAddr = "192.0.2.1:4242".parse().unwrap();
+    if std::net::TcpListener::bind(foreign).is_err() {
+        let why = refused(grimoire_server::ServeOptions { shared: true, listen: Some(foreign), ..options(&team) });
+        assert!(why.starts_with("cannot listen on 192.0.2.1:4242: ") && !why.contains("choose another"), "{why}");
+    } else {
+        eprintln!("skipped the other refusal: this machine can listen on {foreign}");
+    }
+    drop(held);
+}
