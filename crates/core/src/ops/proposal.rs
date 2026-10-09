@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Keep a write that changes intent in its ticket's proposal, leaving the truth alone, and apply the proposal to the truth when the ticket closes or is bottled, refusing what moved under it.","criteria":[{"id":"proposal-writes","statement":"propose runs a write that changes intent on the store as the named brewing or simmering ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on, a deletion as a mark and a ticket whose references it changed as that ticket's touches and relies_on with the fingerprint of the truth's two lists, so the truth is untouched; a ticket that is neither, or a gap or question that is simmering, is a conflict. A whole-record write rests on the truth as it is now, rebasing a record the proposal already held; a partial write (a patch, a retirement, a deletion, one of a ticket's two lists) keeps the base the proposal held for the record and is refused as a conflict naming the record when the truth moved under it since it was proposed. A requirement's decisions are never part of the record it keeps, whose fingerprint leaves them out: a decision the write appends is kept apart as one the proposal adds, with no id, and a supersession it links on a bottled decision as a link by id, neither resting on any record nor ever refused as moved."},{"id":"close-applies-proposal","statement":"moved names every proposed record, and every ticket whose references the proposal edits, whose truth fingerprint differs from the base it was written against, a requirement's matched with or without its decisions, or that was proposed as new and now exists, a record or edit equal to the truth's, a requirement's decisions aside, and an edit to a ticket since closed or gone, never among them; apply_proposal writes the proposed records that differ from the truth's, each requirement with the truth's decisions as they are then, the links it adds added to them and the decisions it adds after them, each taking the next id and a retirement's superseding every one before it, removes the deleted ones, a deleted page leaving the pages the site shows, and gives each edited ticket that is not bottled the references its edit holds, in one pass, and drops the proposal."}]}
+//! {"purpose":"Keep a write that changes intent in its ticket's proposal, leaving the truth alone, and apply the proposal to the truth when the ticket closes or is bottled, refusing what moved under it.","criteria":[{"id":"keeps-write-in-proposal","statement":"propose runs a write that changes intent on the store as the named brewing or simmering ticket's proposal would leave it and keeps what it changed in that proposal, each record with the fingerprint of the truth's record it rests on, so the truth is untouched."},{"id":"deletion-kept-as-mark","statement":"propose keeps a deletion in the proposal as a mark."},{"id":"ticket-references-kept-as-lists","statement":"propose keeps a ticket whose references a write changed in the proposal as that ticket's touches and relies_on with the fingerprint of the truth's two lists."},{"id":"neither-brewing-nor-simmering-conflict","statement":"propose on a ticket that is neither brewing nor simmering, or on a gap or question that is simmering, is a conflict."},{"id":"whole-write-rebases","statement":"A whole-record write through propose rests on the truth as it is now, rebasing a record the proposal already held."},{"id":"partial-write-keeps-base","statement":"A partial write through propose (a patch, a retirement, a deletion, one of a ticket's two lists) keeps the base the proposal held for the record."},{"id":"partial-write-refused-when-moved","statement":"A partial write through propose (a patch, a retirement, a deletion, one of a ticket's two lists) is refused as a conflict naming the record when the truth moved under it since it was proposed."},{"id":"decisions-left-out-of-record","statement":"A requirement's decisions are never part of the record propose keeps, whose fingerprint leaves them out."},{"id":"appended-decision-kept-apart","statement":"A decision a write appends to a requirement is kept apart as one the proposal adds, with no id."},{"id":"supersession-kept-as-link","statement":"A supersession a write links on a bottled decision is kept as a link by id."},{"id":"decision-never-refused-as-moved","statement":"A decision a write appends, and a supersession it links on a bottled decision, rest on no record and are never refused as moved."},{"id":"moved-names-differing-records","statement":"moved names every proposed record, and every ticket whose references the proposal edits, whose truth fingerprint differs from the base it was written against, a requirement's matched with or without its decisions, or that was proposed as new and now exists."},{"id":"moved-leaves-out-equal-records","statement":"moved never names a record or edit equal to the truth's, a requirement's decisions aside."},{"id":"moved-leaves-out-closed-edit","statement":"moved never names an edit to a ticket since closed or gone."},{"id":"apply-writes-differing-records","statement":"apply_proposal writes the proposed records that differ from the truth's."},{"id":"apply-decisions-after-truths","statement":"apply_proposal writes each requirement with the truth's decisions as they are then, the links it adds added to them and the decisions it adds after them, each taking the next id."},{"id":"apply-retirement-supersedes-all","statement":"apply_proposal gives a retirement's decision supersession of every decision before it."},{"id":"apply-removes-deleted","statement":"apply_proposal removes the deleted records."},{"id":"apply-deleted-page-leaves-site","statement":"apply_proposal leaves a deleted page out of the pages the site shows."},{"id":"apply-edited-tickets-take-references","statement":"apply_proposal gives each edited ticket that is not bottled the references its edit holds."},{"id":"apply-in-one-pass","statement":"apply_proposal does all of this in one pass."},{"id":"apply-drops-proposal","statement":"apply_proposal drops the proposal."}]}
 //! ```
 
 use super::*;
@@ -300,7 +300,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-proposal-leaves-the-truth-alone", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/tickets#current-ticket"]}
+    /// {"test": "a-proposal-leaves-the-truth-alone", "checks": ["crates/core/src/ops/proposal#keeps-write-in-proposal", "crates/core/src/ops/proposal#deletion-kept-as-mark", "crates/core/src/ops/proposal#neither-brewing-nor-simmering-conflict", "crates/core/src/ops/proposal#whole-write-rebases", "crates/core/src/ops/proposal#partial-write-keeps-base", "crates/core/src/ops/proposal#partial-write-refused-when-moved", "crates/core/src/ops/tickets#current-ticket"]}
     /// ```
     #[test]
     fn a_proposal_leaves_the_truth_alone() {
@@ -352,7 +352,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-close-applies-the-proposal-unless-the-truth-moved", "checks": ["crates/core/src/ops/proposal#close-applies-proposal"]}
+    /// {"test": "a-close-applies-the-proposal-unless-the-truth-moved", "checks": ["crates/core/src/ops/proposal#moved-names-differing-records", "crates/core/src/ops/proposal#moved-leaves-out-equal-records", "crates/core/src/ops/proposal#apply-writes-differing-records", "crates/core/src/ops/proposal#apply-removes-deleted", "crates/core/src/ops/proposal#apply-deleted-page-leaves-site", "crates/core/src/ops/proposal#apply-in-one-pass", "crates/core/src/ops/proposal#apply-drops-proposal"]}
     /// ```
     #[test]
     fn a_close_applies_the_proposal_unless_the_truth_moved() {
@@ -396,7 +396,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-edit-to-a-ticket-is-proposed-moved-renamed-and-applied", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/rename#rename-proposals"]}
+    /// {"test": "an-edit-to-a-ticket-is-proposed-moved-renamed-and-applied", "checks": ["crates/core/src/ops/proposal#ticket-references-kept-as-lists", "crates/core/src/ops/proposal#moved-names-differing-records", "crates/core/src/ops/proposal#moved-leaves-out-closed-edit", "crates/core/src/ops/proposal#apply-edited-tickets-take-references", "crates/core/src/ops/proposal#apply-in-one-pass", "crates/core/src/ops/rename#rename-rewrites-links-marks-edits", "crates/core/src/ops/rename#rename-edit-base-follows-ticket"]}
     /// ```
     #[test]
     fn an_edit_to_a_ticket_is_proposed_moved_renamed_and_applied() {
@@ -440,7 +440,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "decisions-wait-apart-and-are-bottled-after-the-truths", "checks": ["crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/ops/decisions#decisions-append-only", "crates/core/src/ops/decisions#retire"]}
+    /// {"test": "decisions-wait-apart-and-are-bottled-after-the-truths", "checks": ["crates/core/src/ops/proposal#decisions-left-out-of-record", "crates/core/src/ops/proposal#appended-decision-kept-apart", "crates/core/src/ops/proposal#supersession-kept-as-link", "crates/core/src/ops/proposal#moved-leaves-out-equal-records", "crates/core/src/ops/proposal#apply-decisions-after-truths", "crates/core/src/ops/proposal#apply-retirement-supersedes-all", "crates/core/src/ops/proposal#apply-in-one-pass", "crates/core/src/ops/decisions#decisions-append-only", "crates/core/src/ops/decisions#retire"]}
     /// ```
     #[test]
     fn decisions_wait_apart_and_are_bottled_after_the_truths() {
@@ -495,7 +495,30 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-proposal-written-before-ids-is-read-as-kept-now", "checks": ["crates/core/src/store#settles-proposals", "crates/core/src/ops/proposal#close-applies-proposal"]}
+    /// {"test": "a-decision-under-a-moved-record-is-never-refused", "checks": ["crates/core/src/ops/proposal#decision-never-refused-as-moved"]}
+    /// ```
+    #[test]
+    fn a_decision_under_a_moved_record_is_never_refused() {
+        let mut s = store();
+        let x = Reference::req("ready-only-with-commit");
+        let truth = s.requirements["ready-only-with-commit"].clone();
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_requirement(w, Requirement { statement: "It SHALL hold, restated.".into(), ..truth.clone() })).unwrap();
+        // The truth gains a decision, then its statement changes: the record the proposal holds has moved.
+        record_decision(&mut s, &x, "Theirs.".into(), "2026-10-06".into(), vec![], false).unwrap();
+        let now = s.requirements["ready-only-with-commit"].clone();
+        put_requirement(&mut s, Requirement { statement: "It SHALL hold, moved.".into(), ..now }).unwrap();
+        assert_eq!(moved(&s, "later-1").iter().map(|f| f.field.as_str()).collect::<Vec<_>>(), vec![x.to_string().as_str()], "the record moved");
+        // A decision appended and a link on a bottled decision rest on no record: neither is refused.
+        propose(&mut s, "later-1", Proposing::Partial, |w| record_decision(w, &x, "Ours.".into(), "2026-10-07".into(), vec![], false)).unwrap();
+        propose(&mut s, "later-1", Proposing::Partial, |w| supersede(w, &x, 2, &[1])).unwrap();
+        let waiting = &s.proposals["later-1"].decisions["ready-only-with-commit"];
+        assert_eq!((waiting.added.len(), waiting.linked[&2].clone()), (1, vec![1]));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-proposal-written-before-ids-is-read-as-kept-now", "checks": ["crates/core/src/store#settles-proposals", "crates/core/src/ops/proposal#moved-names-differing-records", "crates/core/src/ops/proposal#apply-decisions-after-truths"]}
     /// ```
     #[test]
     fn a_proposal_written_before_ids_is_read_as_kept_now() {
@@ -523,5 +546,72 @@ mod tests {
         apply_proposal(&mut s, "later-1");
         let bottled = &s.requirements["ready-only-with-commit"];
         assert_eq!((bottled.statement.as_str(), bottled.decisions.len(), bottled.decisions[2].id, bottled.decisions[2].supersedes.clone()), ("Restated.", 3, Some(3), vec![1]));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-whole-write-rests-on-the-truth-as-it-is-now", "checks": ["crates/core/src/ops/proposal#whole-write-rebases"]}
+    /// ```
+    #[test]
+    fn a_whole_write_rests_on_the_truth_as_it_is_now() {
+        let mut s = store();
+        let before = s.pages["orphan"].clone();
+        let orphan = |body: &str| Page { body: body.into(), ..before.clone() };
+        // The proposal already holds the page, resting on the truth as it was.
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("first"))).unwrap();
+        assert_eq!(s.proposals["later-1"].pages["orphan"].base, Some(crate::fingerprint::of_record(&before)));
+        // The truth moves; the whole write replaces the held record and rests on the truth now, not on the base it held.
+        put_page(&mut s, orphan("moved")).unwrap();
+        assert_eq!(moved(&s, "later-1").len(), 1);
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, orphan("second"))).unwrap();
+        let held = &s.proposals["later-1"].pages["orphan"];
+        assert_eq!(held.record.body, "second");
+        assert_eq!(held.base, Some(crate::fingerprint::of_record(&s.pages["orphan"])));
+        assert_ne!(held.base, Some(crate::fingerprint::of_record(&before)));
+        assert!(moved(&s, "later-1").is_empty());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-partial-write-on-a-moved-record-is-refused-naming-it", "checks": ["crates/core/src/ops/proposal#partial-write-refused-when-moved"]}
+    /// ```
+    #[test]
+    fn a_partial_write_on_a_moved_record_is_refused_naming_it() {
+        let mut s = store();
+        let r = |v: &str| v.parse::<Reference>().unwrap();
+        let refused = |e: ToolError| {
+            let v = serde_json::to_value(&e).unwrap();
+            (v["error"].as_str().unwrap().to_string(), v["details"][0]["field"].as_str().unwrap().to_string())
+        };
+        let fresh = Requirement { slug: "fresh".into(), ..s.requirements.values().next().unwrap().clone() };
+        let fresh = Requirement { decisions: vec![], retired: false, ..fresh };
+        put_requirement(&mut s, fresh.clone()).unwrap();
+        let orphan = s.pages["orphan"].clone();
+        let touches = |t: Vec<Reference>| TicketPatch { touches: Some(t), ..Default::default() };
+        // The proposal holds a page, a requirement and a ticket's lists, each resting on the truth as it is.
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_page(w, Page { title: "Held".into(), ..orphan.clone() })).unwrap();
+        propose(&mut s, "later-1", Proposing::Whole, |w| put_requirement(w, Requirement { title: "Held".into(), ..fresh.clone() }).map(|(_, c)| ((), c))).unwrap();
+        propose(&mut s, "later-1", Proposing::Partial, |w| update_ticket(w, &Reference::ticket("gap-1"), touches(vec![r("page:orphan")])).map(|(_, c)| ((), c))).unwrap();
+        // The truth moves under all three.
+        put_page(&mut s, Page { body: "moved".into(), ..orphan.clone() }).unwrap();
+        put_requirement(&mut s, Requirement { statement: "The system SHALL move.".into(), ..fresh.clone() }).unwrap();
+        update_ticket(&mut s, &Reference::ticket("gap-1"), touches(vec![r("page:overview")])).unwrap();
+        let held = s.proposals["later-1"].clone();
+        // A patch, a deletion, a retirement and one of a ticket's lists are each refused as a conflict naming the record, and absorb nothing.
+        let patched =
+            propose(&mut s, "later-1", Proposing::Partial, |w| patch_page(w, &r("page:orphan"), PagePatch { add_links: vec![r("page:overview")], ..Default::default() }).map(|(_, c)| ((), c)));
+        assert_eq!(refused(patched.unwrap_err()), ("conflict".to_string(), "page:orphan".to_string()));
+        let deleted = propose(&mut s, "later-1", Proposing::Partial, |w| delete_node(w, &r("page:orphan")).map(|c| ((), c)));
+        assert_eq!(refused(deleted.unwrap_err()), ("conflict".to_string(), "page:orphan".to_string()));
+        let patched =
+            propose(&mut s, "later-1", Proposing::Partial, |w| patch_requirement(w, &r("req:fresh"), RequirementPatch { title: Some("T".into()), ..Default::default() }).map(|(_, c)| ((), c)));
+        assert_eq!(refused(patched.unwrap_err()), ("conflict".to_string(), "req:fresh".to_string()));
+        let retired = propose(&mut s, "later-1", Proposing::Partial, |w| retire_node(w, &r("req:fresh"), "Gone.".into(), "2026-10-08".into()).map(|(_, c)| ((), c)));
+        assert_eq!(refused(retired.unwrap_err()), ("conflict".to_string(), "req:fresh".to_string()));
+        let listed = propose(&mut s, "later-1", Proposing::Partial, |w| update_ticket(w, &Reference::ticket("gap-1"), touches(vec![r("page:orphan"), r("page:overview")])).map(|(_, c)| ((), c)));
+        assert_eq!(refused(listed.unwrap_err()), ("conflict".to_string(), "ticket:gap-1".to_string()));
+        assert_eq!(s.proposals["later-1"], held, "nothing absorbed");
     }
 }

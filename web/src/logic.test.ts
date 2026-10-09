@@ -501,7 +501,7 @@ test("a requirement is described while its decisions in force are all adoptions"
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/handoff#handoff"]}
+ * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/handoff#brews-inscribed-change", "web/src/handoff#continues-brewing-change", "web/src/handoff#bottles-simmering-change", "web/src/handoff#resolves-gap-or-question", "web/src/handoff#nothing-for-answer-waiting", "web/src/handoff#nothing-for-bottled"]}
  * ```
  */
 test("a ticket's next step is a line for the agent, and an answer waiting or a bottled ticket has none", () => {

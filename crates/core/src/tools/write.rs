@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node's summary as it now exists, the findings the write created and what changed for the caller to persist; a ticket's life, brew_ticket, close_ticket, bottle_ticket and withdraw_ticket, has a module beneath.","criteria":[{"id":"releases","statement":"Every write that leaves a ticket gone or no longer being worked removes who had it checked out with ops::release_unworked, in the same write, after its own changes; a write that leaves every list as it was changes none."},{"id":"answers-summary","statement":"Every write answers with the node's summary as it now exists, its ref and title and a ticket's kind, priority and status, never the whole record, but brew_ticket, which answers the ticket in full, and bottle_ticket when no ticket was waiting, which answers with none."},{"id":"answers-warnings","statement":"put_page, patch_page, put_requirement, patch_requirement, record_decision, supersede, inscribe_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, a ticket write judging them over the proposal an update_ticket's edit waits in, else as lint does with no ticket, over the store's current ticket's proposal when there is one and the truth when there is none, the ticket written judged whatever the reading."},{"id":"answers-reprioritised","statement":"inscribe_ticket and update_ticket add reprioritised, the tickets whose priority the write moved beyond the one asked."},{"id":"answers-brew","statement":"brew_ticket adds rests_on, related and recipes, the recipes resting on what it touches with whether each is due, and waiting."},{"id":"answers-close","statement":"close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed, settled, the gaps and questions that closed with it, and due, the recipes due among those resting on what it touched and those whose fingerprint changed since its start, null on a state that holds no code; with when: bottled the findings and due as its proposal leaves them, no such list and settled empty; and given change on a gap or question filed, that change as inscribe_ticket answers it."},{"id":"answers-bottle","statement":"bottle_ticket answers whether a ticket was bottled, what its close answers when one did, and the changes still simmering."},{"id":"answers-judged","statement":"judge_recipe answers judged, for each recipe judged the recipe's reference, the judgement and whether the recipe is still due, null on a state that holds no code."},{"id":"answers-settled","statement":"update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened."},{"id":"answers-retire","statement":"retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones."},{"id":"answers-delete","statement":"delete_node returns the deleted reference and the new dangling edges left behind with a count of the baselined ones."},{"id":"answers-adopt","statement":"adopt returns the new baseline's date, reason and count with the count it replaced."},{"id":"answers-configure","statement":"configure returns the config with the count of findings now new."},{"id":"intent-writes-proposed","statement":"A write that changes intent (put_page, patch_page, put_requirement, patch_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) goes into the proposal of the ticket its input names, else the store's current ticket, is refused as invalid with neither, and answers with the node as the proposal holds it."},{"id":"ticket-taken-where","statement":"Only the writes that change intent, update_ticket and judge_recipe take ticket; any other write refuses it as a field it does not know, and delete_node of a ticket refuses it."},{"id":"close-applies-or-conflicts","statement":"close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise applies it before closing."},{"id":"ticket-references","statement":"update_ticket given touches or relies_on of another ticket under a change being worked, the one its input names in ticket or else the current ticket, proposes them in that change's proposal, a write of both lists resting on the truth as it is now and a write of one on the proposal's copy, and answers with the ticket as that proposal leaves it and with warnings judged over it; its title, priority and body, the references of the ticket itself, and references given under a gap or question or under no ticket apply at once; a ticket named that does not exist is not_found and one not being worked a conflict."},{"id":"settles","statement":"A change closed by close_ticket or bottle_ticket settles the answers it relies on as bottled; a change deleted, or one whose relies_on update_ticket shortens, or the close of another change whose proposal edits it shortens, settles the answers it relied on and no longer does as gone, with why, a close answering those it closed among settled, and a ticket such a close edits keeps pace with what it now relies on; each persists what the settle changed after the write's own changes."},{"id":"reprioritised","statement":"inscribe_ticket keeps pace for the ticket it filed and update_ticket for the ticket it edited, from the priority it had, after settling any answers the edit dropped; each answers the tickets keep_pace moved as reprioritised, with their priorities as they now are, and persists them after the write's own changes."},{"id":"judges-records","statement":"judge_recipe records with ops::judge a judgement of the recipe its ref names, with the outcome given, today's date and the ticket its input names or else the current ticket, refused as invalid with neither; the fingerprint is the one its input supplies, else the recipe's digest in the graph."},{"id":"judges-several","statement":"judge_recipe given judgements records each, in their order, its fingerprint the one the item supplies, else the recipe's digest, having checked every one before recording any so that one refused records none; given both ref and judgements, or neither, it is invalid."},{"id":"judges-refusals","statement":"judge_recipe refuses a ref that is not a recipe, an ingredient among them, as invalid, a recipe the graph does not hold on a state that holds code as not_found, and on a state that holds no code a call supplying no fingerprint as invalid."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
+//! {"purpose":"Answer the write tools: each applies one operation to the store and answers with the node's summary as it now exists, the findings the write created and what changed for the caller to persist; a ticket's life, brew_ticket, close_ticket, bottle_ticket and withdraw_ticket, has a module beneath.","criteria":[{"id":"releases","statement":"Every write that leaves a ticket gone or no longer being worked removes who had it checked out with ops::release_unworked, in the same write, after its own changes; a write that leaves every list as it was changes none."},{"id":"answers-summary","statement":"Every write answers with the node's summary as it now exists, its ref and title and a ticket's kind, priority and status, never the whole record, but brew_ticket, which answers the ticket in full, and bottle_ticket when no ticket was waiting, which answers with none."},{"id":"answers-warnings","statement":"put_page, patch_page, put_requirement, patch_requirement, record_decision, supersede, inscribe_ticket and update_ticket add as warnings the new findings the write created on that node (its dangling edges, and unspecified for a requirement with no scenario) and a count of the baselined ones, a ticket write judging them over the proposal an update_ticket's edit waits in, else as lint does with no ticket, over the store's current ticket's proposal when there is one and the truth when there is none, the ticket written judged whatever the reading."},{"id":"answers-reprioritised","statement":"inscribe_ticket and update_ticket add reprioritised, the tickets whose priority the write moved beyond the one asked."},{"id":"answers-brew","statement":"brew_ticket adds rests_on, related and recipes, the recipes resting on what it touches with whether each is due, and waiting."},{"id":"answers-close","statement":"close_ticket adds the new findings on the nodes it touched, a count of the baselined ones, the touched nodes that never changed, settled, the gaps and questions that closed with it, and due, the recipes due among those resting on what it touched and those whose fingerprint changed since its start, null on a state that holds no code; with when: bottled the findings and due as its proposal leaves them, no such list and settled empty; and given change on a gap or question filed, that change as inscribe_ticket answers it."},{"id":"answers-bottle","statement":"bottle_ticket answers whether a ticket was bottled, what its close answers when one did, and the changes still simmering."},{"id":"answers-judged","statement":"judge_recipe answers judged, for each recipe judged the recipe's reference, the judgement and whether the recipe is still due, null on a state that holds no code."},{"id":"answers-settled","statement":"update_ticket and delete_node of a change add settled and reopened, the answers they closed and reopened."},{"id":"answers-retire","statement":"retire_node adds as warnings the new findings on the criteria the retired requirement named and on the tests that still hold it, and a count of the baselined ones."},{"id":"answers-delete","statement":"delete_node returns the deleted reference and the new dangling edges left behind with a count of the baselined ones."},{"id":"answers-adopt","statement":"adopt returns the new baseline's date, reason and count with the count it replaced."},{"id":"answers-configure","statement":"configure returns the config with the count of findings now new."},{"id":"intent-writes-proposed","statement":"A write that changes intent (put_page, patch_page, put_requirement, patch_requirement, record_decision, supersede, retire_node, and delete_node of a page or requirement) goes into the proposal of the ticket its input names, else the store's current ticket, is refused as invalid with neither, and answers with the node as the proposal holds it."},{"id":"ticket-taken-where","statement":"Only the writes that change intent, update_ticket and judge_recipe take ticket; any other write refuses it as a field it does not know, and delete_node of a ticket refuses it."},{"id":"close-applies-or-conflicts","statement":"close_ticket refuses with a conflict naming the moved records when the truth moved under the proposal, and otherwise applies it before closing."},{"id":"proposes-another-tickets-references","statement":"update_ticket given touches or relies_on of another ticket under a change being worked, the one its input names in ticket or else the current ticket, proposes them in that change's proposal."},{"id":"both-lists-rest-on-truth","statement":"update_ticket writing both of another ticket's lists in a change's proposal rests on the truth as it is now."},{"id":"one-list-rests-on-proposal","statement":"update_ticket writing one of another ticket's lists in a change's proposal rests on the proposal's copy."},{"id":"answers-as-proposal-leaves-it","statement":"update_ticket of another ticket's references under a change answers with the ticket as that proposal leaves it and with warnings judged over it."},{"id":"applies-the-rest-at-once","statement":"update_ticket applies at once a ticket's title, priority and body, the references of the ticket itself, and references given under a gap or question or under no ticket."},{"id":"named-ticket-errors","statement":"update_ticket under a named ticket that does not exist is not_found and under one not being worked a conflict."},{"id":"settles-answers-bottled","statement":"A change closed by close_ticket or bottle_ticket settles the answers it relies on as bottled."},{"id":"settles-answers-gone","statement":"A change deleted, or one whose relies_on update_ticket shortens, or the close of another change whose proposal edits it shortens, settles the answers it relied on and no longer does as gone, with why."},{"id":"close-answers-among-settled","statement":"A close lists the answers it closed among settled."},{"id":"edited-change-keeps-pace","statement":"A ticket a close edits keeps pace with what it now relies on."},{"id":"settle-persisted-after-write","statement":"Each of these writes persists what the settle changed after the write's own changes."},{"id":"reprioritised","statement":"inscribe_ticket keeps pace for the ticket it filed and update_ticket for the ticket it edited, from the priority it had, after settling any answers the edit dropped; each answers the tickets keep_pace moved as reprioritised, with their priorities as they now are, and persists them after the write's own changes."},{"id":"judges-records","statement":"judge_recipe records with ops::judge a judgement of the recipe its ref names, with the outcome given, today's date and the ticket its input names or else the current ticket, refused as invalid with neither; the fingerprint is the one its input supplies, else the recipe's digest in the graph."},{"id":"judges-several","statement":"judge_recipe given judgements records each, in their order, its fingerprint the one the item supplies, else the recipe's digest, having checked every one before recording any so that one refused records none; given both ref and judgements, or neither, it is invalid."},{"id":"judges-refusals","statement":"judge_recipe refuses a ref that is not a recipe, an ingredient among them, as invalid, a recipe the graph does not hold on a state that holds code as not_found, and on a state that holds no code a call supplying no fingerprint as invalid."},{"id":"adopt-findings","statement":"adopt records the findings its caller supplies when it supplies them, and otherwise every finding present; a state that holds no code refuses an adopt that supplies none as invalid."}]}
 //! ```
 
 use serde::Deserialize;
@@ -1072,7 +1072,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "an-edit-to-another-ticket-waits-in-its-change", "checks": ["crates/core/src/tools/write#ticket-references", "crates/core/src/ops/proposal#proposal-writes", "crates/core/src/ops/proposal#close-applies-proposal", "crates/core/src/tools/write#settles", "crates/core/src/tools/read#ticket-view", "crates/core/src/query/board#board-drafts"]}
+    /// {"test": "an-edit-to-another-ticket-waits-in-its-change", "checks": ["crates/core/src/tools/write#proposes-another-tickets-references", "crates/core/src/tools/write#both-lists-rest-on-truth", "crates/core/src/tools/write#one-list-rests-on-proposal", "crates/core/src/tools/write#answers-as-proposal-leaves-it", "crates/core/src/tools/write#applies-the-rest-at-once", "crates/core/src/tools/write#named-ticket-errors", "crates/core/src/ops/proposal#ticket-references-kept-as-lists", "crates/core/src/ops/proposal#whole-write-rebases", "crates/core/src/ops/proposal#partial-write-refused-when-moved", "crates/core/src/ops/proposal#apply-edited-tickets-take-references", "crates/core/src/tools/write#settles-answers-gone", "crates/core/src/tools/read#ticket-view", "crates/core/src/query/board#board-drafts"]}
     /// ```
     #[test]
     fn an_edit_to_another_ticket_waits_in_its_change() {
@@ -1136,7 +1136,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-change-keeps-pace-with-what-it-relies-on", "checks": ["crates/core/src/ops/tickets#priority-follows", "crates/core/src/tools/write#reprioritised", "crates/core/src/tools/write#answers-reprioritised"]}
+    /// {"test": "a-change-keeps-pace-with-what-it-relies-on", "checks": ["crates/core/src/ops/tickets#lowered-change-lowers-its-answers", "crates/core/src/ops/tickets#change-below-answer-raised", "crates/core/src/ops/tickets#raised-answer-raises-its-changes", "crates/core/src/ops/tickets#filed-answer-raises-changes-naming-it", "crates/core/src/ops/tickets#bottled-never-moved", "crates/core/src/ops/tickets#lowering-answer-or-raising-change-moves-nothing", "crates/core/src/tools/write#reprioritised", "crates/core/src/tools/write#answers-reprioritised"]}
     /// ```
     #[test]
     fn a_change_keeps_pace_with_what_it_relies_on() {
@@ -1205,7 +1205,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-reopened-answer-is-cut-to-the-body-limit", "checks": ["crates/core/src/ops/tickets#settles-answers"]}
+    /// {"test": "a-reopened-answer-is-cut-to-the-body-limit", "checks": ["crates/core/src/ops/tickets#reopens-the-rest", "crates/core/src/ops/tickets#reopened-body-cut-to-limit"]}
     /// ```
     #[test]
     fn a_reopened_answer_is_cut_to_the_body_limit() {
@@ -1462,5 +1462,79 @@ mod tests {
         shared.set_without_code(true);
         let closed = call(&mut shared, "bottle_ticket", json!({ "ref": "ticket:phase-62" }), "2026-10-07").unwrap().output;
         assert_eq!(closed["due"], json!(null));
+    }
+
+    /// The records a change persists, in order, each leaf once, whatever the nesting.
+    fn leaves(c: &Changed) -> Vec<Changed> {
+        match c {
+            Changed::Many(cs) => cs.iter().flat_map(leaves).collect(),
+            other => vec![other.clone()],
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-ticket-a-close-edits-keeps-pace", "checks": ["crates/core/src/tools/write#edited-change-keeps-pace"]}
+    /// ```
+    #[test]
+    fn a_ticket_a_close_edits_keeps_pace() {
+        let mut s = state();
+        let day = "2026-10-05";
+        // A question more urgent than phase-62, which is later; later-1 is being worked and is current.
+        s.store_mut().tickets.get_mut("phase-62").unwrap().priority = Priority::Later;
+        let q =
+            call(&mut s, "inscribe_ticket", json!({ "title": "Which?", "kind": "question", "priority": "next", "body": "Asked." }), day).unwrap().output["node"]["ref"].as_str().unwrap().to_string();
+        s.store_mut().current = Some("later-1".into());
+        // The edit waits in later-1's proposal: the truth's ticket does not yet rely on the question, so nothing moves.
+        call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "relies_on": [q] }), day).unwrap();
+        assert_eq!(s.store().tickets["phase-62"].priority, Priority::Later);
+        let closed = call(&mut s, "close_ticket", json!({ "ref": "ticket:later-1", "decision": { "text": "Done." } }), day).unwrap();
+        let edited = &s.store().tickets["phase-62"];
+        assert_eq!(edited.relies_on, vec![q.parse::<Reference>().unwrap()]);
+        assert_eq!(edited.priority, Priority::Next, "it now relies on a more urgent question, and is raised to it");
+        // What moved is persisted with the close.
+        assert!(leaves(closed.changed.as_ref().unwrap()).contains(&Changed::Ticket("phase-62".into())));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "what-a-settle-changed-is-persisted-after-the-write", "checks": ["crates/core/src/tools/write#settle-persisted-after-write"]}
+    /// ```
+    #[test]
+    fn what_a_settle_changed_is_persisted_after_the_write() {
+        let day = "2026-10-05";
+        // gap-1 waits, simmering, for phase-62, the only change relying on it.
+        let waiting = || {
+            let mut s = state();
+            s.store_mut().tickets.get_mut("gap-1").unwrap().status = Status::Brewing;
+            call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "relies_on": ["page:git-readiness", "ticket:gap-1"], "ticket": "gap-1" }), day).unwrap();
+            call(&mut s, "close_ticket", json!({ "ref": "ticket:gap-1", "decision": { "text": "Answered." }, "when": "bottled" }), day).unwrap();
+            assert_eq!(s.store().tickets["gap-1"].status, Status::Simmering);
+            s
+        };
+        let position = |order: &[Changed], c: Changed| order.iter().position(|x| *x == c).unwrap_or_else(|| panic!("{c:?} is persisted in {order:?}"));
+        let (change, gap) = (Changed::Ticket("phase-62".into()), Changed::Bottled("gap-1".into()));
+        // update_ticket shortening relies_on: its own record, then the answer it reopened.
+        let mut s = waiting();
+        let out = call(&mut s, "update_ticket", json!({ "ref": "ticket:phase-62", "relies_on": ["page:git-readiness"] }), day).unwrap();
+        assert_eq!(s.store().tickets["gap-1"].status, Status::Inscribed);
+        let order = leaves(out.changed.as_ref().unwrap());
+        assert!(position(&order, change.clone()) < position(&order, gap.clone()), "{order:?}");
+        // delete_node of the change: the deletion, then the answer.
+        let mut s = waiting();
+        let out = call(&mut s, "delete_node", json!({ "ref": "ticket:phase-62" }), day).unwrap();
+        assert_eq!(s.store().tickets["gap-1"].status, Status::Inscribed);
+        let order = leaves(out.changed.as_ref().unwrap());
+        assert!(position(&order, Changed::Deleted("ticket:phase-62".parse().unwrap())) < position(&order, gap.clone()), "{order:?}");
+        // close_ticket of the change: its close, then the answer it settled.
+        let mut s = waiting();
+        call(&mut s, "brew_ticket", json!({ "ref": "ticket:phase-62" }), day).unwrap();
+        let out = call(&mut s, "close_ticket", json!({ "ref": "ticket:phase-62", "decision": { "text": "Done." } }), day).unwrap();
+        assert_eq!(s.store().tickets["gap-1"].status, Status::Bottled);
+        let order = leaves(out.changed.as_ref().unwrap());
+        assert!(position(&order, Changed::Bottled("phase-62".into())) < position(&order, gap.clone()), "{order:?}");
+        assert_eq!(order.last(), Some(&gap), "nothing is persisted after what the settle changed");
     }
 }

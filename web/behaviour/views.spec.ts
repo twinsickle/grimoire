@@ -1017,7 +1017,7 @@ type BoardAnswer = { tickets: { ref: string; priority: string; waits_on?: { ref:
  * # Test contract
  *
  * ```json
- * {"test": "board-shows-readiness-and-the-unattached", "checks": ["web/src/views/Board#first-screen"]}
+ * {"test": "board-shows-readiness-and-the-unattached", "checks": ["web/src/views/Board#changes-by-priority", "web/src/views/Board#unsettled-listed", "web/src/views/Board#reliance-lines", "web/src/views/Board#filters", "web/src/views/Board#nothing-built-on"]}
  * ```
  */
 test("the board lists changes with their readiness, then the unattached gaps, with filters", async ({ page }) => {
@@ -1059,7 +1059,7 @@ test("the board lists changes with their readiness, then the unattached gaps, wi
  * # Test contract
  *
  * ```json
- * {"test": "a-line-says-whether-what-a-change-relies-on-is-answered", "checks": ["web/src/views/Board#first-screen"]}
+ * {"test": "a-line-says-whether-what-a-change-relies-on-is-answered", "checks": ["web/src/views/Board#reliance-lines"]}
  * ```
  */
 test("a line under a change says whether what it relies on is inscribed, answered or bottled, with its priority", async ({ page }) => {
@@ -1091,7 +1091,7 @@ test("a line under a change says whether what it relies on is inscribed, answere
  * # Test contract
  *
  * ```json
- * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place", "web/src/components#handoff-copy"]}
+ * {"test": "a-board-row-opens-into-the-ticket", "checks": ["web/src/views/Board#ticket-in-place", "web/src/components#shows-the-line", "web/src/components#copy-reads-copied", "web/src/components#copy-refused-says-by-hand"]}
  * ```
  */
 test("a board row opens into the whole ticket, with what it waits on and its next step for an agent", async ({ page }) => {
@@ -1153,7 +1153,7 @@ test("a board row opens into the whole ticket, with what it waits on and its nex
  * # Test contract
  *
  * ```json
- * {"test": "board-keeps-the-tools-order", "checks": ["web/src/views/Board#order-from-tool", "web/src/views/Board#focus-follows"]}
+ * {"test": "board-keeps-the-tools-order", "checks": ["web/src/views/Board#order-not-resorted", "web/src/views/Board#drag-within-band", "web/src/views/Board#drop-in-another-band", "web/src/views/Board#keyboard-move", "web/src/views/Board#moves-one-at-a-time", "web/src/views/Board#moved-among-own-list-only", "web/src/views/Board#focus-follows"]}
  * ```
  */
 test("the board keeps the tool's order, and a change is moved by dragging or from the keyboard", async ({ page }) => {
@@ -1255,7 +1255,7 @@ test("an adopted requirement reads as described, on its page and where a page li
  * # Test contract
  *
  * ```json
- * {"test": "a-drop-the-rule-raises-back-stays", "checks": ["web/src/views/Board#order-from-tool"]}
+ * {"test": "a-drop-the-rule-raises-back-stays", "checks": ["web/src/views/Board#drop-raised-back-stays"]}
  * ```
  */
 test("a change the priority rule raises back stays where the tool put it, and the board says why", async ({ page }) => {
@@ -1276,6 +1276,76 @@ test("a change the priority rule raises back stays where the tool put it, and th
   await expect(page.locator("[aria-live]")).toContainText("Explain readiness stays in high: a gap or question it relies on is held there by another change.");
   expect(reorders).toEqual([]);
   expect((await tool<BoardAnswer>(page, "board")).tickets.find((x) => x.ref === "ticket:0002")?.priority).toBe("high");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-drop-in-another-band-announces-what-moved-with-it", "checks": ["web/src/views/Board#drop-announces-carried"]}
+ * ```
+ */
+test("a change dropped in another band announces the gaps and questions moved with it", async ({ page }) => {
+  await page.goto("/g/repo/cauldron");
+  const grip = (ref: string) => row(page, ref).getByRole("button", { name: /^Move / });
+  // update_ticket answers as the rule would when 0002 carries the question it relies on into the band with it.
+  const summary = (ref: string, title: string, kind: string) => ({ ref, title, kind, priority: "later", status: "inscribed" });
+  await page.route("**/api/update_ticket", async (route) => {
+    const node = (await tool<{ node: unknown }>(page, "get", { ref: "ticket:0002" })).node;
+    const reprioritised = [summary("ticket:0002", "Explain readiness", "change"), summary("ticket:0005", "Should readiness count submodules?", "question")];
+    await route.fulfill({ json: { node, warnings: [], baselined: 0, reprioritised } });
+  });
+  // The order is not written, so the shared store is left as the other specs expect it.
+  await page.route("**/api/reorder", (route) => route.fulfill({ json: {} }));
+  await grip("ticket:0002").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  const said = page.locator("[aria-live]");
+  await expect(said).toContainText("Explain readiness moved to position");
+  await expect(said).toContainText("in later.");
+  await expect(said).toContainText("Moved with it: Should readiness count submodules? to later.");
+  await expect(said).not.toContainText("Moved with it: Explain readiness");
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "an-answer-waiting-for-its-change-hands-nothing-over", "checks": ["web/src/views/Node#answer-waiting-no-line", "web/src/components#waiting-answer-no-line"]}
+ * ```
+ */
+test("a gap waiting for the change that applies it shows no line to hand over and says it is bottled with that change", async ({ page }) => {
+  // A gap of the test's own, deleted at the end, so it holds whatever the specs before it closed.
+  const ref = (await tool<{ node: { ref: string } }>(page, "inscribe_ticket", { title: "Answered, waiting", kind: "gap", priority: "later", touches: [], body: "Waits for its change." })).node.ref;
+  try {
+    // The tool's own answer, with the gap simmering with a decision: the store the other specs share is not touched.
+    await page.route("**/api/get", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      if (body.node?.ref === ref) {
+        body.node.status = "simmering";
+        body.node.decision = { date: "2026-01-20", text: "Decided, and waiting." };
+      }
+      await route.fulfill({ response, json: body });
+    });
+    const said = "Answered: bottled when the change applying it is.";
+    // On its page.
+    await page.goto(`/g/repo/n/${encodeURIComponent(ref)}`);
+    const main = page.locator("main");
+    await expect(main).toContainText("simmering");
+    await expect(main).toContainText("written, waiting for its change to be bottled");
+    await expect(main.getByText(said)).toBeVisible();
+    await expect(main.locator("[data-handoff]")).toHaveCount(0);
+    await expect(main.getByRole("button", { name: /^Copy: / })).toHaveCount(0);
+    // Opened on the board, where the same component draws it.
+    await page.goto("/g/repo/cauldron");
+    await page.getByRole("button", { name: "Show Answered, waiting" }).click();
+    const opened = row(page, ref);
+    await expect(opened.getByText(said)).toBeVisible();
+    await expect(opened.locator("[data-handoff]")).toHaveCount(0);
+    await expect(opened.getByRole("button", { name: /^Copy: / })).toHaveCount(0);
+  } finally {
+    await tool(page, "delete_node", { ref });
+  }
 });
 
 /**
@@ -1530,7 +1600,7 @@ test("every node kind has a page", async ({ page }) => {
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/views/Node#ticket-actions", "web/src/components#handoff-copy"]}
+ * {"test": "a-ticket-hands-its-next-step-to-an-agent", "checks": ["web/src/views/Node#no-start-or-close", "web/src/views/Node#next-step-line", "web/src/components#shows-the-line", "web/src/components#copy-reads-copied", "web/src/components#bottled-shows-nothing", "web/src/components#calls-no-tool"]}
  * ```
  */
 test("a ticket's page hands its next step to an agent, and starts and closes nothing itself", async ({ page }) => {
@@ -1656,7 +1726,7 @@ test("a body with script in it renders as Markdown and runs nothing", async ({ p
  * # Test contract
  *
  * ```json
- * {"test": "a-real-drag-into-an-empty-band", "checks": ["web/src/views/Board#order-from-tool"]}
+ * {"test": "a-real-drag-into-an-empty-band", "checks": ["web/src/views/Board#drop-in-another-band"]}
  * ```
  */
 test("a change dragged with the mouse into an empty band lands there and shows at once", async ({ page }) => {
@@ -2239,7 +2309,7 @@ test("a page names the ticket that would change it, and reads as proposed on req
  * # Test contract
  *
  * ```json
- * {"test": "a-simmering-ticket-shows-its-decision-as-waiting", "checks": ["web/src/views/Node#ticket-actions", "web/src/views/Board#first-screen"]}
+ * {"test": "a-simmering-ticket-shows-its-decision-as-waiting", "checks": ["web/src/views/Node#no-start-or-close", "web/src/views/Node#next-step-line", "web/src/views/Node#simmering-decision-shown", "web/src/views/Board#simmering-waits-to-be-bottled"]}
  * ```
  */
 test("a simmering ticket shows its decision as waiting to be bottled, on its page and on the board", async ({ page }) => {
@@ -2313,7 +2383,7 @@ async function unsettledRefs(page: Page, band: string): Promise<string[]> {
  * # Test contract
  *
  * ```json
- * {"test": "unsettled-gaps-and-questions-are-ranked", "checks": ["web/src/views/Board#first-screen", "web/src/views/Board#order-from-tool", "web/src/views/Board#focus-follows"]}
+ * {"test": "unsettled-gaps-and-questions-are-ranked", "checks": ["web/src/views/Board#unsettled-listed", "web/src/views/Board#order-not-resorted", "web/src/views/Board#drag-within-band", "web/src/views/Board#keyboard-move", "web/src/views/Board#moved-among-own-list-only", "web/src/views/Board#focus-follows"]}
  * ```
  */
 test("the unsettled gaps and questions are ranked by band, apart from the changes", async ({ page }) => {

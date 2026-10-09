@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Carry a ticket through its life: file, update, start, decide and close it, keep a change's priority with the answers it relies on, settle those answers when it is bottled or goes, and name the ticket a write belongs to.","criteria":[{"id":"inscribe-ticket","statement":"inscribe_ticket creates an inscribed ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of a ticket that is not bottled, the body given whole or edited in part as BodyEdit does, and is a conflict on a bottled one."},{"id":"brew-ticket","statement":"brew_ticket moves a ticket from inscribed to brewing and is a conflict from any other status."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a bottled ticket cannot be reopened or edited."},{"id":"priority-follows","statement":"keep_pace keeps a change that is not bottled no lower priority than the gaps and questions it relies on that are not bottled: after a change was lowered, each such answer now above it is lowered to the most urgent priority among the changes not bottled that rely on it; then a change below any such answer is raised to the most urgent of them; after a gap or question was raised, or filed when a change already names it, every change not bottled that relies on it and sits below it is raised to it; a bottled ticket is never moved, lowering an answer or raising a change moves nothing, and it answers each slug it moved once."},{"id":"closes-when-bottled","statement":"decide_ticket writes a decision ahead of a bottling: a brewing ticket becomes simmering, and so does an inscribed gap or question, since closing one needs no start, and a simmering one has its decision replaced, keeping its body, proposal and start, and an inscribed change or a bottled ticket is a conflict; a gap or question becomes simmering only when a change that is not bottled relies on it, invalid otherwise, and only with an empty proposal, invalid otherwise, its proposal then dropped and the current ticket cleared when it was that one; close_ticket refuses a simmering gap or question as a conflict."},{"id":"withdraw","statement":"withdraw_ticket closes an inscribed, brewing or simmering change with nothing of it applied: its decision marked withdrawn, its body emptied, its proposal and start dropped and the current ticket cleared when it was this one; a bottled ticket is a conflict and a gap or question invalid, nothing changing."},{"id":"settles-answers","statement":"settle looks only at the given gaps and questions that are simmering and that no change not bottled relies on: after a change closed it closes each with its decision, its body emptied and its start removed; after a change went away, deleted, withdrawn or no longer relying on them, it closes each that a bottled change relying on it, not withdrawn, closed on or after its decision's date, and reopens every other, inscribed with no decision and its start removed, its body followed by the answer's date, why it reopened and the answer's text, cut with an ellipsis to the body's limit; it answers the slugs it closed and reopened."},{"id":"current-ticket","statement":"brew_ticket makes the started change the store's current one, and never a gap or question, which it leaves as it was, and close_ticket clears it when it closes that one, a simmering ticket staying current until then; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"checked-out","statement":"check_out adds who took a ticket, and when, to the end of that ticket's checked_out list unless that name is listed already, which keeps when they first took it, answering whether the list changed; release_unworked removes the list of every ticket that is gone or no longer being worked, answering whether any went."},{"id":"waits-here","statement":"decide_ticket records on a change's start, when it has one, the checkout it was last decided in, the store's repository, as simmering_in, answering the start among what changed when it moved; waiting_here answers, in slug order, every simmering ticket whose start names this store's repository as simmering_in, but the one given, the same folder spelt with the other slash, a trailing one or another case counting as one."}]}
+//! {"purpose":"Carry a ticket through its life: file, update, start, decide and close it, keep a change's priority with the answers it relies on, settle those answers when it is bottled or goes, and name the ticket a write belongs to.","criteria":[{"id":"inscribe-ticket","statement":"inscribe_ticket creates an inscribed ticket with a null decision under a generated id: one past the highest all-digit id in the store, zero-padded to four digits, so filing never collides and never asks for a name."},{"id":"update-ticket","statement":"update_ticket changes only the given title, priority, touches, relies_on or body of a ticket that is not bottled, the body given whole or edited in part as BodyEdit does, and is a conflict on a bottled one."},{"id":"brew-ticket","statement":"brew_ticket moves a ticket from inscribed to brewing and is a conflict from any other status."},{"id":"close-keeps-only-decision","statement":"Closing a ticket replaces its body with the empty string and sets its decision; a bottled ticket cannot be reopened or edited."},{"id":"lowered-change-lowers-its-answers","statement":"keep_pace, after a change was lowered, lowers each answer it relies on, that is not bottled, now above it to the most urgent priority among the changes not bottled that rely on it."},{"id":"change-below-answer-raised","statement":"keep_pace raises a change that is not bottled below any gap or question it relies on that is not bottled to the most urgent of them."},{"id":"raised-answer-raises-its-changes","statement":"keep_pace, after a gap or question was raised, raises every change not bottled that relies on it and sits below it to it."},{"id":"filed-answer-raises-changes-naming-it","statement":"keep_pace, after a gap or question was filed when a change already names it, raises every change not bottled that relies on it and sits below it to it."},{"id":"bottled-never-moved","statement":"keep_pace never moves a bottled ticket."},{"id":"lowering-answer-or-raising-change-moves-nothing","statement":"keep_pace moves nothing when an answer is lowered or a change is raised."},{"id":"answers-each-slug-once","statement":"keep_pace answers each slug it moved once."},{"id":"brewing-ticket-simmers","statement":"decide_ticket writes a decision ahead of a bottling: a brewing ticket becomes simmering."},{"id":"inscribed-answer-simmers","statement":"decide_ticket makes an inscribed gap or question simmering too, since closing one needs no start."},{"id":"simmering-decision-replaced","statement":"decide_ticket on a simmering ticket replaces its decision, keeping its body, proposal and start."},{"id":"inscribed-change-or-bottled-conflict","statement":"decide_ticket on an inscribed change or a bottled ticket is a conflict."},{"id":"answer-needs-unbottled-change","statement":"A gap or question becomes simmering only when a change that is not bottled relies on it, invalid otherwise."},{"id":"answer-needs-empty-proposal","statement":"A gap or question becomes simmering only with an empty proposal, invalid otherwise."},{"id":"answer-simmering-drops-proposal-clears-current","statement":"A gap or question made simmering has its proposal dropped and the current ticket cleared when it was that one."},{"id":"close-refuses-simmering-answer","statement":"close_ticket refuses a simmering gap or question as a conflict."},{"id":"withdraw","statement":"withdraw_ticket closes an inscribed, brewing or simmering change with nothing of it applied: its decision marked withdrawn, its body emptied, its proposal and start dropped and the current ticket cleared when it was this one; a bottled ticket is a conflict and a gap or question invalid, nothing changing."},{"id":"settles-only-waiting-answers","statement":"settle looks only at the given gaps and questions that are simmering and that no change not bottled relies on."},{"id":"closes-answers-after-change-closed","statement":"After a change closed, settle closes each with its decision, its body emptied and its start removed."},{"id":"closes-answers-an-applied-change-closed","statement":"After a change went away, deleted, withdrawn or no longer relying on them, settle closes each that a bottled change relying on it, not withdrawn, closed on or after its decision's date."},{"id":"reopens-the-rest","statement":"After a change went away, settle reopens every other answer, inscribed with no decision and its start removed, its body followed by the answer's date, why it reopened and the answer's text."},{"id":"reopened-body-cut-to-limit","statement":"A reopened answer's body is cut with an ellipsis to the body's limit."},{"id":"answers-closed-and-reopened","statement":"settle answers the slugs it closed and reopened."},{"id":"current-ticket","statement":"brew_ticket makes the started change the store's current one, and never a gap or question, which it leaves as it was, and close_ticket clears it when it closes that one, a simmering ticket staying current until then; target_ticket answers the ticket a write belongs to, the one given as a slug or ticket: reference, else the current one, and refuses as invalid when there is neither."},{"id":"checked-out","statement":"check_out adds who took a ticket, and when, to the end of that ticket's checked_out list unless that name is listed already, which keeps when they first took it, answering whether the list changed; release_unworked removes the list of every ticket that is gone or no longer being worked, answering whether any went."},{"id":"waits-here","statement":"decide_ticket records on a change's start, when it has one, the checkout it was last decided in, the store's repository, as simmering_in, answering the start among what changed when it moved; waiting_here answers, in slug order, every simmering ticket whose start names this store's repository as simmering_in, but the one given, the same folder spelt with the other slash, a trailing one or another case counting as one."}]}
 //! ```
 
 use super::*;
@@ -488,5 +488,62 @@ mod tests {
         // Ten thousand tickets still get distinct ids, just longer.
         s.tickets.insert("9999".into(), Ticket { slug: "9999".into(), ..a.clone() });
         assert_eq!(next_ticket_id(&s), "10000");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-inscribed-answer-simmers-without-a-start", "checks": ["crates/core/src/ops/tickets#inscribed-answer-simmers"]}
+    /// ```
+    #[test]
+    fn an_inscribed_answer_simmers_without_a_start() {
+        let mut s = store();
+        // A change not bottled relies on the gap, which is inscribed and never started.
+        s.tickets.get_mut("later-1").unwrap().relies_on = vec![Reference::ticket("gap-1")];
+        assert_eq!(s.tickets["gap-1"].status, Status::Inscribed);
+        assert!(!s.starts.contains_key("gap-1"));
+        let (t, _) = decide_ticket(&mut s, &Reference::ticket("gap-1"), Decision::new("2026-10-08", "Fix it.")).unwrap();
+        assert_eq!((t.status, t.decision.as_ref().map(|d| d.text.as_str())), (Status::Simmering, Some("Fix it.")));
+        assert_eq!(s.tickets["gap-1"].status, Status::Simmering);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "an-answer-made-simmering-drops-its-proposal-and-current", "checks": ["crates/core/src/ops/tickets#answer-simmering-drops-proposal-clears-current"]}
+    /// ```
+    #[test]
+    fn an_answer_made_simmering_drops_its_proposal_and_current() {
+        let mut s = store();
+        s.tickets.get_mut("later-1").unwrap().relies_on = vec![Reference::ticket("gap-1")];
+        // The gap is the current ticket and holds a proposal, empty, since an answer with a spec is refused.
+        s.current = Some("gap-1".into());
+        s.proposals.insert("gap-1".into(), Proposal::new("gap-1"));
+        decide_ticket(&mut s, &Reference::ticket("gap-1"), Decision::new("2026-10-08", "Fix it.")).unwrap();
+        assert!(!s.proposals.contains_key("gap-1"), "its proposal is gone");
+        assert!(s.current.is_none(), "it is no longer the current ticket");
+        // Another current ticket is left alone.
+        let mut s = store();
+        s.tickets.get_mut("later-1").unwrap().relies_on = vec![Reference::ticket("gap-1")];
+        s.current = Some("later-1".into());
+        decide_ticket(&mut s, &Reference::ticket("gap-1"), Decision::new("2026-10-08", "Fix it.")).unwrap();
+        assert_eq!(s.current.as_deref(), Some("later-1"));
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "keep-pace-answers-each-slug-it-moved-once", "checks": ["crates/core/src/ops/tickets#answers-each-slug-once"]}
+    /// ```
+    #[test]
+    fn keep_pace_answers_each_slug_it_moved_once() {
+        let mut s = store();
+        // A change that names the same gap twice: lowered, it would lower that gap once for each naming.
+        s.tickets.get_mut("gap-1").unwrap().priority = Priority::Next;
+        s.tickets.get_mut("later-1").unwrap().relies_on = vec![Reference::ticket("gap-1"), Reference::ticket("gap-1")];
+        let (moved, changed) = keep_pace(&mut s, "later-1", Some(Priority::Next));
+        assert_eq!(moved, vec!["gap-1".to_string()]);
+        assert_eq!(s.tickets["gap-1"].priority, Priority::Later);
+        assert_eq!(changed, Changed::Many(vec![Changed::Ticket("gap-1".into())]));
     }
 }

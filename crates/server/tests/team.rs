@@ -376,7 +376,7 @@ fn a_close_is_judged_with_the_languages_the_server_now_reads() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-named", "crates/server/src/remote#update-else-as-given", "crates/server/src/remote#bottle-none-here", "crates/server/src/remote#brew-sent", "crates/server/src/remote#current-kept-in-copy", "crates/server/src/remote#current-survives-sync", "crates/server/src/daemon#who-calls", "crates/server/src/http#passes-the-token", "req:ticket-checked-out"]}
+/// {"test": "the-current-ticket-is-each-checkouts-own", "checks": ["crates/server/src/remote#current-named", "crates/server/src/remote#update-else-as-given", "crates/server/src/remote#bottle-none-here", "crates/server/src/remote#brew-sent", "crates/server/src/remote#current-kept-in-copy", "crates/server/src/remote#current-survives-sync", "crates/server/src/daemon#shared-daemon-names-the-token", "crates/server/src/daemon#server-project-says-who", "crates/server/src/http#passes-the-token", "req:ticket-checked-out"]}
 /// ```
 #[test]
 fn the_current_ticket_is_each_checkouts_own() {
