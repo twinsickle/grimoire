@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives and its write lock each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout-files","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each brewing or simmering ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks."},{"id":"layout-malformed","statement":"A record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe."},{"id":"layout-stale-ticket","statement":"A proposal or current file naming a ticket that is neither brewing nor simmering is malformed."},{"id":"layout-ticket-files-go","statement":"A deleted ticket's start and proposal files go with its record."},{"id":"migrates-read-trimmed","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost."},{"id":"migrates-first-writer","statement":"The first writer to take the lock of a version 1 store trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last."},{"id":"migrates-v2-untrimmed-malformed","statement":"In a version 2 store an untrimmed string is malformed."},{"id":"migrates-recipe-text-untrimmed","statement":"In a version 2 store the text of the main line's recipes is kept untrimmed, as the recipe file reads."},{"id":"write-all-validated","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming a brewing or simmering ticket."},{"id":"replacing-removes-the-old","statement":"write_all replacing a store removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written."},{"id":"replacing-leaves-tokens","statement":"write_all replacing a store leaves the tokens file as it is, since it is not what the store says but who may sign in to it."}]}
+//! {"purpose":"Read a store directory into a value and write single records back atomically; where a store lives, its write lock and the marker of the daemon serving it each have a module beneath.","criteria":[{"id":"atomic-writes","statement":"A record is written to a temporary file in the same directory and renamed over the old one in one step: a write that finishes or fails leaves no temporary file behind, and a reader running while records are rewritten always finds the record, whole."},{"id":"malformed-collected","statement":"A file that does not parse or violates a field rule is reported as malformed with its path and reason, and the rest of the store still loads."},{"id":"bom-tolerated","statement":"A store file that begins with a UTF-8 byte-order mark loads as if it did not, since hand edits from Windows editors leave one."},{"id":"layout-files","statement":"A store is a directory holding grimoire.json and pages/, requirements/ and tickets/ with one <slug>.json per record, plus baseline.json once adopted, serve.json while a daemon serves it, starts/<slug>.json and proposals/<slug>.json for each brewing or simmering ticket, current.json naming the main checkout's current ticket while there is one, judgements/<recipe>.json holding each judged recipe's judgements, recipes.json holding the recipes the main line last sent once it has sent any, checked_out.json naming who has each ticket being worked checked out and since when while anyone has, checkouts.json listing a store of its own's other checkouts with theirs, kept by the checkouts module beneath, tokens.json for a shared daemon's tokens and tokens.lock, kept by the tokens module beneath, and lock, the empty file a writer locks."},{"id":"layout-malformed","statement":"A record file whose name differs from its record's slug is malformed, and so is a baseline, start, proposal, current, judgements or recipes file that does not parse or does not validate, or a checked_out file that does not parse or validate, or a judgements file named for another recipe."},{"id":"layout-stale-ticket","statement":"A proposal or current file naming a ticket that is neither brewing nor simmering is malformed."},{"id":"layout-ticket-files-go","statement":"A deleted ticket's start and proposal files go with its record."},{"id":"migrates-read-trimmed","statement":"A version 1 store, written before the tools trimmed, is read with every string trimmed, so nothing in it is lost."},{"id":"migrates-first-writer","statement":"The first writer to take the lock of a version 1 store trims every record file as JSON, rewriting those that change, including one that does not load for another reason, and sets version 2 last."},{"id":"migrates-v2-untrimmed-malformed","statement":"In a version 2 store an untrimmed string is malformed."},{"id":"migrates-recipe-text-untrimmed","statement":"In a version 2 store the text of the main line's recipes is kept untrimmed, as the recipe file reads."},{"id":"write-all-validated","statement":"write_all writes nothing, and replaces nothing, unless the store is at the current version and its config, every record, every start, every proposal, every recipe's judgements, the main line's recipes, who has the tickets checked out, the current ticket and its baseline would load back, each held under its own slug and a proposal or current naming a brewing or simmering ticket."},{"id":"replacing-removes-the-old","statement":"write_all replacing a store removes the old store's records, starts, proposals, judgements, main line's recipes, who had tickets checked out, current ticket, other checkouts and baseline, and those given are written."},{"id":"replacing-leaves-tokens","statement":"write_all replacing a store leaves the tokens file as it is, since it is not what the store says but who may sign in to it."}]}
 //! ```
 
 use std::collections::BTreeMap;
@@ -18,6 +18,7 @@ pub mod checkouts;
 pub mod deletions;
 mod location;
 mod lock;
+mod serving;
 pub mod tokens;
 
 pub use location::{
@@ -25,6 +26,7 @@ pub use location::{
     stores_dir, write_project_file, write_project_file_for_server, Home, HOME_ENV, PROJECT_FILE,
 };
 pub use lock::{lock, lock_new, StoreLock, LOCK_FILE};
+pub use serving::{read_serving, remove_serving, write_serving, write_serving_at, write_serving_in, Serving};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreIoError {
@@ -63,63 +65,6 @@ pub const RECIPES_FILE: &str = "recipes.json";
 /// Who has each ticket being worked checked out, and since when (req:ticket-checked-out).
 pub const CHECKED_OUT_FILE: &str = "checked_out.json";
 
-/// `serve.json`: which daemon serves this store. A hint, never trusted
-/// without asking the daemon itself (see `client::serving`).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Serving {
-    pub port: u16,
-    pub pid: u32,
-    /// Where a command on this machine reaches it, when that is not 127.0.0.1: the
-    /// address it bound, or `::1` when it listens on every IPv6 address.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
-    /// Where in the daemon's library this store's grimoire is served, `/g/<name>`; none
-    /// for a daemon serving it on the bare routes (req:machine-library).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-}
-
-impl Serving {
-    /// Where a command on this machine reaches the daemon: the address it
-    /// bound, or the loopback when it listens there or on every address.
-    pub fn addr(&self) -> std::net::SocketAddr {
-        let ip = self.host.as_deref().and_then(|h| h.parse().ok()).unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
-        std::net::SocketAddr::new(ip, self.port)
-    }
-}
-
-/// Record that this process serves the store on `port` of this machine's loopback.
-pub fn write_serving(store_dir: &Path, port: u16) -> Result<(), StoreIoError> {
-    write_serving_at(store_dir, std::net::SocketAddr::from(([127, 0, 0, 1], port)))
-}
-
-/// Record that this process serves the store at `addr`.
-pub fn write_serving_at(store_dir: &Path, addr: std::net::SocketAddr) -> Result<(), StoreIoError> {
-    write_serving_in(store_dir, addr, None)
-}
-
-/// Record that this process serves the store at `addr`, its grimoire at `path` in the library.
-pub fn write_serving_in(store_dir: &Path, addr: std::net::SocketAddr, path: Option<&str>) -> Result<(), StoreIoError> {
-    let ip = addr.ip();
-    let host = if ip.is_unspecified() {
-        // Every address: reached on this machine by the loopback of the same family.
-        ip.is_ipv6().then(|| std::net::Ipv6Addr::LOCALHOST.to_string())
-    } else {
-        (ip != std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)).then(|| ip.to_string())
-    };
-    write_atomic(&store_dir.join(SERVE_FILE), &to_pretty(&Serving { port: addr.port(), pid: std::process::id(), host, path: path.map(str::to_string) }))
-}
-
-/// Remove the marker, if it is still this process's.
-pub fn remove_serving(store_dir: &Path) {
-    if read_serving(store_dir).is_some_and(|s| s.pid == std::process::id()) {
-        let _ = std::fs::remove_file(store_dir.join(SERVE_FILE));
-    }
-}
-
-pub fn read_serving(store_dir: &Path) -> Option<Serving> {
-    read_json(&store_dir.join(SERVE_FILE)).ok()
-}
 fn dir_of(kind: Kind) -> &'static str {
     match kind {
         Kind::Page => "pages",
@@ -1235,19 +1180,6 @@ mod tests {
         store.baseline = None;
         persist(dir, &store, &Changed::Baseline).unwrap();
         assert!(!dir.join(BASELINE_FILE).exists());
-    }
-
-    #[test]
-    fn the_serving_marker_is_this_process_s_to_remove() {
-        let tmp = temp();
-        let dir = tmp.path();
-        write_serving(dir, 4242).unwrap();
-        assert_eq!(read_serving(dir), Some(Serving { port: 4242, pid: std::process::id(), host: None, path: None }));
-        remove_serving(dir);
-        assert!(read_serving(dir).is_none());
-        std::fs::write(dir.join(SERVE_FILE), r#"{"port":4242,"pid":1}"#).unwrap();
-        remove_serving(dir);
-        assert!(read_serving(dir).is_some(), "another process's marker is left alone");
     }
 
     #[test]
