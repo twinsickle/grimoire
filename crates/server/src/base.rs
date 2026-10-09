@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Find the code a checkout's branch was cut from, so a check can tell its own work from what reached the main line since: the main line, the merge base of HEAD with it, and that commit's code read from git and extracted.","criteria":[{"id":"main-line","statement":"main_line names a repository's main line: the branch the remote origin's HEAD names, else a local main, else a local master; base_commit answers the merge base of HEAD with it, and none outside git, which it tells from the folders above the checkout without running git, with no main line, or when HEAD is the main line's own branch."},{"id":"base-code","statement":"base_code writes a commit's tree into a folder kept for it outside the repository, through an index of its own, so the checkout's index, HEAD and files are untouched, reuses a folder already written for that commit, removes another commit's folder only once it is an hour old, so a check still reading it is not cut short, and extracts it in the languages given from the checkout's place in the tree, refusing the whole base when any of it could not be read rather than judging against part of it; give hands a state the code of its repository's base, or none when it has none."}]}
+//! {"purpose":"Find the code a checkout's branch was cut from, so a check can tell its own work from what reached the main line since: the main line, the merge base of HEAD with it, and that commit's code read from git and extracted.","criteria":[{"id":"main-line","statement":"main_line names a repository's main line: the branch the remote origin's HEAD names, else a local main, else a local master; base_commit answers the merge base of HEAD with it, and none outside git, which it tells from the folders above the checkout without running git, with no main line, or when HEAD is the main line's own branch."},{"id":"base-code-written-aside","statement":"base_code writes a commit's tree into a folder kept for it outside the repository, through an index of its own, so the checkout's index, HEAD and files are untouched."},{"id":"base-code-reuses-folder","statement":"base_code reuses a folder already written for that commit."},{"id":"base-code-removes-old-folders","statement":"base_code removes another commit's folder only once it is an hour old, so a check still reading it is not cut short."},{"id":"base-code-extracts-in-place","statement":"base_code extracts the commit's code in the languages given from the checkout's place in the tree."},{"id":"base-code-refuses-unreadable-base","statement":"base_code refuses the whole base when any of it could not be read rather than judging against part of it."},{"id":"base-given-to-state","statement":"give hands a state the code of its repository's base, or none when it has none."}]}
 //! ```
 
 use std::collections::hash_map::DefaultHasher;
@@ -128,7 +128,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-branch-finds-the-code-it-was-cut-from", "checks": ["crates/server/src/base#main-line", "crates/server/src/base#base-code"]}
+    /// {"test": "a-branch-finds-the-code-it-was-cut-from", "checks": ["crates/server/src/base#main-line", "crates/server/src/base#base-code-written-aside", "crates/server/src/base#base-code-reuses-folder", "crates/server/src/base#base-code-extracts-in-place"]}
     /// ```
     #[test]
     fn a_branch_finds_the_code_it_was_cut_from() {
@@ -161,5 +161,124 @@ mod tests {
         assert_eq!(git(&repo, &["status", "--porcelain"]).unwrap(), "M src/lib.rs", "only the change in hand, index untouched");
         assert!(kept_for(&repo).join(&base).join(".written").exists(), "kept for the next check");
         assert!(base_code(&repo, &base, &["rust".to_string()]).is_ok(), "and reused");
+    }
+
+    /// A repository `shop` under `tmp` on `main` with `files` committed, and the commit.
+    fn repo_with(tmp: &Path, files: &[(&str, &[u8])]) -> (PathBuf, String) {
+        let repo = tmp.join("shop");
+        std::fs::create_dir_all(&repo).unwrap();
+        run(&repo, &["init", "-q", "-b", "main"]);
+        commit_files(&repo, files)
+    }
+
+    fn commit_files(repo: &Path, files: &[(&str, &[u8])]) -> (PathBuf, String) {
+        for (name, bytes) in files {
+            std::fs::create_dir_all(repo.join(name).parent().unwrap()).unwrap();
+            std::fs::write(repo.join(name), bytes).unwrap();
+        }
+        run(repo, &["add", "-A"]);
+        run(repo, &["commit", "-q", "-m", "c"]);
+        (repo.to_path_buf(), git(repo, &["rev-parse", "HEAD"]).unwrap())
+    }
+
+    /// Make a folder's modified time `hours` hours ago.
+    fn age(dir: &Path, hours: u64) {
+        let mut options = std::fs::OpenOptions::new();
+        // A folder is opened for writing its times on Windows, and only read elsewhere, where it cannot be opened to write.
+        #[cfg(windows)]
+        std::os::windows::fs::OpenOptionsExt::custom_flags(options.write(true), 0x0200_0000); // FILE_FLAG_BACKUP_SEMANTICS: a folder may be opened
+        #[cfg(not(windows))]
+        options.read(true);
+        options.open(dir).unwrap().set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(hours * 3600)).unwrap();
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-folder-written-for-a-commit-is-reused-not-rewritten", "checks": ["crates/server/src/base#base-code-reuses-folder"]}
+    /// ```
+    #[test]
+    fn a_folder_written_for_a_commit_is_reused_not_rewritten() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (repo, base) = repo_with(tmp.path(), &[("src/lib.rs", contract("at-base").as_bytes())]);
+        base_code(&repo, &base, &["rust".to_string()]).unwrap();
+        let folder = kept_for(&repo).join(&base);
+        // A mark left in the folder, and git taken away: writing the commit again would need git and fail.
+        std::fs::write(folder.join("mark"), "kept").unwrap();
+        std::fs::rename(repo.join(".git"), tmp.path().join("git-away")).unwrap();
+        let again = base_code(&repo, &base, &["rust".to_string()]).expect("reused, with no git to write it again");
+        assert!(again.modules.contains_key("src"), "{:?}", again.modules.keys().collect::<Vec<_>>());
+        assert_eq!(std::fs::read_to_string(folder.join("mark")).unwrap(), "kept", "the same folder, not written again");
+        let folders: Vec<_> = std::fs::read_dir(kept_for(&repo)).unwrap().flatten().collect();
+        assert_eq!(folders.len(), 1, "and no second folder beside it");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "another-commits-folder-goes-only-once-it-is-an-hour-old", "checks": ["crates/server/src/base#base-code-removes-old-folders"]}
+    /// ```
+    #[test]
+    fn another_commits_folder_goes_only_once_it_is_an_hour_old() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (repo, first) = repo_with(tmp.path(), &[("src/lib.rs", contract("first").as_bytes())]);
+        let languages = ["rust".to_string()];
+        base_code(&repo, &first, &languages).unwrap();
+        let (_, second) = commit_files(&repo, &[("src/lib.rs", contract("second").as_bytes())]);
+        let kept = kept_for(&repo);
+        // The first commit's folder was written just now: kept, as a check may be reading it.
+        base_code(&repo, &second, &languages).unwrap();
+        assert!(kept.join(&first).exists(), "a folder under an hour old stays");
+        assert!(kept.join(&second).exists());
+        // Aged past the hour, it goes with the next folder written; the one being written never does.
+        age(&kept.join(&first), 2);
+        let (_, third) = commit_files(&repo, &[("src/lib.rs", contract("third").as_bytes())]);
+        base_code(&repo, &third, &languages).unwrap();
+        assert!(!kept.join(&first).exists(), "a folder over an hour old is removed");
+        assert!(kept.join(&second).exists(), "one under an hour old stays");
+        assert!(kept.join(&third).exists());
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-base-that-could-not-be-read-whole-is-refused", "checks": ["crates/server/src/base#base-code-refuses-unreadable-base"]}
+    /// ```
+    #[test]
+    fn a_base_that_could_not_be_read_whole_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        // One file reads, the other is not text: the part that reads is not judged alone.
+        let (repo, base) = repo_with(tmp.path(), &[("src/lib.rs", contract("at-base").as_bytes()), ("src/broken.rs", &[0xff, 0xfe, 0x00])]);
+        let refused = base_code(&repo, &base, &["rust".to_string()]).unwrap_err();
+        assert!(refused.contains("the base could not be read whole"), "{refused}");
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-state-is-given-the-base-of-its-repository-or-none", "checks": ["crates/server/src/base#base-given-to-state"]}
+    /// ```
+    #[test]
+    fn a_state_is_given_the_base_of_its_repository_or_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut store = grimoire_core::Store::default();
+        store.config.languages = vec!["rust".to_string()];
+        let mut state = grimoire_core::tools::State::new(store, Extraction::from_files(&Vec::new()), vec![]);
+        // Outside git there is no base: a base the state held is cleared.
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        state.set_base(Some(Extraction::from_files(&Vec::new())));
+        give(&mut state, &outside).unwrap();
+        assert!(state.base_fingerprints().is_none(), "no base outside git");
+        // A branch cut from the main line is given the main line's code it was cut from.
+        let (repo, _) = repo_with(tmp.path(), &[("src/lib.rs", contract("at-base").as_bytes())]);
+        run(&repo, &["checkout", "-q", "-b", "feature"]);
+        commit_files(&repo, &[("src/lib.rs", contract("on-the-branch").as_bytes())]);
+        give(&mut state, &repo).unwrap();
+        assert!(state.base_fingerprints().is_some(), "the branch's base is given");
+        // Back on the main line there is none again.
+        run(&repo, &["checkout", "-q", "main"]);
+        give(&mut state, &repo).unwrap();
+        assert!(state.base_fingerprints().is_none(), "the main line has no base");
     }
 }

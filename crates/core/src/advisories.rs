@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, which it shows as advisories naming the work that may conflict with it, and which a change still waiting to be bottled from it would mend.","criteria":[{"id":"own-work","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base; every other finding stays, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is brewing or simmering, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."},{"id":"mended","statement":"mended gives, for each change ops::waiting_here names for this checkout other than the current ticket, each finding that is not baselined and that the truth with that change's proposal laid beneath the current ticket's does not produce against this checkout's code, naming the change; it takes nothing out of the findings, which still fail."}]}
+//! {"purpose":"Tell a checkout's own work from other work: which findings its check fails on, which it shows as advisories naming the work that may conflict with it, and which a change still waiting to be bottled from it would mend.","criteria":[{"id":"own-work-advisories","statement":"own takes out of a checkout's findings each that is new, that the truth alone also produces against the base's code, and that is on no record the current ticket proposes (its pages, requirements and deletions, its own ticket and the tickets its proposal edits), and gives it back as an advisory from the main line since the base."},{"id":"own-work-other-findings-stay","statement":"own leaves every other finding in a checkout's findings, a baselined one inherited as before, and with no base every finding stays."},{"id":"other-tickets","statement":"others gives, for each ticket other than the current one that is brewing or simmering, in slug order, an advisory naming the ticket for each finding the truth with that ticket's proposal produces against this checkout's code that the truth alone does not and that is not among the checkout's own findings already."},{"id":"mended","statement":"mended gives, for each change ops::waiting_here names for this checkout other than the current ticket, each finding that is not baselined and that the truth with that change's proposal laid beneath the current ticket's does not produce against this checkout's code, naming the change; it takes nothing out of the findings, which still fail."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -121,7 +121,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-check-fails-only-on-its-own-work", "checks": ["crates/core/src/advisories#own-work"]}
+    /// {"test": "a-check-fails-only-on-its-own-work", "checks": ["crates/core/src/advisories#own-work-advisories", "crates/core/src/advisories#own-work-other-findings-stay"]}
     /// ```
     #[test]
     fn a_check_fails_only_on_its_own_work() {
@@ -154,6 +154,31 @@ mod tests {
         assert!(advised.is_empty());
         // With no base, nothing moves.
         assert_eq!(own(findings.clone(), None, &s, Some("later-1")).0, findings);
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-baselined-finding-stays-inherited-not-an-advisory", "checks": ["crates/core/src/advisories#own-work-other-findings-stay"]}
+    /// ```
+    #[test]
+    fn a_baselined_finding_stays_inherited_not_an_advisory() {
+        let ext = crate::extraction::fixtures::extraction();
+        let s = crate::graph::fixtures::store();
+        let mut findings = lint(&Graph::build(&s, &ext, &[]), &[Rule::Dangling]);
+        assert!(!findings.is_empty());
+        // The base shows the same findings, so but for the baseline every one would be an advisory.
+        let base = findings.clone();
+        let (kept, advised) = own(findings.clone(), Some(&base), &s, None);
+        assert!(kept.is_empty() && advised.len() == findings.len());
+        // One of them is in the baseline: it stays among the findings, still baselined, and is no advisory.
+        findings[0].baselined = true;
+        let held = findings[0].clone();
+        let (kept, advised) = own(findings.clone(), Some(&base), &s, None);
+        assert_eq!(kept, vec![held.clone()], "a baselined finding stays inherited");
+        assert!(kept[0].baselined);
+        assert!(advised.iter().all(|a| a.finding.key() != held.key()), "and is not made an advisory");
+        assert_eq!(advised.len(), findings.len() - 1);
     }
 
     /// # Test contract

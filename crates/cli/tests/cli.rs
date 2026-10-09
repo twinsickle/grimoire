@@ -398,7 +398,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-branch-is-judged-by-its-own-work", "checks": ["crates/cli/src/check#check-own-work"]}
+/// {"test": "a-branch-is-judged-by-its-own-work", "checks": ["crates/cli/src/check#check-own-work-base", "crates/cli/src/check#check-prints-advisories", "crates/cli/src/check#check-json-advisories", "crates/cli/src/check#check-ticket-or-main-line-takes-no-base"]}
 /// ```
 #[test]
 fn a_branch_is_judged_by_its_own_work() {
@@ -447,7 +447,7 @@ fn a_branch_is_judged_by_its_own_work() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-check-names-a-ticket-still-simmering-here", "checks": ["crates/cli/src/check#check-own-work"]}
+/// {"test": "the-check-names-a-ticket-still-simmering-here", "checks": ["crates/cli/src/check#check-names-what-would-mend"]}
 /// ```
 #[test]
 fn the_check_names_a_ticket_still_simmering_here() {
@@ -2124,7 +2124,7 @@ fn team_fixture(languages: Option<&[&str]>) -> TeamFixture {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line", "crates/cli/src/check#bottle", "crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/team#read-now", "crates/server/src/http#prune", "crates/server/src/remote#intent-digest"]}
+/// {"test": "the-main-line-prunes-a-teams-baseline", "checks": ["crates/cli/src/check#check-main-line-judges-the-truth", "crates/cli/src/check#check-main-line-refused-beside-ticket", "crates/cli/src/check#check-main-line-prunes-the-server", "crates/cli/src/check#check-main-line-prints-findings", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#check-main-line-own-store", "crates/cli/src/check#bottle", "crates/cli/src/team#prune-sends-findings-with-digest", "crates/cli/src/team#prune-answers-what-it-judged", "crates/cli/src/team#prune-refused-says-why", "crates/cli/src/team#prune-fails-outright-only-when-intent-unreadable", "crates/cli/src/team#read-now", "crates/server/src/http#prune-route-prunes", "crates/server/src/http#prune-conflict-when-intent-moved", "crates/server/src/http#prune-refused-to-reader", "crates/server/src/http#prune-refused-non-json", "crates/server/src/http#prune-invalid-body", "crates/server/src/http#prune-conflict-on-code-daemon", "crates/server/src/http#prune-route-not-tool", "crates/server/src/remote#intent-digest-names-intent"]}
 /// ```
 #[test]
 fn the_main_line_prunes_a_teams_baseline() {
@@ -2140,7 +2140,8 @@ fn the_main_line_prunes_a_teams_baseline() {
     let refused = team(repo, &ci, Some(&t.reader), &["check", "--main-line"]);
     assert!(!refused.status.success() && text(&refused).contains("refused the prune") && text(&refused).contains("may only read"), "{}", text(&refused));
     assert_eq!(baseline_count(&t.origin.store), adopted);
-    assert!(!team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--ticket", "x"]).status.success(), "the main line is judged against the truth");
+    let beside = team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--ticket", "x"]);
+    assert!(!beside.status.success() && text(&beside).contains("cannot be used with"), "refused beside --ticket: {}", text(&beside));
     // With a write token: the check as usual, then the server's baseline loses what the main line no longer produces.
     let pruned = team(repo, &ci, Some(&t.writer), &["check", "--main-line"]);
     assert!(pruned.status.success() && text(&pruned).contains("pruned 2 baselined finding(s)"), "{}", text(&pruned));
@@ -2153,6 +2154,21 @@ fn the_main_line_prunes_a_teams_baseline() {
     assert_eq!(baseline_count(&t.origin.store), adopted - 2, "what the main line saw and the baseline lacks is never added");
     // A bottling on a team prunes against the truth with the ticket applied: src's missing contract is fixed on the main line.
     let tool = |name: &str, input: &str| assert!(team(repo, &home, Some(&t.writer), &["tool", name, input]).status.success(), "{name}");
+    // The main line judges the truth whatever the current ticket: a ticket current here, proposing a dangling edge, plays no part.
+    let other = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
+    let other = serde_json::from_slice::<serde_json::Value>(&other.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{other}"}}"#));
+    tool(
+        "put_requirement",
+        &format!(
+            r#"{{"slug":"main-only","title":"Main only","statement":"It SHALL hold.","scenarios":[{{"title":"s","given":"g","when":"w","then":"t"}}],"covered_by":["criterion:src#nowhere"],"ticket":"{other}"}}"#
+        ),
+    );
+    let judged = team(repo, &home, Some(&t.writer), &["check", "--main-line", "--json"]);
+    let answer: serde_json::Value = serde_json::from_slice(&judged.stdout).unwrap();
+    let theirs = answer["findings"].as_array().unwrap().iter().any(|f| f["ref"] == "req:main-only");
+    assert!(answer["new"] == serde_json::json!(2) && !theirs, "judged against the truth alone, the proposal only an advisory: {}", text(&judged));
+    tool("withdraw_ticket", &format!(r#"{{"ref":"{other}","decision":{{"text":"Filed only to show the main line ignores it."}}}}"#));
     let filed = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
     let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
     tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
@@ -2292,7 +2308,7 @@ fn a_server_project_keeps_its_store_in_a_copy_and_runs_no_token() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line", "crates/cli/src/check#bottle", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
+/// {"test": "the-main-line-sends-its-recipes-to-a-teams-site", "checks": ["crates/cli/src/team#sends-recipes", "crates/cli/src/check#check-main-line-sends-recipes", "crates/cli/src/check#check-main-line-says-what-it-did", "crates/cli/src/check#check-main-line-says-recipes-not-taken", "crates/cli/src/check#check-main-line-exit", "crates/cli/src/check#bottle", "crates/server/src/http#recipes", "req:recipe-main-line-snapshot"]}
 /// ```
 #[test]
 fn the_main_line_sends_its_recipes_to_a_teams_site() {
@@ -2313,7 +2329,9 @@ fn the_main_line_sends_its_recipes_to_a_teams_site() {
     assert!(!t.origin.store.join("recipes.json").exists());
     // With a write token: sent, without their files, and said on standard error under --json.
     let sent = team(repo, &ci, Some(&t.writer), &["check", "--main-line", "--json"]);
-    assert!(String::from_utf8_lossy(&sent.stderr).contains("it holds 2") && serde_json::from_slice::<serde_json::Value>(&sent.stdout).is_ok(), "{}", text(&sent));
+    let findings: serde_json::Value = serde_json::from_slice(&sent.stdout).unwrap();
+    assert!(String::from_utf8_lossy(&sent.stderr).contains("it holds 2"), "{}", text(&sent));
+    assert_eq!(sent.status.success(), findings["new"] == 0, "it exits as the check would on its findings: {}", text(&sent));
     let record = held();
     let ids: Vec<&str> = record["recipes"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["button", "icon"]);
@@ -2373,6 +2391,62 @@ fn the_main_line_sends_its_recipes_to_a_teams_site() {
     assert!(code == 200 && button.contains("How to use button.") && !button.contains("src/a.rs"), "{button}");
 }
 
+/// # Test contract
+///
+/// ```json
+/// {"test": "main-line-check-passes-though-recipes-not-taken", "checks": ["crates/cli/src/check#check-main-line-exit"]}
+/// ```
+#[test]
+fn the_main_line_check_is_not_failed_by_recipes_the_server_did_not_take() {
+    use std::io::Write;
+    let t = team_fixture(None);
+    let (_, intent) = http(t.port, &format!("GET /api/export HTTP/1.0\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\n\r\n", t.reader));
+    // A server with the same intent that takes the prune and knows no route for recipes, as an older one.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let head = read_request(&mut stream);
+            let (status, body) = if head.starts_with("GET /api/export") {
+                (200, intent.clone())
+            } else if head.starts_with("POST /api/prune") {
+                (200, r#"{"pruned":0}"#.to_string())
+            } else {
+                (404, r#"{"error":"not_found","message":"no such route"}"#.to_string())
+            };
+            let _ = stream.write_all(format!("HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+        }
+    });
+    let other = uninitialised();
+    let home = other.dir.join("home");
+    assert!(team(&other.repo, &home, None, &["init", "--server", &address]).status.success());
+    let check = team(&other.repo, &home, Some(&t.writer), &["check", "--main-line"]);
+    assert!(text(&check).contains("did not take the main line's recipes"), "the recipes were not taken, and it says so: {}", text(&check));
+    assert!(text(&check).contains("pruned 0") && check.status.success(), "and the check is not failed by it: {}", text(&check));
+}
+
+/// One request read whole from `stream`: its head and body as text.
+fn read_request(stream: &mut std::net::TcpStream) -> String {
+    use std::io::Read;
+    let mut got = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = stream.read(&mut chunk).unwrap_or(0);
+        got.extend_from_slice(&chunk[..n]);
+        let text = String::from_utf8_lossy(&got).to_string();
+        let Some((head, body)) = text.split_once("\r\n\r\n") else {
+            if n == 0 {
+                return text;
+            }
+            continue;
+        };
+        let wanted: usize = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").and_then(|v| v.trim().parse().ok())).unwrap_or(0);
+        if body.len() >= wanted || n == 0 {
+            return text;
+        }
+    }
+}
+
 /// One raw HTTP exchange with a daemon: the status and the body.
 fn http(port: u16, request: &str) -> (u16, String) {
     use std::io::{Read, Write};
@@ -2388,7 +2462,7 @@ fn http(port: u16, request: &str) -> (u16, String) {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prunes-from-the-main-line", "crates/cli/src/check#bottle"]}
+/// {"test": "a-build-that-cannot-read-a-language-does-not-prune", "checks": ["crates/cli/src/team#prune-unreadable-language-sends-nothing", "crates/cli/src/check#bottle"]}
 /// ```
 #[test]
 fn a_build_that_cannot_read_a_language_does_not_prune() {
@@ -2420,7 +2494,7 @@ fn a_build_that_cannot_read_a_language_does_not_prune() {
 /// # Test contract
 ///
 /// ```json
-/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src/check#check-names-a-ticket", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-named-check-fails"]}
+/// {"test": "a-pipeline-checks-a-tickets-code-against-its-proposal", "checks": ["crates/cli/src/check#check-ticket-judges-its-proposal", "crates/cli/src/check#check-ticket-refused-when-not-live", "crates/cli/src/check#check-ticket-refused-when-intent-unreadable", "crates/cli/src/check#check-defaults-to-current-ticket", "crates/cli/src/team#copy-read-when-away", "crates/cli/src/team#copy-named-check-fails"]}
 /// ```
 #[test]
 fn a_pipeline_checks_a_tickets_code_against_its_proposal() {

@@ -681,7 +681,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-decision-is-a-node-references-name", "checks": ["crates/core/src/graph#decision-node", "crates/core/src/graph#decision-supersedes-edge", "crates/core/src/graph#decision-unbottled-no-node", "crates/core/src/graph#decision-title", "crates/core/src/graph#decision-not-found", "crates/core/src/lint#dangling-edge"]}
+    /// {"test": "a-decision-is-a-node-references-name", "checks": ["crates/core/src/graph#decision-node", "crates/core/src/graph#decision-supersedes-edge", "crates/core/src/graph#decision-unbottled-no-node", "crates/core/src/graph#decision-title", "crates/core/src/graph#decision-not-found", "crates/core/src/lint#dangling-edge-reported"]}
     /// ```
     #[test]
     fn a_decision_is_a_node_references_name() {

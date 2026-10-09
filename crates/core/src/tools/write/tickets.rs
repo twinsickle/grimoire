@@ -662,7 +662,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "unnamed-is-only-this-tickets-own-work", "checks": ["crates/core/src/fingerprint#unnamed", "crates/core/src/tools/write/tickets#untouched", "crates/core/src/tools/state#advisories"]}
+    /// {"test": "unnamed-is-only-this-tickets-own-work", "checks": ["crates/core/src/fingerprint#unnamed", "crates/core/src/tools/write/tickets#untouched", "crates/core/src/tools/state#set-base", "crates/core/src/tools/state#base-fingerprints"]}
     /// ```
     #[test]
     fn unnamed_is_only_this_tickets_own_work() {
@@ -779,7 +779,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-brew-names-a-ticket-still-simmering-here", "checks": ["crates/core/src/tools/write/tickets#brew-waiting", "crates/core/src/ops/tickets#waits-here", "crates/core/src/tools/state#advisories"]}
+    /// {"test": "a-brew-names-a-ticket-still-simmering-here", "checks": ["crates/core/src/tools/write/tickets#brew-waiting", "crates/core/src/ops/tickets#waits-here", "crates/core/src/tools/state#lint-mended"]}
     /// ```
     #[test]
     fn a_brew_names_a_ticket_still_simmering_here() {

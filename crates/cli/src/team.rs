@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the grimoire address the project names or the one given with --server, asks the server there with it before keeping it, and keeps it in the person's credentials file under that address, so each grimoire of a server is signed in to on its own; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"copy-synced-first","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first."},{"id":"copy-read-when-away","statement":"When the server does not answer and the checkout holds a copy, a command on a project that names a server reads the copy, saying on standard error that the server was not reached and when the copy was fetched."},{"id":"copy-named-check-fails","statement":"A check that names a ticket fails rather than read a copy it could not fetch now, or one a daemon beside it cannot say is current."},{"id":"copy-none-or-refused","statement":"A command on a project that names a server, with no copy, or a token the server refuses, fails."},{"id":"copy-daemon-asked","statement":"When the daemon serving the checkout holds the lock, a command on a project that names a server asks that daemon what it knows of the server and says the same, failing when the server refused the token."},{"id":"copy-never-prunes","statement":"A command on a project that names a server never prunes the baseline."},{"id":"read-now","statement":"read_now fetches the server's intent into memory and joins it with the checkout's code, reading and writing nothing of the checkout's copy, and answers it with the digest that names the intent it read; it fails when the server cannot be reached or refuses the token."},{"id":"prunes-from-the-main-line","statement":"prune_from_main_line lints the checkout against the server's truth as read_now gives it and sends the server every finding it produced with the digest of that intent, over POST /api/prune; when the server answers that the intent moved since, and only then, it reads it again and sends again, up to three tries, failing after the third; it answers the intent and code it last judged, the one the prune was sent against, with how many baseline entries went or why the prune failed: sending nothing when a configured language is one the build cannot read, or the server refusing it otherwise or not answering; it fails outright only when the intent cannot be read."},{"id":"sends-recipes","statement":"send_recipes sends the server every recipe the graph it is given reads, each by its id, kind, title, text, ingredients by id and what each says, uses and digest, and nothing of its files, its file or its line, over POST /api/recipes, and answers how many the server holds, or why it was not taken: the server refusing it, an older one knowing no such route among them, or not answering."},{"id":"through-the-server","statement":"tool, adopt and bottle on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
+//! {"purpose":"What a command does on a project that names a team's server: sign a person in and out, open the checkout's copy of the server's intent with the checkout's code, and run a tool through the server.","criteria":[{"id":"login","statement":"login takes a token from --token, else from standard input, for the grimoire address the project names or the one given with --server, asks the server there with it before keeping it, and keeps it in the person's credentials file under that address, so each grimoire of a server is signed in to on its own; a token the server refuses, a server that does not answer or an empty token keeps nothing and fails; logout removes the kept token and says so when there was none."},{"id":"copy-synced-first","statement":"A command on a project that names a server, with no daemon serving the checkout's copy, takes the copy's lock when it can and syncs the copy from the server first."},{"id":"copy-read-when-away","statement":"When the server does not answer and the checkout holds a copy, a command on a project that names a server reads the copy, saying on standard error that the server was not reached and when the copy was fetched."},{"id":"copy-named-check-fails","statement":"A check that names a ticket fails rather than read a copy it could not fetch now, or one a daemon beside it cannot say is current."},{"id":"copy-none-or-refused","statement":"A command on a project that names a server, with no copy, or a token the server refuses, fails."},{"id":"copy-daemon-asked","statement":"When the daemon serving the checkout holds the lock, a command on a project that names a server asks that daemon what it knows of the server and says the same, failing when the server refused the token."},{"id":"copy-never-prunes","statement":"A command on a project that names a server never prunes the baseline."},{"id":"read-now","statement":"read_now fetches the server's intent into memory and joins it with the checkout's code, reading and writing nothing of the checkout's copy, and answers it with the digest that names the intent it read; it fails when the server cannot be reached or refuses the token."},{"id":"prune-sends-findings-with-digest","statement":"prune_from_main_line lints the checkout against the server's truth as read_now gives it and sends the server every finding it produced with the digest of that intent, over POST /api/prune."},{"id":"prune-retried-when-intent-moved","statement":"prune_from_main_line, when the server answers that the intent moved since, and only then, reads it again and sends again, up to three tries, failing after the third."},{"id":"prune-answers-what-it-judged","statement":"prune_from_main_line answers the intent and code it last judged, the one the prune was sent against, with how many baseline entries went or why the prune failed."},{"id":"prune-unreadable-language-sends-nothing","statement":"prune_from_main_line sends nothing when a configured language is one the build cannot read, and answers why the prune failed."},{"id":"prune-refused-says-why","statement":"prune_from_main_line answers why the prune failed when the server refuses it otherwise than as the intent having moved, or does not answer."},{"id":"prune-fails-outright-only-when-intent-unreadable","statement":"prune_from_main_line fails outright only when the intent cannot be read."},{"id":"sends-recipes","statement":"send_recipes sends the server every recipe the graph it is given reads, each by its id, kind, title, text, ingredients by id and what each says, uses and digest, and nothing of its files, its file or its line, over POST /api/recipes, and answers how many the server holds, or why it was not taken: the server refusing it, an older one knowing no such route among them, or not answering."},{"id":"through-the-server","statement":"tool, adopt and bottle on a project that names a server run on the daemon serving the checkout's copy when there is one; otherwise a read tool answers over the copy with the checkout's code, and a write tool goes through the server under the copy's lock, refused when another process holds the lock, and refused as store_unavailable when the server does not answer."}]}
 //! ```
 
 use std::io::BufRead;
@@ -309,7 +309,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-prune-is-tried-again-only-when-the-intent-moved", "checks": ["crates/cli/src/team#prunes-from-the-main-line"]}
+    /// {"test": "a-prune-is-tried-again-only-when-the-intent-moved", "checks": ["crates/cli/src/team#prune-retried-when-intent-moved"]}
     /// ```
     #[test]
     fn a_prune_is_tried_again_only_when_the_intent_moved() {
@@ -340,5 +340,73 @@ mod tests {
         assert!(moved(&json!({ "error": "conflict", "message": "the intent moved since the main line read it: read it again and send the prune again" })));
         assert!(!moved(&json!({ "error": "conflict", "message": "only a shared daemon takes a prune from the main line" })));
         assert!(!moved(&json!({ "error": "invalid", "message": "the intent moved" })));
+    }
+
+    /// One request read whole from `stream`: its head and body as text.
+    fn read_request(stream: &mut std::net::TcpStream) -> String {
+        use std::io::Read;
+        let mut got = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            let n = stream.read(&mut chunk).unwrap_or(0);
+            got.extend_from_slice(&chunk[..n]);
+            let text = String::from_utf8_lossy(&got).to_string();
+            let Some((head, body)) = text.split_once("\r\n\r\n") else {
+                if n == 0 {
+                    return text;
+                }
+                continue;
+            };
+            let wanted: usize = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").and_then(|v| v.trim().parse().ok())).unwrap_or(0);
+            if body.len() >= wanted || n == 0 {
+                return text;
+            }
+        }
+    }
+
+    /// A server that answers the intent it is asked for and, to a prune, answers `prune` as a status
+    /// and body, or nothing at all: the connection closed. Its address.
+    fn serving(prune: Option<(u16, &'static str)>) -> String {
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let intent = serde_json::to_string(&grimoire_core::export::exported(&grimoire_core::Store::default())).unwrap();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let head = read_request(&mut stream);
+                let (status, body) = if head.starts_with("GET /api/export") {
+                    (200, intent.clone())
+                } else if let Some((status, body)) = prune {
+                    (status, body.to_string())
+                } else {
+                    continue; // asked to prune, it says nothing: the stream is dropped
+                };
+                let reply = format!("HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                let _ = stream.write_all(reply.as_bytes());
+            }
+        });
+        address
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "a-prune-the-server-does-not-take-says-why", "checks": ["crates/cli/src/team#prune-refused-says-why"]}
+    /// ```
+    #[test]
+    fn a_prune_the_server_does_not_take_says_why() {
+        let repo = tempfile::tempdir().unwrap();
+        let try_prune = |address: String| {
+            let team = Team { address: address.clone(), repo: repo.path().to_path_buf(), copy: repo.path().join("copy") };
+            prune_from_main_line(&team, &Server::new(&address, Some("t".into()))).map(|line| line.pruned)
+        };
+        // Refused otherwise than as the intent having moved: the reason it gave.
+        let refused = try_prune(serving(Some((409, r#"{"error":"conflict","message":"only a shared daemon takes a prune from the main line"}"#)))).expect("a refusal is answered, not failed");
+        let said = refused.unwrap_err().to_string();
+        assert!(said.contains("refused the prune") && said.contains("only a shared daemon takes a prune"), "{said}");
+        // The server does not answer the prune: why, not a failure of the whole.
+        let silent = try_prune(serving(None)).expect("a server that does not answer is answered, not failed");
+        let said = silent.unwrap_err().to_string();
+        assert!(said.starts_with("the baseline was not pruned: "), "{said}");
     }
 }

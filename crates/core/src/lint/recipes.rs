@@ -115,7 +115,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-use-its-kind-may-not-make", "checks": ["crates/core/src/lint/recipes#use-not-allowed", "crates/core/src/lint#dangling-edge"]}
+    /// {"test": "a-use-its-kind-may-not-make", "checks": ["crates/core/src/lint/recipes#use-not-allowed", "crates/core/src/lint#dangling-edge-reported"]}
     /// ```
     #[test]
     fn a_use_its_kind_may_not_make() {

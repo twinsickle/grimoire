@@ -445,7 +445,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-start-is-run-as-its-caller", "checks": ["crates/server/src/daemon#who-calls", "crates/server/src/remote#intent-digest"]}
+    /// {"test": "a-start-is-run-as-its-caller", "checks": ["crates/server/src/daemon#who-calls", "crates/server/src/remote#intent-digest-ignores-checkouts"]}
     /// ```
     #[test]
     fn a_start_is_run_as_its_caller() {
