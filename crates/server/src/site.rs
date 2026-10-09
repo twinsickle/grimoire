@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"renders","statement":"Each page of the site renders as one self-contained HTML document with no script: the site's name, linking /, above a list of every page of the site in order, indented by depth, linking each at /<slug>, then the page's title, its body as Markdown with raw HTML shown as escaped text, a link kept only to somewhere on the site, a page, the catalog, a recipe or an anchor on the same page, and any other link or image shown as its text, and each requirement it links by title, statement and scenarios; its browser title is the page's title then the site's name; every text from the store is escaped, and an empty site renders a page saying the project shows nothing yet; while the site holds any recipe, the list of pages ends with a link to the catalog, a page lists the recipes it links after its requirements, each linking its address, each with any anchor kept; on a recipe's page the catalog's link is marked current."},{"id":"recipe-pages","statement":"The catalog renders every recipe grouped under its kind, each by its title linking /recipes/<id>, with the first paragraph of its prose as Markdown and a mark when it is due; a recipe's page renders its title, its kind, when it was last judged and whether it held or was updated, or that it never was, whether it is due, its prose as Markdown as a body is, each ingredient by its id and what it says under the anchor of its id, and the recipes it uses and those that use it, each linking its address; nothing of its files is rendered, and every text is escaped."},{"id":"only-the-site","statement":"The site's router answers GET (and so HEAD) / with the first page of the site, /<slug> with that page when it is in the site, /recipes/ with the catalog, and /recipes too unless the site holds a page recipes, which it then answers, and /recipes/<id> with that recipe when the code holds it, and every other path and method with 404, so nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."},{"id":"library-site","statement":"router_in serves, as router does, the site of the grimoire a library holds by the name given, looked up as each request arrives, so a grimoire taken or let go after it started is followed; while the library holds none by that name, every path answers 404 with a page saying that grimoire is not served here."}]}
+//! {"purpose":"Serve the project's site: how it is meant to be used, rendered from the truth at each request as plain HTML on an address of its own, with nothing else served there.","criteria":[{"id":"page-is-one-document-with-no-script","statement":"Each page of the site renders as one self-contained HTML document with no script."},{"id":"page-lists-every-page","statement":"A page renders the site's name, linking /, above a list of every page of the site in order, indented by depth, linking each at /<slug>."},{"id":"page-shows-title-body-requirements","statement":"A page renders, after that list, the page's title, its body as Markdown, and each requirement it links by title, statement and scenarios."},{"id":"raw-html-shown-as-text","statement":"A page's body shows raw HTML as escaped text."},{"id":"links-stay-on-the-site","statement":"A page's body keeps a link only to somewhere on the site, a page, the catalog, a recipe or an anchor on the same page, each with any anchor kept, and shows any other link or image as its text."},{"id":"browser-title","statement":"A page's browser title is the page's title then the site's name."},{"id":"every-text-is-escaped","statement":"Every text from the store is escaped in a page."},{"id":"empty-site-says-so","statement":"An empty site renders a page saying the project shows nothing yet."},{"id":"catalog-link-ends-the-list","statement":"While the site holds any recipe, the list of pages ends with a link to the catalog."},{"id":"page-lists-its-recipes","statement":"A page lists the recipes it links after its requirements, each linking its address."},{"id":"catalog-link-current-on-a-recipe","statement":"On a recipe's page the catalog's link is marked current."},{"id":"catalog-renders-every-recipe","statement":"The catalog renders every recipe grouped under its kind, each by its title linking /recipes/<id>, with the first paragraph of its prose as Markdown and a mark when it is due."},{"id":"recipe-page-renders-its-state","statement":"A recipe's page renders its title, its kind, when it was last judged and whether it held or was updated, or that it never was, and whether it is due."},{"id":"recipe-page-renders-prose-and-ingredients","statement":"A recipe's page renders its prose as Markdown as a body is, and each ingredient by its id and what it says under the anchor of its id."},{"id":"recipe-page-links-what-it-uses","statement":"A recipe's page renders the recipes it uses and those that use it, each linking its address."},{"id":"recipe-pages-render-nothing-of-files","statement":"Nothing of a recipe's files is rendered in the catalog or on its page."},{"id":"recipe-pages-escape-every-text","statement":"Every text of the catalog and of a recipe's page is escaped."},{"id":"site-serves-its-pages","statement":"The site's router answers GET (and so HEAD) / with the first page of the site, and /<slug> with that page when it is in the site."},{"id":"site-serves-its-recipes","statement":"The site's router answers /recipes/ with the catalog, and /recipes too unless the site holds a page recipes, which it then answers, and /recipes/<id> with that recipe when the code holds it."},{"id":"site-answers-nothing-else","statement":"The site's router answers every other path and method with 404."},{"id":"nothing-but-the-site-is-served","statement":"Nothing but the site is served on its address, no API, event stream, MCP or builder's UI, and no caller is asked for a token."},{"id":"library-site","statement":"router_in serves, as router does, the site of the grimoire a library holds by the name given, looked up as each request arrives, so a grimoire taken or let go after it started is followed; while the library holds none by that name, every path answers 404 with a page saying that grimoire is not served here."}]}
 //! ```
 
 use std::sync::Arc;
@@ -370,7 +370,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "a-site-page-renders-what-it-says-and-runs-nothing", "checks": ["crates/server/src/site#renders"]}
+    /// {"test": "a-site-page-renders-what-it-says-and-runs-nothing", "checks": ["crates/server/src/site#page-is-one-document-with-no-script", "crates/server/src/site#page-lists-every-page", "crates/server/src/site#page-shows-title-body-requirements", "crates/server/src/site#raw-html-shown-as-text", "crates/server/src/site#links-stay-on-the-site", "crates/server/src/site#browser-title", "crates/server/src/site#every-text-is-escaped", "crates/server/src/site#empty-site-says-so"]}
     /// ```
     #[test]
     fn a_site_page_renders_what_it_says_and_runs_nothing() {
@@ -402,7 +402,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-catalog-and-a-recipe-render-what-they-say", "checks": ["crates/server/src/site#recipe-pages", "crates/server/src/site#renders"]}
+    /// {"test": "the-catalog-and-a-recipe-render-what-they-say", "checks": ["crates/server/src/site#catalog-renders-every-recipe", "crates/server/src/site#recipe-page-renders-its-state", "crates/server/src/site#recipe-page-renders-prose-and-ingredients", "crates/server/src/site#recipe-page-links-what-it-uses", "crates/server/src/site#recipe-pages-escape-every-text", "crates/server/src/site#catalog-link-ends-the-list", "crates/server/src/site#page-lists-its-recipes", "crates/server/src/site#catalog-link-current-on-a-recipe"]}
     /// ```
     #[test]
     fn the_catalog_and_a_recipe_render_what_they_say() {
@@ -462,7 +462,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-recipes-are-served-at-their-addresses", "checks": ["crates/server/src/site#only-the-site", "req:site"]}
+    /// {"test": "the-recipes-are-served-at-their-addresses", "checks": ["crates/server/src/site#site-serves-its-recipes", "crates/server/src/site#site-answers-nothing-else", "req:site"]}
     /// ```
     #[tokio::test]
     async fn the_recipes_are_served_at_their_addresses() {
@@ -559,7 +559,83 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-site-serves-its-pages-and-nothing-else", "checks": ["crates/server/src/site#only-the-site", "crates/server/src#site-listener"]}
+    /// {"test": "a-recipe-renders-none-of-its-files", "checks": ["crates/server/src/site#recipe-pages-render-nothing-of-files"]}
+    /// ```
+    #[tokio::test]
+    async fn a_recipe_renders_none_of_its_files() {
+        use grimoire_core::model::{Page, Reference, Scope, StoreConfig};
+        use grimoire_core::Store;
+        let tmp = tempfile::Builder::new().prefix("grimoire-site-").tempdir().unwrap();
+        let repo = tmp.path().join("repo");
+        std::fs::create_dir_all(repo.join("ui")).unwrap();
+        // A recipe naming two files that exist, one of which holds a phrase no page may show.
+        let text = "# BUTTON
+
+A button.
+
+## Recipe
+
+```json
+{\"id\":\"button\",\"kind\":\"component\",\"ingredients\":[{\"id\":\"label\",\"says\":\"The text.\"}],\"files\":[\"ui/button.ts\",\"ui/button.css\"],\"uses\":[]}
+```
+";
+        std::fs::write(repo.join("ui").join("button.recipe.md"), text).unwrap();
+        std::fs::write(
+            repo.join("ui").join("button.ts"),
+            "export const secretSourceLine = 1;
+",
+        )
+        .unwrap();
+        std::fs::write(
+            repo.join("ui").join("button.css"),
+            ".secret-style-rule {}
+",
+        )
+        .unwrap();
+        let dir = tmp.path().join("store");
+        let config = StoreConfig {
+            large_file: None,
+            plain_file: None,
+            site: vec!["goal".into()],
+            version: StoreConfig::CURRENT_VERSION,
+            repository: repo.to_string_lossy().replace('\\', "/"),
+            roots: vec!["overview".into()].into(),
+            languages: vec![],
+            scope: Scope::default(),
+            order: Default::default(),
+            recipe_kinds: Default::default(),
+        };
+        let mut store = Store::new(config);
+        for (slug, links) in [("overview", vec!["page:goal"]), ("goal", vec!["recipe:button"])] {
+            store
+                .pages
+                .insert(slug.into(), Page { slug: slug.into(), title: slug.to_uppercase(), body: format!("The {slug} page."), links: links.iter().map(|l| l.parse::<Reference>().unwrap()).collect() });
+        }
+        crate::store_io::write_all(&dir, &store, false).unwrap();
+        let daemon = Arc::new(Daemon::open(&dir).unwrap().0);
+        let at = crate::serve_site(router(daemon), "127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let get = move |path: &'static str| {
+            tokio::task::spawn_blocking(move || {
+                let agent: ureq::Agent = ureq::Agent::config_builder().http_status_as_error(false).build().into();
+                let mut r = agent.get(&format!("http://{at}{path}")).call().unwrap();
+                (r.status().as_u16(), r.body_mut().read_to_string().unwrap_or_default())
+            })
+        };
+        for path in ["/recipes/", "/recipes/button"] {
+            let (status, html) = get(path).await.unwrap();
+            assert_eq!(status, 200, "{path}");
+            // The recipe itself is there, so the absence of its files is not an empty page.
+            assert!(html.contains("BUTTON"), "{path}: {html}");
+            for file in ["ui/button.ts", "button.ts", "ui/button.css", "button.css", "button.recipe.md", "secretSourceLine", "secret-style-rule"] {
+                assert!(!html.contains(file), "{path} renders {file}: {html}");
+            }
+        }
+    }
+
+    /// # Test contract
+    ///
+    /// ```json
+    /// {"test": "the-site-serves-its-pages-and-nothing-else", "checks": ["crates/server/src/site#site-serves-its-pages", "crates/server/src/site#site-answers-nothing-else", "crates/server/src/site#nothing-but-the-site-is-served", "crates/server/src#site-listener"]}
     /// ```
     #[tokio::test]
     async fn the_site_serves_its_pages_and_nothing_else() {

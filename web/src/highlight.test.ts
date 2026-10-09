@@ -33,7 +33,7 @@ test("plain gives one untoned line per line, a contract's JSON left as written",
  * # Test contract
  *
  * ```json
- * {"test": "highlight-gives-lines-of-tokens", "checks": ["web/src/highlight#lines-of-tokens"]}
+ * {"test": "highlight-gives-lines-of-tokens", "checks": ["web/src/highlight#grammar-imported-on-first-use", "web/src/highlight#one-line-of-tokens-per-line", "web/src/highlight#only-a-line-feed-ends-a-line", "web/src/highlight#token-tone-is-innermost-scope", "web/src/highlight#tone-kept-across-lines", "web/src/highlight#contract-json-highlighted-as-json", "web/src/highlight#one-line-contract-json-laid-out", "web/src/highlight#unclosed-fence-stays-comment", "web/src/highlight#tsx-read-with-tsx-grammar", "web/src/highlight#no-grammar-comes-back-plain", "web/src/highlight#tokens-are-read-no-html-made"]}
  * ```
  */
 test("highlighting gives one line of tokens per line, tones carried across line breaks", async () => {
@@ -147,7 +147,7 @@ test("highlighting gives one line of tokens per line, tones carried across line 
  * # Test contract
  *
  * ```json
- * {"test": "each-language-has-its-grammar", "checks": ["web/src/highlight#lines-of-tokens"]}
+ * {"test": "each-language-has-its-grammar", "checks": ["web/src/highlight#one-line-of-tokens-per-line", "web/src/highlight#token-tone-is-innermost-scope", "web/src/highlight#htl-read-with-html-grammar", "web/src/highlight#languages-with-a-grammar", "web/src/highlight#contract-json-highlighted-as-json"]}
  * ```
  */
 test("each language the extractor reads is toned by its own grammar", async () => {

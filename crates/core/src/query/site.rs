@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site","statement":"site is named by the title of the config's grimoire root page when it exists, and lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go; it gives in full only the page asked for, else the first, and none for a page not in the site: its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."},{"id":"recipes","statement":"site and recipe read the recipes the graph holds, or, given the main line's recipes, those alone, each as a recipe read with no files; site lists every recipe as the catalog, ordered by kind, then title, then id, each with its id, title, kind, the first paragraph of its text that is not a heading, and whether it is due, and gives with the page shown the recipes it links that exist, an ingredient's link placing its recipe, each once, in link order; recipe gives one recipe in full by its id, none for an id no recipe has: its id, title, kind and text, its ingredients each by id and what it says, the recipes it uses that exist in the order it names them and those that use it ordered by title, its last judgement's date and outcome when it has one, and whether it is due, and nothing of its files, file or line."}]}
+//! {"purpose":"Gather the project's site from the graph: the pages the store's site setting names, every page beneath each, and their requirements' statements and scenarios, and nothing else.","criteria":[{"id":"site-named-by-root","statement":"site is named by the title of the config's grimoire root page when it exists."},{"id":"site-lists-pages","statement":"site lists the pages the config's site setting names that exist, those the roots' links reach first in the order the roots link them and the rest after in the order named, each followed depth first by every page it links, each page once, with its slug, title and depth beneath the named page it came under, however deep the pages go."},{"id":"site-shows-one-page","statement":"site gives in full only the page asked for, else the first, and none for a page not in the site."},{"id":"shown-page-holds-only-what-is-said","statement":"The page site gives in full holds its slug, title and body and the requirements it links that exist and are not retired, in link order, each with its slug, title, statement and scenarios, and nothing else: no decision, module, criterion or ticket."},{"id":"recipes-from-graph-or-main-line","statement":"site and recipe read the recipes the graph holds, or, given the main line's recipes, those alone, each as a recipe read with no files."},{"id":"site-lists-the-catalog","statement":"site lists every recipe as the catalog, ordered by kind, then title, then id, each with its id, title, kind, the first paragraph of its text that is not a heading, and whether it is due."},{"id":"site-gives-linked-recipes","statement":"site gives with the page shown the recipes it links that exist, an ingredient's link placing its recipe, each once, in link order."},{"id":"recipe-gives-one-in-full","statement":"recipe gives one recipe in full by its id, none for an id no recipe has: its id, title, kind and text, its ingredients each by id and what it says, the recipes it uses that exist in the order it names them and those that use it ordered by title, its last judgement's date and outcome when it has one, and whether it is due."},{"id":"recipe-gives-nothing-of-its-files","statement":"recipe gives nothing of its files, file or line."}]}
 //! ```
 
 use std::collections::HashSet;
@@ -243,7 +243,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-site-is-the-named-pages-and-what-is-beneath", "checks": ["crates/core/src/query/site#site"]}
+    /// {"test": "the-site-is-the-named-pages-and-what-is-beneath", "checks": ["crates/core/src/query/site#site-named-by-root", "crates/core/src/query/site#site-lists-pages", "crates/core/src/query/site#site-shows-one-page", "crates/core/src/query/site#shown-page-holds-only-what-is-said"]}
     /// ```
     #[test]
     fn the_site_is_the_named_pages_and_what_is_beneath() {
@@ -313,7 +313,7 @@ mod tests {
     /// # Test contract
     ///
     /// ```json
-    /// {"test": "the-catalog-is-every-recipe-and-a-recipe-is-what-it-says", "checks": ["crates/core/src/query/site#recipes"]}
+    /// {"test": "the-catalog-is-every-recipe-and-a-recipe-is-what-it-says", "checks": ["crates/core/src/query/site#recipes-from-graph-or-main-line", "crates/core/src/query/site#site-lists-the-catalog", "crates/core/src/query/site#site-gives-linked-recipes", "crates/core/src/query/site#recipe-gives-one-in-full", "crates/core/src/query/site#recipe-gives-nothing-of-its-files"]}
     /// ```
     #[test]
     fn the_catalog_is_every_recipe_and_a_recipe_is_what_it_says() {

@@ -47,7 +47,7 @@ test("each finding, advisory and omen marks the node it is about, and an edge's 
  * # Test contract
  *
  * ```json
- * {"test": "marks-gravest-first", "checks": ["web/src/marks#gravest-first"]}
+ * {"test": "marks-gravest-first", "checks": ["web/src/marks#marks-kept-gravest-first", "web/src/marks#border-takes-gravest-colour"]}
  * ```
  */
 test("a node's marks are gravest first, and its border takes the gravest's colour", () => {
@@ -74,7 +74,7 @@ function tree(ref: string, ...children: Tree[]): Tree {
  * # Test contract
  *
  * ```json
- * {"test": "outline-cut-to-trouble", "checks": ["web/src/marks#trouble-only"]}
+ * {"test": "outline-cut-to-trouble", "checks": ["web/src/marks#trouble-only-cuts-the-outline", "web/src/marks#outside-outline-names-marked-nodes"]}
  * ```
  */
 test("the outline is cut to marked nodes and those holding one, and the marked nodes it lacks are named", () => {

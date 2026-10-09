@@ -55,7 +55,7 @@ const rail = "nav[aria-label='Pages']";
  * # Test contract
  *
  * ```json
- * {"test": "three-views-and-nothing-else", "checks": ["web/src/App#three-views"]}
+ * {"test": "three-views-and-nothing-else", "checks": ["web/src/App#grimoire-routes", "web/src/App#old-addresses-redirect", "web/src/App#own-address-is-the-library", "web/src/App#own-address-forwards-to-default", "web/src/App#store-alone-at-own-address"]}
  * ```
  */
 test("the three views are served, a page is the grimoire, and nothing else", async ({ page }) => {
@@ -131,7 +131,7 @@ test("the three views are served, a page is the grimoire, and nothing else", asy
  * # Test contract
  *
  * ```json
- * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#three-views", "web/src/App#where-you-are", "web/src/api#grimoire-base"]}
+ * {"test": "a-grimoire-of-the-library-at-its-own-address", "checks": ["web/src/App#links-stay-under-the-grimoire", "web/src/App#where-you-are", "web/src/api#grimoire-base"]}
  * ```
  */
 test("a grimoire of the library is read at its own address, and the header lists its checkouts alone", async ({ page }) => {
@@ -186,7 +186,7 @@ test("a grimoire of the library is read at its own address, and the header lists
  * # Test contract
  *
  * ```json
- * {"test": "the-shelf-rail-leads-to-every-project", "checks": ["web/src/views/Library#shelf-rail", "web/src/App#three-views"]}
+ * {"test": "the-shelf-rail-leads-to-every-project", "checks": ["web/src/views/Library#shelf-rail", "web/src/App#views-beside-the-shelf-rail"]}
  * ```
  */
 test("the shelf rail beside every page of a grimoire leads to the Library and to each project, shelf by shelf", async ({ page }) => {
@@ -273,7 +273,7 @@ test("the shelf rail beside every page of a grimoire leads to the Library and to
  * # Test contract
  *
  * ```json
- * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#three-views", "web/src/App#where-you-are"]}
+ * {"test": "the-library-stacks-the-machines-grimoires", "checks": ["web/src/views/Library#stacks", "web/src/views/Library#spine-opens", "web/src/views/Library#jingle", "web/src/App#own-address-is-the-library", "web/src/App#where-you-are"]}
  * ```
  */
 test("the Library stands the machine's grimoires in a stack for each place they come from, each spine opening its grimoire", async ({ page }) => {
@@ -494,7 +494,7 @@ test("\"It's almost magic\" shows where a whole view has nothing yet, and nowher
  * # Test contract
  *
  * ```json
- * {"test": "one-tab-is-lit", "checks": ["web/src/App#lit-tab"]}
+ * {"test": "one-tab-is-lit", "checks": ["web/src/App#tabs-are-grimoire-and-cauldron", "web/src/App#exactly-one-tab-lit", "web/src/App#tab-lit-by-view", "web/src/App#tab-lit-on-a-node-page"]}
  * ```
  */
 test("exactly one tab is lit, following the section a node was reached from", async ({ page }) => {
@@ -522,7 +522,7 @@ test("exactly one tab is lit, following the section a node was reached from", as
  * # Test contract
  *
  * ```json
- * {"test": "header-tells-new-from-inherited", "checks": ["web/src/App#header-findings"]}
+ * {"test": "header-tells-new-from-inherited", "checks": ["web/src/App#header-pill-shows-new", "web/src/App#header-panel-counts", "web/src/App#header-counts-open-findings"]}
  * ```
  */
 test("the header shows new findings as a warning and inherited ones dimmed", async ({ page }) => {
@@ -633,7 +633,7 @@ test("a node's page says its own findings under its title, new as a warning and 
  * # Test contract
  *
  * ```json
- * {"test": "the-graph-marks-where-trouble-sits", "checks": ["web/src/views/NodeGraph#marked", "web/src/views/Marks#mark-shapes", "web/src/views/Marks#legend", "req:web-findings-on-graph"]}
+ * {"test": "the-graph-marks-where-trouble-sits", "checks": ["web/src/views/NodeGraph#box-carries-a-mark-dot-per-kind", "web/src/views/NodeGraph#box-border-is-mark-border", "web/src/views/NodeGraph#box-name-ends-with-its-marks", "web/src/views/NodeGraph#legend-shown-above-the-graph", "web/src/views/Marks#mark-dot-draws-each-kind", "web/src/views/Marks#mark-dot-title-says-reasons", "web/src/views/Marks#legend", "req:web-findings-on-graph"]}
  * ```
  */
 test("the graph marks each box with its node's trouble, its border in the gravest mark's colour, under a legend", async ({ page }) => {
@@ -678,7 +678,7 @@ test("the graph marks each box with its node's trouble, its border in the graves
  * # Test contract
  *
  * ```json
- * {"test": "the-findings-list", "checks": ["web/src/views/Findings#list", "req:web-findings-view"]}
+ * {"test": "the-findings-list", "checks": ["web/src/views/Findings#findings-counts-above-the-view", "web/src/views/Findings#list-groups-the-findings", "web/src/views/Findings#list-folds-inherited-and-omens", "web/src/views/Findings#findings-row-links-to-its-node", "req:web-findings-view"]}
  * ```
  */
 test("the findings view lists what fails the check first, then recipes due and other work, with the inherited and omens folded", async ({ page }) => {
@@ -720,7 +720,7 @@ test("the findings view lists what fails the check first, then recipes due and o
  * # Test contract
  *
  * ```json
- * {"test": "the-findings-tree-remembered", "checks": ["web/src/views/Findings#tree", "web/src/views/Findings#switch-remembered", "web/src/marks#trouble-only", "req:web-findings-view"]}
+ * {"test": "the-findings-tree-remembered", "checks": ["web/src/views/Findings#tree-draws-the-outline", "web/src/views/Findings#tree-shows-trouble-only-by-default", "web/src/views/Findings#tree-lists-what-the-outline-lacks", "web/src/views/Findings#pressing-a-row-selects-its-node", "web/src/views/Findings#selected-node-shown-beside-the-tree", "web/src/views/Findings#switch-remembered", "web/src/marks#trouble-only-cuts-the-outline", "web/src/marks#outside-outline-names-marked-nodes", "req:web-findings-view"]}
  * ```
  */
 test("the findings view reads as the marked tree, cut to where trouble is, and the browser remembers the choice", async ({ page }) => {
@@ -971,7 +971,7 @@ test("a page body is rendered as Markdown", async ({ page }) => {
  * # Test contract
  *
  * ```json
- * {"test": "a-recipes-page-and-where-it-is-placed", "checks": ["web/src/views/Node#content-then-graph", "web/src/views/Node#every-kind", "web/src/components#markdown-bodies", "web/src/views/Home#contracts-grouped", "web/src/views/Home#marks"]}
+ * {"test": "a-recipes-page-and-where-it-is-placed", "checks": ["web/src/views/Node#recipe-page-parts", "web/src/views/Node#ingredient-page-shows-its-recipe", "web/src/views/Node#every-kind", "web/src/components#markdown-bodies", "web/src/views/Home#page-lists-its-requirements", "web/src/views/Home#page-lists-the-recipes-it-places", "web/src/views/Home#requirement-shows-what-it-names"]}
  * ```
  */
 test("a recipe's page says what it is, then its graph, prose, ingredients and files; a page places it", async ({ page }) => {
@@ -1214,7 +1214,7 @@ test("the board keeps the tool's order, and a change is moved by dragging or fro
  * # Test contract
  *
  * ```json
- * {"test": "an-adopted-requirement-reads-as-described", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Home#marks"]}
+ * {"test": "an-adopted-requirement-reads-as-described", "checks": ["web/src/views/Node#adoption-marked", "web/src/views/Node#described-requirement-page-marked", "web/src/views/Home#described-requirement-marked", "web/src/views/Home#described-rollup-adds-a-bar"]}
  * ```
  */
 test("an adopted requirement reads as described, on its page and where a page lists it", async ({ page }) => {
@@ -1387,7 +1387,7 @@ test("the root shows the grimoire's own level: its body, its bars and its pages 
  * # Test contract
  *
  * ```json
- * {"test": "contracts-listed-once-by-area", "checks": ["web/src/views/Home#contracts-grouped"]}
+ * {"test": "contracts-listed-once-by-area", "checks": ["web/src/views/Home#page-body-rendered-with-bars", "web/src/views/Home#page-lists-each-module-once", "web/src/views/Home#long-body-folded-to-five-lines", "web/src/views/Home#files-and-declarations-not-shown"]}
  * ```
  */
 test("a page lists each module it links once, with its criteria beneath it", async ({ page }) => {
@@ -1547,7 +1547,7 @@ test("going from one page to another never shows the first under the second", as
  * # Test contract
  *
  * ```json
- * {"test": "marks-new-inherited-and-untested", "checks": ["web/src/views/Home#marks", "web/src/components#badge-tone", "req:web-badge-tone"]}
+ * {"test": "marks-new-inherited-and-untested", "checks": ["web/src/views/Home#rail-shows-findings-apart", "web/src/views/Home#criterion-marked-from-checks", "web/src/views/Home#requirement-shows-what-it-names", "web/src/components#badge-tone", "req:web-badge-tone"]}
  * ```
  */
 test("pages mark new findings apart from inherited ones, and criteria and requirements by what holds them", async ({ page }) => {
@@ -1640,7 +1640,7 @@ test("a ticket's page hands its next step to an agent, and starts and closes not
  * # Test contract
  *
  * ```json
- * {"test": "a-bottled-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/NodeGraph#centred"]}
+ * {"test": "a-bottled-tickets-gone-reference-is-marked", "checks": ["web/src/views/Node#stale-reference-marked", "web/src/views/NodeGraph#gone-reference-drawn-dimmed"]}
  * ```
  */
 test("a bottled ticket's reference that leads nowhere is drawn marked and not a link; an unbottled ticket's stays a link", async ({ page }) => {
@@ -1766,7 +1766,7 @@ test("a change dragged with the mouse into an empty band lands there and shows a
  * # Test contract
  *
  * ```json
- * {"test": "drill-down-ends-at-the-annotated-source", "checks": ["web/src/views/Source#annotated-source", "web/src/views/Node#content-then-graph"]}
+ * {"test": "drill-down-ends-at-the-annotated-source", "checks": ["web/src/views/Source#source-shows-numbered-lines", "web/src/views/Source#source-is-syntax-highlighted", "web/src/views/Source#long-lines-wrap", "web/src/views/Source#contract-json-laid-out-under-its-line", "web/src/views/Source#annotated-lines-link-their-nodes", "web/src/views/Source#line-anchor-scrolls-and-marks", "web/src/views/Node#pages-link-to-their-line", "web/src/views/Node#file-page-is-annotated-source"]}
  * ```
  */
 test("drilling down from a declaration ends at its line in the annotated source", async ({ page }) => {
@@ -1828,7 +1828,7 @@ test("drilling down from a declaration ends at its line in the annotated source"
  * # Test contract
  *
  * ```json
- * {"test": "a-file-waits-for-its-highlighting-and-falls-back-to-plain", "checks": ["web/src/views/Source#annotated-source"]}
+ * {"test": "a-file-waits-for-its-highlighting-and-falls-back-to-plain", "checks": ["web/src/views/Source#source-says-loading-until-highlighted", "web/src/views/Source#source-plain-when-grammar-fails", "web/src/views/Source#annotated-lines-link-their-nodes", "web/src/views/Source#line-anchor-scrolls-and-marks"]}
  * ```
  */
 test("a file says Loading until it is highlighted, and is shown plain when the highlighter cannot load", async ({ page }) => {
@@ -1856,7 +1856,7 @@ test("a file says Loading until it is highlighted, and is shown plain when the h
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/NodeGraph#centred"]}
+ * {"test": "a-ticket-page-draws-its-graph", "checks": ["web/src/views/NodeGraph#graph-draws-what-it-rests-on-to-the-right", "web/src/views/NodeGraph#box-is-a-link-naming-how-it-connects"]}
  * ```
  */
 test("a ticket's page draws what it rests on, and a node in the graph opens its page", async ({ page }) => {
@@ -1881,7 +1881,7 @@ test("a ticket's page draws what it rests on, and a node in the graph opens its 
  * # Test contract
  *
  * ```json
- * {"test": "a-large-graph-folds-and-unfolds", "checks": ["web/src/views/NodeGraph#centred"]}
+ * {"test": "a-large-graph-folds-and-unfolds", "checks": ["web/src/views/NodeGraph#right-walk-over-forty-folded", "web/src/views/NodeGraph#fold-all-button-while-unfolded"]}
  * ```
  */
 test("a ticket resting on many nodes folds them into counts that unfold, and folds them again", async ({ page }) => {
@@ -1915,7 +1915,7 @@ test("a ticket resting on many nodes folds them into counts that unfold, and fol
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-resting-on-nothing-draws-no-graph", "checks": ["web/src/views/NodeGraph#centred"]}
+ * {"test": "a-ticket-resting-on-nothing-draws-no-graph", "checks": ["web/src/views/NodeGraph#no-graph-when-nothing-either-side"]}
  * ```
  */
 test("a ticket that rests on nothing, and that nothing rests on, draws no graph", async ({ page }) => {
@@ -2009,7 +2009,7 @@ test("a module outside the contract scope whose contract block cannot be read sh
  * # Test contract
  *
  * ```json
- * {"test": "a-node-page-is-what-it-is-then-its-graph", "checks": ["web/src/views/Node#content-then-graph", "web/src/views/NodeGraph#centred", "web/src/views/Node#draft-shown"]}
+ * {"test": "a-node-page-is-what-it-is-then-its-graph", "checks": ["web/src/views/Node#requirement-page-parts", "web/src/views/Node#module-page-parts", "web/src/views/Node#no-panel-of-edges", "web/src/views/NodeGraph#graph-draws-what-it-rests-on-to-the-right", "web/src/views/NodeGraph#graph-draws-what-rests-on-it-to-the-left", "web/src/views/NodeGraph#left-leaves-out-own-criteria-and-files", "web/src/views/NodeGraph#module-left-includes-requirements-behind-its-criteria", "web/src/views/NodeGraph#graph-read-through-a-proposal", "web/src/views/NodeGraph#box-is-a-link-naming-how-it-connects"]}
  * ```
  */
 test("a node's page is what it is, then its graph centred on it, then the rest it holds, and nothing else", async ({ page }) => {
@@ -2069,7 +2069,7 @@ test("a node's page is what it is, then its graph centred on it, then the rest i
  * # Test contract
  *
  * ```json
- * {"test": "a-large-file-is-shown-as-an-omen", "checks": ["web/src/views/Node#omens-shown", "web/src/views/Home#marks"]}
+ * {"test": "a-large-file-is-shown-as-an-omen", "checks": ["web/src/views/Node#omens-shown", "web/src/views/Home#omens-shown-apart"]}
  * ```
  */
 test("a file past the large-file limit is shown as an omen, dimmed and apart from the findings", async ({ page }) => {
@@ -2145,7 +2145,7 @@ test("a declaration's page links to its own file, though the file's name and the
  * # Test contract
  *
  * ```json
- * {"test": "a-requirement-shows-decisions-in-force", "checks": ["web/src/views/Node#decisions-in-force", "web/src/views/Node#content-then-graph"]}
+ * {"test": "a-requirement-shows-decisions-in-force", "checks": ["web/src/views/Node#decisions-in-force-newest-first", "web/src/views/Node#waiting-decision-marked", "web/src/views/Node#superseded-decisions-folded", "web/src/views/Node#retired-requirement-marked", "web/src/views/Node#requirement-page-parts", "web/src/views/Node#decision-page-parts"]}
  * ```
  */
 test("a requirement's page shows its decisions in force and folds the superseded ones; a retired one says so", async ({ page }) => {
@@ -2211,7 +2211,7 @@ test("a requirement's page shows its decisions in force and folds the superseded
  * # Test contract
  *
  * ```json
- * {"test": "a-ticket-lists-its-proposal-and-a-node-reads-as-proposed", "checks": ["web/src/views/Node#draft-shown"]}
+ * {"test": "a-ticket-lists-its-proposal-and-a-node-reads-as-proposed", "checks": ["web/src/views/Node#ticket-page-lists-its-proposal", "web/src/views/Node#node-opened-with-ticket-reads-as-proposed", "web/src/views/Node#node-names-tickets-that-would-change-it"]}
  * ```
  */
 test("a brewing ticket lists what it proposes, and a node page reads it as proposed", async ({ page }) => {
@@ -2245,7 +2245,7 @@ test("a brewing ticket lists what it proposes, and a node page reads it as propo
  * # Test contract
  *
  * ```json
- * {"test": "an-edit-to-another-ticket-is-shown-as-proposed", "checks": ["web/src/views/Node#draft-shown", "web/src/views/Board#ticket-in-place"]}
+ * {"test": "an-edit-to-another-ticket-is-shown-as-proposed", "checks": ["web/src/views/Node#ticket-page-lists-its-proposal", "web/src/views/Node#node-names-tickets-that-would-change-it", "web/src/views/Board#ticket-in-place"]}
  * ```
  */
 test("a ticket another proposes to edit is named on its page and in the cauldron, and listed in the proposal", async ({ page }) => {
@@ -2582,4 +2582,469 @@ test("who has a ticket checked out is shown on its row and its page, and not on 
   await page.goto("/g/repo/n/ticket%3A0006");
   await expect(main.locator("p").first()).toBeVisible();
   await expect(main.locator("[data-checked-out]")).toHaveCount(0);
+});
+
+/** Each locator is on the page and lower than the one before it. */
+async function inOrder(...parts: Locator[]) {
+  const tops: number[] = [];
+  for (const part of parts) {
+    await expect(part).toBeVisible();
+    tops.push((await part.boundingBox())!.y);
+  }
+  tops.forEach((y, i) => i > 0 && expect(y, `part ${i} sits below part ${i - 1}: ${tops.join(", ")}`).toBeGreaterThan(tops[i - 1]));
+}
+
+/** A colour of the theme as the browser computes it: the colour of text, or of a border, given the classes that draw it. */
+async function computed(page: Page, classes: string, of: "color" | "borderTopColor"): Promise<string> {
+  return page.evaluate(
+    ([c, prop]) => {
+      const probe = document.createElement("div");
+      probe.className = c;
+      document.body.append(probe);
+      const rgb = getComputedStyle(probe)[prop as "color"];
+      probe.remove();
+      return rgb;
+    },
+    [classes, of],
+  );
+}
+
+/** The lint answer with findings of the spec's own added, each new, as the header counts them. */
+async function lintAlso(page: Page, refs: string[]) {
+  await page.route("**/api/lint", async (route) => {
+    const response = await route.fetch();
+    const answer = await response.json();
+    const own = refs.map((ref) => ({ rule: "dangling", check: "dangling-edge", ref, reason: "a mark the spec added", baselined: false }));
+    await route.fulfill({ response, json: { ...answer, findings: [...answer.findings, ...own], new: answer.new + own.length } }).catch(() => {});
+  });
+}
+
+/** The node's page with `extra` added to what rests on it, as an answer of more links would give it. */
+async function restedOnBy(page: Page, ref: string, extra: { ref: string; relation: string; title: string }[]) {
+  await page.route("**/api/get", async (route) => {
+    if (route.request().postDataJSON().ref !== ref) return route.continue();
+    const answer = await (await route.fetch()).json();
+    answer.node.in = [...answer.node.in, ...extra];
+    await route.fulfill({ json: answer }).catch(() => {});
+  });
+}
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-bare-address-goes-where-status-last-said", "checks": ["web/src/App#status-answer-remembered"]}
+ * ```
+ */
+test("a bare address goes where status last said it went", async ({ page }) => {
+  // Never told: the bare address stays, and the view says the daemon is not answering.
+  await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+  await page.goto("/cauldron");
+  await expect(page.locator("main")).toContainText("The daemon is not answering");
+  expect(new URL(page.url()).pathname).toBe("/cauldron");
+  // Told once, status's answer is kept in the browser.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await page.goto("/cauldron");
+  await expect(page).toHaveURL(/\/g\/repo\/cauldron$/);
+  await expect(page.locator("section[id^='band-']").first()).toBeVisible();
+  // Away again, the same bare address goes to the grimoire it went to before.
+  await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+  await page.goto("/cauldron");
+  await expect(page).toHaveURL(/\/g\/repo\/cauldron$/);
+  await expect(page.locator("main")).toContainText("The daemon is not answering");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-tab-lit-follows-the-view-opened", "checks": ["web/src/App#exactly-one-tab-lit", "web/src/App#tab-lit-by-view"]}
+ * ```
+ */
+test("one tab is lit: Cauldron on its own address and cold tickets", async ({ page }) => {
+  const lit = page.locator("header nav [aria-current='page']");
+  for (const [path, tab] of [
+    ["/g/repo/cauldron", "Cauldron"],
+    ["/g/repo/n/ticket%3A0006", "Cauldron"],
+    ["/g/repo/n/ticket%3A0004", "Cauldron"],
+    ["/g/repo/findings", "Grimoire"],
+    ["/g/repo/unplaced", "Grimoire"],
+  ] as const) {
+    await page.goto(path);
+    await expect(lit, path).toHaveCount(1);
+    await expect(lit, path).toContainText(tab);
+    await expect(page.locator("header nav a").filter({ hasText: tab === "Cauldron" ? "Grimoire" : "Cauldron" }), path).not.toHaveAttribute("aria-current", "page");
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-pill-shows-new-only-when-there-are-any", "checks": ["web/src/App#header-pill-shows-new"]}
+ * ```
+ */
+test("the header's pill says N new only while there are any", async ({ page }) => {
+  const pill = page.locator("header button[aria-label^='Where you are']");
+  const lint = await tool<{ new: number }>(page, "lint");
+  expect(lint.new, "the fixture has new findings").toBeGreaterThan(0);
+  await page.goto("/g/repo/cauldron");
+  const said = pill.getByText(`${lint.new} new`, { exact: true });
+  await expect(said).toBeVisible();
+  await expect(said).toHaveCSS("color", "rgb(224, 108, 117)");
+  // Every finding inherited: the answer's new is 0, and the pill says nothing of it.
+  await page.route("**/api/lint", async (route) => {
+    const response = await route.fetch();
+    const answer = await response.json();
+    await route.fulfill({ response, json: { ...answer, new: 0, findings: answer.findings.map((f: object) => ({ ...f, baselined: true })) } }).catch(() => {});
+  });
+  const answered = page.waitForResponse((r) => r.url().endsWith("/api/lint"));
+  await page.goto("/g/repo/cauldron");
+  await answered;
+  await expect(page.locator("section[id^='band-']").first()).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(pill).toBeVisible();
+  await expect(pill.getByText(/\bnew\b/)).toHaveCount(0);
+  await expect(pill).not.toHaveAttribute("aria-label", /\bnew\b/);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-page-shows-the-pages-it-links-as-cards", "checks": ["web/src/views/Home#page-links-shown-as-cards"]}
+ * ```
+ */
+test("a page shows the pages it links as cards", async ({ page }) => {
+  for (const ref of ["page:architecture", "page:handbook"]) {
+    const links = (await tool<{ node: { links: string[] } }>(page, "get", { ref })).node.links.filter((l) => l.startsWith("page:"));
+    expect(links.length, ref).toBeGreaterThan(0);
+    await page.goto(`/g/repo/n/${encodeURIComponent(ref)}`);
+    await expect(page.locator("#pages"), ref).toBeVisible();
+    expect(await linkedRefs(page, "#pages"), ref).toEqual(links);
+  }
+  // A card holds its page's title and its first paragraph.
+  await page.goto("/g/repo/n/page%3Aarchitecture");
+  const card = page.locator("#pages a[href='/g/repo/n/page%3Areadiness']");
+  await expect(card).toContainText("Readiness");
+  await expect(card.locator("p")).not.toHaveText("");
+  // A page that links no page has no cards.
+  await page.goto("/g/repo/n/page%3Agoal");
+  await expect(page.locator("main h1")).toHaveText("Goal");
+  await expect(page.locator("#pages")).toHaveCount(0);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-rite-says-it-is-held-by-the-work", "checks": ["web/src/views/Home#rite-says-held-by-the-work"]}
+ * ```
+ */
+test("a rite says it is held by the work, and no other does", async ({ page }) => {
+  const listed = page.locator("#requirements li");
+  await page.goto("/g/repo/n/page%3Areadiness");
+  await expect(listed.first()).toBeVisible();
+  const reqs = await listed.count();
+  expect(reqs).toBeGreaterThan(1);
+  await expect(page.locator("#requirements").getByText("held by the work")).toHaveCount(0);
+  // The outline marks the requirements of the page as the rites'.
+  await page.route("**/api/outline", async (route) => {
+    const response = await route.fetch();
+    const answer = await response.json();
+    const mark = (t: { ref: string; rites?: boolean; children: unknown[] }) => {
+      if (t.ref.startsWith("req:")) t.rites = true;
+      (t.children as (typeof t)[]).forEach(mark);
+    };
+    answer.roots.forEach(mark);
+    await route.fulfill({ response, json: answer }).catch(() => {});
+  });
+  await page.goto("/g/repo/n/page%3Areadiness");
+  await expect(listed).toHaveCount(reqs);
+  for (const row of await listed.all()) {
+    await expect(row.getByText("held by the work", { exact: true })).toBeVisible();
+    await expect(row).not.toContainText("uncovered");
+  }
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-mark-chip-is-bad-for-new-and-dim-for-the-rest", "checks": ["web/src/views/Marks#mark-chip-names-a-mark"]}
+ * ```
+ */
+test("a mark's chip is in the bad colour for new, dim for the rest", async ({ page }) => {
+  await page.goto("/g/repo/");
+  const bad = await computed(page, "text-bad", "color");
+  const dim = await computed(page, "text-fg-dim", "color");
+  const line = await computed(page, "border border-line", "borderTopColor");
+  expect(bad).toBe("rgb(224, 108, 117)");
+  expect(dim).not.toBe(bad);
+  const chipOf = (name: string) => page.locator("[aria-label='Trouble here'] li").getByText(name, { exact: true }).first();
+  await page.goto("/g/repo/n/req%3Aready-names-its-errors");
+  const fresh = chipOf("new");
+  await expect(fresh).toBeVisible();
+  await expect(fresh).toHaveCSS("color", bad);
+  await expect(fresh).toHaveCSS("border-top-color", bad);
+  for (const [path, name] of [
+    ["module:src/loose", "inherited"],
+    ["req:ready-writes-nothing", "may conflict"],
+    ["file:src/ready.rs", "omen"],
+  ]) {
+    await page.goto(`/g/repo/n/${encodeURIComponent(path)}`);
+    const chip = chipOf(name);
+    await expect(chip, name).toBeVisible();
+    await expect(chip, name).toHaveCSS("color", dim);
+    await expect(chip, name).toHaveCSS("border-top-color", line);
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "trouble-comes-between-the-title-and-what-the-node-is", "checks": ["web/src/views/Node#trouble-said-under-the-title"]}
+ * ```
+ */
+test("trouble in words sits under the title, above what it is", async ({ page }) => {
+  const trouble = page.locator("[aria-label='Trouble here']");
+  // A requirement: its statement is what it is.
+  const req = await tool<{ node: { statement: string } }>(page, "get", { ref: "req:ready-names-its-errors" });
+  await page.goto("/g/repo/n/req%3Aready-names-its-errors");
+  await inOrder(page.locator("main h1"), trouble, page.locator("main").getByText(req.node.statement, { exact: true }).last());
+  // A module with no contract: the error it shows about its contract is what it is.
+  await page.goto("/g/repo/n/module%3Asrc%2Floose");
+  await inOrder(page.locator("main h1"), trouble, page.locator("main").getByText(/^Contract: /));
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-ticket-page-is-its-status-graph-body-decision-step-proposal", "checks": ["web/src/views/Node#ticket-page-parts"]}
+ * ```
+ */
+test("a ticket's page parts come in their order", async ({ page }) => {
+  const ticket = (await tool<{ node: { priority: string; kind: string; status: string; body: string; decision: { text: string } } }>(page, "get", { ref: "ticket:0011" })).node;
+  expect(ticket.status, "the fixture's simmering ticket").toBe("simmering");
+  await page.goto("/g/repo/n/ticket%3A0011");
+  const main = page.locator("main");
+  const lead = main.locator("p").filter({ hasText: ticket.priority }).filter({ hasText: ticket.kind }).filter({ hasText: ticket.status }).first();
+  await expect(lead).toHaveText(new RegExp(`${ticket.priority}\\s*·\\s*${ticket.kind}\\s*·\\s*${ticket.status}`, "i"));
+  await inOrder(
+    lead,
+    main.getByRole("region", { name: "Graph" }),
+    main.getByText(ticket.body, { exact: true }),
+    main.getByText(ticket.decision.text),
+    main.getByRole("heading", { name: "Next step" }),
+    main.getByRole("heading", { name: "Proposed" }),
+  );
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-criterion-page-is-its-statement-and-place-then-its-graph", "checks": ["web/src/views/Node#criterion-page-parts"]}
+ * ```
+ */
+test("a criterion's page is its statement and place, then graph", async ({ page }) => {
+  const ref = "criterion:src/ready#needs-commit";
+  const node = (await tool<{ node: { statement: string } }>(page, "get", { ref })).node;
+  const written = await tool<{ file: string; line: number }>(page, "module_source", { ref });
+  await page.goto(`/g/repo/n/${encodeURIComponent(ref)}`);
+  const main = page.locator("main");
+  const title = main.locator("h1");
+  await expect(title).toHaveText(node.statement);
+  const where = main.locator("p").filter({ hasText: /^In / });
+  await expect(where.getByRole("link", { name: "src/ready", exact: true })).toHaveAttribute("href", "/g/repo/n/module%3Asrc%2Fready");
+  const place = where.getByRole("link", { name: `${written.file}:${written.line}` });
+  await expect(place).toHaveAttribute("href", `/g/repo/n/${encodeURIComponent(`file:${written.file}`)}#L${written.line}`);
+  await inOrder(title, where, main.getByRole("region", { name: "Graph" }));
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-module-page-is-its-contract-and-place-graph-then-criteria", "checks": ["web/src/views/Node#module-page-parts"]}
+ * ```
+ */
+test("a module's page is contract and place, graph, criteria", async ({ page }) => {
+  const node = (await tool<{ node: { purpose: string; contract_at: [string, number]; criteria: { id: string; statement: string }[] } }>(page, "get", { ref: "module:src/ready" })).node;
+  expect(node.criteria.length).toBeGreaterThan(1);
+  await page.goto("/g/repo/n/module%3Asrc%2Fready");
+  const main = page.locator("main");
+  const title = main.locator("h1");
+  await expect(title).toHaveText(node.purpose);
+  const [file, line] = node.contract_at;
+  const where = main.locator("p").filter({ hasText: /^Contract at / });
+  await expect(where.getByRole("link", { name: `${file}:${line}` })).toHaveAttribute("href", `/g/repo/n/${encodeURIComponent(`file:${file}`)}#L${line}`);
+  const rows = node.criteria.map((c) => main.locator("h2:has-text('Criteria') + ul > li").filter({ has: page.getByRole("link", { name: `#${c.id}`, exact: true }) }));
+  await inOrder(title, where, main.getByRole("region", { name: "Graph" }), main.getByRole("heading", { name: "Criteria" }), ...rows);
+  for (const [i, c] of node.criteria.entries()) {
+    await expect(rows[i].getByRole("link", { name: `#${c.id}`, exact: true })).toHaveAttribute("href", `/g/repo/n/${encodeURIComponent(`criterion:src/ready#${c.id}`)}`);
+    await expect(rows[i]).toContainText(c.statement);
+  }
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-graph-marks-neither-a-gone-box-nor-a-folded-count", "checks": ["web/src/views/NodeGraph#gone-box-and-folded-count-carry-no-marks"]}
+ * ```
+ */
+test("a gone box and a folded count carry no marks", async ({ page }) => {
+  // Trouble found on the gone requirement and on 44 requirements folded into a count, and on the box beside each as the control.
+  await lintAlso(page, ["req:ready-old-name", "module:src/ready", "page:readiness", ...Array.from({ length: 44 }, (_, i) => `req:r${i}`)]);
+  await page.goto("/g/repo/n/ticket%3A0004");
+  const graph = page.getByRole("region", { name: "Graph" });
+  const gone = graph.locator("[data-gone='req:ready-old-name']");
+  await expect(gone).toBeVisible();
+  await expect(graph.locator("[data-graph-node='module:src/ready']")).toHaveAttribute("data-marks", "new");
+  await expect(gone.locator("[data-mark]")).toHaveCount(0);
+  await expect(gone).not.toHaveAttribute("data-marks", /./);
+  await expect(gone).not.toHaveAttribute("aria-label", /marked/);
+  // A walk of 46 folds its 44 requirements into a count.
+  const via = ["ticket:0006", "page:readiness"];
+  const nodes = [
+    { ref: "page:readiness", title: "Readiness", via: ["ticket:0006"], decisions: [] },
+    ...Array.from({ length: 44 }, (_, i) => ({ ref: `req:r${i}`, title: `Requirement ${i}`, via, decisions: [] })),
+  ];
+  await page.route("**/api/rests_on", async (route) => {
+    if (route.request().postDataJSON().depth !== undefined) return route.continue();
+    await route.fulfill({ json: { nodes } });
+  });
+  await page.goto("/g/repo/n/ticket%3A0006");
+  await expect(graph.locator("[data-graph-node='page:readiness']")).toHaveAttribute("data-marks", "new");
+  const count = graph.getByRole("button", { name: "Show the 44 requirements under Readiness" });
+  await expect(count).toBeVisible();
+  await expect(count.locator("[data-mark]")).toHaveCount(0);
+  await expect(count).not.toHaveAttribute("data-marks", /./);
+  // Unfolded, the same requirements are marked.
+  await count.click();
+  await expect(graph.locator("[data-graph-node='req:r0']")).toHaveAttribute("data-marks", "new");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "the-left-draws-only-tickets-being-worked", "checks": ["web/src/views/NodeGraph#left-tickets-only-those-being-worked"]}
+ * ```
+ */
+test("the left draws only tickets being worked or waited on", async ({ page }) => {
+  type Row = { ref: string; waits_on?: { ref: string }[] };
+  const board = await tool<{ tickets: Row[]; unattached: Row[] }>(page, "board", {});
+  const live = new Set([...board.tickets, ...board.unattached].flatMap((t) => [t.ref, ...(t.waits_on ?? []).map((w) => w.ref)]));
+  const node = (await tool<{ node: { in: { ref: string; relation: string }[] } }>(page, "get", { ref: "module:src/ready" })).node;
+  // Two tickets that are bottled, which the board does not list, added to what the answer says rests on the module.
+  const history = ["ticket:0004", "ticket:0010"];
+  expect(history.filter((t) => live.has(t)), "bottled tickets are not on the board").toEqual([]);
+  await restedOnBy(page, "module:src/ready", history.map((ref) => ({ ref, relation: "touches", title: `Bottled ${ref}` })));
+  const expected = node.in.filter((e) => e.ref.startsWith("ticket:") && live.has(e.ref)).map((e) => e.ref).sort();
+  expect(expected.length, "tickets being worked").toBeGreaterThan(1);
+  await page.goto("/g/repo/n/module%3Asrc%2Fready");
+  const graph = page.getByRole("region", { name: "Graph" });
+  await expect(graph.locator("[data-graph-node='req:ready-needs-commit']")).toBeVisible();
+  const fold = graph.getByRole("button", { name: /^Show the \d+ tickets resting on / });
+  if (await fold.count()) await fold.click();
+  await expect(graph.locator("[data-graph-node^='ticket:']").first()).toBeVisible();
+  await expect.poll(async () => (await graph.locator("[data-graph-node^='ticket:']").evaluateAll((as) => as.map((a) => a.getAttribute("data-graph-node") ?? ""))).sort()).toEqual(expected);
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-left-group-over-six-is-a-count-that-unfolds", "checks": ["web/src/views/NodeGraph#left-group-over-six-folded"]}
+ * ```
+ */
+test("on the left a group over six is a count that unfolds", async ({ page }) => {
+  const ref = "criterion:src/ready#reads-only";
+  const extra = [
+    ...Array.from({ length: 7 }, (_, i) => ({ ref: `req:many${i}`, relation: "covers", title: `Many ${i}` })),
+    ...Array.from({ length: 6 }, (_, i) => ({ ref: `page:few${i}`, relation: "links", title: `Few ${i}` })),
+  ];
+  await restedOnBy(page, ref, extra);
+  await page.goto(`/g/repo/n/${encodeURIComponent(ref)}`);
+  const graph = page.getByRole("region", { name: "Graph" });
+  const count = graph.getByRole("button", { name: /^Show the 7 requirements resting on / });
+  await expect(count).toBeVisible();
+  await expect(graph.locator("[data-graph-node^='req:many']")).toHaveCount(0);
+  // Six of a kind are drawn whole.
+  await expect(graph.locator("[data-graph-node^='page:few']")).toHaveCount(6);
+  await expect(graph.getByRole("button", { name: /^Show the 6 pages/ })).toHaveCount(0);
+  await count.click();
+  await expect(graph.locator("[data-graph-node^='req:many']")).toHaveCount(7);
+  await expect(count).toHaveCount(0);
+  await graph.getByRole("button", { name: "Fold all" }).click();
+  await expect(graph.locator("[data-graph-node^='req:many']")).toHaveCount(0);
+  await expect(graph.getByRole("button", { name: /^Show the 7 requirements resting on / })).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-file-keeps-its-last-lines-while-changed-text-is-highlighted", "checks": ["web/src/views/Source#source-keeps-last-lines-meanwhile"]}
+ * ```
+ */
+test("a file keeps its last lines while changed text is highlighted", async ({ page }) => {
+  let changed = false;
+  await page.route("**/api/source", async (route) => {
+    const response = await route.fetch();
+    const answer = await response.json();
+    await route.fulfill({ response, json: changed ? { ...answer, text: `${answer.text}// text-changed-meanwhile\n` } : answer }).catch(() => {});
+  });
+  await page.goto(`/g/repo/n/${encodeURIComponent("file:src/ready.rs")}`);
+  const region = page.getByRole("region", { name: "Source of src/ready.rs" });
+  await expect(region.locator("tr#L7")).toContainText("pub fn ready() -> bool");
+  await expect(region.locator("[data-tone]").first()).toBeVisible();
+  // From here the lines are watched: they must never be gone, nor the page say Loading.
+  await page.evaluate(() => {
+    const w = window as unknown as { __gaps: number };
+    w.__gaps = 0;
+    const seen = () => {
+      if (!document.querySelector("[role=region][aria-label='Source of src/ready.rs'] tr#L7") || document.body.innerText.includes("Loading…")) w.__gaps++;
+    };
+    new MutationObserver(seen).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  // Its text changes: the answer to the next source call has a line more, arriving with the event a write makes.
+  changed = true;
+  await tool(page, "inscribe_ticket", { title: "Written while the file is open", kind: "gap", priority: "later", touches: [], body: "Its event makes the file's page ask for its source again." });
+  await expect(region).toContainText("text-changed-meanwhile");
+  await expect(region.locator("tr#L7")).toContainText("pub fn ready() -> bool");
+  expect(await page.evaluate(() => (window as unknown as { __gaps: number }).__gaps), "the lines were gone for a moment").toBe(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+/**
+ * # Test contract
+ *
+ * ```json
+ * {"test": "a-proposal-marks-deletions-and-leaves-out-equal-records", "checks": ["web/src/views/Node#proposal-marks-deletions", "web/src/views/Node#proposal-leaves-out-equal-records"]}
+ * ```
+ */
+test("Proposed marks deletions and omits records equal to truth", async ({ page }) => {
+  // Last in the file, since the draft's proposal is read by earlier specs: a deletion, and a page proposed just as it is.
+  const goal = (await tool<{ node: { slug: string; title: string; body: string; links: string[] } }>(page, "get", { ref: "page:goal" })).node;
+  await tool(page, "put_page", { slug: goal.slug, title: goal.title, body: goal.body, links: goal.links, ticket: "0001" });
+  await tool(page, "delete_node", { ref: "page:runbook", ticket: "0001" });
+  await page.goto("/g/repo/n/ticket%3A0001");
+  const rows = page.locator("main h2:has-text('Proposed') + ul > li");
+  const deleted = rows.filter({ has: page.locator("a[href$='/n/page%3Arunbook']") });
+  await expect(deleted).toHaveCount(1);
+  await expect(deleted.getByText("to be deleted", { exact: true })).toBeVisible();
+  // The three records it proposes are not marked as deletions, and the record equal to the truth's is not listed.
+  await expect(rows.getByText("to be deleted")).toHaveCount(1);
+  await expect(rows).toHaveCount(4);
+  await expect(rows.filter({ has: page.locator("a[href$='/n/page%3Agoal']") })).toHaveCount(0);
 });
