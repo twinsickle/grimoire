@@ -1,7 +1,7 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, bottle, token, login, logout, scaffold, init, uninstall or tool.","criteria":[{"id":"token-add","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked."},{"id":"token-revoke","statement":"token revoke removes a token by name and fails when there is none."},{"id":"token-list","statement":"token list prints each name and what it may do."},{"id":"token-finds-store","statement":"token add, revoke and list each find their store as every command does, refusing a project that names a server unless --store names the store."},{"id":"token-own-lock","statement":"token add, revoke and list take the tokens' own lock, never the store's, so they work while a daemon serves."},{"id":"token-sent","statement":"A command run with GRIMOIRE_TOKEN set sends it to the daemon it calls."},{"id":"token-refused-says-so","statement":"A command the daemon refuses says so and does not go round the daemon."},{"id":"writes-through-daemon","statement":"tool, adopt, bottle and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-found","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it."},{"id":"store-found-server-copy","statement":"When the nearest .grimoire.toml names a server, a command's store is this checkout's copy of the server's intent."},{"id":"store-flag-resolved","statement":"A --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"lock-writers-hold","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and bottle for the call, init from creating or opening the store to adopting, and scaffold while it writes the store."},{"id":"lock-delete-holds","statement":"uninstall --delete-store, with no daemon serving the store, checks it once, lets a daemon's library release it, then takes the store's lock under the deletion queue's lock and holds it to the store's removal, checking again under it before anything is removed."},{"id":"lock-refused-writes-nothing","statement":"A command that writes the store and is refused the lock writes nothing, but uninstall --delete-store, which queues the deletion instead."},{"id":"lock-delete-queues","statement":"uninstall --delete-store queues the deletion when another holds the lock."},{"id":"lock-reads-take-none","statement":"Reads take no lock."},{"id":"lock-check-prunes-when-got","statement":"check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."}]}
+//! {"purpose":"Parse the command line and dispatch to serve, check, adopt, bottle, token, login, logout, scaffold, init, uninstall, export or tool.","criteria":[{"id":"token-add","statement":"token add makes a token for the store, prints it once and keeps its digest, read-only when asked."},{"id":"token-revoke","statement":"token revoke removes a token by name and fails when there is none."},{"id":"token-list","statement":"token list prints each name and what it may do."},{"id":"token-finds-store","statement":"token add, revoke and list each find their store as every command does, refusing a project that names a server unless --store names the store."},{"id":"token-own-lock","statement":"token add, revoke and list take the tokens' own lock, never the store's, so they work while a daemon serves."},{"id":"token-sent","statement":"A command run with GRIMOIRE_TOKEN set sends it to the daemon it calls."},{"id":"token-refused-says-so","statement":"A command the daemon refuses says so and does not go round the daemon."},{"id":"writes-through-daemon","statement":"tool, adopt, bottle and init run a tool on the daemon serving the store when there is one, and against the store directly only when there is not; on a project that names a server the store is the server's, and a write goes to it."},{"id":"store-found","statement":"Every command finds its store from --store, else from the nearest .grimoire.toml above the working directory, which names it."},{"id":"store-found-server-copy","statement":"When the nearest .grimoire.toml names a server, a command's store is this checkout's copy of the server's intent."},{"id":"store-flag-resolved","statement":"A --store is resolved as the project file is, a relative path against the project's repository (the working directory outside any project) and a bare name under the stores directory."},{"id":"repository-untouched","statement":"Only init writes into a repository, and only the integration: .grimoire.toml, the agent skill and its references for each harness, a marked section in CLAUDE.md and AGENTS.md, the MCP entry in .mcp.json and .codex/config.toml, a pre-commit hook and a post-commit hook; only uninstall takes it out again. Every other command reads it."},{"id":"lock-writers-hold","statement":"A command that writes the store with no daemon serving it takes the store's lock first and holds it to the end of its run: tool with a write tool, adopt and bottle for the call, init from creating or opening the store to adopting, and scaffold while it writes the store."},{"id":"lock-delete-holds","statement":"uninstall --delete-store, with no daemon serving the store, checks it once, lets a daemon's library release it, then takes the store's lock under the deletion queue's lock and holds it to the store's removal, checking again under it before anything is removed."},{"id":"lock-refused-writes-nothing","statement":"A command that writes the store and is refused the lock writes nothing, but uninstall --delete-store, which queues the deletion instead."},{"id":"lock-delete-queues","statement":"uninstall --delete-store queues the deletion when another holds the lock."},{"id":"lock-reads-take-none","statement":"Reads take no lock."},{"id":"export","statement":"export writes the intent of the command's store as handed_on gives it, as JSON, to --out or else standard output; on a project that names a server, the server's intent read now with who has each ticket checked out left out, or, when the server cannot be reached, the checkout's copy, opened as check opens it, saying so. It refuses, writing nothing, a store of its own holding a record that does not load, and an --out inside the repository or the store, and writes nothing into either; it writes the file beside --out and renames it over, so a link there is replaced, never written through."},{"id":"lock-check-prunes-when-got","statement":"check, a read, takes the lock before it loads and prunes the baseline only when it got it."},{"id":"serve-site-of","statement":"serve takes --site-of only beside --library and --site, refusing it otherwise before anything is served, and hands the name to the team's library server as the grimoire whose site is served."},{"id":"serve-a-server-project","statement":"serve on a project that names a server, with no --store, serves the checkout's copy of the server's intent, signed in with the person's token; with --shared and no --store it is refused."}]}
 //! ```
 
 mod check;
@@ -123,6 +123,10 @@ enum Command {
         /// read off the module contracts: for writing a grimoire from nothing.
         #[arg(long, conflicts_with = "server")]
         empty: bool,
+        /// Make the new store from an export, as `grimoire export` writes one,
+        /// rather than the skeleton: to take up a grimoire someone handed you.
+        #[arg(long, conflicts_with_all = ["server", "empty"])]
+        from: Option<PathBuf>,
     },
     /// Remove exactly what init wrote, and nothing of yours. The store is kept
     /// unless --delete-store is given.
@@ -174,6 +178,16 @@ enum Command {
         /// The grimoire's address on the server. Defaults to the one the project names.
         #[arg(long)]
         server: Option<String>,
+    },
+    /// Write this project's grimoire to one file, to hand to someone who will use
+    /// it with a store of their own: `grimoire init --from` takes it up. All of
+    /// its intent, open work included, but who has a ticket checked out.
+    Export {
+        #[arg(long)]
+        store: Option<String>,
+        /// The file to write. Standard output when not given.
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// Run one tool against the store and print its output: on the daemon
     /// serving the store when there is one, directly otherwise.
@@ -392,6 +406,71 @@ fn adopt(target: &Target, reason: &str, held: Option<&store_io::StoreLock>) -> a
     }
 }
 
+/// Write the intent of `target`'s store, as it is handed to a person, to
+/// `out` or standard output (req:grimoire-handed-on-as-a-file). A store of
+/// its own is read as it is; a team's is the server's intent read now, and
+/// this checkout's copy only when the server cannot be reached, saying so. A
+/// store with a record that does not load is not exported, since the file
+/// would hand on less than the grimoire holds; and `out` is never inside the
+/// repository or the store, which only init and the store's writer write.
+fn export(target: &Target, out: Option<&Path>) -> anyhow::Result<()> {
+    use grimoire_core::export::{handed_on, Exported};
+    // The folders the file may not be written into: the store, and every repository it is joined with.
+    let mut guarded = vec![target.store_dir.clone()];
+    guarded.extend(target.checkout.clone());
+    let exported: Exported = match &target.team {
+        Some(team) => {
+            guarded.push(team.repo.clone());
+            let server = team.server()?;
+            match server.export() {
+                Ok(intent) => Exported { checked_out: Default::default(), ..intent },
+                // Away, the copy last fetched, as any command reads it, saying so.
+                Err(grimoire_server::remote::RemoteError::Unreachable(..)) => handed_on(team::open(team, &server, false)?.loaded.state.store()),
+                Err(e) => return Err(e.into()),
+            }
+        }
+        None => {
+            let (store, malformed) = store_io::load(&target.store_dir)?;
+            if !malformed.is_empty() {
+                let which: Vec<String> = malformed.iter().map(|m| format!("{}: {}", m.path, m.reason)).collect();
+                bail!("store {} holds records that do not load, so an export would hand on less than it holds: {}", target.store_dir.display(), which.join("; "));
+            }
+            guarded.push(PathBuf::from(&store.config.repository));
+            handed_on(&store)
+        }
+    };
+    let text = serde_json::to_string_pretty(&exported)?;
+    let Some(path) = out else {
+        println!("{text}");
+        return Ok(());
+    };
+    let parent = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => cwd()?,
+    };
+    let at = parent.canonicalize().with_context(|| format!("{} does not exist", parent.display()))?;
+    if let Some(inside) = guarded.iter().filter_map(|d| d.canonicalize().ok()).find(|d| at.starts_with(d)) {
+        bail!("{} is inside {}: export writes nothing into a repository or a store; name a file outside it, or redirect standard output", path.display(), inside.display());
+    }
+    let Some(name) = path.file_name() else { bail!("{} names no file", path.display()) };
+    // Written beside it and renamed over it, so a link at that path is replaced, never written through.
+    let aside = at.join(format!(".{}.{}.part", name.to_string_lossy(), std::process::id()));
+    std::fs::write(&aside, format!("{text}\n")).with_context(|| format!("writing {}", aside.display()))?;
+    if let Err(e) = std::fs::rename(&aside, at.join(name)) {
+        let _ = std::fs::remove_file(&aside);
+        return Err(e).with_context(|| format!("writing {}", path.display()));
+    }
+    eprintln!(
+        "wrote {}: {} page(s), {} requirement(s) and {} ticket(s); `grimoire init --store <name> --from {}` takes it up",
+        path.display(),
+        exported.pages.len(),
+        exported.requirements.len(),
+        exported.tickets.len(),
+        path.display()
+    );
+    Ok(())
+}
+
 /// The repository as the store records it: its canonical path, slashed.
 fn canonical(p: &Path) -> anyhow::Result<String> {
     let c = p.canonicalize().with_context(|| format!("{} does not exist", p.display()))?;
@@ -489,7 +568,8 @@ fn main() -> anyhow::Result<()> {
             report_skeleton(&skeleton, &extraction, &store_dir);
             Ok(())
         }
-        Command::Init { repo, store, server, languages, port, name, empty } => init::command::run(repo, store, server, languages, port, name, empty),
+        Command::Init { repo, store, server, languages, port, name, empty, from } => init::command::run(repo, store, server, languages, port, name, empty, from),
+        Command::Export { store, out } => export(&target(store.as_deref())?, out.as_deref()),
         Command::Uninstall { repo, delete_store } => uninstall::uninstall(repo, delete_store),
         Command::Adopt { store, reason } => adopt(&target(store.as_deref())?, &reason, None),
         Command::Bottle { store, ticket } => check::bottle(&target(store.as_deref())?, ticket.as_deref()),

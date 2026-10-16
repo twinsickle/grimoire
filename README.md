@@ -22,7 +22,7 @@ A Cargo workspace and one web package.
 - `crates/core` — domain model, store, graph and queries, lints, scaffold, and the tool dispatcher. No I/O.
 - `crates/extract` — code extractor: tree-sitter parsing, module contracts, language adapters (Rust, TypeScript and JavaScript, Java) and a comment table for the languages read by their comments alone.
 - `crates/server` — the `grimoire serve` daemon: store I/O, watcher, JSON API, MCP over streamable HTTP, SSE.
-- `crates/cli` — the `grimoire` binary: `init`, `uninstall`, `serve`, `check`, `bottle`, `adopt`, `scaffold`, `tool`, and for a team `token`, `login` and `logout`.
+- `crates/cli` — the `grimoire` binary: `init`, `uninstall`, `serve`, `check`, `bottle`, `adopt`, `scaffold`, `export`, `tool`, and for a team `token`, `login` and `logout`.
 - `web` — React/Vite UI: the grimoire, the cauldron of tickets, the findings, a page for every node, and the Library of a machine's grimoires. Dark only. `npm run build` writes `web/dist`, which a release build embeds and `serve --ui-dir web/dist` serves.
 - `examples/` — per-project notes: what each target repository has, and how it is migrated.
 
@@ -65,6 +65,8 @@ grimoire serve --port 4242                       # the daemon: the UI, /api/<too
 grimoire bottle [<ticket>]                       # a change is on the main line: bottle its ticket (the post-commit hook runs it)
 grimoire adopt --reason <text>                   # accept the present findings as inherited, so the check fails only on new ones
 grimoire tool <name> '<json>'                    # one tool against the store: on the daemon serving it, else directly
+grimoire export [--out <file>]                   # the whole grimoire as one file, to hand to someone with no server
+grimoire init --store <name> --from <file>       # take one up: a store of your own made from that file
 ```
 
 A store lives under the platform data directory (`<data>/grimoire/stores/<name>`)

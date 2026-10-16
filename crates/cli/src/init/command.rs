@@ -1,12 +1,12 @@
 //! # Module contract
 //!
 //! ```json
-//! {"purpose":"Carry out the init command: name the grimoire, make or open its store under the store's lock, re-pointing it or adding this checkout, or name a team's server in its place, then write the project file, install the integration and adopt what the store holds.","criteria":[{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"repoint-moved","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store."},{"id":"repoint-adds-checkout","statement":"init on a store that records another repository, when the recorded repository still exists and this checkout's .grimoire.toml names this store, adds this checkout to the store's checkouts instead, itself under the lock or through the daemon serving the store, saying it did."},{"id":"repoint-other-store-refused","statement":"init on a store that records another repository, when the project file names another store, refuses with the reason and changes nothing."},{"id":"repoint-same-folder","statement":"The same folder spelt differently, by case or through a link, is this checkout, not a move."},{"id":"repoint-canonical","statement":"init records the repository as its canonical path, a share as //server/share."},{"id":"init-server-writes","statement":"init with --server writes .grimoire.toml naming the server, as its address is kept, and installs the integration, creating no store and adopting nothing."},{"id":"init-server-exclusive","statement":"init takes --store or --server and never both."},{"id":"init-server-bad-address","statement":"init refuses an address that is not one before writing anything."},{"id":"init-server-name","statement":"The grimoire init --server names is the one --name gives, else the one the address carries in /g/<name>, else the repository folder's."},{"id":"init-scaffolds","statement":"init, creating a store, writes into it the skeleton scaffold would write for the repository in the languages given, or with --empty a store whose roots are named and which holds no page, and says what it made, before adopting; a store that already exists is left as it is, and init with --server makes no store."}]}
+//! {"purpose":"Carry out the init command: name the grimoire, make or open its store under the store's lock, re-pointing it or adding this checkout, or name a team's server in its place, then write the project file, install the integration and adopt what the store holds.","criteria":[{"id":"init-adopts","statement":"init ends by adopting, with the reason adopted at init, when the store has no baseline yet, one it created or one scaffold made, so the hook it installs passes on the next commit, and prints how many findings it baselined; on a store that already has a baseline, a re-run or a moved checkout, it keeps that baseline as it is and says so."},{"id":"repoint-moved","statement":"init on a store that records another repository re-points it to this one, under the store's lock, saying it did, only when no folder is left at the recorded repository and this checkout's .grimoire.toml names this store."},{"id":"repoint-adds-checkout","statement":"init on a store that records another repository, when the recorded repository still exists and this checkout's .grimoire.toml names this store, adds this checkout to the store's checkouts instead, itself under the lock or through the daemon serving the store, saying it did."},{"id":"repoint-other-store-refused","statement":"init on a store that records another repository, when the project file names another store, refuses with the reason and changes nothing."},{"id":"repoint-same-folder","statement":"The same folder spelt differently, by case or through a link, is this checkout, not a move."},{"id":"repoint-canonical","statement":"init records the repository as its canonical path, a share as //server/share."},{"id":"init-server-writes","statement":"init with --server writes .grimoire.toml naming the server, as its address is kept, and installs the integration, creating no store and adopting nothing."},{"id":"init-server-exclusive","statement":"init takes --store or --server and never both."},{"id":"init-server-bad-address","statement":"init refuses an address that is not one before writing anything."},{"id":"init-server-name","statement":"The grimoire init --server names is the one --name gives, else the one the address carries in /g/<name>, else the repository folder's."},{"id":"init-scaffolds","statement":"init, creating a store, writes into it the skeleton scaffold would write for the repository in the languages given, or with --empty a store whose roots are named and which holds no page, or with --from the intent the export holds, and says what it made, before adopting; a store that already exists is left as it is, and init with --server makes no store."},{"id":"init-from","statement":"init --from makes the store from an export file, the intent it holds joined with this repository and no one's current ticket, refusing before anything is written a store that already exists, a file that is not an export and a store version this build does not write; it is never given beside --server or --empty."}]}
 //! ```
 
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use grimoire_core::scaffold;
 use grimoire_server::client;
 use grimoire_server::store_io::{self, deletions};
@@ -16,8 +16,9 @@ use super::{plan_install, Wrote};
 use crate::{adopt, canonical, checkout_view, cwd, report_skeleton, run_tool, skeleton, uninstall, write_whole_store, Target};
 
 /// Run `init`: a project naming a team's server, or one with a store of its own on this machine,
-/// made as the skeleton or empty, or taken up again, and adopted when it has no baseline yet.
-pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>, languages: Vec<String>, port: u16, name: Option<String>, empty: bool) -> anyhow::Result<()> {
+/// made as the skeleton, empty or from an export, or taken up again, and adopted when it has no baseline yet.
+#[allow(clippy::too_many_arguments)]
+pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>, languages: Vec<String>, port: u16, name: Option<String>, empty: bool, from: Option<PathBuf>) -> anyhow::Result<()> {
     let languages: Vec<String> = languages.iter().map(|l| l.trim().to_string()).collect();
     let repo = repo.unwrap_or(cwd()?);
     let repo_str = canonical(&repo)?;
@@ -33,6 +34,11 @@ pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>,
             _ => store_io::default_name(&repo),
         },
     };
+    // An export to make the store from, read and judged before anything is written (req:grimoire-handed-on-as-a-file).
+    if from.is_some() && (server.is_some() || empty) {
+        bail!("init --from makes a store of one's own from an export, so it is never given beside --server or --empty");
+    }
+    let from = from.map(|path| from_export(&path, &repo_str)).transpose()?;
     // An address that is not one stops init before anything is written.
     let server = server.as_deref().map(store_io::server_address).transpose().map_err(anyhow::Error::msg)?;
     // Everything init will write, worked out first: a file it cannot merge into stops it before the store or .grimoire.toml.
@@ -59,6 +65,10 @@ pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>,
     // Resolved as the project file it writes will resolve it, a relative path against the repository.
     let store_dir = store_io::store_for_repo(&store, &repo)?;
     store_io::refuse_inside(&store_dir, &repo)?;
+    // An export makes only a new store, never merged into one that exists.
+    if from.is_some() && store_dir.join(store_io::CONFIG_FILE).exists() {
+        bail!("store {} already exists, and init --from makes a new store from an export: name another store", store_dir.display());
+    }
     // Taken up again: a deletion queued for this store is cancelled before anything is written (req:store-deletion-queued).
     if deletions::cancel(&deletions::deletions_dir()?, &store_dir)? {
         println!("cancelled the queued deletion of store {}", store_dir.display());
@@ -67,7 +77,11 @@ pub fn run(repo: Option<PathBuf>, store: Option<String>, server: Option<String>,
     // The store's lock for the whole run, from creating the store to adopting, unless
     // a daemon serves it, which then takes init's one write, the adopt, itself.
     let created = !store_dir.join(store_io::CONFIG_FILE).exists();
-    let held = if created && empty {
+    let held = if let Some(handed) = from.as_ref().filter(|_| created) {
+        let lock = write_whole_store(&store_dir, handed, false)?;
+        println!("made store {} from the export: {} page(s), {} requirement(s) and {} ticket(s)", store_dir.display(), handed.pages.len(), handed.requirements.len(), handed.tickets.len());
+        Some(lock)
+    } else if created && empty {
         let empty = grimoire_core::Store::new(grimoire_core::StoreConfig {
             large_file: None,
             long_statement: None,
@@ -168,6 +182,15 @@ fn repoint_moved_store(store_dir: &Path, recorded: &str, repo: &Path, repo_str: 
     store_io::persist(store_dir, &store, &grimoire_core::ops::Changed::Config)?;
     println!("re-pointed store {} from {recorded}, which is gone, to {repo_str}", store_dir.display());
     Ok(())
+}
+
+/// The store an export file holds, joined with the repository `repo_str`
+/// and nothing of this machine's, so no ticket is anyone's current one here.
+fn from_export(path: &Path, repo_str: &str) -> anyhow::Result<grimoire_core::Store> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let exported: grimoire_core::export::Exported =
+        serde_json::from_str(text.trim_start_matches('\u{feff}')).with_context(|| format!("{} is not an export of a grimoire, as `grimoire export` writes one", path.display()))?;
+    exported.joined(&grimoire_core::Store::default(), repo_str).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))
 }
 
 /// Whether a daemon serving this machine's library answers on `port`: then a

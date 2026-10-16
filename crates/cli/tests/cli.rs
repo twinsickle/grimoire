@@ -3442,3 +3442,141 @@ version = \"0.1.0\"
     assert!(un.status.success(), "{}", text(&un));
     assert!(top.repo.join(".git/hooks/pre-commit").is_file() && top.repo.join(".git/hooks/post-commit").is_file(), "{}", text(&un));
 }
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-grimoire-is-handed-on-as-one-file", "checks": ["crates/cli/src#export", "crates/core/src/tools/write/tickets#takes-up-without-start", "crates/cli/src/init/command#init-from", "crates/cli/src/init/command#init-scaffolds", "req:grimoire-handed-on-as-a-file", "req:init-scaffolds"]}
+/// ```
+#[test]
+fn a_grimoire_is_handed_on_as_one_file() {
+    let (p, _) = project();
+    let tool = |name: &str, input: &str| {
+        let o = run(&p.repo, &["tool", name, input]);
+        assert!(o.status.success(), "{name}: {}", text(&o));
+        serde_json::from_slice::<serde_json::Value>(&o.stdout).unwrap()
+    };
+    // Work under way: a ticket brewing here, checked out by this person, its proposal holding a requirement.
+    let ticket = tool("inscribe_ticket", A_TICKET)["node"]["ref"].as_str().unwrap().to_string();
+    tool("brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#));
+    tool("put_requirement", r#"{"slug":"handed","title":"Handed","statement":"It SHALL be handed on.","scenarios":[{"title":"s","given":"g","when":"w","then":"t"}],"covered_by":[]}"#);
+    // Exported, the store and the repository are left as they were, the store's lock untaken.
+    let (store_before, repo_before) = (state(&p.store), state(&p.repo));
+    let file = p.dir.join("shop.json");
+    let exported = run(&p.repo, &["export", "--out", &file.to_string_lossy()]);
+    assert!(exported.status.success() && exported.stdout.is_empty(), "{}", text(&exported));
+    assert!(changed(&store_before, &state(&p.store)).is_empty() && changed(&repo_before, &state(&p.repo)).is_empty(), "export writes nothing but its file");
+    // Never into the repository or the store, whatever --out names.
+    for inside in [p.repo.join("shop.json"), p.repo.join(".grimoire.toml"), p.store.join("grimoire.json")] {
+        let refused = run(&p.repo, &["export", "--out", &inside.to_string_lossy()]);
+        assert!(!refused.status.success() && text(&refused).contains("export writes nothing into"), "{}", text(&refused));
+    }
+    // A link outside to a file inside is replaced, never written through.
+    let link = p.dir.join("linked.json");
+    std::fs::hard_link(p.repo.join(".grimoire.toml"), &link).unwrap();
+    assert!(run(&p.repo, &["export", "--out", &link.to_string_lossy()]).status.success());
+    assert!(std::fs::read_to_string(&link).unwrap().contains("\"tickets\""), "the link's path holds the export");
+    assert!(changed(&store_before, &state(&p.store)).is_empty() && changed(&repo_before, &state(&p.repo)).is_empty(), "the refusals and the link wrote nothing inside");
+    let written = std::fs::read_to_string(&file).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&written).unwrap();
+    assert!(value["tickets"].as_array().unwrap().iter().any(|t| format!("ticket:{}", t["slug"].as_str().unwrap()) == ticket), "{value}");
+    assert!(value["kept_proposals"].as_array().unwrap().iter().any(|p| p["requirements"].get("handed").is_some()), "the proposal travels: {value}");
+    assert!(value.get("baseline").is_some_and(|b| !b.is_null()));
+    for absent in ["checked_out", "repository", "current", "starts"] {
+        assert!(value.get(absent).is_none(), "nothing of a machine or a person: {absent} in {value}");
+    }
+    // With no --out, standard output is the export and nothing else.
+    let stdout = run(&p.repo, &["export"]);
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&stdout.stdout).unwrap(), value);
+
+    // Someone new takes it up in a clone with no store: one command.
+    let q = bare_repo();
+    let init = run(&q.repo, &["init", "--store", &q.store.to_string_lossy(), "--from", &file.to_string_lossy()]);
+    assert!(init.status.success() && text(&init).contains("from the export"), "{}", text(&init));
+    assert!(q.repo.join(".grimoire.toml").is_file() && q.store.join("baseline.json").is_file(), "named, installed and adopted");
+    let theirs = |name: &str, input: &str| serde_json::from_slice::<serde_json::Value>(&run(&q.repo, &["tool", name, input]).stdout).unwrap();
+    let got = theirs("get", &format!(r#"{{"ref":"{ticket}"}}"#));
+    assert_eq!(got["node"]["status"], "brewing", "{got}");
+    assert!(theirs("status", "{}")["current"].is_null(), "no one's current ticket here");
+    let config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(q.store.join("grimoire.json")).unwrap()).unwrap();
+    let ours = format!("{}/repo", q.dir.file_name().unwrap().to_string_lossy());
+    assert!(config["repository"].as_str().unwrap().ends_with(&ours), "this checkout is its repository: {config}");
+    let proposed = theirs("get", &format!(r#"{{"ref":"req:handed","ticket":"{ticket}"}}"#));
+    assert_eq!(proposed["node"]["title"], "Handed", "{proposed}");
+    // Taken up here with a brew: current, with a start of its own, and nothing of the ticket changed.
+    let brewed = run(&q.repo, &["tool", "brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]);
+    assert!(brewed.status.success(), "{}", text(&brewed));
+    assert_eq!(theirs("status", "{}")["current"]["id"], ticket.trim_start_matches("ticket:"));
+    assert_eq!(theirs("get", &format!(r#"{{"ref":"{ticket}"}}"#))["node"]["status"], "brewing");
+    assert!(theirs("get", &format!(r#"{{"ref":"req:handed","ticket":"{ticket}"}}"#))["node"]["title"] == "Handed", "its proposal kept");
+    // A store holding a record that does not load is not exported: the file would hand on less than it holds.
+    std::fs::write(q.store.join("pages").join("broken.json"), "{\"slug\":").unwrap();
+    let partial = run(&q.repo, &["export"]);
+    assert!(!partial.status.success() && partial.stdout.is_empty() && text(&partial).contains("do not load"), "{}", text(&partial));
+    std::fs::remove_file(q.store.join("pages").join("broken.json")).unwrap();
+
+    // Refused, before anything is written: a store that exists, a file that is no export, a newer build's, and beside --server or --empty.
+    let again = run(&q.repo, &["init", "--store", &q.store.to_string_lossy(), "--from", &file.to_string_lossy()]);
+    assert!(!again.status.success() && text(&again).contains("already exists"), "{}", text(&again));
+    let r = bare_repo();
+    let junk = r.dir.join("junk.json");
+    std::fs::write(&junk, "{\"pages\":3}").unwrap();
+    let not_one = run(&r.repo, &["init", "--store", &r.store.to_string_lossy(), "--from", &junk.to_string_lossy()]);
+    assert!(!not_one.status.success() && text(&not_one).contains("is not an export"), "{}", text(&not_one));
+    let mut newer = value.clone();
+    newer["version"] = serde_json::json!(999);
+    let newer_file = r.dir.join("newer.json");
+    std::fs::write(&newer_file, newer.to_string()).unwrap();
+    let too_new = run(&r.repo, &["init", "--store", &r.store.to_string_lossy(), "--from", &newer_file.to_string_lossy()]);
+    assert!(!too_new.status.success() && text(&too_new).contains("update grimoire"), "{}", text(&too_new));
+    for beside in [&["--empty"][..], &["--server", "http://127.0.0.1:1"][..]] {
+        let mut args = vec!["init", "--from", file.to_str().unwrap()];
+        args.extend_from_slice(beside);
+        if beside[0] == "--empty" {
+            args.extend_from_slice(&["--store", r.store.to_str().unwrap()]);
+        }
+        assert!(!run(&r.repo, &args).status.success(), "{beside:?}");
+    }
+    assert!(!r.store.exists() && !r.repo.join(".grimoire.toml").exists(), "nothing written by any refusal");
+}
+
+/// # Test contract
+///
+/// ```json
+/// {"test": "a-teams-grimoire-is-exported-from-the-server", "checks": ["crates/cli/src#export", "req:grimoire-handed-on-as-a-file"]}
+/// ```
+#[test]
+fn a_teams_grimoire_is_exported_from_the_server() {
+    let mut t = team_fixture(None);
+    let (repo, home) = (&t.checkout.repo, t.checkout.dir.join("home"));
+    let filed = team(repo, &home, Some(&t.writer), &["tool", "inscribe_ticket", A_TICKET]);
+    let ticket = serde_json::from_slice::<serde_json::Value>(&filed.stdout).unwrap()["node"]["ref"].as_str().unwrap().to_string();
+    assert!(team(repo, &home, Some(&t.writer), &["tool", "brew_ticket", &format!(r#"{{"ref":"{ticket}"}}"#)]).status.success());
+    let exported = team(repo, &home, Some(&t.reader), &["export"]);
+    assert!(exported.status.success(), "{}", text(&exported));
+    let value: serde_json::Value = serde_json::from_slice(&exported.stdout).unwrap();
+    assert!(value["tickets"].as_array().unwrap().iter().any(|t| format!("ticket:{}", t["slug"].as_str().unwrap()) == ticket), "the server's intent: {value}");
+    assert!(value.get("checked_out").is_none(), "the server names who has it; the file does not: {value}");
+    // The server answering, its intent is read now, never the checkout's copy: a page only the copy holds is not handed on.
+    let copy = {
+        let mut stack = vec![home.clone()];
+        let mut found = None;
+        while let Some(d) = stack.pop() {
+            if d.join("grimoire.json").is_file() {
+                found = Some(d);
+                break;
+            }
+            stack.extend(std::fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.is_dir()));
+        }
+        found.expect("the checkout holds a copy")
+    };
+    std::fs::create_dir_all(copy.join("pages")).unwrap();
+    std::fs::write(copy.join("pages").join("only-here.json"), r#"{"slug":"only-here","title":"Only here","body":"b","links":[]}"#).unwrap();
+    let now = team(repo, &home, Some(&t.reader), &["export"]);
+    assert!(now.status.success() && !String::from_utf8_lossy(&now.stdout).contains("only-here"), "{}", text(&now));
+    // The server away, the copy as last fetched is handed on, and the command says so.
+    drop(std::mem::replace(&mut t._server, Serving(grimoire().arg("--version").spawn().unwrap())));
+    let away = team(repo, &home, Some(&t.reader), &["export"]);
+    assert!(away.status.success() && String::from_utf8_lossy(&away.stdout).contains("only-here"), "{}", text(&away));
+    assert!(String::from_utf8_lossy(&away.stderr).contains("cannot be reached"), "{}", text(&away));
+}
