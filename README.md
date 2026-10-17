@@ -11,8 +11,7 @@ http://127.0.0.1:4242, starting from the pages the root links, in their order, o
 tools. The tool surface and the store
 schema are requirements in the grimoire too, under the Tools and Store pages,
 and `GET /api/tools` on a running daemon lists every tool with its input
-schema. [examples/](./examples/) holds the notes on other projects it is
-pointed at. The original proposal and the early schema documents are in the
+schema. The original proposal and the early schema documents are in the
 git history before the grimoire replaced them.
 
 ## Layout

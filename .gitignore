@@ -13,3 +13,4 @@ build/
 web/visual/out/
 web/behaviour/out/
 /grimoire.json
+/examples/
